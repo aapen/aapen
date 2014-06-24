@@ -36,6 +36,12 @@
         .set JONES_VERSION,47
         #include <asm/unistd.h>
 
+@ Define stdin, stdout, stderr file descriptors numbers
+
+        .set stdin, 0
+        .set stdout, 1
+        .set stderr, 2
+
 @ Reserve three special registers:
 @ DSP (r13) points to the top of the data stack
 @ RSP (r11) points to the top of the return stack
@@ -44,12 +50,6 @@
         #define DSP r13
         #define RSP r11
         #define IP r10
-
-@ Define stdin, stdout, stderr file descriptors numbers
-
-        .set stdin, 0
-        .set stdout, 1
-        .set stderr, 2
 
 @ Implement NEXT, which:
 @   1. finds the address of the forth word to execute by
@@ -62,6 +62,19 @@
         ldr r1, [r0]
         bx r1
         .endm
+
+@ _start is the program entry point
+
+        .text
+        .align 4
+        .global _start
+_start:
+        ldr r0, =var_S0
+        str DSP, [r0]           @ Save the original stack position in var_S0
+        ldr RSP, =return_stack_top      @ Set the initial return stack position
+        bl  set_up_data_segment         @ Set up the data segment
+        ldr IP, =cold_start             @ Make the IP point to cold_start
+        NEXT                            @ Start the interpreter
 
 @ Define macros to push and pop from the data
 @ and return stacks
@@ -89,32 +102,18 @@
 @ Then it calls NEXT to start interpreting the word.
 
         .text
-        .align 2
+        .align 4
 DOCOL:
         PUSHRSP IP
         add IP, r0, #4
         NEXT
-
-@ _start is the program entry point
-
-        .text
-        .align 2
-        .global _start
-_start:
-        ldr r0, =var_S0
-        str DSP, [r0]           @ Save the original stack position in var_S0
-        ldr RSP, =return_stack_top      @ Set the initial return stack position
-        bl  set_up_data_segment         @ Set up the data segment
-        ldr IP, =cold_start             @ Make the IP point to cold_start
-        NEXT                            @ Start the interpreter
-
 
 @ Allocate a data segment to define new words and data
 @ structures
 
         .set INITIAL_DATA_SEGMENT_SIZE,65536
         .text
-        .align 2
+        .align 4
 
 set_up_data_segment:
 
@@ -131,12 +130,53 @@ set_up_data_segment:
 
         bx      lr              @ Return
 
-@ cold_start is used to bootstrap the interpreter, the first word executed
-@ is QUIT
+@ cold_start is used to bootstrap the interpreter, 
+@ the first word executed is QUIT
 
         .section .rodata
 cold_start:
         .int QUIT
+
+
+@@
+@@ Inject a few assembly-language helpers used by C code, e.g.: raspberry.c
+@@
+        .text
+        .align 4
+
+        .globl NO_OP
+NO_OP:
+        bx lr
+
+        .globl PUT_32
+PUT_32:
+        str r1,[r0]
+        bx lr
+
+        .globl GET_32
+GET_32:
+        ldr r0,[r0]
+        bx lr
+
+        .globl PUT_16
+PUT_16:
+        strh r1,[r0]
+        bx lr
+
+        .globl PUT_8
+PUT_8:
+        strb r1,[r0]
+        bx lr
+
+        .globl GET_PC
+GET_PC:
+        mov r0,lr
+        bx lr
+
+        .globl BRANCH_TO
+BRANCH_TO:
+        bx r0
+
 
 @@ Now we define a set of helper macros that are syntactic sugar
 @@ to ease the declaration of Forth words, Native words, Forth variables
@@ -154,14 +194,14 @@ cold_start:
 
         .macro defword name, namelen, flags=0, label
         .section .rodata
-        .align 2
+        .align 4
         .global name_\label
 name_\label :
         .int link               @ link
         .set link,name_\label
         .byte \flags+\namelen   @ flags + length byte
         .ascii "\name"          @ the name
-        .align 2                @ padding to next 4 byte boundary
+        .align 4                @ padding to next 4 byte boundary
         .global \label
 \label :
         .int DOCOL              @ codeword - the interpreter
@@ -172,14 +212,14 @@ name_\label :
 
         .macro defcode name, namelen, flags=0, label
         .section .rodata
-        .align 2
+        .align 4
         .globl name_\label
 name_\label :
         .int link               @ link
         .set link,name_\label
         .byte \flags+\namelen   @ flags + length byte
         .ascii "\name"          @ the name
-        .align 2                @ padding to next 4 byte boundary
+        .align 4                @ padding to next 4 byte boundary
         .global \label
 \label :
         .int code_\label        @ codeword
@@ -196,7 +236,7 @@ code_\label :                   @ assembler code follows
         push r0
         NEXT
         .data
-        .align 2
+        .align 4
 var_\name :
         .int \initial
         .endm
@@ -744,7 +784,7 @@ _KEY:
 @ buffer for KEY
 
         .data
-        .align 2
+        .align 4
 currkey:
         .int buffer
 bufftop:
