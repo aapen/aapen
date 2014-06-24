@@ -1,16 +1,22 @@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @
-@ Jones' Forth port for ARM EABI
-@ Copyright (C) 2013 M2IHP'13 class, see AUTHORS for the full list of
-@ contributors.
+@ pijFORTHos -- Raspberry Pi JonesFORTH Operating System
 @
-@ Original x86 and forth code: Richard W.M. Jones <rich@annexia.org>
+@ A bare-metal FORTH operating system for Raspberry Pi
+@ Copyright (C) 2014 Dale Schumacher and Tristan Slominski
+@
+@ based on Jones' Forth port for ARM EABI
+@ Copyright (C) 2013 M2IHP'13 class
+@
+@ Original x86 and FORTH code: Richard W.M. Jones <rich@annexia.org>
+@
+@ See AUTHORS for the full list of contributors.
 @
 @ The extensive comments from Jones' x86 version have been removed.  You should
 @ check them out, they are really detailed, well written and pedagogical.
+@ The original sources (with full comments) are in the /annexia/ directory.
 @
-@ The DIVMOD routine is taken from the ARM Software Development Toolkit User
-@ Guide 2.50.
+@ DIVMOD routine taken from the ARM Software Development Toolkit User Guide 2.50.
 @
 @ This program is free software: you can redistribute it and/or modify it under
 @ the terms of the GNU Lesser General Public License as published by the Free

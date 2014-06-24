@@ -1,7 +1,14 @@
-# Jonesforth-ARM
+# Raspberry Pi JonesFORTH Operating System
 
-An ARM port of X86 JonesForth by Richard W.M. Jones <rich@annexia.org>
-at <http://annexia.org/forth>.
+A bare-metal operating system for Raspberry Pi,
+based on _Jonesforth-ARM_ <https://github.com/M2IHP13-admin/JonesForth-arm>.
+
+_Jonesforth-ARM_ is an ARM port by M2IHP'13 class members listed in `AUTHORS` of _x86 JonesForth_.
+
+_x86 JonesForth_ is a Linux-hosted FORTH presented in a Literate Programming style
+by Richard W.M. Jones <rich@annexia.org> originally at <http://annexia.org/forth>.
+Comments embedded in the original provide an excellent FORTH implementation tutorial.
+See the `/annexia/` directory for a copy of this original source.
 
 ## What is this ?
 

@@ -1,4 +1,9 @@
-Contributors:
+Bare-metal Raspberry Pi port by:
+
+Dale Schumacher <dale.schumacher@gmail.com>
+Tristan Slominski <tristan.slominski@gmail.com>
+
+M2IHP'13 class Contributors:
 
 ABECASSIS Felix
 BISPO VIEIRA Ricardo
@@ -15,3 +20,6 @@ OLIVEIRA Pablo
 PLAZA ONATE Florian
 POPOV Mihail
 
+Original x86/FORTH Literate Code by:
+
+Richard W.M. Jones <rich@annexia.org>
