@@ -1,4 +1,4 @@
-# Raspberry Pi JonesFORTH Operating System
+# Raspberry Pi JonesFORTH O/S
 
 A bare-metal operating system for Raspberry Pi,
 based on _Jonesforth-ARM_ <https://github.com/M2IHP13-admin/JonesForth-arm>.
