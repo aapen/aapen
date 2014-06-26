@@ -31,6 +31,11 @@ extern void NO_OP ( unsigned int );
 //alt function 0 for uart0
 
 //((250,000,000/115200)/8)-1 = 270
+
+/* Use external declarations to force full register discipline */
+extern void uart_putc ( unsigned int c );
+extern int c_start ( unsigned int earlypc );
+
 //------------------------------------------------------------------------
 void uart_putc ( unsigned int c )
 {

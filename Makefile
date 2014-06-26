@@ -1,16 +1,14 @@
 # $Id: Makefile,v 1.9 2007-10-22 18:53:12 rich Exp $
 
-#BUILD_ID_NONE := -Wl,--build-id=none 
-#BUILD_ID_NONE := 
-
-#SHELL	:= /bin/bash
+BUILD_ID := -Wl,--build-id=none 
+#BUILD_ID := 
 
 COPTS = -Wall -O2 -nostdlib -nostartfiles -ffreestanding 
 
 all: kernel.img
 
 jonesforth.o: jonesforth.S
-	gcc $(COPTS) jonesforth.S -o jonesforth.o
+	gcc $(COPTS) $(BUILD_ID) jonesforth.S -o jonesforth.o
 #	as jonesforth.S -o jonesforth.o
 
 raspberry.o: raspberry.c
