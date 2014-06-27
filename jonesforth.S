@@ -51,6 +51,10 @@
         #define RSP r11
         #define IP r10
 
+@ Define external symbols
+        .extern _start          @ bootstrap entry-point
+        .extern c_start         @ void c_start(u32 sp);
+
 @ Implement NEXT, which:
 @   1. finds the address of the forth word to execute by
 @      dereferencing the IP
@@ -66,7 +70,7 @@
 @ jonesforth is the entry point for the FORTH environment
 
         .text
-        .align 4
+        .align 2                @ alignment 2^n (2^2 = 4 byte alignment)
         .global jonesforth
 jonesforth:
         ldr r0, =var_S0
@@ -102,7 +106,7 @@ jonesforth:
 @ Then it calls NEXT to start interpreting the word.
 
         .text
-        .align 4
+        .align 2
 DOCOL:
         PUSHRSP IP
         add IP, r0, #4
@@ -113,7 +117,7 @@ DOCOL:
 
         .set INITIAL_DATA_SEGMENT_SIZE,65536
         .text
-        .align 4
+        .align 2
 
 set_up_data_segment:
 
@@ -154,14 +158,14 @@ cold_start:
 
         .macro defword name, namelen, flags=0, label
         .section .rodata
-        .align 4
+        .align 2
         .global name_\label
 name_\label :
         .int link               @ link
         .set link,name_\label
         .byte \flags+\namelen   @ flags + length byte
         .ascii "\name"          @ the name
-        .align 4                @ padding to next 4 byte boundary
+        .align 2                @ padding to next 4 byte boundary
         .global \label
 \label :
         .int DOCOL              @ codeword - the interpreter
@@ -172,14 +176,14 @@ name_\label :
 
         .macro defcode name, namelen, flags=0, label
         .section .rodata
-        .align 4
+        .align 2
         .globl name_\label
 name_\label :
         .int link               @ link
         .set link,name_\label
         .byte \flags+\namelen   @ flags + length byte
         .ascii "\name"          @ the name
-        .align 4                @ padding to next 4 byte boundary
+        .align 2                @ padding to next 4 byte boundary
         .global \label
 \label :
         .int code_\label        @ codeword
@@ -196,7 +200,7 @@ code_\label :                   @ assembler code follows
         push r0
         NEXT
         .data
-        .align 4
+        .align 2
 var_\name :
         .int \initial
         .endm
@@ -704,7 +708,10 @@ defcode "KEY",3,,KEY
         push r0                 @ push the return value on the stack
         NEXT
 
+@       .extern uart1_getc      @ int uart1_getc();
 _KEY:
+@       bl uart1_getc           @ call function in raspberry.c
+@       bx lr                   @ return
 
         ldr r3, =currkey        @ Load the address of currkey
         ldr r1, [r3]            @ Get the value of currkey
@@ -744,7 +751,7 @@ _KEY:
 @ buffer for KEY
 
         .data
-        .align 4
+        .align 2
 currkey:
         .int buffer
 bufftop:

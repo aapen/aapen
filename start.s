@@ -1,10 +1,10 @@
 
 @ _start is the kernel bootstrap entry point
         .text
-        .align 4
+        .align 2
         .global _start
 _start:
-	sub	sp, pc, #12	@ Bootstrap stack immediately before _start
+	sub	sp, pc, #8	@ Bootstrap stack immediately before _start
 	mov	r0, sp
 	bl	c_start		@ Jump to C entry-point
 
@@ -12,7 +12,7 @@ _start:
 @@ Provide a few assembly-language helpers used by C code, e.g.: raspberry.c
 @@
         .text
-        .align 4
+        .align 2
 
         .globl NO_OP
 NO_OP:

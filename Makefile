@@ -1,9 +1,11 @@
 # $Id: Makefile,v 1.9 2007-10-22 18:53:12 rich Exp $
 
-BUILD_ID := -Wl,--build-id=none 
-#BUILD_ID := 
+BUILD_ID = -Wl,--build-id=none
+#BUILD_ID =
 
-COPTS = -Wall -O2 -nostdlib -nostartfiles -ffreestanding 
+
+COPTS = -Wall -O2 -nostdlib -nostartfiles -ffreestanding
+#COPTS = -Wall -O2 -nostdlib -nostartfiles -static
 
 all: kernel.img
 
