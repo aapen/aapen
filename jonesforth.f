@@ -1,19 +1,4 @@
 \ -*- text -*-
-
-\ The following words were defined natively on the original Richard W.M. Jones
-\ x86 forth. In this ARM port, they are defined in forth.
-
-: 0= 0 = ;
-: 0> 0 > ;
-: 0< 0 < ;
-: 0<> 0 <> ;
-: 0<= 0 <= ;
-: 0>= 0 >= ;
-: 2DROP DROP DROP ;
-: 2DUP OVER OVER ;
-: 2SWAP >R -ROT R> -ROT ;
-: +! DUP @ ROT + SWAP ! ;
-
 \	A sometimes minimal FORTH compiler and tutorial for Linux / i386 systems. -*- asm -*-
 \	By Richard W.M. Jones <rich@annexia.org> http://annexia.org/forth
 \	This is PUBLIC DOMAIN (see public domain release statement below).
