@@ -34,35 +34,38 @@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
         .set JONES_VERSION,47
-        #include <asm/unistd.h>
 
 @ Define stdin, stdout, stderr file descriptors numbers
-
         .set stdin, 0
         .set stdout, 1
         .set stderr, 2
 
+@ Define codes for system calls (markers for code we have to port)
+        .set __NR_exit, -1
+        .set __NR_brk, 0
+        .set __NR_creat, 1
+        .set __NR_open, 2
+        .set __NR_close, 3
+        .set __NR_write, 4
+        .set __NR_read, 5
+
 @ Reserve three special registers:
 @ DSP (r13) points to the top of the data stack
 @ RSP (r11) points to the top of the return stack
-@ IP (r10) points to the next forth word that will be executed
+@ FIP (r10) points to the next forth word that will be executed
 
-        #define DSP r13
-        #define RSP r11
-        #define IP r10
-
-@ Define external symbols
-        .extern _start          @ bootstrap entry-point
-        .extern c_start         @ void c_start(u32 sp);
+DSP     .req    r13
+RSP     .req    r11
+FIP     .req    r10
 
 @ Implement NEXT, which:
-@   1. finds the address of the forth word to execute by
-@      dereferencing the IP
-@   2. increment IP
+@   1. finds the address of the forth word to execute
+@      by dereferencing the FIP
+@   2. increment FIP
 @   3. executes the forth word
 
         .macro NEXT
-        ldr r0, [IP], #4
+        ldr r0, [FIP], #4
         ldr r1, [r0]
         bx r1
         .endm
@@ -70,14 +73,16 @@
 @ jonesforth is the entry point for the FORTH environment
 
         .text
-        .align 2                @ alignment 2^n (2^2 = 4 byte alignment)
+        .align 2                        @ alignment 2^n (2^2 = 4 byte alignment)
         .global jonesforth
 jonesforth:
         ldr r0, =var_S0
-        str DSP, [r0]           @ Save the original stack position in var_S0
+        str DSP, [r0]                   @ Save the original stack position in S0
         ldr RSP, =return_stack_top      @ Set the initial return stack position
-        bl  set_up_data_segment         @ Set up the data segment
-        ldr IP, =cold_start             @ Make the IP point to cold_start
+        ldr r0, =data_segment           @ Get the initial data segment address
+        ldr r1, =var_HERE               @ Initialize HERE to point at
+        str r0, [r1]                    @   the beginning of data segment
+        ldr FIP, =cold_start            @ Make the FIP point to cold_start
         NEXT                            @ Start the interpreter
 
 @ Define macros to push and pop from the data
@@ -101,38 +106,16 @@ jonesforth:
 
 @ DOCOL is the assembly subroutine that is called
 @ at the start of every forth word execution.
-@ It saves the old IP on the return stack, and
-@ makes IP point to the first codeword.
+@ It saves the old FIP on the return stack, and
+@ makes FIP point to the first codeword.
 @ Then it calls NEXT to start interpreting the word.
 
         .text
         .align 2
 DOCOL:
-        PUSHRSP IP
-        add IP, r0, #4
+        PUSHRSP FIP
+        add FIP, r0, #4
         NEXT
-
-@ Allocate a data segment to define new words and data
-@ structures
-
-        .set INITIAL_DATA_SEGMENT_SIZE,65536
-        .text
-        .align 2
-
-set_up_data_segment:
-
-        mov r1, #0
-        mov r7, #__NR_brk
-        swi 0                   @ Call brk(0) to get value of Program Break
-
-        ldr r1, =var_HERE
-        str r0, [r1]            @ Initialize HERE to point at the beginning
-                                @ of data segment
-
-        add r0, #INITIAL_DATA_SEGMENT_SIZE
-        swi 0                   @ Allocate Memory
-
-        bx      lr              @ Return
 
 @ cold_start is used to bootstrap the interpreter, 
 @ the first word executed is QUIT
@@ -147,12 +130,12 @@ cold_start:
 @@ and Forth constants.
 
 @ define the word flags
-        .set F_IMMED,0x80
-        .set F_HIDDEN,0x20
-        .set F_LENMASK,0x1f
+        .set F_IMMED, 0x80
+        .set F_HIDDEN, 0x20
+        .set F_LENMASK, 0x1f
 
 @ link is used to chain the words in the dictionary as they are defined
-        .set link,0
+        .set link, 0
 
 @ defword macro helps defining new forth words in assembly
 
@@ -215,11 +198,11 @@ var_\name :
         .endm
 
 @ EXIT is the last codeword of a forth word.
-@ It restores the IP and returns to the caller using NEXT.
+@ It restores the FIP and returns to the caller using NEXT.
 @ (See DOCOL)
 
 defcode "EXIT",4,,EXIT
-        POPRSP IP
+        POPRSP FIP
         NEXT
 
 @ DIVMOD computes the unsigned integer division and remainder
@@ -570,7 +553,7 @@ defcode "INVERT",6,,INVERT
 @ into the stack and skips it (since the literal is not executable).
 
 defcode "LIT", 3,, LIT
-        ldr r1, [IP], #4
+        ldr r1, [FIP], #4
         push r1
         NEXT
 
@@ -703,59 +686,13 @@ defcode "DSP!",4,,DSPSTORE
 @ refilled, when empty, with a read syscall.
 
 defcode "KEY",3,,KEY
-
         bl _KEY                 @ Call _KEY
         push r0                 @ push the return value on the stack
         NEXT
 
-@       .extern uart1_getc      @ int uart1_getc();
 _KEY:
-@       bl uart1_getc           @ call function in raspberry.c
-@       bx lr                   @ return
-
-        ldr r3, =currkey        @ Load the address of currkey
-        ldr r1, [r3]            @ Get the value of currkey
-        ldr r3, =bufftop        @ Load the address of bufftop
-        ldr r2, [r3]            @ Get the value of bufftop
-        cmp r2, r1
-        ble 1f                  @ if bufftop <= currkey
-
-        ldrb r0, [r1]           @ load the first byte of currkey
-        ldr r3, =currkey
-        add r1, #1              @ Increments CURRKEY
-        str r1, [r3]
-
+        bl uart1_getc           @ extern int uart1_getc();
         bx lr                   @ return
-
-1:
-        ldr r3, =currkey
-        mov r0, #0              @ 1st arg: STDIN
-        ldr r1, =buffer         @ 2nd arg : buffer add
-        str r1, [r3]            @ CURRKEY := BUFFER
-        mov r2, #BUFFER_SIZE    @ 3rd arg : buffer sz
-        mov r7, #__NR_read      @ read syscall flag
-        swi 0                   @ call
-        cmp r0, #0
-        ble 2f                  @ if errors goto 2
-        add r1,r0               @ Set bufftop at the end of the word
-        ldr r4, =bufftop
-        str r1, [r4]            @ update bufftop
-        b       _KEY
-
-2:                              @ read syscall returned with an error
-        mov r0, #0
-        mov r7, #__NR_exit      @ exit(0)
-        swi 0
-
-
-@ buffer for KEY
-
-        .data
-        .align 2
-currkey:
-        .int buffer
-bufftop:
-        .int buffer
 
 @ EMIT ( c -- ) outputs character c to stdout
 
@@ -785,7 +722,7 @@ emit_scratch:
 
 defcode "WORD",4,,WORD
         bl _WORD
-        push r0                 @ adress
+        push r0                 @ address
         push r1                 @ length
         NEXT
 
@@ -1120,15 +1057,15 @@ defword "HIDE",4,,HIDE
 @ only works in compile mode. Implementation is identical to LIT.
 
 defcode "'",1,,TICK
-        ldr r1, [IP], #4
+        ldr r1, [FIP], #4
         push r1
         NEXT
 
-@ BRANCH ( -- ) changes IP by offset which is found in the next codeword
+@ BRANCH ( -- ) changes FIP by offset which is found in the next codeword
 
 defcode "BRANCH",6,,BRANCH
-        ldr r1, [IP]
-        add IP, IP, r1
+        ldr r1, [FIP]
+        add FIP, FIP, r1
         NEXT
 
 @ 0BRANCH ( p -- ) branch if the top of the stack is zero
@@ -1137,18 +1074,18 @@ defcode "0BRANCH",7,,ZBRANCH
         pop r0
         cmp r0, #0              @ if the top of the stack is zero
         beq code_BRANCH         @ then branch
-        add IP, IP, #4          @ else, skip the offset
+        add FIP, FIP, #4        @ else, skip the offset
         NEXT
 
 @ LITSTRING ( -- ) as LIT but for strings
 
 defcode "LITSTRING",9,,LITSTRING
-        ldr r0, [IP], #4        @ read length
-        push IP                 @ push address
+        ldr r0, [FIP], #4       @ read length
+        push FIP                @ push address
         push r0                 @ push string
-        add IP, IP, r0          @ skip the string
-        add IP, IP, #3          @ find the next 4-byte boundary
-        and IP, IP, #~3
+        add FIP, FIP, r0        @ skip the string
+        add FIP, FIP, #3        @ find the next 4-byte boundary
+        and FIP, FIP, #~3
         NEXT
 
 @ TELL ( addr length -- ) writes a string to stdout
@@ -1223,7 +1160,7 @@ defcode "INTERPRET",9,,INTERPRET
 
                                         @ not a literal, execute now
         ldr r1, [r0]                    @ (it's important here that
-        bx r1                           @  IP address in r0, since DOCOL
+        bx r1                           @  FIP address in r0, since DOCOL
                                         @  assummes it)
 
 5:  @ Push literal on the stack
@@ -1311,18 +1248,18 @@ defcode "SYSCALL0",8,,SYSCALL0
         push r0
         NEXT
 
-@ Reserve space for the return stack and the read buffer (for KEY)
-
+@ Reserve space for the return stack (8Kb)
         .bss
-
-        .set RETURN_STACK_SIZE,8192
-        .set BUFFER_SIZE,4096
-
         .align 12
+        .set RETURN_STACK_SIZE, 0x2000
 return_stack:
         .space RETURN_STACK_SIZE
 return_stack_top:
 
+@ Reserve space for new words and data structures (16Kb)
+        .bss
         .align 12
-buffer:
-        .space BUFFER_SIZE
+        .set DATA_SEGMENT_SIZE, 0x4000
+data_segment:
+        .space DATA_SEGMENT_SIZE
+data_segment_top:

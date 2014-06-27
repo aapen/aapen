@@ -1,19 +1,16 @@
-# $Id: Makefile,v 1.9 2007-10-22 18:53:12 rich Exp $
-
-BUILD_ID = -Wl,--build-id=none
-#BUILD_ID =
-
+#
+# Makefile for pijFORTHos -- Raspberry Pi JonesFORTH Operating System
+#
 
 COPTS = -Wall -O2 -nostdlib -nostartfiles -ffreestanding
-#COPTS = -Wall -O2 -nostdlib -nostartfiles -static
 
 all: kernel.img
 
 start.o: start.s
 	as start.s -o start.o
 
-jonesforth.o: jonesforth.S
-	gcc $(COPTS) $(BUILD_ID) jonesforth.S -o jonesforth.o
+jonesforth.o: jonesforth.s
+	as jonesforth.s -o jonesforth.o
 
 raspberry.o: raspberry.c
 	gcc $(COPTS) -c raspberry.c -o raspberry.o
