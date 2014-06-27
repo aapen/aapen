@@ -35,24 +35,11 @@
 
         .set JONES_VERSION,47
 
-@ Define stdin, stdout, stderr file descriptors numbers
-        .set stdin, 0
-        .set stdout, 1
-        .set stderr, 2
-
-@ Define codes for system calls (markers for code we have to port)
-        .set __NR_exit, -1
-        .set __NR_brk, 0
-        .set __NR_creat, 1
-        .set __NR_open, 2
-        .set __NR_close, 3
-        .set __NR_write, 4
-        .set __NR_read, 5
-
 @ Reserve three special registers:
 @ DSP (r13) points to the top of the data stack
 @ RSP (r11) points to the top of the return stack
 @ FIP (r10) points to the next forth word that will be executed
+@ Note: r12 is often considered a "scratch" register
 
 DSP     .req    r13
 RSP     .req    r11
@@ -305,19 +292,16 @@ _DIVMOD:
         b 5f
 
 4:      @ Error, division by 0.
-        # Display error message on stderr.
-        mov r0, #stderr
-        ldr r1, =div0msg
-        mov r2, #div0msgend-div0msg
-        mov r7, #__NR_write
-        swi 0
+        ldr r0, =errdiv0
+        mov r1, #(errdiv0end-errdiv0)
+        bl _TELL                        @ Display error message
 
 5:
         bx lr
 
 .section .rodata
-div0msg: .ascii "Division by 0!\n"
-div0msgend:
+errdiv0: .ascii "Division by 0!\r\n"
+errdiv0end:
 
 @ DROP ( a -- ) drops the top element of the stack
 
@@ -584,7 +568,7 @@ defcode "C!",2,,STOREBYTE
 
 defcode "C@",2,,FETCHBYTE
         POPDSP r0
-        mov r1, #0
+        mov r1, #0              @ FIXME: not needed? ldrb zero-extends!
         ldrb r1, [r0]
         PUSHDSP r1
         NEXT
@@ -611,8 +595,9 @@ defcode "CMOVE",5,,CMOVE
 
         defvar "STATE",5,,STATE
         defvar "HERE",4,,HERE
-        defvar "LATEST",6,,LATEST,name_SYSCALL0 @ must point to the last word
-                                                @ defined in assembly, SYSCALL0
+        defvar "LATEST",6,,LATEST,name_EXECUTE  @ must point to the last word
+                                                @ defined in assembly, EXECUTE
+
         defvar "S0",2,,SZ
         defvar "BASE",4,,BASE,10
 
@@ -622,23 +607,6 @@ defcode "CMOVE",5,,CMOVE
         defconst "F_IMMED",7,,__F_IMMED,F_IMMED
         defconst "F_HIDDEN",8,,__F_HIDDEN,F_HIDDEN
         defconst "F_LENMASK",9,,__F_LENMASK,F_LENMASK
-
-        defconst "SYS_EXIT",8,,SYS_EXIT,__NR_exit
-        defconst "SYS_OPEN",8,,SYS_OPEN,__NR_open
-        defconst "SYS_CLOSE",9,,SYS_CLOSE,__NR_close
-        defconst "SYS_READ",8,,SYS_READ,__NR_read
-        defconst "SYS_WRITE",9,,SYS_WRITE,__NR_write
-        defconst "SYS_CREAT",9,,SYS_CREAT,__NR_creat
-        defconst "SYS_BRK",7,,SYS_BRK,__NR_brk
-
-        defconst "O_RDONLY",8,,__O_RDONLY,0
-        defconst "O_WRONLY",8,,__O_WRONLY,1
-        defconst "O_RDWR",6,,__O_RDWR,2
-        defconst "O_CREAT",7,,__O_CREAT,0100
-        defconst "O_EXCL",6,,__O_EXCL,0200
-        defconst "O_TRUNC",7,,__O_TRUNC,01000
-        defconst "O_APPEND",8,,__O_APPEND,02000
-        defconst "O_NONBLOCK",10,,__O_NONBLOCK,04000
 
 
 @ >R ( a -- ) move the top element from the data stack to the return stack
@@ -686,7 +654,7 @@ defcode "DSP!",4,,DSPSTORE
 @ refilled, when empty, with a read syscall.
 
 defcode "KEY",3,,KEY
-        bl uart1_getc           @ extern int uart1_getc();
+        bl uart1_getc           @ r0 = uart1_getc();
         PUSHDSP r0              @ push the return value on the stack
         NEXT
 
@@ -694,7 +662,7 @@ defcode "KEY",3,,KEY
 
 defcode "EMIT",4,,EMIT
         POPDSP r0
-        bl uart1_putc           @ extern void uart1_putc(int c);
+        bl uart1_putc           @ uart1_putc(r0);
         NEXT
 
 @ WORD ( -- addr length ) reads next word from stdin
@@ -736,8 +704,9 @@ _WORD:
 @ word_buffer for WORD
 
         .data
+        .align 5                @ align to cache-line size
 word_buffer:
-        .space 32
+        .space 32               @ FIXME: what about overflow!?
 
 @ NUMBER ( addr length -- n e ) converts string to number
 @ n is the parsed number
@@ -1071,12 +1040,22 @@ defcode "LITSTRING",9,,LITSTRING
 @ TELL ( addr length -- ) writes a string to stdout
 
 defcode "TELL",4,,TELL
-        mov r0, #stdout
-        POPDSP r2               @ length
-        POPDSP r1               @ address
-        ldr r7, =__NR_write
-        swi 0
+        POPDSP r1               @ length
+        POPDSP r0               @ address
+        bl _TELL
         NEXT
+_TELL:
+        stmfd sp!, {r4-r5, lr}  @ stack save + return address
+        mov r4, r0              @ address
+        mov r5, r1              @ length
+        b 2f
+1:                              @ while (--r5 >= 0) {
+        ldrb r0, [r4], #1       @     r0 = *r4++;
+        bl uart1_putc           @     uart1_putc(r0);
+2:                              @ }
+        subs r5, r5, #1
+        bge 1b
+        ldmfd sp!, {r4-r5, pc}  @ stack restore + return
 
 @ QUIT ( -- ) the first word to be executed
 
@@ -1129,13 +1108,13 @@ defcode "INTERPRET",9,,INTERPRET
     @ Here in compile mode
 
         bl _COMMA                       @ Call comma to compile the codeword
-        cmp r8,#1                       @ If it's a literal, we have to compile
-        moveq r0,r6                     @ the integer ...
+        cmp r8, #1                      @ If it's a literal, we have to compile
+        moveq r0, r6                    @ the integer ...
         bleq _COMMA                     @ .. too
         NEXT
 
 4:  @ Executing
-        cmp r8,#1                       @ if it's a literal, branch to 5
+        cmp r8, #1                      @ if it's a literal, branch to 5
         beq 5f
 
                                         @ not a literal, execute now
@@ -1148,32 +1127,28 @@ defcode "INTERPRET",9,,INTERPRET
         NEXT
 
 6:  @ Parse error
-        mov r0, #stderr                 @ Write an error message
-        ldr r1, =errmsg
-        mov r2, #(errmsgend-errmsg)
-        ldr r7, =__NR_write
-        swi 0
+        ldr r0, =errpfx
+        mov r1, #(errpfxend-errpfx)
+        bl _TELL                        @ Begin error message
 
-        mov r0, #stderr                 @ with the word that could not be parsed
-        mov r1, r4
-        mov r2, r5
-        ldr r7, =__NR_write
-        swi 0
+        mov r0, r4                      @ Address of offending word
+        mov r1, r5                      @ Length of offending word
+        bl _TELL
 
-        mov r0, #stderr
-        ldr r1, =errmsg2
-        mov r2, #(errmsg2end-errmsg2)
-        ldr r7, =__NR_write
-        swi 0
+        ldr r0, =errsfx
+        mov r1, #(errsfxend-errsfx)
+        bl _TELL                        @ End error message
 
         NEXT
 
         .section .rodata
-errmsg: .ascii "PARSE ERROR<"
-errmsgend:
+errpfx:
+        .ascii "PARSE ERROR<"
+errpfxend:
 
-errmsg2: .ascii ">\n"
-errmsg2end:
+errsfx:
+        .ascii ">\r\n"
+errsfxend:
 
 @ CHAR ( -- c ) put the ASCII code of the first character of the next word
 @ on the stack
@@ -1190,43 +1165,6 @@ defcode "EXECUTE",7,,EXECUTE
         POPDSP r0
         ldr r1, [r0]
         bx r1
-
-@ Wrappers for doing syscalls from the forth word
-@ SYSCALLX have to be used for a syscall with X arguments
-@ In ARM, syscalls arguments must be located in r0-r2 and
-@ the syscall index is in r7.
-@ The return value is then pushed in the stack.
-@ SYSCALLX ( i [arg1 arg2 ar3] -- r )
-
-defcode "SYSCALL3",8,,SYSCALL3
-        POPDSP r7
-        POPDSP r0
-        POPDSP r1
-        POPDSP r2
-        swi 0
-        PUSHDSP r0
-        NEXT
-
-defcode "SYSCALL2",8,,SYSCALL2
-        POPDSP r7
-        POPDSP r0
-        POPDSP r1
-        swi 0
-        PUSHDSP r0
-        NEXT
-
-defcode "SYSCALL1",8,,SYSCALL1
-        POPDSP r7
-        POPDSP r0
-        swi 0
-        PUSHDSP r0
-        NEXT
-
-defcode "SYSCALL0",8,,SYSCALL0
-        POPDSP r7
-        swi 0
-        PUSHDSP r0
-        NEXT
 
 @ Reserve space for the return stack (8Kb)
         .bss

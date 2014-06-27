@@ -1,5 +1,8 @@
 /*
  * raspberry.c -- Raspberry Pi support routines written in C
+ *
+ * Some of this code was inspired by bare-metal examples
+ * from David Welch at https://github.com/dwelch67/raspberrypi
  */
 
 typedef unsigned int u32;
@@ -64,14 +67,14 @@ void uart1_init()
 
     PUT_32(GPPUD, 0);
     n = 150;
-    while (n-- > 0) {
+    while (n-- > 0) {  // wait for (at least) 150 clock cycles
         NO_OP();
     }
 
     r0 = (1 << 14) | (1 << 15);
     PUT_32(GPPUDCLK0, r0);
     n = 150;
-    while (n-- > 0) {
+    while (n-- > 0) {  // wait for (at least) 150 clock cycles
         NO_OP();
     }
 
@@ -155,6 +158,9 @@ void c_start(u32 sp)
     // echo console input to output
     for (;;) {
         c = uart1_getc();
+        if (c == 0x04) {  // ^D to exit loop
+            break;
+        }
         uart1_putc(c);
     }
 }
