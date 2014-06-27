@@ -63,12 +63,12 @@
         bx r1
         .endm
 
-@ _start is the program entry point
+@ jonesforth is the entry point for the FORTH environment
 
         .text
         .align 4
-        .global _start
-_start:
+        .global jonesforth
+jonesforth:
         ldr r0, =var_S0
         str DSP, [r0]           @ Save the original stack position in var_S0
         ldr RSP, =return_stack_top      @ Set the initial return stack position
@@ -136,46 +136,6 @@ set_up_data_segment:
         .section .rodata
 cold_start:
         .int QUIT
-
-
-@@
-@@ Inject a few assembly-language helpers used by C code, e.g.: raspberry.c
-@@
-        .text
-        .align 4
-
-        .globl NO_OP
-NO_OP:
-        bx lr
-
-        .globl PUT_32
-PUT_32:
-        str r1,[r0]
-        bx lr
-
-        .globl GET_32
-GET_32:
-        ldr r0,[r0]
-        bx lr
-
-        .globl PUT_16
-PUT_16:
-        strh r1,[r0]
-        bx lr
-
-        .globl PUT_8
-PUT_8:
-        strb r1,[r0]
-        bx lr
-
-        .globl GET_PC
-GET_PC:
-        mov r0,lr
-        bx lr
-
-        .globl BRANCH_TO
-BRANCH_TO:
-        bx r0
 
 
 @@ Now we define a set of helper macros that are syntactic sugar

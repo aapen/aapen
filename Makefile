@@ -7,24 +7,20 @@ COPTS = -Wall -O2 -nostdlib -nostartfiles -ffreestanding
 
 all: kernel.img
 
+start.o: start.s
+	as start.s -o start.o
+
 jonesforth.o: jonesforth.S
 	gcc $(COPTS) $(BUILD_ID) jonesforth.S -o jonesforth.o
-#	as jonesforth.S -o jonesforth.o
 
 raspberry.o: raspberry.c
 	gcc $(COPTS) -c raspberry.c -o raspberry.o
 
-kernel.img: loadmap jonesforth.o raspberry.o 
-	ld jonesforth.o raspberry.o -T loadmap -o pijFORTHos.elf
+kernel.img: loadmap start.o jonesforth.o raspberry.o 
+	ld start.o jonesforth.o raspberry.o -T loadmap -o pijFORTHos.elf
 	objdump -D pijFORTHos.elf > pijFORTHos.list
 	objcopy pijFORTHos.elf -O ihex pijFORTHos.hex
 	objcopy pijFORTHos.elf -O binary kernel.img
-
-jonesforth: jonesforth.S
-	gcc -nostdlib -static -o $@ $<
-
-run:
-	cat jonesforth.f $(PROG) - | ./jonesforth
 
 clean:
 	rm -f *.o
@@ -33,7 +29,4 @@ clean:
 	rm -f *.elf
 	rm -f *.list
 	rm -f *.img
-	rm -f jonesforth *~ core
-
-.SUFFIXES: .f
-.PHONY: run
+	rm -f *~ core
