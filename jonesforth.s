@@ -686,36 +686,16 @@ defcode "DSP!",4,,DSPSTORE
 @ refilled, when empty, with a read syscall.
 
 defcode "KEY",3,,KEY
-        bl _KEY                 @ Call _KEY
+        bl uart1_getc           @ extern int uart1_getc();
         push r0                 @ push the return value on the stack
         NEXT
-
-_KEY:
-        bl uart1_getc           @ extern int uart1_getc();
-        bx lr                   @ return
 
 @ EMIT ( c -- ) outputs character c to stdout
 
 defcode "EMIT",4,,EMIT
         pop r0
-        bl      _EMIT
+        bl uart1_putc           @ extern void uart1_putc(int c);
         NEXT
-
-_EMIT:
-        ldr r2, =emit_scratch
-        str r0, [r2]            @ write character to memory
-        mov r1, r2
-        mov r2, #1              @ write 1 byte
-        mov r0, #stdout         @ write on standard output
-        mov r7, #__NR_write     @ write syscall flag
-
-        swi 0                   @ write syscall
-        bx lr
-
-
-        .data
-emit_scratch:
-        .space 1
 
 @ WORD ( -- addr length ) reads next word from stdin
 @ skips spaces and comments, limited to 32 characters
@@ -729,7 +709,7 @@ defcode "WORD",4,,WORD
 _WORD:
         stmfd   sp!, {r6,lr}    @ preserve r6 and lr
 1:
-        bl _KEY                 @ read a character
+        bl uart1_getc           @ read a character
         cmp r0, #'\\'
         beq 3f                  @ skip comments until end of line
         cmp r0, #' '
@@ -738,7 +718,7 @@ _WORD:
         ldr     r6, =word_buffer
 2:
         strb r0, [r6], #1       @ store character in word buffer
-        bl _KEY                 @ read more characters until a space is found
+        bl uart1_getc           @ read more characters until a space is found
         cmp r0, #' '
         bgt 2b
 
@@ -748,7 +728,7 @@ _WORD:
         ldmfd sp!, {r6,lr}      @ restore r6 and lr
         bx lr
 3:
-        bl _KEY                 @ skip all characters until end of line
+        bl uart1_getc           @ skip all characters until end of line
         cmp r0, #'\n'
         bne 3b
         b 1b
