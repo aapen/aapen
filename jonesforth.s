@@ -96,11 +96,11 @@ jonesforth:
         ldr \reg, [RSP], #4
         .endm
 
-        .macro push reg
+        .macro PUSHDSP reg
         str \reg, [DSP, #-4]!
         .endm
 
-        .macro pop reg
+        .macro POPDSP reg
         ldr \reg, [DSP], #4
         .endm
 
@@ -180,7 +180,7 @@ code_\label :                   @ assembler code follows
         .macro defvar name, namelen, flags=0, label, initial=0
         defcode \name,\namelen,\flags,\label
         ldr r0, =var_\name
-        push r0
+        PUSHDSP r0
         NEXT
         .data
         .align 2
@@ -193,7 +193,7 @@ var_\name :
         .macro defconst name, namelen, flags=0, label, value
         defcode \name,\namelen,\flags,\label
         ldr r0, =\value
-        push r0
+        PUSHDSP r0
         NEXT
         .endm
 
@@ -214,8 +214,8 @@ defcode "EXIT",4,,EXIT
 @ ( a b -- r q ) where a = q * b + r
 
 defcode "/MOD",4,,DIVMOD
-        pop     r1                      @ Get b
-        pop     r0                      @ Get a
+        POPDSP  r1                      @ Get b
+        POPDSP  r0                      @ Get a
         mov     r3, r1                  @ Put b in tmp
 
         cmp     r3, r0, LSR #1
@@ -232,23 +232,23 @@ defcode "/MOD",4,,DIVMOD
         cmp     r3, r1                  @ Jump until tmp < b
         bhs     2b
 
-        push    r0                      @ Put r
-        push    r2                      @ Put q
+        PUSHDSP    r0                   @ Put r
+        PUSHDSP    r2                   @ Put q
         NEXT
 
 @ Alternative to DIVMOD: signed implementation using Euclidean division.
 defcode "S/MOD",5,,SDIVMOD
         @ Denominator
-        pop r2
+        POPDSP r2
         @ Numerator
-        pop r1
+        POPDSP r1
 
         bl _DIVMOD
 
         @ Remainder
-        push r1
+        PUSHDSP r1
         @ Quotient
-        push r0
+        PUSHDSP r0
 
         NEXT
 
@@ -322,26 +322,26 @@ div0msgend:
 @ DROP ( a -- ) drops the top element of the stack
 
 defcode "DROP",4,,DROP
-        pop r0 @( )
+        POPDSP r0       @ ( )
         NEXT
 
 @ SWAP ( a b -- b a ) swaps the two top elements
 
 defcode "SWAP",4,,SWAP
         @ ( a b -- )
-        pop r0          @  ( a ) , r0 = b
-        pop r1          @  (  ) , r0 = b, r1 = a
-        push r0         @  ( b  ) , r0 = b, r1 = a
-        push r1         @  ( b a  ) , r0 = b, r1 = a
+        POPDSP r0       @ ( a ) , r0 = b
+        POPDSP r1       @ (  ) , r0 = b, r1 = a
+        PUSHDSP r0      @ ( b  ) , r0 = b, r1 = a
+        PUSHDSP r1      @ ( b a  ) , r0 = b, r1 = a
         NEXT
 
 @ DUP ( a -- a a ) duplicates the top element
 
 defcode "DUP",3,,DUP
         @ ( a -- )
-        pop r0          @ (  ) , r0 = a
-        push r0         @ ( a  ) , r0 = a
-        push r0         @ ( a a  ) , r0 = a
+        POPDSP r0       @ (  ) , r0 = a
+        PUSHDSP r0      @ ( a  ) , r0 = a
+        PUSHDSP r0      @ ( a a  ) , r0 = a
         NEXT
 
 @ OVER ( a b c -- a b c b ) pushes the second element on top
@@ -351,29 +351,29 @@ defcode "OVER",4,,OVER
         @ and since DSP is the top of the stack we will load
         @ the second element of the stack in r0
         ldr r0, [DSP, #4]
-        push r0         @ ( a b c b )
+        PUSHDSP r0      @ ( a b c b )
         NEXT
 
 @ ROT ( a b c -- b c a) rotation
 
 defcode "ROT",3,,ROT
-        pop r0          @ ( a b ) r0 = c
-        pop r1          @ ( a ) r1 = b
-        pop r2          @ ( ) r2 = a
-        push r1         @ ( b )
-        push r0         @ ( b c )
-        push r2         @ ( b c a )
+        POPDSP r0       @ ( a b ) r0 = c
+        POPDSP r1       @ ( a ) r1 = b
+        POPDSP r2       @ ( ) r2 = a
+        PUSHDSP r1      @ ( b )
+        PUSHDSP r0      @ ( b c )
+        PUSHDSP r2      @ ( b c a )
         NEXT
 
 @ -ROT ( a b c -- c a b ) backwards rotation
 
 defcode "-ROT",4,,NROT
-        pop r0          @ ( a b ) r0 = c
-        pop r1          @ ( a ) r1 = b
-        pop r2          @ ( ) r2 = a
-        push r0         @ ( c )
-        push r2         @ ( c a )
-        push r1         @ ( c a b )
+        POPDSP r0       @ ( a b ) r0 = c
+        POPDSP r1       @ ( a ) r1 = b
+        POPDSP r2       @ ( ) r2 = a
+        PUSHDSP r0      @ ( c )
+        PUSHDSP r2      @ ( c a )
+        PUSHDSP r1      @ ( c a b )
         NEXT
 
 @ ?DUP ( 0 -- 0 | a -- a a ) duplicates if non-zero
@@ -383,167 +383,167 @@ defcode "?DUP", 4,,QDUP
         ldr r0, [DSP]   @ r0 = x
         cmp r0, #0      @ test if x==0
         beq 1f          @ if x==0 we jump to 1
-        push r0         @ ( a a ) it's now duplicated
+        PUSHDSP r0      @ ( a a ) it's now duplicated
         1: NEXT         @ ( a a / 0 )
 
 @ 1+ ( a | a+1 ) increments the top element
 
 defcode "1+",2,,INCR
-        pop r0
+        POPDSP r0
         add r0,r0,#1
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ 1- ( a | a-1 ) decrements the top element
 
 defcode "1-",2,,DECR
-        pop r0
+        POPDSP r0
         sub r0,r0,#1
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ 4+ ( a | a+4 ) increments by 4 the top element
 
 defcode "4+",2,,INCR4
-        pop r0
+        POPDSP r0
         add r0,r0,#4
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ 4- ( a | a-4 ) decrements by 4 the top element
 
 defcode "4-",2,,DECR4
-        pop r0
+        POPDSP r0
         sub r0,r0,#4
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ + ( a b | a+b)
 
 defcode "+",1,,ADD
-        pop r0
-        pop r1
+        POPDSP r0
+        POPDSP r1
         add r0,r0,r1
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ + ( a b | a-b)
 
 defcode "-",1,,SUB
-        pop r1
-        pop r0
+        POPDSP r1
+        POPDSP r0
         sub r0,r0,r1
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ + ( a b | a*b)
 
 defcode "*",1,,MUL
-        pop r0
-        pop r1
+        POPDSP r0
+        POPDSP r1
         mul r2,r0,r1
-        push r2
+        PUSHDSP r2
         NEXT
 
 @ = ( a b | p ) where p is 1 when a and b are equal (0 otherwise)
 
 defcode "=",1,,EQU
-        pop r1
-        pop r0
+        POPDSP r1
+        POPDSP r0
         cmp r0, r1
         moveq r0, #1
         movne r0, #0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ <> ( a b | p) where p = a <> b
 
 defcode "<>",2,,NEQU
-        pop r1
-        pop r0
+        POPDSP r1
+        POPDSP r0
         cmp r0, r1
         movne r0, #1
         moveq r0, #0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ < ( a b | p) where p = a < b
 
 defcode "<",1,,LT
-        pop r1
-        pop r0
+        POPDSP r1
+        POPDSP r0
         cmp r0, r1
         movlt r0, #1
         movge r0, #0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ < ( a b | p) where p = a < b
 
 defcode ">",1,,GT
-        pop r1
-        pop r0
+        POPDSP r1
+        POPDSP r0
         cmp r0, r1
         movgt r0, #1
         movle r0, #0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ <= ( a b | p) where p = a <= b
 
 defcode "<=",2,,LE
-        pop r1
-        pop r0
+        POPDSP r1
+        POPDSP r0
         cmp r0, r1
         movle r0, #1
         movgt r0, #0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ >= ( a b | p) where p = a >= b
 
 defcode ">=",2,,GE
-        pop r1
-        pop r0
+        POPDSP r1
+        POPDSP r0
         cmp r0, r1
         movge r0, #1
         movlt r0, #0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ AND ( a b | a&b) bitwise and
 
 defcode "AND",3,,AND
-        pop r0
-        pop r1
+        POPDSP r0
+        POPDSP r1
         and r0, r1, r0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ OR ( a b | a|b) bitwise or
 
 defcode "OR",2,,OR
-        pop r0
-        pop r1
+        POPDSP r0
+        POPDSP r1
         orr r0, r1, r0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ XOR ( a b | a^b) bitwise xor
 
 defcode "XOR",3,,XOR
-        pop r0
-        pop r1
+        POPDSP r0
+        POPDSP r1
         eor r0, r1, r0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ INVERT ( a | ~a ) bitwise not
 
 defcode "INVERT",6,,INVERT
-        pop r0
+        POPDSP r0
         mvn r0, r0
-        push r0
+        PUSHDSP r0
         NEXT
 
 
@@ -554,39 +554,39 @@ defcode "INVERT",6,,INVERT
 
 defcode "LIT", 3,, LIT
         ldr r1, [FIP], #4
-        push r1
+        PUSHDSP r1
         NEXT
 
 @ ! ( value address -- ) write value at address
 
 defcode "!",1,,STORE
-        pop r0
-        pop r1
+        POPDSP r0
+        POPDSP r1
         str r1, [r0]
         NEXT
 
 @ @ ( address -- value ) reads value from address
 
 defcode "@",1,,FETCH
-        pop r1
+        POPDSP r1
         ldr r0, [r1]
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ C! and @! are the same for bytes
 
 defcode "C!",2,,STOREBYTE
-        pop r0
-        pop r1
+        POPDSP r0
+        POPDSP r1
         strb r1, [r0]
         NEXT
 
 
 defcode "C@",2,,FETCHBYTE
-        pop r0
+        POPDSP r0
         mov r1, #0
         ldrb r1, [r0]
-        push r1
+        PUSHDSP r1
         NEXT
 
 
@@ -595,9 +595,9 @@ defcode "C@",2,,FETCHBYTE
 @ address to dest address
 
 defcode "CMOVE",5,,CMOVE
-        pop r0
-        pop r1
-        pop r2
+        POPDSP r0
+        POPDSP r1
+        POPDSP r2
 1:
         cmp r0, #0              @ while length > 0
         ldrgtb r3, [r2], #1     @ read character from source
@@ -644,7 +644,7 @@ defcode "CMOVE",5,,CMOVE
 @ >R ( a -- ) move the top element from the data stack to the return stack
 
 defcode ">R",2,,TOR
-        pop r0
+        POPDSP r0
         PUSHRSP r0
         NEXT
 
@@ -652,7 +652,7 @@ defcode ">R",2,,TOR
 
 defcode "R>",2,,FROMR
         POPRSP r0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ RDROP drops the top element from the return stack
@@ -664,20 +664,20 @@ defcode "RDROP",5,,RDROP
 @ RSP@, RSP!, DSP@, DSP! manipulate the return and data stack pointers
 
 defcode "RSP@",4,,RSPFETCH
-        push RSP
+        PUSHDSP RSP
         NEXT
 
 defcode "RSP!",4,,RSPSTORE
-        pop RSP
+        POPDSP RSP
         NEXT
 
 defcode "DSP@",4,,DSPFETCH
         mov r0, DSP
-        push r0
+        PUSHDSP r0
         NEXT
 
 defcode "DSP!",4,,DSPSTORE
-        pop r0
+        POPDSP r0
         mov r0, DSP
         NEXT
 
@@ -687,13 +687,13 @@ defcode "DSP!",4,,DSPSTORE
 
 defcode "KEY",3,,KEY
         bl uart1_getc           @ extern int uart1_getc();
-        push r0                 @ push the return value on the stack
+        PUSHDSP r0              @ push the return value on the stack
         NEXT
 
 @ EMIT ( c -- ) outputs character c to stdout
 
 defcode "EMIT",4,,EMIT
-        pop r0
+        POPDSP r0
         bl uart1_putc           @ extern void uart1_putc(int c);
         NEXT
 
@@ -702,8 +702,8 @@ defcode "EMIT",4,,EMIT
 
 defcode "WORD",4,,WORD
         bl _WORD
-        push r0                 @ address
-        push r1                 @ length
+        PUSHDSP r0              @ address
+        PUSHDSP r1              @ length
         NEXT
 
 _WORD:
@@ -744,11 +744,11 @@ word_buffer:
 @ e is the number of unparsed characters
 
 defcode "NUMBER",6,,NUMBER
-        pop r1
-        pop r0
+        POPDSP r1
+        POPDSP r0
         bl _NUMBER
-        push r0
-        push r1
+        PUSHDSP r0
+        PUSHDSP r1
         NEXT
 
 _NUMBER:
@@ -836,10 +836,10 @@ _NUMBER:
 @ If the word is not found, NULL is returned.
 
 defcode "FIND",4,,FIND
-    pop r1 @length
-    pop r0 @addr
+        POPDSP r1       @ length
+        POPDSP r0       @ addr
         bl _FIND
-        push r0
+        PUSHDSP r0
         NEXT
 
 _FIND:
@@ -885,9 +885,9 @@ _FIND:
 @ Transformat a dictionary address into a code field address
 
 defcode ">CFA",4,,TCFA
-        pop r0
+        POPDSP r0
         bl _TCFA
-        push r0
+        PUSHDSP r0
         NEXT
 _TCFA:
         add r0,r0,#4            @ skip link field
@@ -914,8 +914,8 @@ defword ">DFA",4,,TDFA
 
 defcode "CREATE",6,,CREATE
 
-        pop r1          @ length of the word to insert into the dictionnary
-        pop r0          @ address of the word to insert into the dictionnary
+        POPDSP r1       @ length of the word to insert into the dictionnary
+        POPDSP r0       @ address of the word to insert into the dictionnary
 
         ldr r2,=var_HERE
         ldr r3,[r2]     @ load into r3 and r8 the location of the header
@@ -958,7 +958,7 @@ defcode "CREATE",6,,CREATE
 @ , ( n -- ) writes the top element from the stack at HERE
 
 defcode ",",1,,COMMA
-        pop r0
+        POPDSP r0
         bl _COMMA
         NEXT
 _COMMA:
@@ -1019,7 +1019,7 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
 
 defcode "HIDDEN",6,,HIDDEN
-        pop  r0
+        POPDSP  r0
         ldr r1, [r0, #4]!
         eor r1, r1, #F_HIDDEN
         str r1, [r0]
@@ -1038,7 +1038,7 @@ defword "HIDE",4,,HIDE
 
 defcode "'",1,,TICK
         ldr r1, [FIP], #4
-        push r1
+        PUSHDSP r1
         NEXT
 
 @ BRANCH ( -- ) changes FIP by offset which is found in the next codeword
@@ -1051,7 +1051,7 @@ defcode "BRANCH",6,,BRANCH
 @ 0BRANCH ( p -- ) branch if the top of the stack is zero
 
 defcode "0BRANCH",7,,ZBRANCH
-        pop r0
+        POPDSP r0
         cmp r0, #0              @ if the top of the stack is zero
         beq code_BRANCH         @ then branch
         add FIP, FIP, #4        @ else, skip the offset
@@ -1061,8 +1061,8 @@ defcode "0BRANCH",7,,ZBRANCH
 
 defcode "LITSTRING",9,,LITSTRING
         ldr r0, [FIP], #4       @ read length
-        push FIP                @ push address
-        push r0                 @ push string
+        PUSHDSP FIP             @ push address
+        PUSHDSP r0              @ push string
         add FIP, FIP, r0        @ skip the string
         add FIP, FIP, #3        @ find the next 4-byte boundary
         and FIP, FIP, #~3
@@ -1072,8 +1072,8 @@ defcode "LITSTRING",9,,LITSTRING
 
 defcode "TELL",4,,TELL
         mov r0, #stdout
-        pop r2 @length
-        pop r1 @addr
+        POPDSP r2               @ length
+        POPDSP r1               @ address
         ldr r7, =__NR_write
         swi 0
         NEXT
@@ -1144,7 +1144,7 @@ defcode "INTERPRET",9,,INTERPRET
                                         @  assummes it)
 
 5:  @ Push literal on the stack
-        push r6
+        PUSHDSP r6
         NEXT
 
 6:  @ Parse error
@@ -1181,13 +1181,13 @@ errmsg2end:
 defcode "CHAR",4,,CHAR
         bl _WORD
         ldrb r1, [r0]
-        push r1
+        PUSHDSP r1
         NEXT
 
 @ EXECUTE ( xt -- ) jump to the address on the stack
 
 defcode "EXECUTE",7,,EXECUTE
-        pop r0
+        POPDSP r0
         ldr r1, [r0]
         bx r1
 
@@ -1199,33 +1199,33 @@ defcode "EXECUTE",7,,EXECUTE
 @ SYSCALLX ( i [arg1 arg2 ar3] -- r )
 
 defcode "SYSCALL3",8,,SYSCALL3
-        pop r7
-        pop r0
-        pop r1
-        pop r2
+        POPDSP r7
+        POPDSP r0
+        POPDSP r1
+        POPDSP r2
         swi 0
-        push r0
+        PUSHDSP r0
         NEXT
 
 defcode "SYSCALL2",8,,SYSCALL2
-        pop r7
-        pop r0
-        pop r1
+        POPDSP r7
+        POPDSP r0
+        POPDSP r1
         swi 0
-        push r0
+        PUSHDSP r0
         NEXT
 
 defcode "SYSCALL1",8,,SYSCALL1
-        pop r7
-        pop r0
+        POPDSP r7
+        POPDSP r0
         swi 0
-        push r0
+        PUSHDSP r0
         NEXT
 
 defcode "SYSCALL0",8,,SYSCALL0
-        pop r7
+        POPDSP r7
         swi 0
-        push r0
+        PUSHDSP r0
         NEXT
 
 @ Reserve space for the return stack (8Kb)
