@@ -5,6 +5,7 @@
  * from David Welch at https://github.com/dwelch67/raspberrypi
  */
 
+typedef unsigned char u8;
 typedef unsigned int u32;
 
 /* Declare ARM assembly-language helper functions */
@@ -115,12 +116,12 @@ void uart1_puts(char* s)
     }
 }
 
+static char* hex = "0123456789abcdef";
+    
 /*
  * Output u32 in hexadecimal to mini UART
  */
 void uart1_hex32(u32 w) {
-    static char* hex = "0123456789abcdef";
-    
     uart1_putc(hex[0xF & (w >> 28)]);
     uart1_putc(hex[0xF & (w >> 24)]);
     uart1_putc(hex[0xF & (w >> 20)]);
@@ -132,11 +133,20 @@ void uart1_hex32(u32 w) {
 }
 
 /*
+ * Output u8 in hexadecimal to mini UART
+ */
+void uart1_hex8(u8 b) {
+    uart1_putc(hex[0xF & (b >> 4)]);
+    uart1_putc(hex[0xF & b]);
+}
+
+/*
  * Entry point for C code
  */
 void c_start(u32 sp)
 {
     int c;
+    int z = 0;
 
     uart1_init();
 
@@ -150,7 +160,7 @@ void c_start(u32 sp)
     
     // display banner
     uart1_puts("\r\n");
-    uart1_puts("pijFORTHos 0.1.0");
+    uart1_puts("pijFORTHos 0.1.1");
     uart1_puts(" sp=");
     uart1_hex32(sp);
     uart1_puts("\r\n");
@@ -158,9 +168,26 @@ void c_start(u32 sp)
     // echo console input to output
     for (;;) {
         c = uart1_getc();
+        if (z) {
+            uart1_hex8(c);  // display as hexadecimal value
+            uart1_putc('=');
+            if ((c > 0x20) && (c < 0x7F)) {  // echo printables
+                uart1_putc(c);
+            } else {
+                uart1_putc(' ');
+            }
+            uart1_putc(' ');
+        } else if ((c == '\r') || (c == '\n')) {
+            uart1_puts("\r\n");
+        } else {
+            uart1_putc(c);
+        }
         if (c == 0x04) {  // ^D to exit loop
             break;
         }
-        uart1_putc(c);
+        if (c == 0x1A) {  // ^Z toggle hexadecimal substitution
+            z = !z;
+        }
     }
+    uart1_puts("\r\nOK ");
 }
