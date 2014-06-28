@@ -240,14 +240,14 @@ defcode "2DROP",5,,TWODROP
         POPDSP r0       @ ( )
         NEXT
 
-@ : 2DUP OVER OVER ;
-defword "2DUP",4,,TWODUP  // duplicate top two elements of stack
+@ : 2DUP OVER OVER ;  // duplicate top two elements of stack
+defword "2DUP",4,,TWODUP
         .int OVER, OVER
         .int EXIT
 
-@ : 2SWAP >R -ROT R> -ROT ;
-defword "2SWAP",5,,TWOSWAP  // swap top two pairs of elements of stack
-        .int TOR NROT TOR NROT
+@ : 2SWAP >R -ROT R> -ROT ;  // swap top two pairs of elements of stack
+defword "2SWAP",5,,TWOSWAP
+        .int TOR, NROT, TOR, NROT
         .int EXIT
 
 @ ?DUP ( 0 -- 0 | a -- a a ) duplicates if non-zero
