@@ -1,4 +1,10 @@
 \ -*- text -*-
+\
+\       Much of the annotation has been removed from the file to expediate processing.
+\       See the files in the /annexia/ for the full Literate Code tutorial, it's great!
+\
+\	ORIGNAL NOTICE ----------------------------------------------------------------------
+\
 \	A sometimes minimal FORTH compiler and tutorial for Linux / i386 systems. -*- asm -*-
 \	By Richard W.M. Jones <rich@annexia.org> http://annexia.org/forth
 \	This is PUBLIC DOMAIN (see public domain release statement below).
@@ -13,69 +19,26 @@
 \	In case this is not legally possible, I grant any entity the right to use this work for any purpose,
 \	without any conditions, unless such conditions are required by law.
 \
-\	SETTING UP ----------------------------------------------------------------------
-\
-\	Let's get a few housekeeping things out of the way.  Firstly because I need to draw lots of
-\	ASCII-art diagrams to explain concepts, the best way to look at this is using a window which
-\	uses a fixed width font and is at least this wide:
-\
-\<------------------------------------------------------------------------------------------------------------------------>
-\
-\	Secondly make sure TABS are set to 8 characters.  The following should be a vertical
-\	line.  If not, sort out your tabs.
-\
-\		|
-\	        |
-\	    	|
-\
-\	Thirdly I assume that your screen is at least 50 characters high.
-\
-\	START OF FORTH CODE ----------------------------------------------------------------------
-\
-\	We've now reached the stage where the FORTH system is running and self-hosting.  All further
-\	words can be written as FORTH itself, including words like IF, THEN, .", etc which in most
-\	languages would be considered rather fundamental.
-\
-\	Some notes about the code:
-\
-\	I use indenting to show structure.  The amount of whitespace has no meaning to FORTH however
-\	except that you must use at least one whitespace character between words, and words themselves
-\	cannot contain whitespace.
-\
-\	FORTH is case-sensitive.  Use capslock!
 
-\ The primitive word /MOD (DIVMOD) leaves both the quotient and the remainder on the stack.  (On
-\ i386, the idivl instruction gives both anyway).  Now we can define the / and MOD in terms of /MOD
-\ and a few other primitives.
 : / /MOD SWAP DROP ;
 : MOD /MOD DROP ;
 
-\ Define some character constants
+: '\r' 13 ;
 : '\n' 10 ;
-: BL   32 ; \ BL (BLank) is a standard FORTH word for space.
+: BL   32 ;
 
-\ CR prints a carriage return
-: CR '\n' EMIT ;
-
-\ SPACE prints a space
+: CR '\r' EMIT '\n' EMIT ;  \ line terminator
 : SPACE BL EMIT ;
 
-\ NEGATE leaves the negative of a number on the stack.
 : NEGATE 0 SWAP - ;
 
-\ Standard words for booleans.
 : TRUE  1 ;
 : FALSE 0 ;
 : NOT   0= ;
 
-\ LITERAL takes whatever is on the stack and compiles LIT <foo>
-: LITERAL IMMEDIATE
-	' LIT ,		\ compile LIT
-	,		\ compile the literal itself (from the stack)
-	;
+: LITERAL IMMEDIATE ' LIT , , ;  \ takes <word> from the stack and compiles LIT <word>
 
-\ Now we can use [ and ] to insert literals which are calculated at compile time.  (Recall that
-\ [ and ] are the FORTH words which switch into and out of immediate mode.)
+\ Now we can use [ and ] to insert literals which are calculated at compile time.
 \ Within definitions, use [ ... ] LITERAL anywhere that '...' is a constant expression which you
 \ would rather only compute once (at compile time, rather than calculating it each time your word runs).
 : ':'
@@ -84,8 +47,6 @@
 	]		\ go back to compile mode
 	LITERAL		\ compile LIT 58 as the definition of ':' word
 ;
-
-\ A few more character constants defined the same way as above.
 : ';' [ CHAR ; ] LITERAL ;
 : '(' [ CHAR ( ] LITERAL ;
 : ')' [ CHAR ) ] LITERAL ;
@@ -95,7 +56,7 @@
 : '-' [ CHAR - ] LITERAL ;
 : '.' [ CHAR . ] LITERAL ;
 
-\ While compiling, '[COMPILE] word' compiles 'word' if it would otherwise be IMMEDIATE.
+\ While compiling, '[COMPILE] <word>' compiles <word> if it would otherwise be IMMEDIATE.
 : [COMPILE] IMMEDIATE
 	WORD		\ get the next word
 	FIND		\ find it in the dictionary
@@ -104,11 +65,6 @@
 ;
 
 \ RECURSE makes a recursive call to the current word that is being compiled.
-\
-\ Normally while a word is being compiled, it is marked HIDDEN so that references to the
-\ same word within are calls to the previous definition of the word.  However we still have
-\ access to the word which we are currently compiling through the LATEST pointer so we
-\ can use that to compile a recursive call.
 : RECURSE IMMEDIATE
 	LATEST @	\ LATEST points to the word being compiled at the moment
 	>CFA		\ get the codeword
@@ -117,37 +73,22 @@
 
 \	CONTROL STRUCTURES ----------------------------------------------------------------------
 \
-\ So far we have defined only very simple definitions.  Before we can go further, we really need to
-\ make some control structures, like IF ... THEN and loops.  Luckily we can define arbitrary control
-\ structures directly in FORTH.
-\
 \ Please note that the control structures as I have defined them here will only work inside compiled
 \ words.  If you try to type in expressions using IF, etc. in immediate mode, then they won't work.
 \ Making these work in immediate mode is left as an exercise for the reader.
 
-\ condition IF true-part THEN rest
-\	-- compiles to: --> condition 0BRANCH OFFSET true-part rest
-\	where OFFSET is the offset of 'rest'
-\ condition IF true-part ELSE false-part THEN
-\ 	-- compiles to: --> condition 0BRANCH OFFSET true-part BRANCH OFFSET2 false-part rest
-\	where OFFSET if the offset of false-part and OFFSET2 is the offset of rest
-
-\ IF is an IMMEDIATE word which compiles 0BRANCH followed by a dummy offset, and places
-\ the address of the 0BRANCH on the stack.  Later when we see THEN, we pop that address
-\ off the stack, calculate the offset, and back-fill the offset.
+\ <condition> IF <true-part> THEN <rest>
+\ <condition> IF <true-part> ELSE <false-part> THEN
 : IF IMMEDIATE
 	' 0BRANCH ,	\ compile 0BRANCH
 	HERE @		\ save location of the offset on the stack
 	0 ,		\ compile a dummy offset
 ;
-
 : THEN IMMEDIATE
 	DUP
 	HERE @ SWAP -	\ calculate the offset from the address saved on the stack
 	SWAP !		\ store the offset in the back-filled location
 ;
-
-
 : ELSE IMMEDIATE
 	' BRANCH ,	\ definite branch to just over the false-part
 	HERE @		\ save location of the offset on the stack
@@ -158,34 +99,27 @@
 	SWAP !
 ;
 
-\ BEGIN loop-part condition UNTIL
-\	-- compiles to: --> loop-part condition 0BRANCH OFFSET
-\	where OFFSET points back to the loop-part
-\ This is like do { loop-part } while (condition) in the C language
+\ BEGIN <loop-part> <condition> UNTIL
+\ This is like do { <loop-part> } while (<condition>) in the C language
 : BEGIN IMMEDIATE
 	HERE @		\ save location on the stack
 ;
-
 : UNTIL IMMEDIATE
 	' 0BRANCH ,	\ compile 0BRANCH
 	HERE @ -	\ calculate the offset from the address saved on the stack
 	,		\ compile the offset here
 ;
 
-\ BEGIN loop-part AGAIN
-\	-- compiles to: --> loop-part BRANCH OFFSET
-\	where OFFSET points back to the loop-part
-\ In other words, an infinite loop which can only be returned from with EXIT
+\ BEGIN <loop-part> AGAIN
+\ An infinite loop which can only be returned from with EXIT
 : AGAIN IMMEDIATE
 	' BRANCH ,	\ compile BRANCH
 	HERE @ -	\ calculate the offset back
 	,		\ compile the offset here
 ;
 
-\ BEGIN condition WHILE loop-part REPEAT
-\	-- compiles to: --> condition 0BRANCH OFFSET2 loop-part BRANCH OFFSET
-\	where OFFSET points back to condition (the beginning) and OFFSET2 points to after the whole piece of code
-\ So this is like a while (condition) { loop-part } loop in the C language
+\ BEGIN <condition> WHILE <loop-part> REPEAT
+\ So this is like a while (<condition>) { <loop-part> } loop in the C language
 : WHILE IMMEDIATE
 	' 0BRANCH ,	\ compile 0BRANCH
 	HERE @		\ save location of the offset2 on the stack
@@ -202,13 +136,6 @@
 ;
 
 \ UNLESS is the same as IF but the test is reversed.
-\
-\ Note the use of [COMPILE]: Since IF is IMMEDIATE we don't want it to be executed while UNLESS
-\ is compiling, but while UNLESS is running (which happens to be when whatever word using UNLESS is
-\ being compiled -- whew!).  So we use [COMPILE] to reverse the effect of marking IF as immediate.
-\ This trick is generally used when we want to write our own control words without having to
-\ implement them all in terms of the primitives 0BRANCH and BRANCH, but instead reusing simpler
-\ control words like (in this instance) IF.
 : UNLESS IMMEDIATE
 	' NOT ,		\ compile NOT (to reverse the test)
 	[COMPILE] IF	\ continue by calling the normal IF
@@ -284,25 +211,10 @@
 	U.	( u -- )	which prints an unsigned number
 	.R	( n width -- )	which prints a signed number, padded to a certain width.
 
-	For example:
-		-123 6 .R
-	will print out these characters:
-		<space> <space> - 1 2 3
-
-	In other words, the number padded left to a certain number of characters.
-
-	The full number is printed even if it is wider than width, and this is what allows us to
-	define the ordinary functions U. and . (we just set width to zero knowing that the full
-	number will be printed anyway).
-
-	Another wrinkle of . and friends is that they obey the current base in the variable BASE.
-	BASE can be anything in the range 2 to 36.
-
-	While we're defining . &c we can also define .S which is a useful debugging tool.  This
-	word prints the current stack (non-destructively) from top to bottom.
+	. and friends obey the current base in the variable BASE, which can range from 2 to 36.
 )
 
-( This is the underlying recursive definition of U. )
+( This is the underlying recursive definition of U. It will be redefined below. )
 : U.		( u -- )
 	BASE @ /MOD	( width rem quot )
 	?DUP IF			( if quotient <> 0 then )
@@ -352,18 +264,11 @@
 	UWIDTH		( width u uwidth )
 	ROT		( u uwidth width )
 	SWAP -		( u width-uwidth )
-	( At this point if the requested width is narrower, we'll have a negative number on the stack.
-	  Otherwise the number on the stack is the number of spaces to print.  But SPACES won't print
-	  a negative number of spaces anyway, so it's now safe to call SPACES ... )
 	SPACES
-	( ... and then call the underlying implementation of U. )
 	U.
 ;
 
-(
-	.R prints a signed number, padded to a certain width.  We can't just print the sign
-	and call U.R because we want the sign to be next to the number ('-123' instead of '-  123').
-)
+( .R prints a signed number, padded to a certain width. )
 : .R		( n width -- )
 	SWAP		( width n )
 	DUP 0< IF
@@ -396,7 +301,9 @@
 ( Finally we can define word . in terms of .R, with a trailing space. )
 : . 0 .R SPACE ;
 
-( The real U., note the trailing space. )
+( The real U., note the trailing space.
+  All code beyond this point will use the new definition.
+  Old code, including this definition, continues to use the old version.  )
 : U. U. SPACE ;
 
 ( ? fetches the integer at an address and prints it. )
@@ -425,16 +332,12 @@
 	4-			( adjust because S0 was on the stack when we pushed DSP )
 ;
 
-(
-	ALIGNED takes an address and rounds it up (aligns it) to the next 4 byte boundary.
-)
+( ALIGNED takes an address and rounds it up (aligns it) to the next 4 byte boundary. )
 : ALIGNED	( addr -- addr )
 	3 + 3 INVERT AND	( (addr+3) & ~3 )
 ;
 
-(
-	ALIGN aligns the HERE pointer, so the next word appended will be aligned properly.
-)
+( ALIGN aligns the HERE pointer, so the next word appended will be aligned properly. )
 : ALIGN HERE @ ALIGNED HERE ! ;
 
 (
@@ -443,19 +346,6 @@
 	S" string" is used in FORTH to define strings.  It leaves the address of the string and
 	its length on the stack, (length at the top of stack).  The space following S" is the normal
 	space between FORTH words and is not a part of the string.
-
-	This is tricky to define because it has to do different things depending on whether
-	we are compiling or in immediate mode.  (Thus the word is marked IMMEDIATE so it can
-	detect this and do different things).
-
-	In compile mode we append
-		LITSTRING <string length> <string rounded up 4 bytes>
-	to the current word.  The primitive LITSTRING does the right thing when the current
-	word is executed.
-
-	In immediate mode there isn't a particularly good place to put the string, but in this
-	case we put the string at HERE (but we _don't_ change HERE).  This is meant as a temporary
-	location, likely to be overwritten soon after.
 )
 ( C, appends a byte to the current compiled word. )
 : C,
@@ -500,17 +390,6 @@
 	." is the print string operator in FORTH.  Example: ." Something to print"
 	The space after the operator is the ordinary space required between words and is not
 	a part of what is printed.
-
-	In immediate mode we just keep reading characters and printing them until we get to
-	the next double quote.
-
-	In compile mode we use S" to store the string, then add TELL afterwards:
-		LITSTRING <string length> <string rounded up to 4 bytes> TELL
-
-	It may be interesting to note the use of [COMPILE] to turn the call to the immediate
-	word S" into compilation of that word.  It compiles it into the definition of .",
-	not into the definition of the word being compiled when this is running (complicated
-	enough for you?)
 )
 : ." IMMEDIATE		( -- )
 	STATE @ IF	( compiling? )
@@ -554,37 +433,6 @@
 
 	Note that variables are uninitialised (but see VALUE later on which provides initialised
 	variables with a slightly simpler syntax).
-
-	How can we define the words CONSTANT and VARIABLE?
-
-	The trick is to define a new word for the variable itself (eg. if the variable was called
-	'VAR' then we would define a new word called VAR).  This is easy to do because we exposed
-	dictionary entry creation through the CREATE word (part of the definition of : above).
-	A call to WORD [TEN] CREATE (where [TEN] means that "TEN" is the next word in the input)
-	leaves the dictionary entry:
-
-				   +--- HERE
-				   |
-				   V
-	+---------+---+---+---+---+
-	| LINK    | 3 | T | E | N |
-	+---------+---+---+---+---+
-                   len
-
-	For CONSTANT we can continue by appending DOCOL (the codeword), then LIT followed by
-	the constant itself and then EXIT, forming a little word definition that returns the
-	constant:
-
-	+---------+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 3 | T | E | N | DOCOL      | LIT        | 10         | EXIT       |
-	+---------+---+---+---+---+------------+------------+------------+------------+
-                   len              codeword
-
-	Notice that this word definition is exactly the same as you would have got if you had
-	written : TEN 10 ;
-
-	Note for people reading the code below: DOCOL is a constant word which we defined in the
-	assembler part which returns the value of the assembler symbol of the same name.
 )
 : CONSTANT
 	WORD		( get the name (the name follows CONSTANT) )
@@ -596,22 +444,6 @@
 ;
 
 (
-	VARIABLE is a little bit harder because we need somewhere to put the variable.  There is
-	nothing particularly special about the user memory (the area of memory pointed to by HERE
-	where we have previously just stored new word definitions).  We can slice off bits of this
-	memory area to store anything we want, so one possible definition of VARIABLE might create
-	this:
-
-	   +--------------------------------------------------------------+
-	   |								  |
-	   V								  |
-	+---------+---------+---+---+---+---+------------+------------+---|--------+------------+
-	| <var>   | LINK    | 3 | V | A | R | DOCOL      | LIT        | <addr var> | EXIT       |
-	+---------+---------+---+---+---+---+------------+------------+------------+------------+
-        		     len              codeword
-
-	where <var> is the place to store the variable, and <addr var> points back to it.
-
 	To make this more general let's define a couple of words which we can use to allocate
 	arbitrary memory from the user memory.
 
@@ -659,41 +491,6 @@
 	making values simpler and more obvious to use than variables (no indirection through '@').
 	The price is a more complicated implementation, although despite the complexity there is no
 	performance penalty at runtime.
-
-	A naive implementation of 'TO' would be quite slow, involving a dictionary search each time.
-	But because this is FORTH we have complete control of the compiler so we can compile TO more
-	efficiently, turning:
-		TO VAL
-	into:
-		LIT <addr> !
-	and calculating <addr> (the address of the value) at compile time.
-
-	Now this is the clever bit.  We'll compile our value like this:
-
-	+---------+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 3 | V | A | L | DOCOL      | LIT        | <value>    | EXIT       |
-	+---------+---+---+---+---+------------+------------+------------+------------+
-                   len              codeword
-
-	where <value> is the actual value itself.  Note that when VAL executes, it will push the
-	value on the stack, which is what we want.
-
-	But what will TO use for the address <addr>?  Why of course a pointer to that <value>:
-
-		code compiled	- - - - --+------------+------------+------------+-- - - - -
-		by TO VAL		  | LIT        | <addr>     | !          |
-				- - - - --+------------+-----|------+------------+-- - - - -
-							     |
-							     V
-	+---------+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 3 | V | A | L | DOCOL      | LIT        | <value>    | EXIT       |
-	+---------+---+---+---+---+------------+------------+------------+------------+
-                   len              codeword
-
-	In other words, this is a kind of self-modifying code.
-
-	(Note to the people who want to modify this FORTH to add inlining: values defined this
-	way cannot be inlined).
 )
 : VALUE		( n -- )
 	WORD CREATE	( make the dictionary entry (the name follows VALUE) )
@@ -799,17 +596,6 @@
 
 	'FORGET word' deletes the definition of 'word' from the dictionary and everything defined
 	after it, including any variables and other memory allocated after.
-
-	The implementation is very simple - we look up the word (which returns the dictionary entry
-	address).  Then we set HERE to point to that address, so in effect all future allocations
-	and definitions will overwrite memory starting at the word.  We also need to set LATEST to
-	point to the previous word.
-
-	Note that you cannot FORGET built-in words (well, you can try but it will probably cause
-	a segfault).
-
-	XXX: Because we wrote VARIABLE to store the variable in memory allocated before the word,
-	in the current implementation VARIABLE FOO FORGET FOO will leak 1 cell of memory.
 )
 : FORGET
 	WORD FIND	( find the word, gets the dictionary entry address )
@@ -859,7 +645,7 @@
 		WHILE
 			SWAP		( addr len linelen addr )
 			DUP C@		( addr len linelen addr byte )
-			DUP 32 128 WITHIN IF	( 32 <= c < 128? )
+			DUP 32 127 WITHIN IF	( 32 <= c < 127? )
 				EMIT
 			ELSE
 				DROP '.' EMIT
@@ -904,48 +690,8 @@
 	The default case may be omitted.  In fact the tests may also be omitted so that you
 	just have a default case, although this is probably not very useful.
 
-	An example (assuming that 'q', etc. are words which push the ASCII value of the letter
-	on the stack):
-
-		0 VALUE QUIT
-		0 VALUE SLEEP
-		KEY CASE
-			'q' OF 1 TO QUIT ENDOF
-			's' OF 1 TO SLEEP ENDOF
-			( default case: )
-			." Sorry, I didn't understand key <" DUP EMIT ." >, try again." CR
-		ENDCASE
-
-	(In some versions of FORTH, more advanced tests are supported, such as ranges, etc.
-	Other versions of FORTH need you to write OTHERWISE to indicate the default case.
-	As I said above, this FORTH tries to follow the ANS FORTH standard).
-
 	The implementation of CASE...ENDCASE is somewhat non-trivial.  I'm following the
-	implementations from here:
-	http://www.uni-giessen.de/faq/archiv/forthfaq.case_endcase/msg00000.html
-
-	The general plan is to compile the code as a series of IF statements:
-
-	CASE				(push 0 on the immediate-mode parameter stack)
-	test1 OF ... ENDOF		test1 OVER = IF DROP ... ELSE
-	test2 OF ... ENDOF		test2 OVER = IF DROP ... ELSE
-	testn OF ... ENDOF		testn OVER = IF DROP ... ELSE
-	... ( default case )		...
-	ENDCASE				DROP THEN [THEN [THEN ...]]
-
-	The CASE statement pushes 0 on the immediate-mode parameter stack, and that number
-	is used to count how many THEN statements we need when we get to ENDCASE so that each
-	IF has a matching THEN.  The counting is done implicitly.  If you recall from the
-	implementation above of IF, each IF pushes a code address on the immediate-mode stack,
-	and these addresses are non-zero, so by the time we get to ENDCASE the stack contains
-	some number of non-zeroes, followed by a zero.  The number of non-zeroes is how many
-	times IF has been called, so how many times we need to match it with THEN.
-
-	This code uses [COMPILE] so that we compile calls to IF, ELSE, THEN instead of
-	actually calling them while we're compiling the words below.
-
-	As is the case with all of our control structures, they only work within word
-	definitions, not in immediate mode.
+	implementations from http://www.uni-giessen.de/faq/archiv/forthfaq.case_endcase/msg00000.html
 )
 : CASE IMMEDIATE
 	0		( push 0 to mark the bottom of the stack )
@@ -1004,22 +750,7 @@
 	0		( sorry, nothing found )
 ;
 
-(
-	SEE decompiles a FORTH word.
-
-	We search for the dictionary entry of the word, then search again for the next
-	word (effectively, the end of the compiled word).  This results in two pointers:
-
-	+---------+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 3 | T | E | N | DOCOL      | LIT        | 10         | EXIT       |
-	+---------+---+---+---+---+------------+------------+------------+------------+
-	 ^									       ^
-	 |									       |
-	Start of word							      End of word
-
-	With this information we can have a go at decompiling the word.  We need to
-	recognise "meta-words" like LIT, LITSTRING, BRANCH, etc. and treat those separately.
-)
+( SEE decompiles a FORTH word. )
 : SEE
 	WORD FIND	( find the dictionary entry to decompile )
 
@@ -1113,30 +844,11 @@
 	Standard FORTH defines a concept called an 'execution token' (or 'xt') which is very
 	similar to a function pointer in C.  We map the execution token to a codeword address.
 
-			execution token of DOUBLE is the address of this codeword
-						    |
-						    V
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-                   len                         pad  codeword					       ^
-
 	There is one assembler primitive for execution tokens, EXECUTE ( xt -- ), which runs them.
 
-	You can make an execution token for an existing word the long way using >CFA,
-	ie: WORD [foo] FIND >CFA will push the xt for foo onto the stack where foo is the
-	next word in input.  So a very slow way to run DOUBLE might be:
-
-		: DOUBLE DUP + ;
-		: SLOW WORD FIND >CFA EXECUTE ;
-		5 SLOW DOUBLE . CR	\ prints 10
-
-	We also offer a simpler and faster way to get the execution token of any word FOO:
+	You can make an execution token for any word FOO, like this:
 
 		['] FOO
-
-	(Exercises for readers: (1) What is the difference between ['] FOO and ' FOO?
-	(2) What is the relationship between ', ['] and LIT?)
 
 	More useful is to define anonymous words and/or to assign xt's to variables.
 
@@ -1153,10 +865,8 @@
 		10 SWAP EXECUTE		\ prints 'called with parameter 10'
 		20 SWAP EXECUTE		\ prints 'called with parameter 20'
 
-	Notice that the above code has a memory leak: the anonymous word is still compiled
-	into the data segment, so even if you lose track of the xt, the word continues to
-	occupy memory.  A good way to keep track of the xt and thus avoid the memory leak is
-	to assign it to a CONSTANT, VARIABLE or VALUE:
+	A good way to keep track of the xt (and thus avoid a memory leak)
+	is to assign it to a CONSTANT, VARIABLE or VALUE:
 
 		0 VALUE ANON
 		:NONAME ." anon word was called" CR ; TO ANON
@@ -1233,52 +943,7 @@
 		( 0 -- )
 		( * e -- ?_n-1 ... ?_1 ?_0 e )	the stack is restored to the state from the corresponding CATCH
 
-	The implementation hangs on the definitions of CATCH and THROW and the state shared
-	between them.
-
-	Up to this point, the return stack has consisted merely of a list of return addresses,
-	with the top of the return stack being the return address where we will resume executing
-	when the current word EXITs.  However CATCH will push a more complicated 'exception stack
-	frame' on the return stack.  The exception stack frame records some things about the
-	state of execution at the time that CATCH was called.
-
-	When called, THROW walks up the return stack (the process is called 'unwinding') until
-	it finds the exception stack frame.  It then uses the data in the exception stack frame
-	to restore the state allowing execution to continue after the matching CATCH.  (If it
-	unwinds the stack and doesn't find the exception stack frame then it prints a message
-	and drops back to the prompt, which is also normal behaviour for so-called 'uncaught
-	exceptions').
-
-	This is what the exception stack frame looks like.  (As is conventional, the return stack
-	is shown growing downwards from higher to lower memory addresses).
-
-		+------------------------------+
-		| return address from CATCH    |   Notice this is already on the
-		|                              |   return stack when CATCH is called.
-		+------------------------------+
-		| original parameter stack     |
-		| pointer                      |
-		+------------------------------+  ^
-		| exception stack marker       |  |
-		| (EXCEPTION-MARKER)           |  |   Direction of stack
-		+------------------------------+  |   unwinding by THROW.
-						  |
-						  |
-
-	The EXCEPTION-MARKER marks the entry as being an exception stack frame rather than an
-	ordinary return address, and it is this which THROW "notices" as it is unwinding the
-	stack.  (If you want to implement more advanced exceptions such as TRY...WITH then
-	you'll need to use a different value of marker if you want the old and new exception stack
-	frame layouts to coexist).
-
-	What happens if the executed word doesn't throw an exception?  It will eventually
-	return and call EXCEPTION-MARKER, so EXCEPTION-MARKER had better do something sensible
-	without us needing to modify EXIT.  This nicely gives us a suitable definition of
-	EXCEPTION-MARKER, namely a function that just drops the stack frame and itself
-	returns (thus "returning" from the original CATCH).
-
-	One thing to take from this is that exceptions are a relatively lightweight mechanism
-	in FORTH.
+	Exceptions are a relatively lightweight mechanism in FORTH.
 )
 
 : EXCEPTION-MARKER
@@ -1365,272 +1030,14 @@
 ;
 
 (
-	C STRINGS ----------------------------------------------------------------------
-
-	FORTH strings are represented by a start address and length kept on the stack or in memory.
-
-	Most FORTHs don't handle C strings, but we need them in order to access the process arguments
-	and environment left on the stack by the Linux kernel, and to make some system calls.
-
-	Operation	Input		Output		FORTH word	Notes
-	----------------------------------------------------------------------
-
-	Create FORTH string		addr len	S" ..."
-
-	Create C string			c-addr		Z" ..."
-
-	C -> FORTH	c-addr		addr len	DUP STRLEN
-
-	FORTH -> C	addr len	c-addr		CSTRING		Allocated in a temporary buffer, so
-									should be consumed / copied immediately.
-									FORTH string should not contain NULs.
-
-	For example, DUP STRLEN TELL prints a C string.
-)
-
-(
-	Z" .." is like S" ..." except that the string is terminated by an ASCII NUL character.
-
-	To make it more like a C string, at runtime Z" just leaves the address of the string
-	on the stack (not address & length as with S").  To implement this we need to add the
-	extra NUL to the string and also a DROP instruction afterwards.  Apart from that the
-	implementation just a modified S".
-)
-: Z" IMMEDIATE
-	STATE @ IF	( compiling? )
-		' LITSTRING ,	( compile LITSTRING )
-		HERE @		( save the address of the length word on the stack )
-		0 ,		( dummy length - we don't know what it is yet )
-		BEGIN
-			KEY 		( get next character of the string )
-			DUP '"' <>
-		WHILE
-			HERE @ C!	( store the character in the compiled image )
-			1 HERE +!	( increment HERE pointer by 1 byte )
-		REPEAT
-		0 HERE @ C!	( add the ASCII NUL byte )
-		1 HERE +!
-		DROP		( drop the double quote character at the end )
-		DUP		( get the saved address of the length word )
-		HERE @ SWAP -	( calculate the length )
-		4-		( subtract 4 (because we measured from the start of the length word) )
-		SWAP !		( and back-fill the length location )
-		ALIGN		( round up to next multiple of 4 bytes for the remaining code )
-		' DROP ,	( compile DROP (to drop the length) )
-	ELSE		( immediate mode )
-		HERE @		( get the start address of the temporary space )
-		BEGIN
-			KEY
-			DUP '"' <>
-		WHILE
-			OVER C!		( save next character )
-			1+		( increment address )
-		REPEAT
-		DROP		( drop the final " character )
-		0 SWAP C!	( store final ASCII NUL )
-		HERE @		( push the start address )
-	THEN
-;
-
-: STRLEN 	( str -- len )
-	DUP		( save start address )
-	BEGIN
-		DUP C@ 0<>	( zero byte found? )
-	WHILE
-		1+
-	REPEAT
-
-	SWAP -		( calculate the length )
-;
-
-: CSTRING	( addr len -- c-addr )
-	SWAP OVER	( len saddr len )
-	HERE @ SWAP	( len saddr daddr len )
-	CMOVE		( len )
-
-	HERE @ +	( daddr+len )
-	0 SWAP C!	( store terminating NUL char )
-
-	HERE @ 		( push start address )
-;
-
-(
-	THE ENVIRONMENT ----------------------------------------------------------------------
-
-	Linux makes the process arguments and environment available to us on the stack.
-
-	The top of stack pointer is saved by the early assembler code when we start up in the FORTH
-	variable S0, and starting at this pointer we can read out the command line arguments and the
-	environment.
-
-	Starting at S0, S0 itself points to argc (the number of command line arguments).
-
-	S0+4 points to argv[0], S0+8 points to argv[1] etc up to argv[argc-1].
-
-	argv[argc] is a NULL pointer.
-
-	After that the stack contains environment variables, a set of pointers to strings of the
-	form NAME=VALUE and on until we get to another NULL pointer.
-
-	The first word that we define, ARGC, pushes the number of command line arguments (note that
-	as with C argc, this includes the name of the command).
-)
-: ARGC
-	S0 @ @
-;
-
-(
-	n ARGV gets the nth command line argument.
-
-	For example to print the command name you would do:
-		0 ARGV TELL CR
-)
-: ARGV ( n -- str u )
-	1+ CELLS S0 @ +	( get the address of argv[n] entry )
-	@		( get the address of the string )
-	DUP STRLEN	( and get its length / turn it into a FORTH string )
-;
-
-(
-	ENVIRON returns the address of the first environment string.  The list of strings ends
-	with a NULL pointer.
-
-	For example to print the first string in the environment you could do:
-		ENVIRON @ DUP STRLEN TELL
-)
-: ENVIRON	( -- addr )
-	ARGC		( number of command line parameters on the stack to skip )
-	2 +		( skip command line count and NULL pointer after the command line args )
-	CELLS		( convert to an offset )
-	S0 @ +		( add to base stack address )
-;
-
-(
-	SYSTEM CALLS AND FILES  ----------------------------------------------------------------------
-
-	Miscellaneous words related to system calls, and standard access to files.
-)
-
-( BYE exits by calling the Linux exit(2) syscall. )
-: BYE		( -- )
-	0		( return code (0) )
-	SYS_EXIT	( system call number )
-	SYSCALL1
-;
-
-(
 	UNUSED returns the number of cells remaining in the user memory (data segment).
-
-	For our implementation we will use Linux brk(2) system call to find out the end
-	of the data segment and subtract HERE from it.
 )
-: GET-BRK	( -- brkpoint )
-	0 SYS_BRK SYSCALL1	( call brk(0) )
-;
 
 : UNUSED	( -- n )
-	GET-BRK		( get end of data segment according to the kernel )
-	HERE @		( get current position in data segment )
-	-
-	4 /		( returns number of cells )
+	HEX 18000 DECIMAL	( FIXME: need to expose the real "data_segment_top" symbol )
+	HERE @			( get current position in data segment )
+	- 4 /			( returns number of 4-byte cells )
 ;
-
-(
-	MORECORE increases the data segment by the specified number of (4 byte) cells.
-
-	NB. The number of cells requested should normally be a multiple of 1024.  The
-	reason is that Linux can't extend the data segment by less than a single page
-	(4096 bytes or 1024 cells).
-
-	This FORTH doesn't automatically increase the size of the data segment "on demand"
-	(ie. when , (COMMA), ALLOT, CREATE, and so on are used).  Instead the programmer
-	needs to be aware of how much space a large allocation will take, check UNUSED, and
-	call MORECORE if necessary.  A simple programming exercise is to change the
-	implementation of the data segment so that MORECORE is called automatically if
-	the program needs more memory.
-)
-: BRK		( brkpoint -- )
-	SYS_BRK SYSCALL1
-;
-
-: MORECORE	( cells -- )
-	CELLS GET-BRK + BRK
-;
-
-(
-	Standard FORTH provides some simple file access primitives which we model on
-	top of Linux syscalls.
-
-	The main complication is converting FORTH strings (address & length) into C
-	strings for the Linux kernel.
-
-	Notice there is no buffering in this implementation.
-)
-
-: R/O ( -- fam ) O_RDONLY ;
-: R/W ( -- fam ) O_RDWR ;
-
-: OPEN-FILE	( addr u fam -- fd 0 (if successful) | c-addr u fam -- fd errno (if there was an error) )
-	-ROT		( fam addr u )
-	CSTRING		( fam cstring )
-	SYS_OPEN SYSCALL2 ( open (filename, flags) )
-	DUP		( fd fd )
-	DUP 0< IF	( errno? )
-		NEGATE		( fd errno )
-	ELSE
-		DROP 0		( fd 0 )
-	THEN
-;
-
-: CREATE-FILE	( addr u fam -- fd 0 (if successful) | c-addr u fam -- fd errno (if there was an error) )
-	O_CREAT OR
-	O_TRUNC OR
-	-ROT		( fam addr u )
-	CSTRING		( fam cstring )
-	420 -ROT	( 0644 fam cstring )
-	SYS_OPEN SYSCALL3 ( open (filename, flags|O_TRUNC|O_CREAT, 0644) )
-	DUP		( fd fd )
-	DUP 0< IF	( errno? )
-		NEGATE		( fd errno )
-	ELSE
-		DROP 0		( fd 0 )
-	THEN
-;
-
-: CLOSE-FILE	( fd -- 0 (if successful) | fd -- errno (if there was an error) )
-	SYS_CLOSE SYSCALL1
-	NEGATE
-;
-
-: READ-FILE	( addr u fd -- u2 0 (if successful) | addr u fd -- 0 0 (if EOF) | addr u fd -- u2 errno (if error) )
-	>R SWAP R>	( u addr fd )
-	SYS_READ SYSCALL3
-
-	DUP		( u2 u2 )
-	DUP 0< IF	( errno? )
-		NEGATE		( u2 errno )
-	ELSE
-		DROP 0		( u2 0 )
-	THEN
-;
-
-(
-	PERROR prints a message for an errno, similar to C's perror(3) but we don't have the extensive
-	list of strerror strings available, so all we can do is print the errno.
-)
-: PERROR	( errno addr u -- )
-	TELL
-	':' EMIT SPACE
-	." ERRNO="
-	. CR
-;
-
-(
-	NOTES ----------------------------------------------------------------------
-
-	DOES> isn't possible to implement with this FORTH because we don't have a separate
-	data pointer.
-)
 
 (
 	WELCOME MESSAGE ----------------------------------------------------------------------
@@ -1646,5 +1053,5 @@
 	THEN
 ;
 
- WELCOME
- HIDE WELCOME
+WELCOME
+HIDE WELCOME
