@@ -37,6 +37,13 @@ extern int getchar();
 #define AUX_MU_STAT_REG 0x20215064
 #define AUX_MU_BAUD_REG 0x20215068
 
+/* Private data structures */
+int linepos = 0;  // read position
+int linelen = 0;  // write position
+static char linebuf[1024];  // line editing buffer
+static char* hex = "0123456789abcdef";  // hexadecimal map
+    
+
 /*
  * Initialize mini UART to use GPIO pins 14 and 15
  */
@@ -116,8 +123,6 @@ void uart1_puts(char* s)
     }
 }
 
-static char* hex = "0123456789abcdef";
-    
 /*
  * Output u32 in hexadecimal to mini UART
  */
@@ -155,7 +160,7 @@ int putchar(int c) {
 /*
  * Traditional single-character input
  */
-int getchar() {
+static int _getchar() {  // unbuffered
     int c;
 
     c = uart1_getc();
@@ -164,13 +169,46 @@ int getchar() {
     }
     return c;
 }
+int getchar() {  // buffered
+    while (linepos >= linelen) {
+        editline();
+    }
+    return linebuf[linepos++];
+}
 
+/*
+ * Get single line of edited input
+ */
+char* editline() {
+    int c;
+
+    linelen = 0;  // reset write position
+    while (linelen < (sizeof(linebuf) - 1)) {
+        c = _getchar();
+        if (c == '\b') {
+            if (--linelen < 0) {
+                linelen = 0;
+                continue;  // no echo
+            }
+        } else {
+            linebuf[linelen++] = c;
+        }
+        putchar(c);  // echo input
+        if (c == '\n') {
+            break;  // end-of-line
+        }
+    }
+    linebuf[linelen] = '\0';  // ensure NUL termination
+    linepos = 0;  // reset read position
+    return linebuf;
+}
 
 /*
  * Entry point for C code
  */
 void c_start(u32 sp)
 {
+    u32 buf[16];  // stack space preceeds kernel entry-point
     int c;
     int z = 0;
 
@@ -186,9 +224,11 @@ void c_start(u32 sp)
     
     // display banner
     uart1_puts("\r\n");
-    uart1_puts("pijFORTHos 0.1.1");
-    uart1_puts(" sp=");
-    uart1_hex32(sp);
+    uart1_puts("pijFORTHos 0.1.2");
+//    uart1_puts(" sp=");
+//    uart1_hex32(sp);
+    uart1_puts(" buf=");
+    uart1_hex32((u32)buf);
     uart1_puts("\r\n");
     
     // echo console input to output
@@ -204,8 +244,8 @@ void c_start(u32 sp)
             }
             uart1_putc(' ');
         } else {  // "cooked" mode
-            c = getchar();
-            putchar(c);
+            c = getchar();  // buffered input also echos
+//            putchar(c);
         }
         if (c == 0x04) {  // ^D to exit loop
             break;
