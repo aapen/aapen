@@ -1202,10 +1202,10 @@ return_stack:
         .space RETURN_STACK_SIZE
 return_stack_top:
 
-@ Reserve space for new words and data structures (32Kb)
+@ Reserve space for new words and data structures (16Kb)
         .bss
         .align 12
-        .set DATA_SEGMENT_SIZE, 0x8000
+        .set DATA_SEGMENT_SIZE, 0x4000
 data_segment:
         .space DATA_SEGMENT_SIZE
 data_segment_top:
