@@ -23,12 +23,11 @@
 : / /MOD SWAP DROP ;
 : MOD /MOD DROP ;
 
-: '\r' 13 ;
 : '\n' 10 ;
 : BL   32 ;
 
-: CR '\r' EMIT '\n' EMIT ;  \ line terminator
-: SPACE BL EMIT ;
+: CR '\n' EMIT ;  \ print newline
+: SPACE BL EMIT ;  \ print space
 
 : NEGATE 0 SWAP - ;
 

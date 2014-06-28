@@ -598,14 +598,14 @@ defcode "DSP!",4,,DSPSTORE
 
 @ KEY ( -- c ) Reads a character from stdin
 defcode "KEY",3,,KEY
-        bl uart1_getc           @ r0 = uart1_getc();
+        bl getchar              @ r0 = getchar();
         PUSHDSP r0              @ push the return value on the stack
         NEXT
 
-@ EMIT ( c -- ) outputs character c to stdout
+@ EMIT ( c -- ) Writes character c to stdout
 defcode "EMIT",4,,EMIT
         POPDSP r0
-        bl uart1_putc           @ uart1_putc(r0);
+        bl putchar              @ putchar(r0);
         NEXT
 
 @ WORD ( -- addr length ) reads next word from stdin
@@ -619,7 +619,7 @@ defcode "WORD",4,,WORD
 _WORD:
         stmfd   sp!, {r6,lr}    @ preserve r6 and lr
 1:
-        bl uart1_getc           @ read a character
+        bl getchar              @ read a character
         cmp r0, #'\\'
         beq 3f                  @ skip comments until end of line
         cmp r0, #' '
@@ -628,7 +628,7 @@ _WORD:
         ldr     r6, =word_buffer
 2:
         strb r0, [r6], #1       @ store character in word buffer
-        bl uart1_getc           @ read more characters until a space is found
+        bl getchar              @ read more characters until a space is found
         cmp r0, #' '
         bgt 2b
 
@@ -638,7 +638,7 @@ _WORD:
         ldmfd sp!, {r6,lr}      @ restore r6 and lr
         bx lr
 3:
-        bl uart1_getc           @ skip all characters until end of line
+        bl getchar              @ skip all characters until end of line
         cmp r0, #'\n'
         bne 3b
         b 1b
@@ -974,7 +974,7 @@ _TELL:
         b 2f
 1:                              @ while (--r5 >= 0) {
         ldrb r0, [r4], #1       @     r0 = *r4++;
-        bl uart1_putc           @     uart1_putc(r0);
+        bl putchar              @     putchar(r0);
 2:                              @ }
         subs r5, r5, #1
         bge 1b
@@ -1067,7 +1067,7 @@ errpfx:
 errpfxend:
 
 errsfx:
-        .ascii ">\r\n"
+        .ascii ">\n"
 errsfxend:
 
 @ DIVMOD computes the unsigned integer division and remainder
@@ -1177,7 +1177,7 @@ _DIVMOD:
         bx lr
 
 .section .rodata
-errdiv0: .ascii "Division by 0!\r\n"
+errdiv0: .ascii "Division by 0!\n"
 errdiv0end:
 
 @ CHAR ( -- c ) put the ASCII code of the first character of the next word on the stack

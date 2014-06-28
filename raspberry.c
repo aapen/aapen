@@ -15,8 +15,8 @@ extern void NO_OP();
 
 /* Use external declarations to force full register discipline */
 extern void c_start(u32 sp);
-extern void uart1_putc(int c);
-extern int uart1_getc();
+extern int putchar(int c);
+extern int getchar();
 
 #define GPFSEL1         0x20200004
 #define GPSET0          0x2020001c
@@ -141,6 +141,32 @@ void uart1_hex8(u8 b) {
 }
 
 /*
+ * Traditional single-character output
+ */
+int putchar(int c) {
+    if (c == '\n') {
+        uart1_puts("\r\n");
+    } else {
+        uart1_putc(c);
+    }
+    return c;
+}
+
+/*
+ * Traditional single-character input
+ */
+int getchar() {
+    int c;
+
+    c = uart1_getc();
+    if (c == '\r') {
+        c = '\n';
+    }
+    return c;
+}
+
+
+/*
  * Entry point for C code
  */
 void c_start(u32 sp)
@@ -167,8 +193,8 @@ void c_start(u32 sp)
     
     // echo console input to output
     for (;;) {
-        c = uart1_getc();
-        if (z) {
+        if (z) {  // "raw" mode
+            c = uart1_getc();
             uart1_hex8(c);  // display as hexadecimal value
             uart1_putc('=');
             if ((c > 0x20) && (c < 0x7F)) {  // echo printables
@@ -177,10 +203,9 @@ void c_start(u32 sp)
                 uart1_putc(' ');
             }
             uart1_putc(' ');
-        } else if ((c == '\r') || (c == '\n')) {
-            uart1_puts("\r\n");
-        } else {
-            uart1_putc(c);
+        } else {  // "cooked" mode
+            c = getchar();
+            putchar(c);
         }
         if (c == 0x04) {  // ^D to exit loop
             break;
