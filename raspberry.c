@@ -38,11 +38,11 @@ extern int getchar();
 #define AUX_MU_BAUD_REG 0x20215068
 
 /* Private data structures */
-int linepos = 0;  // read position
-int linelen = 0;  // write position
 static char linebuf[1024];  // line editing buffer
+static int linepos = 0;  // read position
+static int linelen = 0;  // write position
 static char* hex = "0123456789abcdef";  // hexadecimal map
-    
+
 
 /*
  * Initialize mini UART to use GPIO pins 14 and 15
@@ -170,6 +170,8 @@ static int _getchar() {  // unbuffered
     return c;
 }
 int getchar() {  // buffered
+    char* editline();
+
     while (linepos >= linelen) {
         editline();
     }
