@@ -156,6 +156,14 @@ name_\label :
 code_\label :                   @ assembler code follows
         .endm
 
+@ EXIT is the last codeword of a forth word.
+@ It restores the FIP and returns to the caller using NEXT.
+@ (See DOCOL)
+defcode "EXIT",4,,EXIT
+        POPRSP FIP
+        NEXT
+
+
 @ defvar macro helps defining Forth variables in assembly
         .macro defvar name, namelen, flags=0, label, initial=0
         defcode \name,\namelen,\flags,\label
@@ -168,6 +176,19 @@ var_\name :
         .int \initial
         .endm
 
+@ The built-in variables are:
+@  STATE           Is the interpreter executing code (0) or compiling a word (non-zero)?
+        defvar "STATE",5,,STATE
+@  HERE            Points to the next free byte of memory.  When compiling, compiled words go here.
+        defvar "HERE",4,,HERE
+@  LATEST          Points to the latest (most recently defined) word in the dictionary.
+        defvar "LATEST",6,,LATEST,name_EXECUTE  @ The last word defined in assembly is EXECUTE
+@  S0              Stores the address of the top of the parameter stack.
+        defvar "S0",2,,SZ
+@  BASE            The current base for printing and reading numbers.
+        defvar "BASE",4,,BASE,10
+
+
 @ defconst macro helps defining Forth constants in assembly
         .macro defconst name, namelen, flags=0, label, value
         defcode \name,\namelen,\flags,\label
@@ -176,12 +197,22 @@ var_\name :
         NEXT
         .endm
 
-@ EXIT is the last codeword of a forth word.
-@ It restores the FIP and returns to the caller using NEXT.
-@ (See DOCOL)
-defcode "EXIT",4,,EXIT
-        POPRSP FIP
-        NEXT
+@ The built-in constants are:
+@  VERSION         Is the current version of this FORTH.
+        defconst "VERSION",7,,VERSION,JONES_VERSION
+@  R0              The address of the top of the return stack.
+        defconst "R0",2,,RZ,return_stack_top
+@  DOCOL           Pointer to DOCOL.
+        defconst "DOCOL",5,,__DOCOL,DOCOL
+@  PAD             Pointer to scratch-pad buffer.
+        defconst "PAD",3,,PAD,scratch_pad
+@  F_IMMED         The IMMEDIATE flag's actual value.
+        defconst "F_IMMED",7,,__F_IMMED,F_IMMED
+@  F_HIDDEN        The HIDDEN flag's actual value.
+        defconst "F_HIDDEN",8,,__F_HIDDEN,F_HIDDEN
+@  F_LENMASK       The length mask in the flags/len byte.
+        defconst "F_LENMASK",9,,__F_LENMASK,F_LENMASK
+
 
 @ DROP ( a -- ) drops the top element of the stack
 defcode "DROP",4,,DROP
@@ -530,34 +561,6 @@ defcode "CMOVE",5,,CMOVE
         subgt r0, r0, #1        @ decrement length
         bgt 1b
         NEXT
-
-
-@ The built-in variables are:
-@  STATE           Is the interpreter executing code (0) or compiling a word (non-zero)?
-        defvar "STATE",5,,STATE
-@  HERE            Points to the next free byte of memory.  When compiling, compiled words go here.
-        defvar "HERE",4,,HERE
-@  LATEST          Points to the latest (most recently defined) word in the dictionary.
-        defvar "LATEST",6,,LATEST,name_EXECUTE  @ The last word defined in assembly is EXECUTE
-@  S0              Stores the address of the top of the parameter stack.
-        defvar "S0",2,,SZ
-@  BASE            The current base for printing and reading numbers.
-        defvar "BASE",4,,BASE,10
-
-@ The built-in constants are:
-@  VERSION         Is the current version of this FORTH.
-        defconst "VERSION",7,,VERSION,JONES_VERSION
-@  R0              The address of the top of the return stack.
-        defconst "R0",2,,RZ,return_stack_top
-@  DOCOL           Pointer to DOCOL.
-        defconst "DOCOL",5,,__DOCOL,DOCOL
-@  F_IMMED         The IMMEDIATE flag's actual value.
-        defconst "F_IMMED",7,,__F_IMMED,F_IMMED
-@  F_HIDDEN        The HIDDEN flag's actual value.
-        defconst "F_HIDDEN",8,,__F_HIDDEN,F_HIDDEN
-@  F_LENMASK       The length mask in the flags/len byte.
-        defconst "F_LENMASK",9,,__F_LENMASK,F_LENMASK
-
 
 @ >R ( a -- ) move the top element from the data stack to the return stack
 defcode ">R",2,,TOR
@@ -1187,6 +1190,13 @@ defcode "CHAR",4,,CHAR
         PUSHDSP r1
         NEXT
 
+@ DUMP ( addr length -- ) Pretty-printed memory dump
+defcode "DUMP",4,,DUMP
+        POPDSP r1
+        POPDSP r0
+        bl hexdump              @ hexdump(r0, r1);
+        NEXT
+
 @ EXECUTE ( xt -- ) jump to the address on the stack
 @-- WARNING! THIS MUST BE THE LAST WORD DEFINED IN ASSEMBLY (see LATEST) --@
 defcode "EXECUTE",7,,EXECUTE
@@ -1194,10 +1204,10 @@ defcode "EXECUTE",7,,EXECUTE
         ldr r1, [r0]
         bx r1
 
-@ Reserve space for the return stack (8Kb)
+@ Reserve space for the return stack (4Kb)
         .bss
         .align 5                @ align to cache-line size
-        .set RETURN_STACK_SIZE, 0x2000
+        .set RETURN_STACK_SIZE, 0x1000
 return_stack:
         .space RETURN_STACK_SIZE
 return_stack_top:
@@ -1209,3 +1219,11 @@ return_stack_top:
 data_segment:
         .space DATA_SEGMENT_SIZE
 data_segment_top:
+
+@ Reserve space for scratch-pad buffer (128b)
+        .bss
+        .align 5                @ align to cache-line size
+        .set SCRATCH_PAD_SIZE, 0x80
+scratch_pad:
+        .space SCRATCH_PAD_SIZE
+scratch_pad_top:

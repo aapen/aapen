@@ -603,68 +603,6 @@
 ;
 
 (
-	DUMP ----------------------------------------------------------------------
-
-	DUMP is used to dump out the contents of memory, in the 'traditional' hexdump format.
-
-	Notice that the parameters to DUMP (address, length) are compatible with string words
-	such as WORD and S".
-
-	You can dump out the raw code for the last word you defined by doing something like:
-
-		LATEST @ 128 DUMP
-)
-: DUMP		( addr len -- )
-	BASE @ -ROT		( save the current BASE at the bottom of the stack )
-	HEX			( and switch to hexadecimal mode )
-
-	BEGIN
-		?DUP		( while len > 0 )
-	WHILE
-		OVER 8 U.R	( print the address )
-		SPACE
-
-		( print up to 16 words on this line )
-		2DUP		( addr len addr len )
-		1- 15 AND 1+	( addr len addr linelen )
-		BEGIN
-			?DUP		( while linelen > 0 )
-		WHILE
-			SWAP		( addr len linelen addr )
-			DUP C@		( addr len linelen addr byte )
-			2 .R SPACE	( print the byte )
-			1+ SWAP 1-	( addr len linelen addr -- addr len addr+1 linelen-1 )
-		REPEAT
-		DROP		( addr len )
-
-		( print the ASCII equivalents )
-		2DUP 1- 15 AND 1+ ( addr len addr linelen )
-		BEGIN
-			?DUP		( while linelen > 0)
-		WHILE
-			SWAP		( addr len linelen addr )
-			DUP C@		( addr len linelen addr byte )
-			DUP 32 127 WITHIN IF	( 32 <= c < 127? )
-				EMIT
-			ELSE
-				DROP '.' EMIT
-			THEN
-			1+ SWAP 1-	( addr len linelen addr -- addr len addr+1 linelen-1 )
-		REPEAT
-		DROP		( addr len )
-		CR
-
-		DUP 1- 15 AND 1+ ( addr len linelen )
-		TUCK		( addr linelen len linelen )
-		-		( addr linelen len-linelen )
-		>R + R>		( addr+linelen len-linelen )
-	REPEAT
-
-	DROP			( restore stack )
-	BASE !			( restore saved BASE )
-;
-
-(
 	CASE ----------------------------------------------------------------------
 
 	CASE...ENDCASE is how we do switch statements in FORTH.  There is no generally
@@ -1028,22 +966,17 @@
 	CR
 ;
 
-(
-	UNUSED returns the number of cells remaining in the user memory (data segment).
-)
-
+( UNUSED returns the number of cells remaining in the user memory (data segment). )
 : UNUSED	( -- n )
-	HEX 18000 DECIMAL	( FIXME: need to expose the real "data_segment_top" symbol )
-	HERE @			( get current position in data segment )
-	- 4 /			( returns number of 4-byte cells )
+	PAD 		( the scratch-pad immediately follows the data segment )
+	HERE @		( get current position in data segment )
+	- 4 /		( returns number of 4-byte cells )
 ;
 
-(
-	WELCOME MESSAGE ----------------------------------------------------------------------
+: 16# HEX ;		( ALIAS FOR HEX )
+: 10# DECIMAL ;		( ALIAS FOR DECIMAL )
 
-	Print the version and OK prompt.
-)
-
+( Print the version and OK prompt. )
 : WELCOME
 	S" TEST-MODE" FIND NOT IF
 		." JONESFORTH VERSION " VERSION . CR

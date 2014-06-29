@@ -70,3 +70,15 @@ GET_PC:				@ u32 GET_PC();
 	.globl BRANCH_TO
 BRANCH_TO:			@ void BRANCH_TO(u32 addr);
 	bx	r0
+
+BOOT:				@ u32 BOOT(u32 dst, u32 src, u32 len);
+	stmfd	sp!, {r4-r13, lr}	@ stack save + stack pointer + return address
+@	mov	lr, r0		@ put boot address in link register
+@	add	r0, pc, #52	@ start address of code to copy
+	add	r0, pc, #60	@ start address of code to copy
+	ldmia	r0, {r3-r12}	@ read 10 words of code
+	mov	r0, sp		@ stack pointer is copy target
+	stmdb	r0!, {r3-r12}	@ copy code to stack
+@	bx	sp		@ jump to code on the stack!
+	ldmfd	sp, {r4-r13, pc}	@ stack restore + stack pointer + return
+	.int	1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16

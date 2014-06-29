@@ -12,12 +12,14 @@ typedef unsigned int u32;
 extern void PUT_32(u32 addr, u32 data);
 extern u32 GET_32(u32 addr);
 extern void NO_OP();
+extern u32 BOOT(u32 dst, u32 src, u32 len);
 
 /* Use external declarations to force full register discipline */
 extern void c_start(u32 sp);
 extern u32 timer_usecs();
 extern int putchar(int c);
 extern int getchar();
+extern void hexdump(u8* p, int n);
 extern int rcv_xmodem(u8* buf, int size);
 
 #define ARM_TIMER_CTL   0x2000B408
@@ -157,6 +159,13 @@ void uart1_puts(char* s)
 
 #define uart1_eol()                 uart1_puts("\r\n")
 
+void uart1_rep(int c, int n)
+{
+    while (n-- > 0) {
+        uart1_putc(c);
+    }
+}
+
 /*
  * Output u32 in hexadecimal to mini UART
  */
@@ -177,6 +186,49 @@ void uart1_hex32(u32 w) {
 void uart1_hex8(u8 b) {
     uart1_putc(hex[0xF & (b >> 4)]);
     uart1_putc(hex[0xF & b]);
+}
+
+/*
+ * Pretty-printed memory dump
+ */
+void hexdump(u8* p, int n)
+{
+    int i;
+    int c;
+
+    while (n > 0) {
+        uart1_hex16((u32)p);
+        uart1_putc(' ');
+        for (i = 0; i < 16; ++i) {
+            if (i == 8) {
+                uart1_putc(' ');
+            }
+            if (i < n) {
+                uart1_putc(' ');
+                uart1_hex8(p[i]);
+            } else {
+                uart1_rep(' ', 3);
+            }
+        }
+        uart1_rep(' ', 2);
+        uart1_putc('|');
+        for (i = 0; i < 16; ++i) {
+            if (i < n) {
+                c = p[i];
+                if ((c >= ' ') && (c < 0x7F)) {
+                    uart1_putc(c);
+                } else {
+                    uart1_putc('.');
+                }
+            } else {
+                uart1_putc(' ');
+            }
+        }
+        uart1_putc('|');
+        uart1_eol();
+        p += 16;
+        n -= 16;
+    }
 }
 
 /*
@@ -430,7 +482,7 @@ void c_start(u32 sp)
         if (c == 0x0C) {  // ^L xmodem file upload
             uart1_eol();
             uart1_puts("START XMODEM...");
-            c = rcv_xmodem((u8*)(0x10000), 0x8000);
+            c = rcv_xmodem((u8*)0x10000, 0x8000);
             putchar(wait_for_kb());
             if (c < 0) {
                 uart1_puts("UPLOAD FAILED! ");
@@ -442,6 +494,11 @@ void c_start(u32 sp)
                 uart1_puts(" BYTES RECEIVED.");
                 uart1_eol();
             }
+        }
+        if (c == 0x17) {  // ^W copy upload and boot
+            uart1_puts("BOOTING...");
+            uart1_eol();
+            hexdump(BOOT((u32*)0x8000, (u32*)0x10000, 0x8000), 256);
         }
     }
     uart1_eol();
