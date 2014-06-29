@@ -15,8 +15,13 @@ extern void NO_OP();
 
 /* Use external declarations to force full register discipline */
 extern void c_start(u32 sp);
+extern u32 timer_usecs();
 extern int putchar(int c);
 extern int getchar();
+extern int rcv_xmodem(u8* buf, int size);
+
+#define ARM_TIMER_CTL   0x2000B408
+#define ARM_TIMER_CNT   0x2000B420
 
 #define GPFSEL1         0x20200004
 #define GPSET0          0x2020001c
@@ -43,6 +48,27 @@ static int linepos = 0;  // read position
 static int linelen = 0;  // write position
 static char* hex = "0123456789abcdef";  // hexadecimal map
 
+
+#define usec /* 1e-6 seconds */
+#define msec * 1000 usec
+#define sec  * 1000 msec
+
+/*
+ * Initialize 1Mhz timer
+ */
+void timer_init()
+{
+    PUT32(ARM_TIMER_CTL, 0x00F90000);  // 0xF9+1 = 250
+    PUT32(ARM_TIMER_CTL, 0x00F90200);  // 250MHz/250 = 1MHz
+}
+
+/*
+ * Get 1Mhz timer tick count (microseconds)
+ */
+u32 timer_usecs()
+{
+    return GET32(ARM_TIMER_CNT);
+}
 
 /*
  * Initialize mini UART to use GPIO pins 14 and 15
@@ -91,24 +117,29 @@ void uart1_init()
     PUT_32(AUX_MU_CNTL_REG, 3);
 }
 
+#define uart1_transmitter_idle()    (GET_32(AUX_MU_LSR_REG) & 0x20)
+#define uart1_write_data(c)         PUT_32(AUX_MU_IO_REG, (c))
+#define uart1_data_ready()          (GET_32(AUX_MU_LSR_REG) & 0x01)
+#define uart1_read_data()           GET_32(AUX_MU_IO_REG)
+
 /*
- * Output a single character to mini UART
+ * Output a single character to mini UART (blocking)
  */
 void uart1_putc(int c)
 {
-    while ((GET_32(AUX_MU_LSR_REG) & 0x20) == 0)
+    while (!uart1_transmitter_idle())
         ;
-    PUT_32(AUX_MU_IO_REG, c);
+    uart1_write_data(c);
 }
 
 /*
- * Input a single character from mini UART
+ * Input a single character from mini UART (blocking)
  */
 int uart1_getc()
 {
-    while ((GET_32(AUX_MU_LSR_REG) & 0x01) == 0)
+    while (!uart1_data_ready())
         ;
-    return GET_32(AUX_MU_IO_REG);
+    return uart1_read_data();
 }
 
 /*
@@ -206,6 +237,125 @@ char* editline() {
 }
 
 /*
+ * XMODEM file transfer
+ */
+
+#define SOH (0x01)  // Start of Header
+#define ACK (0x06)  // Acknowledge
+#define NAK (0x15)  // Negative Ack
+#define EOT (0x04)  // End of Transmission
+#define CAN (0x18)  // Cancel
+
+int rcv_timeout(int timeout) {
+    int t0;
+    int t1;
+
+    t0 = timer_usecs();
+    t1 = t0 + timeout;
+    for (;;) {
+        if (uart1_data_ready()) {
+            return uart1_read_data();
+        }
+        t0 = timer_usecs();
+        if ((t0 - t1) >= 0) {  // timeout
+            return -1;
+        }
+    }
+}
+
+#define CHAR_TIME   (250 msec)  // wait 0.25 sec per character
+
+void rcv_flush() {
+    while (rcv_timeout(CHAR_TIME) >= 0)
+        ;
+}
+
+int rcv_xmodem(u8* buf, int size) {
+    int data;
+    int rem;
+    int len = 0;
+    int chk;
+    int blk = 0;
+    int try;
+    int ok = NAK;
+
+    while ((len + 128) <= size) {  // make sure there is room to receive block
+        if (ok == NAK) {
+            rcv_flush();  // clear input
+        }
+        uart1_putc(ok);
+        /* receive start-of-header (SOH) */
+        ok = NAK;
+        for (;;) {
+            try = 1;
+            data = rcv_timeout(6 sec);  // send NAK every 6 seconds 
+            if (data < 0) {
+                if (++try > 10) {  // retry 10 times
+                    uart1_putc(CAN);
+                    return -1;  // FAIL!
+                }
+                uart1_putc(NAK);
+            } else if (data == SOH) {  // start-of-header
+                break;
+            } else if (data == EOT) {  // end-of-transmission
+                return len;  // SUCCESS! return total length of data in buffer
+            }
+        }
+        /* receive block number */
+        data = rcv_timeout(CHAR_TIME);
+        if (data < 0) {
+            continue;  // reject
+        }
+        if (data == (blk & 0xFF)) {  // previous block #
+            rcv_flush();  // ignore duplicate block
+            ok = ACK;  // acknowledge block
+            continue;
+        }
+        ++blk;  // update expected block #
+        if (data != (blk & 0xFF)) {  // unexpected block
+            rcv_flush();  // ignore unexpected block
+            uart1_putc(CAN);
+            return -1;  // FAIL!
+        }
+        /* receive inverse block number */
+        data = rcv_timeout(CHAR_TIME);
+        if (data < 0) {
+            continue;  // reject
+        }
+        if (data != (~blk & 0xFF)) {  // unexpected block
+            continue;  // reject
+        }
+        /* receive block data (128 bytes) */
+        chk = 0;  // checksum
+        rem = 128;  // remaining count
+        do {
+            data = rcv_timeout(CHAR_TIME);
+            if (data < 0) {
+                break;  // timeout
+            }
+            buf[len++] = data;  // store data in buffer
+            chk += data;  // accumulate checksum
+        } while (--rem > 0);
+        if (rem > 0) {  // incomplete block
+            len -= (128 - rem);  // ignore partial block data
+            continue;  // reject
+        }
+        /* receive checksum */
+        data = rcv_timeout(CHAR_TIME);
+        if (data < 0) {
+            continue;  // reject
+        }
+        if (data != chk) {  // bad checksum
+            len -= 128;  // ignore bad block data
+            continue;  // reject
+        }
+        /* acknowledge good block */
+        ok = ACK;
+    }
+    return -1;  // FAIL! not enough room in buffer
+}
+
+/*
  * Entry point for C code
  */
 void c_start(u32 sp)
@@ -214,6 +364,7 @@ void c_start(u32 sp)
     int c;
     int z = 0;
 
+    timer_init();
     uart1_init();
 
     // wait for first whitespace character
@@ -227,11 +378,12 @@ void c_start(u32 sp)
     // display banner
     uart1_puts("\r\n");
     uart1_puts("pijFORTHos 0.1.2");
-//    uart1_puts(" sp=");
+//    uart1_puts(" sp=0x");
 //    uart1_hex32(sp);
-    uart1_puts(" buf=");
+    uart1_puts(" buf=0x");
     uart1_hex32((u32)buf);
     uart1_puts("\r\n");
+    uart1_puts("^D=exit-monitor ^Z=toggle-hexadecimal ^L=xmodem-upload\r\n");
     
     // echo console input to output
     for (;;) {
@@ -246,14 +398,25 @@ void c_start(u32 sp)
             }
             uart1_putc(' ');
         } else {  // "cooked" mode
-            c = getchar();  // buffered input also echos
-//            putchar(c);
+            c = _getchar();
+            putchar(c);
         }
         if (c == 0x04) {  // ^D to exit loop
             break;
         }
         if (c == 0x1A) {  // ^Z toggle hexadecimal substitution
             z = !z;
+        }
+        if (c == 0x0C) {  // ^L xmodem file upload
+            uart1_puts("\r\nSTART XMODEM...\r\n");
+            c = rcv_xmodem((u8*)(0x10000), 0x8000);
+            if (c < 0) {
+                uart1_puts('UPLOAD FAILED!\r\n');
+            } else {
+                uart1_puts("0x");
+                uart1_hex32((u32)buf);
+                uart1_puts(" BYTES RECEIVED.\r\n");
+            }
         }
     }
     uart1_puts("\r\nOK ");
