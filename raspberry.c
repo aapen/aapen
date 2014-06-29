@@ -43,7 +43,7 @@ extern int rcv_xmodem(u8* buf, int size);
 #define AUX_MU_BAUD_REG 0x20215068
 
 /* Private data structures */
-static char linebuf[1024];  // line editing buffer
+static char linebuf[256];  // line editing buffer
 static int linepos = 0;  // read position
 static int linelen = 0;  // write position
 static char* hex = "0123456789abcdef";  // hexadecimal map
@@ -58,8 +58,8 @@ static char* hex = "0123456789abcdef";  // hexadecimal map
  */
 void timer_init()
 {
-    PUT32(ARM_TIMER_CTL, 0x00F90000);  // 0xF9+1 = 250
-    PUT32(ARM_TIMER_CTL, 0x00F90200);  // 250MHz/250 = 1MHz
+    PUT_32(ARM_TIMER_CTL, 0x00F90000);  // 0xF9+1 = 250
+    PUT_32(ARM_TIMER_CTL, 0x00F90200);  // 250MHz/250 = 1MHz
 }
 
 /*
@@ -67,7 +67,7 @@ void timer_init()
  */
 u32 timer_usecs()
 {
-    return GET32(ARM_TIMER_CNT);
+    return GET_32(ARM_TIMER_CNT);
 }
 
 /*
@@ -411,7 +411,7 @@ void c_start(u32 sp)
             uart1_puts("\r\nSTART XMODEM...\r\n");
             c = rcv_xmodem((u8*)(0x10000), 0x8000);
             if (c < 0) {
-                uart1_puts('UPLOAD FAILED!\r\n');
+                uart1_puts("UPLOAD FAILED!\r\n");
             } else {
                 uart1_puts("0x");
                 uart1_hex32((u32)buf);

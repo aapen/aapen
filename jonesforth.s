@@ -1196,7 +1196,7 @@ defcode "EXECUTE",7,,EXECUTE
 
 @ Reserve space for the return stack (8Kb)
         .bss
-        .align 10
+        .align 5                @ align to cache-line size
         .set RETURN_STACK_SIZE, 0x2000
 return_stack:
         .space RETURN_STACK_SIZE
@@ -1204,7 +1204,7 @@ return_stack_top:
 
 @ Reserve space for new words and data structures (16Kb)
         .bss
-        .align 10
+        .align 5                @ align to cache-line size
         .set DATA_SEGMENT_SIZE, 0x4000
 data_segment:
         .space DATA_SEGMENT_SIZE
