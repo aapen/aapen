@@ -197,7 +197,7 @@ void hexdump(u8* p, int n)
     int c;
 
     while (n > 0) {
-        uart1_hex16((u32)p);
+        uart1_hex32((u32)p);
         uart1_putc(' ');
         for (i = 0; i < 16; ++i) {
             if (i == 8) {
@@ -433,14 +433,18 @@ int wait_for_kb()
     }
 }
 
+#define	KERNEL_ADDR	(0x8000)
+#define	UPLOAD_ADDR	(0x10000)
+#define	UPLOAD_LIMIT	(0x8000)
+
 /*
  * Entry point for C code
  */
 void c_start(u32 sp)
 {
-    u32 buf[16];  // stack space preceeds kernel entry-point
     int c;
     int z = 0;
+    int len = 0;
 
     timer_init();
     uart1_init();
@@ -451,8 +455,6 @@ void c_start(u32 sp)
     uart1_puts("pijFORTHos 0.1.2");
 //    uart1_puts(" sp=0x");
 //    uart1_hex32(sp);
-    uart1_puts(" buf=0x");
-    uart1_hex32((u32)buf);
     uart1_eol();
     uart1_puts("^D=exit-monitor ^Z=toggle-hexadecimal ^L=xmodem-upload");
     uart1_eol();
@@ -473,7 +475,7 @@ void c_start(u32 sp)
             c = _getchar();
             putchar(c);
         }
-        if (c == 0x04) {  // ^D to exit loop
+        if (c == 0x04) {  // ^D to exit monitor loop
             break;
         }
         if (c == 0x1A) {  // ^Z toggle hexadecimal substitution
@@ -482,23 +484,24 @@ void c_start(u32 sp)
         if (c == 0x0C) {  // ^L xmodem file upload
             uart1_eol();
             uart1_puts("START XMODEM...");
-            c = rcv_xmodem((u8*)0x10000, 0x8000);
+            len = rcv_xmodem((u8*)UPLOAD_ADDR, UPLOAD_LIMIT);
             putchar(wait_for_kb());
-            if (c < 0) {
+            if (len < 0) {
                 uart1_puts("UPLOAD FAILED! ");
                 uart1_puts(error);
                 uart1_eol();
             } else {
                 uart1_puts("0x");
-                uart1_hex32(c);
+                uart1_hex32(len);
                 uart1_puts(" BYTES RECEIVED.");
+                uart1_eol();
+                uart1_puts("^W=boot-uploaded-image");
                 uart1_eol();
             }
         }
-        if (c == 0x17) {  // ^W copy upload and boot
-            uart1_puts("BOOTING...");
+        if ((c == 0x17) && (len > 0)) {  // ^W copy upload and boot
             uart1_eol();
-            hexdump(BOOT((u32*)0x8000, (u32*)0x10000, 0x8000), 256);
+            BOOT(KERNEL_ADDR, UPLOAD_ADDR, len);
         }
     }
     uart1_eol();
