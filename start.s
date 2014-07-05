@@ -10,15 +10,24 @@
 @@ If your tabs are set correctly, the lines above should be aligned.
 @@
 
-@ _start is the kernel bootstrap entry point
+@ _start is the bootstrap entry point
 	.text
 	.align 2
 	.global _start
 _start:
-	sub	sp, pc, #8	@ Bootstrap stack immediately before _start
-	mov	r0, sp
-	bl	c_start		@ Jump to C entry-point
-	bl	jonesforth	@ If c_start returns, call jonesforth...
+	sub	r1, pc, #8	@ Where are we?
+	mov	sp, r1		@ Bootstrap stack immediately before _start
+	ldr	lr, =halt	@ Halt on "return"
+	ldr	r0, =0x8000	@ Absolute address of kernel memory
+	cmp	r0, r1		@ Are we loaded where we expect to be?
+	beq	k_start		@ Then, jump to kernel entry-point
+	mov	lr, r0		@ Otherwise, relocate ourselves
+	ldr	r2, =0x7F00	@ Copy (32k - 256) bytes
+1:	ldmia	r1!, {r3-r10}	@ Read 8 words
+	stmia	r0!, {r3-r10}	@ Write 8 words
+	subs	r2, #32		@ Decrement len
+	bgt	1b		@ More to copy?
+	bx	lr		@ Jump to bootstrap entry-point
 halt:
 	b	halt		@ Full stop
 

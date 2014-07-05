@@ -12,6 +12,7 @@ typedef unsigned int u32;
 extern void PUT_32(u32 addr, u32 data);
 extern u32 GET_32(u32 addr);
 extern void NO_OP();
+extern void BRANCH_TO(u32 addr);
 extern void asm_stack(u32* buf);
 extern void asm_copy32(u32* dst, u32* src, int len);
 extern u32 asm_himem(u32 id);
@@ -19,8 +20,11 @@ extern u32 asm_safe(u32 id);
 extern void BOOT(int len);
 extern u32 XBOOT(u32 dst, u32 src, u32 len);
 
+/* Declare FORTH entry-point */
+extern void jonesforth();
+
 /* Use external declarations to force full register discipline */
-extern void c_start(u32 sp);
+extern void k_start(u32 sp);
 extern u32 timer_usecs();
 extern u32 busy_wait(int dt);
 extern int putchar(int c);
@@ -463,7 +467,7 @@ int wait_for_kb()
 
 #define	KERNEL_ADDR	(0x8000)
 #define	UPLOAD_ADDR	(0x10000)
-#define	UPLOAD_LIMIT	(0x8000)
+#define	UPLOAD_LIMIT	(0x7F00)
 
 static const u8 src[256] = {
 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,
@@ -490,7 +494,7 @@ static char dst[256] =
 /*
  * Entry point for C code
  */
-void c_start(u32 sp)
+void k_start(u32 sp)
 {
     int c;
     int z = 0;
@@ -503,9 +507,10 @@ void c_start(u32 sp)
     putchar(wait_for_kb());
     
     // display banner
-    uart1_puts("pijFORTHos 0.1.3");
-//    uart1_puts(" sp=0x");
-//    uart1_hex32(sp);
+    uart1_puts("pijFORTHos 0.1.3 ");
+    uart1_puts("sp=0x");
+    uart1_hex32(sp);
+//    uart1_hex32(asm_safe(0xDEADBEEF));
     uart1_eol();
     uart1_puts("^D=exit-monitor ^Z=toggle-hexadecimal ^L=xmodem-upload");
     uart1_eol();
@@ -542,17 +547,22 @@ void c_start(u32 sp)
                 uart1_puts(error);
                 uart1_eol();
             } else {
+                hexdump((u8*)UPLOAD_ADDR, 128);  // show first block
+                uart1_rep('.', 3);
+                uart1_eol();
+                hexdump((u8*)UPLOAD_ADDR + (len - 128), 128);  // and last block
                 uart1_puts("0x");
                 uart1_hex32(len);
-                uart1_puts(" BYTES RECEIVED.");
+                uart1_puts(" BYTES RECEIVED.");  // and length
                 uart1_eol();
                 uart1_puts("^W=boot-uploaded-image");
                 uart1_eol();
             }
         }
-        if ((c == 0x17)/* && (len > 0)*/) {  // ^W copy upload and boot
+        if ((c == 0x17) && (len > 0)) {  // ^W copy upload and boot
             uart1_eol();
-            BOOT(len);
+            BRANCH_TO(UPLOAD_ADDR);  // should not return...
+//            BOOT(len);
 //            hexdump((u8*)src, sizeof(src));
             hexdump((u8*)dst, sizeof(dst)+3);
             putchar(wait_for_kb());
@@ -562,12 +572,12 @@ void c_start(u32 sp)
             asm_copy32((u32*)(dst + 128), (u32*)src, 128);
             hexdump((u8*)dst, sizeof(dst)+1);
             putchar(wait_for_kb());
+/*
             uart1_hex32(asm_safe(0xDEADBEEF));
 //            uart1_hex32(asm_himem(0xDEADBEEF));
             putchar(wait_for_kb());
             hexdump((u8*)(UPLOAD_ADDR - 128), 256);
 //            XBOOT(KERNEL_ADDR, UPLOAD_ADDR, len);
-/*
             XBOOT((u32)dst, (u32)src, (u32)sizeof(dst));
             uart1_eol();
             hexdump((u8*)src, sizeof(src));
@@ -578,4 +588,5 @@ void c_start(u32 sp)
     }
     uart1_eol();
     uart1_puts("OK ");
+    jonesforth();
 }

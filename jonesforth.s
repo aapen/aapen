@@ -1204,10 +1204,10 @@ defcode "EXECUTE",7,,EXECUTE
         ldr r1, [r0]
         bx r1
 
-@ Reserve space for the return stack (4Kb)
+@ Reserve space for the return stack (1Kb)
         .bss
         .align 5                @ align to cache-line size
-        .set RETURN_STACK_SIZE, 0x1000
+        .set RETURN_STACK_SIZE, 0x400
 return_stack:
         .space RETURN_STACK_SIZE
 return_stack_top:
