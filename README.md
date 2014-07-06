@@ -25,7 +25,7 @@ The interpreter uses the RPi miniUART as a console (115200 baud, 8 data bits, no
 If you have _pijFORTHos_ on an SD card in the RPi, 
 you can connect it to another machine (even another RPi) using a USB-to-Serial cable <http://www.adafruit.com/products/954>.
 When the RPi is powered on (I provide power through the cable),
-a terminal program on the host machine provides access to the FORTH console.
+a terminal program on the host machine allows access to the FORTH console.
 
 ## Build and run instructions
 
@@ -35,14 +35,14 @@ If you are building on the RPi, just type:
 
 Then, copy the firmware and kernel to a blank SD card:
 
-    $ cp firmware/* /media/_SD-card_
-    $ cp kernel.img /media/_SD-card_
+    $ cp firmware/* /media/<var>SD-card</var>
+    $ cp kernel.img /media/<var>SD-card</var>
 
 Put the prepared SD card into the RPi, connect the USB-to-Serial cable, and power-up to the console.
 
 ## Built-in FORTH Words
 
-The table below shows the words pre-defined in _pijFORTHos_ :
+The following words are pre-defined in _pijFORTHos_ 
 
 | Word | Stack | Description |
 |------|-------|-------------|

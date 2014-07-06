@@ -1191,11 +1191,11 @@ defcode "CHAR",4,,CHAR
         NEXT
 
 @ UPLOAD ( -- addr len ) XMODEM file upload to memory
-defcode "UPLOAD",4,,UPLOAD
+defcode "UPLOAD",6,,UPLOAD
         ldr r0, =0x10000        @ Upload buffer address
         ldr r1, =0x7F00         @ Upload limit (32k - 256) bytes
         PUSHDSP r0              @ Push buffer address on the stack
-        bl hexdump              @ r0 = rcv_xmodem(r0, r1);
+        bl rcv_xmodem           @ r0 = rcv_xmodem(r0, r1);
         PUSHDSP r0              @ Push upload byte count on the stack
         NEXT
 
@@ -1207,7 +1207,6 @@ defcode "DUMP",4,,DUMP
         NEXT
 
 @ BOOT ( addr len -- ) Boot from memory image (see UPLOAD)
-@ : BOOT DROP EXECUTE ;  \ Equivalent FORTH definition
 defcode "BOOT",4,,BOOT
         POPDSP r0
         POPDSP r1
