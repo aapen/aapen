@@ -5,8 +5,8 @@
 @@ and is the first code that runs to boot the O/S kernel.
 @@
 @@ View this file with hard tabs every 8 positions.
-@@	|	|	|	|	|			   max width ->
-@@      |       |       |       |       |                          max width ->
+@@	|	|	.	|	.	.	.	.  max width ->
+@@      |       |       .       |       .       .       .       .  max width ->
 @@ If your tabs are set correctly, the lines above should be aligned.
 @@
 

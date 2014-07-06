@@ -973,9 +973,6 @@
 	- 4 /		( returns number of 4-byte cells )
 ;
 
-: 16# HEX ;		( ALIAS FOR HEX )
-: 10# DECIMAL ;		( ALIAS FOR DECIMAL )
-
 ( Print the version and OK prompt. )
 : WELCOME
 	S" TEST-MODE" FIND NOT IF

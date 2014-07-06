@@ -38,7 +38,7 @@
 @ Reserve three special registers:
 @ DSP (r13) points to the top of the data stack
 @ RSP (r11) points to the top of the return stack
-@ FIP (r10) points to the next forth word that will be executed
+@ FIP (r10) points to the next FORTH word that will be executed
 @ Note: r12 is often considered a "scratch" register
 
 DSP     .req    r13
@@ -46,10 +46,10 @@ RSP     .req    r11
 FIP     .req    r10
 
 @ Implement NEXT, which:
-@   1. finds the address of the forth word to execute
+@   1. finds the address of the FORTH word to execute
 @      by dereferencing the FIP
 @   2. increment FIP
-@   3. executes the forth word
+@   3. executes the FORTH word
         .macro NEXT
         ldr r0, [FIP], #4
         ldr r1, [r0]
@@ -90,7 +90,7 @@ jonesforth:
         .endm
 
 @ DOCOL is the assembly subroutine that is called
-@ at the start of every forth word execution.
+@ at the start of every FORTH word execution.
 @ It saves the old FIP on the return stack, and
 @ makes FIP point to the first codeword.
 @ Then it calls NEXT to start interpreting the word.
@@ -109,8 +109,8 @@ cold_start:
 
 
 @@ Now we define a set of helper macros that are syntactic sugar
-@@ to ease the declaration of Forth words, Native words, Forth variables
-@@ and Forth constants.
+@@ to ease the declaration of FORTH words, Native words, FORTH variables
+@@ and FORTH constants.
 
 @ define the word flags
         .set F_IMMED, 0x80
@@ -120,7 +120,7 @@ cold_start:
 @ link is used to chain the words in the dictionary as they are defined
         .set link, 0
 
-@ defword macro helps defining new forth words in assembly
+@ defword macro helps defining new FORTH words in assembly
         .macro defword name, namelen, flags=0, label
         .section .rodata
         .align 2
@@ -156,7 +156,7 @@ name_\label :
 code_\label :                   @ assembler code follows
         .endm
 
-@ EXIT is the last codeword of a forth word.
+@ EXIT is the last codeword of a FORTH word.
 @ It restores the FIP and returns to the caller using NEXT.
 @ (See DOCOL)
 defcode "EXIT",4,,EXIT
@@ -164,7 +164,7 @@ defcode "EXIT",4,,EXIT
         NEXT
 
 
-@ defvar macro helps defining Forth variables in assembly
+@ defvar macro helps defining FORTH variables in assembly
         .macro defvar name, namelen, flags=0, label, initial=0
         defcode \name,\namelen,\flags,\label
         ldr r0, =var_\name
@@ -189,7 +189,7 @@ var_\name :
         defvar "BASE",4,,BASE,10
 
 
-@ defconst macro helps defining Forth constants in assembly
+@ defconst macro helps defining FORTH constants in assembly
         .macro defconst name, namelen, flags=0, label, value
         defcode \name,\namelen,\flags,\label
         ldr r0, =\value
@@ -245,7 +245,7 @@ defcode "OVER",4,,OVER
         PUSHDSP r0      @ ( a b c b )
         NEXT
 
-@ ROT ( a b c -- b c a) rotation
+@ ROT ( a b c -- b c a ) rotation
 defcode "ROT",3,,ROT
         POPDSP r0       @ ( a b ) r0 = c
         POPDSP r1       @ ( a ) r1 = b
@@ -494,7 +494,7 @@ defcode "INVERT",6,,INVERT
         NEXT
 
 
-@ LIT is used to compile literals in forth word.
+@ LIT is used to compile literals in FORTH word.
 @ When LIT is executed it pushes the literal (which is the next codeword)
 @ into the stack and skips it (since the literal is not executable).
 defcode "LIT", 3,, LIT
@@ -549,7 +549,7 @@ defcode "C@",2,,FETCHBYTE
         NEXT
 
 @ CMOVE ( source dest length -- ) copies a chunk of length bytes from source
-@ address to dest address
+@ address to dest address  [FIXME: handle overlapping regions properly]
 defcode "CMOVE",5,,CMOVE
         POPDSP r0
         POPDSP r1
@@ -887,7 +887,7 @@ defcode "]",1,,RBRAC
         str     r1, [r0]
         NEXT
 
-@ : ( -- ) Define a new forth word
+@ : ( -- ) Define a new FORTH word
 defword ":",1,,COLON
         .int WORD                       @ Get the name of the new word
         .int CREATE                     @ CREATE the dictionary entry / header
@@ -932,7 +932,7 @@ defword "HIDE",4,,HIDE
         .int HIDDEN             @ Set F_HIDDEN flag.
         .int EXIT               @ Return.
 
-@ TICK ( -- ) returns the codeword address of next read word
+@ ' ( -- ) returns the codeword address of next read word
 @ only works in compile mode. Implementation is identical to LIT.
 defcode "'",1,,TICK
         ldr r1, [FIP], #4
@@ -1190,12 +1190,28 @@ defcode "CHAR",4,,CHAR
         PUSHDSP r1
         NEXT
 
+@ UPLOAD ( -- addr len ) XMODEM file upload to memory
+defcode "UPLOAD",4,,UPLOAD
+        ldr r0, =0x10000        @ Upload buffer address
+        ldr r1, =0x7F00         @ Upload limit (32k - 256) bytes
+        PUSHDSP r0              @ Push buffer address on the stack
+        bl hexdump              @ r0 = rcv_xmodem(r0, r1);
+        PUSHDSP r0              @ Push upload byte count on the stack
+        NEXT
+
 @ DUMP ( addr length -- ) Pretty-printed memory dump
 defcode "DUMP",4,,DUMP
         POPDSP r1
         POPDSP r0
         bl hexdump              @ hexdump(r0, r1);
         NEXT
+
+@ BOOT ( addr len -- ) Boot from memory image (see UPLOAD)
+@ : BOOT DROP EXECUTE ;  \ Equivalent FORTH definition
+defcode "BOOT",4,,BOOT
+        POPDSP r0
+        POPDSP r1
+        bx r1
 
 @ EXECUTE ( xt -- ) jump to the address on the stack
 @-- WARNING! THIS MUST BE THE LAST WORD DEFINED IN ASSEMBLY (see LATEST) --@
