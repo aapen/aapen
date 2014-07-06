@@ -19,7 +19,8 @@ See the `/firmware/` directory for local copies used in the build process.
 ## What is this ?
 
 _pijFORTHos_ is a bare-metal FORTH interpreter for the Raspberry Pi.
-It follows the general strategy given by the excellent examples at <https://github.com/dwelch67/raspberrypi>
+It follows the general strategy given by the excellent examples at <https://github.com/dwelch67/raspberrypi>.
+A bootloader is built in, supporting XMODEM uploads of new bare-metal kernel images.
 
 The interpreter uses the RPi miniUART as a console (115200 baud, 8 data bits, no parity, 1 stop bit).
 If you have _pijFORTHos_ on an SD card in the RPi, 
@@ -35,8 +36,8 @@ If you are building on the RPi, just type:
 
 Then, copy the firmware and kernel to a blank SD card:
 
-    $ cp firmware/* /media/<SD-card>
-    $ cp kernel.img /media/<SD-card>
+    $ cp firmware/* /media/<SD-card>/
+    $ cp kernel.img /media/<SD-card>/
 
 Put the prepared SD card into the RPi, connect the USB-to-Serial cable, and power-up to the console.
 
@@ -62,10 +63,10 @@ The following variable are pre-defined in _pijFORTHos_
 
 Here is an example using the `BASE` variable:
 
-    BASE @         \ read the current value of BASE (to restore later)
-    16 BASE !      \ switch to hexadecimal
-    8000 100 DUMP  \ hexdump 256 bytes starting at 0x8000
-    BASE !         \ restore the orignial value of BASE (from the stack)
+    BASE @          \ read the current value of BASE (to restore later)
+    16 BASE !       \ switch to hexadecimal
+    8000 100 DUMP   \ hexdump 256 bytes starting at 0x8000
+    BASE !          \ restore the orignial value of BASE (from the stack)
 
 ### Built-in FORTH Constants
 
@@ -86,9 +87,9 @@ The following constants are pre-defined in _pijFORTHos_
 Given the relationship between `HERE` and `PAD`, 
 the following calculates the number of free memory cells available:
 
-    PAD            \ the base of PAD is the end of available program memory
-    HERE @ -       \ subtract the base address of free memory
-    4 /            \ divide by 4 to convery bytes to (32-bit) cells
+    PAD        \ the base of PAD is the end of available program memory
+    HERE @ -   \ subtract the base address of free memory
+    4 /        \ divide by 4 to convert bytes to (32-bit) cells
 
 ### Built-in FORTH Words
 
@@ -173,3 +174,35 @@ The following words are pre-defined in _pijFORTHos_
 | `DUMP` | ( addr len -- ) | pretty-printed memory dump |
 | `BOOT` | ( addr len -- ) | boot from memory image (see UPLOAD) |
 | `EXECUTE` | ( xt -- ) | jump to the address on the stack |
+
+### Supplemental FORTH Words
+
+Many standard words can be defined using the built-in primitives shown above.
+The file `jonesforth.f` contains important and useful definitions.
+It also serves as a significant corpus of example FORTH code.
+The entire contents of this file can simply be copy-and-pasted 
+into the terminal session connected to the _pijFORTHos_ console.
+A welcome message is displayed by the code at the end of the file.
+The following additional words are defined in `jonesforth.f` 
+
+| Word | Stack | Description |
+|------|-------|-------------|
+| / | ( -- ) | /MOD SWAP DROP |
+| MOD | ( -- ) | /MOD DROP |
+| '\n' | ( -- ) | 10 |
+| BL | ( -- ) | 32 |
+| CR | ( -- ) | '\n' EMIT \ print newline |
+| SPACE | ( -- ) | BL EMIT \ print space |
+| NEGATE | ( -- ) | 0 SWAP - |
+| TRUE | ( -- ) | 1 |
+| FALSE | ( -- ) | 0 |
+| NOT | ( -- ) | 0= |
+| UNUSED | ( -- n ) | calculate the number of cells remaining in the user memory (data segment). |
+
+## Memory Organization
+
+_TODO_
+
+### Bootloader
+
+_TODO_
