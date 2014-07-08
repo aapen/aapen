@@ -145,9 +145,9 @@ The following words are pre-defined in _pijFORTHos_
 | `RSP!` | ( addr -- ) | set return stack pointer |
 | `DSP@` | ( -- addr ) | get data stack pointer |
 | `DSP!` | ( addr -- ) | set data stack pointer |
-| `KEY` | ( -- c ) | read a character from the console |
-| `EMIT` | ( c -- ) | write character c to the console |
-| `WORD` | ( -- addr len ) | read next word from stdin |
+| `KEY` | ( -- c ) | read a character from input |
+| `EMIT` | ( c -- ) | write character c to output |
+| `WORD` | ( -- addr len ) | read next word from input |
 | `NUMBER` | ( addr len -- n e ) | convert string to number n, with e unparsed characters |
 | `FIND` | ( addr len -- entry &#124; 0 ) | search dictionary for entry matching string |
 | `>CFA` | ( entry -- xt ) | get code field address from dictionary entry |
@@ -165,7 +165,7 @@ The following words are pre-defined in _pijFORTHos_
 | `BRANCH offset` | ( -- ) | change FIP by following offset |
 | `0BRANCH offset` | ( p -- ) | branch if the top of the stack is zero |
 | `LITSTRING addr len` | ( -- s ) | compile string in FORTH word |
-| `TELL` | ( addr len -- ) | write a string to the console |
+| `TELL` | ( addr len -- ) | write a string to output |
 | `QUIT` | ( -- ) | the first word to be executed |
 | `/MOD` | ( a b -- r q ) | where a = q * b + r |
 | `S/MOD` | ( a b -- r q ) | alternative signed /MOD using Euclidean division |
@@ -212,8 +212,8 @@ The following words are defined in `jonesforth.f`
 |------|-------|-------------|
 | `/` | ( a b -- q ) | integer division quotient (see /MOD) |
 | `MOD` | ( a b -- r ) | integer division remainder (see /MOD) |
-| `CR` | ( -- ) | print newline on console |
-| `SPACE` | ( -- ) | print space on console |
+| `CR` | ( -- ) | print newline |
+| `SPACE` | ( -- ) | print space |
 | `NEGATE` | ( n -- -n ) | integer negation |
 | `NOT` | ( p -- !p ) | Boolean predicate negation |
 | `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
@@ -229,7 +229,7 @@ The following words are defined in `jonesforth.f`
 | `NIP` | ( x y -- y ) | `SWAP DROP` |
 | `TUCK` | ( x y -- y x y ) | `SWAP OVER` |
 | `PICK` | ( x_n ... x_0 n -- x_n ... x_0 x_n ) | DUP n-th stack item |
-| `SPACES` | ( n -- ) | write n spaces to console |
+| `SPACES` | ( n -- ) | print n spaces |
 | `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
 | `HEX` | ( -- ) | set number conversion BASE to 16 |
 | `U.R` | ( n width -- ) | print unsigned number, padded to width |
@@ -245,7 +245,7 @@ The following words are defined in `jonesforth.f`
 | `ALIGN` | ( -- ) | align the HERE pointer |
 | `C,` | ( c -- ) | write a byte from the stack at HERE |
 | `S" string"` | ( -- addr len ) | create a string value |
-| `." string"` | ( -- ) | write string to console |
+| `." string"` | ( -- ) | print string |
 | `CONSTANT name` | ( value -- ) | create named constant value |
 | `ALLOT` | ( n -- addr ) | allocate n bytes of user memory |
 | `CELLS` | ( n -- m ) | number of bytes for n cells |
