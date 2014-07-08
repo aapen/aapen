@@ -114,18 +114,18 @@ The following words are pre-defined in _pijFORTHos_
 | `+` | ( a b -- a+b ) | addition |
 | `-` | ( a b -- a-b ) | subtraction |
 | `*` | ( a b -- a*b ) | multiplication |
-| `=` | ( a b -- p ) | where p is 1 when a == b, 0 otherwise |
-| `<>` | ( a b -- p ) | where p = a <> b |
-| `<` | ( a b -- p ) | where p = a < b |
-| `>` | ( a b -- p ) | where p = a > b |
-| `<=` | ( a b -- p ) | where p = a <= b |
-| `>=` | ( a b -- p ) | where p = a >= b |
-| `0=` | ( a -- p ) | where p = a == 0 |
-| `0<>` | ( a -- p ) | where p = a <> 0 |
-| `0<` | ( a -- p ) | where p = a < 0 |
-| `0>` | ( a -- p ) | where p = a > 0 |
-| `0<=` | ( a -- p ) | where p = a <= 0 |
-| `0>=` | ( a -- p ) | where p = a >= 0 |
+| `=` | ( a b -- p ) | where p is 1 when (a == b), 0 otherwise |
+| `<>` | ( a b -- p ) | where p = (a <> b) |
+| `<` | ( a b -- p ) | where p = (a < b) |
+| `>` | ( a b -- p ) | where p = (a > b) |
+| `<=` | ( a b -- p ) | where p = (a <= b) |
+| `>=` | ( a b -- p ) | where p = (a >= b) |
+| `0=` | ( a -- p ) | where p = (a == 0) |
+| `0<>` | ( a -- p ) | where p = (a <> 0) |
+| `0<` | ( a -- p ) | where p = (a < 0) |
+| `0>` | ( a -- p ) | where p = (a > 0) |
+| `0<=` | ( a -- p ) | where p = (a <= 0) |
+| `0>=` | ( a -- p ) | where p = (a >= 0) |
 | `AND` | ( a b -- a&amp;b ) | bitwise and |
 | `OR` | ( a b -- a&#124;b ) | bitwise or |
 | `XOR` | ( a b -- a^b ) | bitwise xor |
@@ -226,8 +226,8 @@ The following words are defined in `jonesforth.f`
 | `BEGIN p WHILE loop-part REPEAT` | ( -- ) | pre-test loop |
 | `p UNLESS false-part ...` | ( p -- ) | same as `p NOT IF` |
 | `( comment text ) ` | ( -- ) | comment inside definition |
-| `NIP` | ( x y -- y ) | SWAP DROP |
-| `TUCK` | ( x y -- y x y ) | SWAP OVER |
+| `NIP` | ( x y -- y ) | `SWAP DROP` |
+| `TUCK` | ( x y -- y x y ) | `SWAP OVER` |
 | `PICK` | ( x_n ... x_0 n -- x_n ... x_0 x_n ) | DUP n-th stack item |
 | `SPACES` | ( n -- ) | write n spaces to console |
 | `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
@@ -236,10 +236,10 @@ The following words are defined in `jonesforth.f`
 | `U.` | ( n -- ) | print unsigned number and a trailing space |
 | `.R` | ( n width -- ) | print signed number, padded to width |
 | `.S` | ( -- ) | print the contents of the stack (non-destructive) |
-| `UWIDTH` | ( n -- w ) | number of characters U. would print |
+| `UWIDTH` | ( n -- width ) | number of characters `U.` would print |
 | `.` | ( n -- ) | print signed number and a trailing space |
 | `?` | ( addr -- ) | fetch and print signed number at addr |
-| `WITHIN` | ( a b c -- p ) | p = ((a >= b) && (a < c)) |
+| `WITHIN` | ( a b c -- p ) | where p = ((a >= b) && (a < c)) |
 | `DEPTH` | ( -- n ) | the number of items on the stack |
 | `ALIGNED` | ( addr -- addr' ) | round addr up to next 4-byte boundary |
 | `ALIGN` | ( -- ) | align the HERE pointer |
@@ -260,7 +260,7 @@ The following words are defined in `jonesforth.f`
 | `FORGET name` | ( -- ) | reset dictionary prior to definition of name |
 | `CASE cases... default ENDCASE` | ( value -- ) | select case based on value |
 | `test OF case-body ENDOF` | ( p -- ) | execute case-body if test non-zero |
-| `CFA>` | ( -- 0 &#124; addr ) | `CFA>` is the opposite of `>CFA` |
+| `CFA>` | ( xt -- 0 &#124; entry ) | `CFA>` is the opposite of `>CFA` |
 | `SEE word` | ( -- ) | print source code for word |
 | `:NONAME` | ( -- xt ) | define (compile) an unnamed new FORTH word |
 | `['] name` | ( -- xt ) | compile `LIT` |
@@ -353,6 +353,6 @@ halt:
 
 From FORTH you can UPLOAD a new kernel image and BOOT it.
 
-    UPLOAD     \ initiate XMODEM file transfer
-    BOOT       \ jump to upload buffer address
+    UPLOAD   \ initiate XMODEM file transfer
+    BOOT     \ jump to upload buffer address
 
