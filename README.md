@@ -173,6 +173,7 @@ The following words are pre-defined in _pijFORTHos_
 | `UPLOAD` | ( -- addr len ) | XMODEM file upload to memory image |
 | `DUMP` | ( addr len -- ) | pretty-printed memory dump |
 | `BOOT` | ( addr len -- ) | boot from memory image (see UPLOAD) |
+| `MONITOR` | ( -- ) | enter bootstrap monitor |
 | `EXECUTE` | ( xt -- ) | call procedure indicated by CFA |
 
 ## FORTH-in-FORTH

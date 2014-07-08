@@ -172,6 +172,7 @@ defcode "EXIT",4,,EXIT
         NEXT
         .data
         .align 2
+        .global var_\name
 var_\name :
         .int \initial
         .endm
@@ -1221,6 +1222,10 @@ defcode "BOOT",4,,BOOT
 errboot: .ascii "Bad Image!\n"
 errbootend:
 
+@ MONITOR ( -- ) Enter bootstrap monitor
+defcode "MONITOR",7,,MONITOR
+        bl monitor              @ monitor();
+        NEXT
 
 @ EXECUTE ( xt -- ) jump to the address on the stack
 @-- WARNING! THIS MUST BE THE LAST WORD DEFINED IN ASSEMBLY (see LATEST) --@

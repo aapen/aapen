@@ -15,11 +15,13 @@ extern void NO_OP();
 extern void BRANCH_TO(u32 addr);
 extern void asm_copy32(u32* dst, u32* src, int len);
 
-/* Declare FORTH entry-point */
+/* Declare symbols from FORTH */
 extern void jonesforth();
+extern int var_BASE;
 
-/* Use external declarations to force full register discipline */
+/* Use external declarations (force full register discipline) */
 extern void k_start(u32 sp);
+extern void monitor();
 extern u32 timer_usecs();
 extern u32 busy_wait(int dt);
 extern int putchar(int c);
@@ -460,29 +462,23 @@ int wait_for_kb()
     }
 }
 
-#define	KERNEL_ADDR	(0x8000)
-#define	UPLOAD_ADDR	(0x10000)
-#define	UPLOAD_LIMIT	(0x7F00)
+#define	KERNEL_ADDR     (0x00008000)
+#define	UPLOAD_ADDR     (0x00010000)
+#define	UPLOAD_LIMIT    (0x00007F00)
 
 /*
- * Entry point for C code
+ * Simple bootstrap monitor
  */
-void k_start(u32 sp)
+void monitor()
 {
     int c;
     int z = 0;
     int len = 0;
 
-    timer_init();
-    uart1_init();
-
-    uart1_puts(";-) ");
-    putchar(wait_for_kb());
-    
     // display banner
-    uart1_puts("pijFORTHos 0.1.3 ");
-    uart1_puts("sp=0x");
-    uart1_hex32(sp);
+    uart1_eol();
+    uart1_puts("BASE=0x");
+    uart1_hex32(var_BASE);
     uart1_eol();
     uart1_puts("^D=exit-monitor ^Z=toggle-hexadecimal ^L=xmodem-upload");
     uart1_eol();
@@ -538,5 +534,26 @@ void k_start(u32 sp)
     }
     uart1_eol();
     uart1_puts("OK ");
+}
+
+/*
+ * Entry point for C code
+ */
+void k_start(u32 sp)
+{
+    timer_init();
+    uart1_init();
+
+    // wait for initial interaction
+    uart1_puts(";-) ");
+    putchar(wait_for_kb());
+
+    // display banner
+    uart1_puts("pijFORTHos 0.1.3 ");
+    uart1_puts("sp=0x");
+    uart1_hex32(sp);
+    uart1_eol();
+
+    // jump to FORTH entry-point
     jonesforth();
 }
