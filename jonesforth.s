@@ -1119,7 +1119,7 @@ _UFMT:                          @ Unsigned Integer Formatting
         mov     r5, r4                  @ remember PAD end
         cmp     r0, r1                  @ if (num >= base)
         bge     2f                      @ then, do DIVMOD first
-        ldr     r2, #0                  @ else, initial div = 0
+        mov     r2, #0                  @ else, initial div = 0
 1:
         subs    r3, r0, #10             @ tmp = num - 10
         addlt   r3, r0, #48             @ dig = '0' + num, if num < 10
@@ -1144,7 +1144,7 @@ defcode "U.",2,,UDOT
         mov     r3, #(scratch_pad_top-scratch_pad)  @ size
         bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
         bl      _TELL                   @ display number
-        ldr     r0, #32                 @ space character
+        mov     r0, #32                 @ space character
         bl      putchar                 @ print trailing space
         NEXT
 
@@ -1159,7 +1159,7 @@ _IFMT:                          @ Signed Integer Formatting
 1:
         rsblt   r0, r0, #0              @ num = -num
         bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
-        ldr     r3, #45                 @ tmp = '-'
+        mov     r3, #45                 @ tmp = '-'
         strb    r3, [r0, #-1]!          @ *(--addr) = tmp
         add     r1, r1, #1              @ ++len
         ldmfd   sp!, {pc}               @ restore registers and return
@@ -1173,7 +1173,7 @@ defcode ".",1,,DOT
         mov     r3, #(scratch_pad_top-scratch_pad)  @ size
         bl      _IFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
         bl      _TELL                   @ display number
-        ldr     r0, #32                 @ space character
+        mov     r0, #32                 @ space character
         bl      putchar                 @ print trailing space
         NEXT
 
