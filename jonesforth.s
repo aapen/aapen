@@ -1210,7 +1210,17 @@ defcode "DUMP",4,,DUMP
 defcode "BOOT",4,,BOOT
         POPDSP r0
         POPDSP r1
-        bx r1
+        cmp r0, #0              @ len = -1 on upload failure
+        bxge r1                 @ jump to boot address if len >= 0
+        ldr r0, =errboot
+        mov r1, #(errbootend-errboot)
+        bl _TELL                @ write error message to console
+        NEXT
+
+.section .rodata
+errboot: .ascii "Bad Image!\n"
+errbootend:
+
 
 @ EXECUTE ( xt -- ) jump to the address on the stack
 @-- WARNING! THIS MUST BE THE LAST WORD DEFINED IN ASSEMBLY (see LATEST) --@
