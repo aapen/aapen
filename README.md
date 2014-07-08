@@ -130,7 +130,7 @@ The following words are pre-defined in _pijFORTHos_
 | `OR` | ( a b -- a&#124;b ) | bitwise or |
 | `XOR` | ( a b -- a^b ) | bitwise xor |
 | `INVERT` | ( a -- ~a ) | bitwise not |
-| `LIT` | ( -- x ) | used to compile literals in FORTH word |
+| `LIT word` | ( -- xt ) | compile literal in FORTH word |
 | `!` | ( value addr -- ) | write value at addr |
 | `@` | ( addr -- value ) | read value from addr |
 | `+!` | ( amount addr -- ) | add amount to value at addr |
@@ -149,31 +149,31 @@ The following words are pre-defined in _pijFORTHos_
 | `EMIT` | ( c -- ) | write character c to the console |
 | `WORD` | ( -- addr len ) | read next word from stdin |
 | `NUMBER` | ( addr len -- n e ) | convert string to number n, with e unparsed characters |
-| `FIND` | ( addr len -- dictionary_addr &#124; 0 ) | search dictionary for entry matching string |
-| `>CFA` | ( dictionary_addr -- executable_addr ) | get execution address from dictionary entry |
-| `>DFA` | ( dictionary_addr -- data_field_addr ) | get data field address from dictionary entry |
+| `FIND` | ( addr len -- entry &#124; 0 ) | search dictionary for entry matching string |
+| `>CFA` | ( entry -- xt ) | get code field address from dictionary entry |
+| `>DFA` | ( entry -- addr ) | get data field address from dictionary entry |
 | `CREATE` | ( addr len -- ) | create a new dictionary entry |
 | `,` | ( n -- ) | write the top element from the stack at HERE |
 | `[` | ( -- ) | change interpreter state to Immediate mode |
 | `]` | ( -- ) | change interpreter state to Compilation mode |
-| `:` | ( -- ) | define a new FORTH word |
+| `: name` | ( -- ) | define (compile) a new FORTH word |
 | `;` | ( -- ) | end FORTH word definition |
 | `IMMEDIATE` | ( -- ) | set IMMEDIATE flag of last defined word |
-| `HIDDEN` | ( dictionary_addr -- ) | set HIDDEN flag of a word |
-| `HIDE` | ( -- ) | hide definition of  next read word |
-| `'` | ( -- xt ) | return the codeword address of next read word (compile only) |
-| `BRANCH` | ( -- ) | change FIP by offset which is found in the next codeword |
-| `0BRANCH` | ( p -- ) | branch if the top of the stack is zero |
-| `LITSTRING` | ( -- s ) | as LIT but for strings |
+| `HIDDEN` | ( entry -- ) | set HIDDEN flag of a word |
+| `HIDE word` | ( -- ) | hide definition of following word |
+| `' word` | ( -- xt ) | find CFA of following word (compile only) |
+| `BRANCH offset` | ( -- ) | change FIP by following offset |
+| `0BRANCH offset` | ( p -- ) | branch if the top of the stack is zero |
+| `LITSTRING addr len` | ( -- s ) | compile string in FORTH word |
 | `TELL` | ( addr len -- ) | write a string to the console |
 | `QUIT` | ( -- ) | the first word to be executed |
 | `/MOD` | ( a b -- r q ) | where a = q * b + r |
 | `S/MOD` | ( a b -- r q ) | alternative signed /MOD using Euclidean division |
-| `CHAR` | ( -- c ) | ASCII code of the first character of the next word |
+| `CHAR word` | ( -- c ) | ASCII code from first character of following word |
 | `UPLOAD` | ( -- addr len ) | XMODEM file upload to memory image |
 | `DUMP` | ( addr len -- ) | pretty-printed memory dump |
 | `BOOT` | ( addr len -- ) | boot from memory image (see UPLOAD) |
-| `EXECUTE` | ( xt -- ) | jump to the address on the stack |
+| `EXECUTE` | ( xt -- ) | call procedure indicated by CFA |
 
 ## FORTH-in-FORTH
 
@@ -182,8 +182,7 @@ The file `jonesforth.f` contains important and useful definitions.
 It also serves as a significant corpus of example FORTH code.
 The entire contents of this file can simply be copy-and-pasted 
 into the terminal session connected to the _pijFORTHos_ console.
-A welcome message is displayed by the code at the end of the file.
-The following additional words are defined in `jonesforth.f` 
+Code at the end of the file displays a welcome message when processing is complete.
 
 ### Additional Constants Defined in FORTH
 
@@ -211,107 +210,65 @@ The following words are defined in `jonesforth.f`
 
 | Word | Stack | Description |
 |------|-------|-------------|
-| / | ( -- ) | /MOD SWAP DROP |
-| MOD | ( -- ) | /MOD DROP |
-| CR | ( -- ) | print newline on console |
-| SPACE | ( -- ) | print space on console |
-| NEGATE | ( -- ) | 0 SWAP - |
-| NOT | ( -- ) | 0= |
-```
-: LITERAL IMMEDIATE ' LIT , , ;  \ takes <word> from the stack and compiles LIT <word>
-\ While compiling, '[COMPILE] <word>' compiles <word> if it would otherwise be IMMEDIATE.
-: [COMPILE] IMMEDIATE
-\ RECURSE makes a recursive call to the current word that is being compiled.
-: RECURSE IMMEDIATE
-\ <condition> IF <true-part> THEN <rest>
-\ <condition> IF <true-part> ELSE <false-part> THEN
-: IF IMMEDIATE
-: THEN IMMEDIATE
-: ELSE IMMEDIATE
-\ BEGIN <loop-part> <condition> UNTIL
-\ This is like do { <loop-part> } while (<condition>) in the C language
-: BEGIN IMMEDIATE
-: UNTIL IMMEDIATE
-\ BEGIN <loop-part> AGAIN
-\ An infinite loop which can only be returned from with EXIT
-: AGAIN IMMEDIATE
-\ BEGIN <condition> WHILE <loop-part> REPEAT
-\ So this is like a while (<condition>) { <loop-part> } loop in the C language
-: WHILE IMMEDIATE
-: REPEAT IMMEDIATE
-\ UNLESS is the same as IF but the test is reversed.
-: UNLESS IMMEDIATE
-\ FORTH allows ( ... ) as comments within function definitions.  This works by having an IMMEDIATE
-\ word called ( which just drops input characters until it hits the corresponding ).
-: ( IMMEDIATE
-: NIP ( x y -- y ) SWAP DROP ;
-: TUCK ( x y -- y x y ) SWAP OVER ;
-: PICK ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u )
-( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
-: SPACES	( n -- )
-: DECIMAL ( -- ) 10 BASE ! ;
-: HEX ( -- ) 16 BASE ! ;
-U.R	( u width -- )	which prints an unsigned number, padded to a certain width
-U.	( u -- )	which prints an unsigned number
-.R	( n width -- )	which prints a signed number, padded to a certain width.
-: .S		( -- )  prints the contents of the stack.  It doesn't alter the stack.
-: UWIDTH	( u -- width )  the width (in characters) of an unsigned number in the current base
-( Finally we can define word . in terms of .R, with a trailing space. )
-: . 0 .R SPACE ;
-( The real U., note the trailing space.
-  All code beyond this point will use the new definition.
-  Old code, including this definition, continues to use the old version.  )
-( ? fetches the integer at an address and prints it. )
-: ? ( addr -- ) @ . ;
-( c a b WITHIN returns true if a <= c and c < b )
-: WITHIN
-( DEPTH returns the depth of the stack. )
-: DEPTH		( -- n )
-( ALIGNED takes an address and rounds it up (aligns it) to the next 4 byte boundary. )
-: ALIGNED	( addr -- addr )
-( ALIGN aligns the HERE pointer, so the next word appended will be aligned properly. )
-: ALIGN HERE @ ALIGNED HERE ! ;
-( C, appends a byte to the current compiled word. )
-: C,
-: S" IMMEDIATE		( -- addr len )  S" string" is used in FORTH to define strings.
-: ." IMMEDIATE		( -- )  ." is the print string operator in FORTH.
-: CONSTANT ( value -- )  e.g.: <value> CONSTANT <name>
-: ALLOT		( n -- addr )
-: CELLS ( n -- n ) 4 * ;
-: VARIABLE ( -- addr )  e.g.: VARIABLE <name>
-: VALUE		( n -- )
-: TO IMMEDIATE	( n -- )
-( x +TO VAL adds x to VAL )
-: +TO IMMEDIATE
-: ID. ( dict_addr -- )  e.g.: LATEST @ ID. \ print the name of the last word that was defined.
-: ?HIDDEN
-: ?IMMEDIATE
-: WORDS ( -- )  prints all the words defined in the dictionary
-: FORGET  e.g.: FORGET <name>
-	( some value on the stack )
-	CASE
-	test1 OF ... ENDOF
-	test2 OF ... ENDOF
-	testn OF ... ENDOF
-	... ( default case )
-	ENDCASE
-: CASE IMMEDIATE
-: OF IMMEDIATE
-: ENDOF IMMEDIATE
-: ENDCASE IMMEDIATE
-: CFA> ( -- 0 &#124; -- addr )  CFA> is the opposite of >CFA.
-( SEE decompiles a FORTH word. )
-: SEE
-: :NONAME
-: ['] IMMEDIATE ( -- xt )  e.g: ['] <name>
-: EXCEPTION-MARKER
-: CATCH		( xt -- exn? )
-: THROW		( n -- )
-: ABORT		( -- )
-( Print a stack trace by walking up the return stack. )
-: PRINT-STACK-TRACE
-| UNUSED | ( -- n ) | calculate the number of cells remaining in the user memory (data segment). |
-```
+| `/` | ( a b -- q ) | integer division quotient (see /MOD) |
+| `MOD` | ( a b -- r ) | integer division remainder (see /MOD) |
+| `CR` | ( -- ) | print newline on console |
+| `SPACE` | ( -- ) | print space on console |
+| `NEGATE` | ( n -- -n ) | integer negation |
+| `NOT` | ( p -- !p ) | Boolean predicate negation |
+| `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
+| `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
+| `RECURSE` | ( -- ) | compile recursive call to current word |
+| `p IF true-part THEN` | ( p -- ) | conditional execution |
+| `p IF true-part ELSE false-part THEN` | ( p -- ) | conditional execution |
+| `BEGIN loop-part p UNTIL` | ( -- ) | post-test loop |
+| `BEGIN loop-part AGAIN` | ( -- ) | infinite loop (until EXIT) |
+| `BEGIN p WHILE loop-part REPEAT` | ( -- ) | pre-test loop |
+| `p UNLESS false-part ...` | ( p -- ) | same as `p NOT IF` |
+| `( comment text ) ` | ( -- ) | comment inside definition |
+| `NIP` | ( x y -- y ) | SWAP DROP |
+| `TUCK` | ( x y -- y x y ) | SWAP OVER |
+| `PICK` | ( x_n ... x_0 n -- x_n ... x_0 x_n ) | DUP n-th stack item |
+| `SPACES` | ( n -- ) | write n spaces to console |
+| `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
+| `HEX` | ( -- ) | set number conversion BASE to 16 |
+| `U.R` | ( n width -- ) | print unsigned number, padded to width |
+| `U.` | ( n -- ) | print unsigned number and a trailing space |
+| `.R` | ( n width -- ) | print signed number, padded to width |
+| `.S` | ( -- ) | print the contents of the stack (non-destructive) |
+| `UWIDTH` | ( n -- w ) | number of characters U. would print |
+| `.` | ( n -- ) | print signed number and a trailing space |
+| `?` | ( addr -- ) | fetch and print signed number at addr |
+| `WITHIN` | ( a b c -- p ) | p = ((a >= b) && (a < c)) |
+| `DEPTH` | ( -- n ) | the number of items on the stack |
+| `ALIGNED` | ( addr -- addr' ) | round addr up to next 4-byte boundary |
+| `ALIGN` | ( -- ) | align the HERE pointer |
+| `C,` | ( c -- ) | write a byte from the stack at HERE |
+| `S" string"` | ( -- addr len ) | create a string value |
+| `." string"` | ( -- ) | write string to console |
+| `CONSTANT name` | ( value -- ) | create named constant value |
+| `ALLOT` | ( n -- addr ) | allocate n bytes of user memory |
+| `CELLS` | ( n -- m ) | number of bytes for n cells |
+| `VARIABLE name` | ( -- addr ) | create named variable location |
+| `VALUE name` | ( n -- ) | create named value initialized to n |
+| `TO name` | ( n -- ) | set named value to n |
+| `+TO name` | ( d -- ) | add d to named value |
+| `ID.` | ( entry -- ) | print word/name associated with dictionary entry |
+| `?HIDDEN` | ( entry -- p ) | get HIDDEN flag from dictionary entry |
+| `?IMMEDIATE` | ( entry -- p ) | get IMMEDIATE flag from dictionary entry |
+| `WORDS` | ( -- ) | print all the words defined in the dictionary |
+| `FORGET name` | ( -- ) | reset dictionary prior to definition of name |
+| `CASE cases... default ENDCASE` | ( value -- ) | select case based on value |
+| `test OF case-body ENDOF` | ( p -- ) | execute case-body if test non-zero |
+| `CFA>` | ( -- 0 &#124; addr ) | `CFA>` is the opposite of `>CFA` |
+| `SEE word` | ( -- ) | print source code for word |
+| `:NONAME` | ( -- xt ) | define (compile) an unnamed new FORTH word |
+| `['] name` | ( -- xt ) | compile `LIT` |
+| `CATCH` | ( xt -- 0 &#124; n ) | execute procedure reporting n THROW or 0 |
+| `THROW` | ( n -- ) | send exception n to CATCH |
+| `ABORT` | ( -- ) | THROW exception -1 |
+| `PRINT-STACK-TRACE` | ( -- ) | walk up return stack printing values |
+| `UNUSED` | ( -- n ) | calculate number of cells remaining in user memory |
 
 ## Memory Organization
 
@@ -346,18 +303,18 @@ U.	( u -- )	which prints an unsigned number
 ### Bootloader
 
 The bootloader has two main components.
-An XMODEM file transfer routine,
+An XMODEM file transfer routine
 and automatic kernel relocation code.
-The relocation code allows the new kernel image
+The relocation code allows a new kernel image
 to be uploaded at a different address
-from where it is supposed to finally run.
+than where it is expected to finally run.
 
-For the RPi, the kernel wants to execute starting at 0x00008000.
+On the RPi, the kernel wants to execute starting at 0x00008000.
 We can't upload to that address, of course,
-because that's where the *current* kernel is running!
+because that's where the **current** kernel is running!
 Instead, we upload to a buffer at 0x00010000
 and start running the new kernel at that address.
-The first bit of code is position independent.
+The first bit of code executed is position independent.
 It checks where it's running,
 and if it's not at 0x00008000 it copies itself there.
 When the relocation code finishes,
@@ -370,7 +327,7 @@ In order for this scheme to work,
 we have to ensure two things.
 First, the kernel image must by smaller than (32k - 256) bytes,
 to fit between 0x00008000 and 0x10000000.
-Second, each kernel must begin with this automatic-relocation code:
+Second, each kernel image must begin with this automatic-relocation code:
 ~~~
 @ _start is the bootstrap entry point
         .text
@@ -393,3 +350,9 @@ _start:
 halt:
         b       halt            @ Full stop
 ~~~
+
+From FORTH you can UPLOAD a new kernel image and BOOT it.
+
+    UPLOAD     \ initiate XMODEM file transfer
+    BOOT       \ jump to upload buffer address
+
