@@ -109,26 +109,29 @@ The following words are pre-defined in _pijFORTHos_
 | `2DUP` | ( a b -- a b a b ) | duplicate top two elements of stack |
 | `2SWAP` | ( a b c d -- c d a b ) | swap top two pairs of elements of stack |
 | `?DUP` | ( 0 -- 0 &#124; a -- a a ) | duplicate if non-zero |
-| `1+` | ( a -- a+1 ) | increment the top element |
-| `1-` | ( a -- a-1 ) | decrement the top element |
-| `4+` | ( a -- a+4 ) | increment by 4 the top element |
-| `4-` | ( a -- a-4 ) | decrement by 4 the top element |
-| `+` | ( a b -- a+b ) | addition |
-| `-` | ( a b -- a-b ) | subtraction |
-| `*` | ( a b -- a*b ) | multiplication |
-| `=` | ( a b -- p ) | where p is 1 when (a == b), 0 otherwise |
-| `<>` | ( a b -- p ) | where p = (a <> b) |
-| `<` | ( a b -- p ) | where p = (a < b) |
-| `>` | ( a b -- p ) | where p = (a > b) |
-| `<=` | ( a b -- p ) | where p = (a <= b) |
-| `>=` | ( a b -- p ) | where p = (a >= b) |
-| `0=` | ( a -- p ) | where p = (a == 0) |
-| `0<>` | ( a -- p ) | where p = (a <> 0) |
-| `0<` | ( a -- p ) | where p = (a < 0) |
-| `0>` | ( a -- p ) | where p = (a > 0) |
-| `0<=` | ( a -- p ) | where p = (a <= 0) |
-| `0>=` | ( a -- p ) | where p = (a >= 0) |
-| `NOT` | ( p -- !p ) | Boolean predicate negation |
+| `1+` | ( n -- n+1 ) | increment the top element |
+| `1-` | ( n -- n-1 ) | decrement the top element |
+| `4+` | ( n -- n+4 ) | increment by 4 the top element |
+| `4-` | ( n -- n-4 ) | decrement by 4 the top element |
+| `+` | ( n m -- n+m ) | addition |
+| `-` | ( n m -- n-m ) | subtraction |
+| `*` | ( n m -- n*m ) | multiplication |
+| `/` | ( n m -- n/m ) | division |
+| `MOD` | ( n m -- n%m ) | modulus |
+| `NEGATE` | ( n -- -n ) | negation |
+| `=` | ( n m -- p ) | where p is 1 when (n == m), 0 otherwise |
+| `<>` | ( n m -- p ) | where p = (n <> m) |
+| `<` | ( n m -- p ) | where p = (n < m) |
+| `>` | ( n m -- p ) | where p = (n > m) |
+| `<=` | ( n m -- p ) | where p = (n <= m) |
+| `>=` | ( n m -- p ) | where p = (n >= m) |
+| `0=` | ( n -- p ) | where p = (n == 0) |
+| `0<>` | ( n -- p ) | where p = (n <> 0) |
+| `0<` | ( n -- p ) | where p = (n < 0) |
+| `0>` | ( n -- p ) | where p = (n > 0) |
+| `0<=` | ( n -- p ) | where p = (n <= 0) |
+| `0>=` | ( n -- p ) | where p = (n >= 0) |
+| `NOT` | ( p -- !p ) | Boolean predicate not |
 | `AND` | ( a b -- a&amp;b ) | bitwise and |
 | `OR` | ( a b -- a&#124;b ) | bitwise or |
 | `XOR` | ( a b -- a^b ) | bitwise xor |
@@ -172,8 +175,8 @@ The following words are pre-defined in _pijFORTHos_
 | `LITS addr len` | ( -- ) | compile literal string in FORTH word |
 | `TELL` | ( addr len -- ) | write a string to output |
 | `QUIT` | ( -- ) | the first word to be executed |
-| `/MOD` | ( a b -- r q ) | where a = q * b + r |
-| `S/MOD` | ( a b -- r q ) | alternative signed /MOD using Euclidean division |
+| `/MOD` | ( n m -- r q ) | where n = q * m + r |
+| `S/MOD` | ( n m -- r q ) | alternative signed /MOD using Euclidean division |
 | `CHAR word` | ( -- c ) | ASCII code from first character of following word |
 | `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
 | `HEX` | ( -- ) | set number conversion BASE to 16 |
@@ -218,9 +221,6 @@ The following words are defined in `jonesforth.f`
 
 | Word | Stack | Description |
 |------|-------|-------------|
-| `/` | ( a b -- q ) | integer division quotient (see /MOD) |
-| `MOD` | ( a b -- r ) | integer division remainder (see /MOD) |
-| `NEGATE` | ( n -- -n ) | integer negation |
 | `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
 | `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
 | `RECURSE` | ( -- ) | compile recursive call to current word |

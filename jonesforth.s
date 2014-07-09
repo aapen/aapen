@@ -349,6 +349,32 @@ defcode "*",1,,MUL
         PUSHDSP r2
         NEXT
 
+@ / ( n m -- q ) integer division quotient (see /MOD)
+@ : / /MOD SWAP DROP ;
+defcode "/",1,,DIV
+        POPDSP  r1                      @ Get b
+        POPDSP  r0                      @ Get a
+        bl _DIVMOD
+        PUSHDSP r2                      @ Put q
+        NEXT
+
+@ MOD ( n m -- r ) integer division remainder (see /MOD)
+@ : MOD /MOD DROP ;
+defcode "MOD",3,,MOD
+        POPDSP  r1                      @ Get b
+        POPDSP  r0                      @ Get a
+        bl _DIVMOD
+        PUSHDSP r0                      @ Put r
+        NEXT
+
+@ NEGATE ( n -- -n ) integer negation
+@ : NEGATE 0 SWAP - ;
+defcode "NEGATE",6,,NEGATE
+        POPDSP r0
+        rsb r0, r0, #0
+        PUSHDSP r0
+        NEXT
+
 @@  ANS FORTH says that the comparison words should return
 @@  all (binary) 1's for TRUE and all 0's for FALSE.
 @@  However this is a bit of a strange convention

@@ -20,13 +20,8 @@
 \	without any conditions, unless such conditions are required by law.
 \
 
-: / /MOD SWAP DROP ;
-: MOD /MOD DROP ;
-
 : '\n' 10 ;
 : BL   32 ;
-
-: NEGATE 0 SWAP - ;
 
 : LITERAL IMMEDIATE ' LIT , , ;  \ takes <word> from the stack and compiles LIT <word>
 
