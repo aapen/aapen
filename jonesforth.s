@@ -1313,6 +1313,26 @@ defcode "HEX", 3,, HEX
         str     r0, [r1]
         NEXT
 
+@ 10# value ( -- n ) interpret decimal literal value w/o changing BASE
+@ : 10# BASE @ 10 BASE ! WORD NUMBER DROP SWAP BASE ! ;
+defword "10#",3,,DECNUMBER
+        .int BASE, FETCH
+        .int LIT, 10, BASE, STORE
+        .int WORD, NUMBER
+        .int DROP, SWAP
+        .int BASE, STORE
+        .int EXIT
+
+@ 16# value ( -- n ) interpret hexadecimal literal value w/o changing BASE
+@ : 16# BASE @ 16 BASE ! WORD NUMBER DROP SWAP BASE ! ;
+defword "16#",3,,HEXNUMBER
+        .int BASE, FETCH
+        .int LIT, 16, BASE, STORE
+        .int WORD, NUMBER
+        .int DROP, SWAP
+        .int BASE, STORE
+        .int EXIT
+
 @ UPLOAD ( -- addr len ) XMODEM file upload to memory
 defcode "UPLOAD",6,,UPLOAD
         ldr r0, =0x10000        @ Upload buffer address

@@ -174,6 +174,8 @@ The following words are pre-defined in _pijFORTHos_
 | `CHAR word` | ( -- c ) | ASCII code from first character of following word |
 | `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
 | `HEX` | ( -- ) | set number conversion BASE to 16 |
+| `10# value` | ( -- n ) | interpret decimal literal value w/o changing BASE |
+| `16# value` | ( -- n ) | interpret hexadecimal literal value w/o changing BASE |
 | `UPLOAD` | ( -- addr len ) | XMODEM file upload to memory image |
 | `DUMP` | ( addr len -- ) | pretty-printed memory dump |
 | `BOOT` | ( addr len -- ) | boot from memory image (see UPLOAD) |
