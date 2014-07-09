@@ -174,9 +174,13 @@ The following words are pre-defined in _pijFORTHos_
 | `0BRANCH offset` | ( p -- ) | branch if the top of the stack is zero |
 | `LITS addr len` | ( -- ) | compile literal string in FORTH word |
 | `TELL` | ( addr len -- ) | write a string to output |
-| `QUIT` | ( -- ) | the first word to be executed |
+| `.` | ( n -- ) | print signed number and a trailing space |
+| `U.` | ( u -- ) | print unsigned number and a trailing space |
+| `.R` | ( n width -- ) | print signed number, padded to width |
+| `U.R` | ( u width -- ) | print unsigned number, padded to width |
 | `/MOD` | ( n m -- r q ) | where n = q * m + r |
 | `S/MOD` | ( n m -- r q ) | alternative signed /MOD using Euclidean division |
+| `QUIT` | ( -- ) | the first word to be executed, runs REPL |
 | `CHAR word` | ( -- c ) | ASCII code from first character of following word |
 | `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
 | `HEX` | ( -- ) | set number conversion BASE to 16 |
@@ -236,12 +240,7 @@ The following words are defined in `jonesforth.f`
 | `PICK` | ( x_n ... x_0 n -- x_n ... x_0 x_n ) | DUP n-th stack item |
 | `SPACES` | ( n -- ) | print n spaces |
 | `# value` | ( b -- n ) | interpret base-b literal value w/o changing BASE |
-| `U.R` | ( n width -- ) | print unsigned number, padded to width |
-| `U.` | ( n -- ) | print unsigned number and a trailing space |
-| `.R` | ( n width -- ) | print signed number, padded to width |
 | `.S` | ( -- ) | print the contents of the stack (non-destructive) |
-| `UWIDTH` | ( n -- width ) | number of characters `U.` would print |
-| `.` | ( n -- ) | print signed number and a trailing space |
 | `?` | ( addr -- ) | fetch and print signed number at addr |
 | `WITHIN` | ( a b c -- p ) | where p = ((a >= b) && (a < c)) |
 | `DEPTH` | ( -- n ) | the number of items on the stack |

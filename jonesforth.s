@@ -1039,6 +1039,227 @@ _TELL:
         bge 1b
         ldmfd sp!, {r4-r5, pc}  @ stack restore + return
 
+@ DIVMOD computes the unsigned integer division and remainder
+@ The implementation is based upon the algorithm extracted from 'ARM Software
+@ Development Toolkit User Guide v2.50' published by ARM in 1997-1998
+@ The algorithm is split in two steps: search the biggest divisor b^(2^n)
+@ lesser than a and then subtract it and all b^(2^i) (for i from 0 to n)
+@ to a.
+@ ( a b -- r q ) where a = q * b + r
+defcode "/MOD",4,,DIVMOD
+        POPDSP  r1                      @ Get b
+        POPDSP  r0                      @ Get a
+        bl _DIVMOD
+        PUSHDSP r0                      @ Put r
+        PUSHDSP r2                      @ Put q
+        NEXT
+
+@ on entry r0=numerator r1=denominator
+@ on exit r0=remainder r1=denominator r2=quotient
+_DIVMOD:                        @ Integer Divide/Modulus
+        mov     r3, r1                  @ Put b in tmp
+
+        cmp     r3, r0, LSR #1
+1:      movls   r3, r3, LSL #1          @ Double tmp
+        cmp     r3, r0, LSR #1
+        bls     1b                      @ Jump until 2 * tmp > a
+
+        mov     r2, #0                  @ Initialize q
+
+2:      cmp     r0, r3                  @ If a - tmp > 0
+        subcs   r0, r0, r3              @ a <= a - tmp
+        adc     r2, r2, r2              @ Increment q
+        mov     r3, r3, LSR #1          @ Halve tmp
+        cmp     r3, r1                  @ Jump until tmp < b
+        bhs     2b
+
+        bx lr
+
+@ on entry r0=integer r1=base r2=buffer r3=size
+@ in-use r0=num/mod r1=base r2=div r3=tmp/dig r4=pad r5=end
+@ on exit r0=addr r1=len
+_UFMT:                          @ Unsigned Integer Formatting
+        stmfd   sp!, {r4-r5,lr}         @ save in-use registers
+        add     r4, r2, r3              @ beyond the PAD
+        mov     r5, r4                  @ remember PAD end
+        cmp     r0, r1                  @ if (num >= base)
+        bhs     2f                      @ then, do DIVMOD first
+        mov     r2, #0                  @ else, initial div = 0
+1:
+        subs    r3, r0, #10             @ tmp = num - 10
+        addlt   r3, r0, #48             @ dig = '0' + num, if num < 10
+        addge   r3, r3, #65             @ dig = 'A' + tmp, if num >= 10
+        strb    r3, [r4, #-1]!          @ *(--pad) = dig
+        movs    r0, r2                  @ num = div
+        beq     3f                      @ if num == 0, we're done!
+2:
+        bl      _DIVMOD                 @ (num, base, -, -) ==> (mod, base, div, -)
+        b       1b                      @ convert next digit
+3:
+        mov     r0, r4                  @ string address
+        sub     r1, r5, r4              @ string length
+        ldmfd   sp!, {r4-r5,pc}         @ restore registers and return
+
+@ U. ( u -- ) print unsigned number and a trailing space
+defcode "U.",2,,UDOT
+        POPDSP  r0                      @ number from stack
+        ldr     r1, =var_BASE           @ address of BASE
+        ldr     r1, [r1]                @ current value of BASE
+        ldr     r2, =scratch_pad        @ buffer
+        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
+        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        bl      _TELL                   @ display number
+        mov     r0, #32                 @ space character
+        bl      putchar                 @ print trailing space
+        NEXT
+
+@ U.R ( u width -- ) print unsigned number, padded to width
+defcode "U.R",3,,UDOTR
+        POPDSP  r2                      @ width from stack
+        POPDSP  r0                      @ number from stack
+        PUSHDSP r2                      @ width to stack
+        ldr     r1, =var_BASE           @ address of BASE
+        ldr     r1, [r1]                @ current value of BASE
+        ldr     r2, =scratch_pad        @ buffer
+        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
+        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        POPDSP  r2                      @ width from stack
+        mov     r3, #32                 @ space character
+1:      cmp     r1, r2                  @ while (len < width) {
+        strblt  r3, [r0, #-1]!          @     *(--addr) = ' ';
+        addlt   r1, r1, #1              @     ++len;
+        blt     1b                      @ }
+        bl      _TELL                   @ display number
+        NEXT
+
+@ on entry r0=integer r1=base r2=buffer r3=size
+@ on exit r0=addr r1=len
+_DFMT:                          @ Signed Integer Formatting
+        stmfd   sp!, {lr}               @ save in-use registers
+        movs    r0, r0                  @ check sign of number
+        blt     1f                      @ if num < 0, jump to negative case
+        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        ldmfd   sp!, {pc}               @ restore registers and return
+1:
+        rsb     r0, r0, #0              @ num = -num
+        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        mov     r3, #45                 @ tmp = '-'
+        strb    r3, [r0, #-1]!          @ *(--addr) = tmp
+        add     r1, r1, #1              @ ++len
+        ldmfd   sp!, {pc}               @ restore registers and return
+
+@ . ( n -- ) print signed number and a trailing space
+defcode ".",1,,DOT
+        POPDSP  r0                      @ number from stack
+        ldr     r1, =var_BASE           @ address of BASE
+        ldr     r1, [r1]                @ current value of BASE
+        ldr     r2, =scratch_pad        @ buffer
+        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
+        bl      _DFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        bl      _TELL                   @ display number
+        mov     r0, #32                 @ space character
+        bl      putchar                 @ print trailing space
+        NEXT
+
+@ .R ( n width -- ) print signed number, padded to width
+defcode ".R",2,,DOTR
+        POPDSP  r2                      @ width from stack
+        POPDSP  r0                      @ number from stack
+        PUSHDSP r2                      @ width to stack
+        ldr     r1, =var_BASE           @ address of BASE
+        ldr     r1, [r1]                @ current value of BASE
+        ldr     r2, =scratch_pad        @ buffer
+        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
+        bl      _DFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        POPDSP  r2                      @ width from stack
+        mov     r3, #32                 @ space character
+1:      cmp     r1, r2                  @ while (len < width) {
+        strblt  r3, [r0, #-1]!          @     *(--addr) = ' ';
+        addlt   r1, r1, #1              @     ++len;
+        blt     1b                      @ }
+        bl      _TELL                   @ display number
+        NEXT
+
+@ Alternative to DIVMOD: signed implementation using Euclidean division.
+defcode "S/MOD",5,,SDIVMOD
+        @ Denominator
+        POPDSP r2
+        @ Numerator
+        POPDSP r1
+
+        bl _SDIVMOD
+
+        @ Remainder
+        PUSHDSP r1
+        @ Quotient
+        PUSHDSP r0
+
+        NEXT
+
+_SDIVMOD:
+        @ Division by 0.
+        cmp r2, #0
+        beq 4f
+
+        @ r0 will store the quotient at the end.
+        mov r0, #0
+
+        @ r3 will be 1 if numerator and denominator have the same
+        @ sign, -1 otherwise.
+        @ r4 will be 1 if the numerator is positive, -1 otherwise.
+        mov r3, #1
+        mov r4, #1
+
+        rsblt r3, r3, #0 @ r3 = -r3 if negative denominator
+        rsblt r2, r2, #0 @ denominator = abs(denominator)
+
+        cmp r1, #0
+        rsblt r4, r4, #0 @ r4 = sign(numerator)
+        rsblt r3, r3, #0 @ r3 = -r3 if negative numerator
+        rsblt r1, r1, #0 @ numerator = abs(numerator)
+
+        cmp r3, #-1
+        beq 2f
+
+1:      @ Case where denominator and numerator have the same sign.
+        cmp r1, r2
+        blt 3f
+        11:
+        add r0, r0, #1
+        sub r1, r1, r2
+        cmp r1, r2
+        bge 11b
+
+        b 3f
+
+2:      @ Case where denominator and numerator have different sign.
+        cmp r1, #0
+        beq 3f
+        21:
+        sub r0, r0, #1
+        sub r1, r1, r2
+        cmp r1, #0
+        bgt 21b
+
+3:
+        @ If numerator and denominator were negative:
+        @ remainder = -remainder
+        cmp r4, #-1
+        rsbeq r1, r1, #0
+        b 5f
+
+4:      @ Error, division by 0.
+        ldr r0, =errdiv0
+        mov r1, #(errdiv0end-errdiv0)
+        bl _TELL                        @ Display error message
+
+5:
+        bx lr
+
+.section .rodata
+errdiv0: .ascii "Division by 0!\n"
+errdiv0end:
+
 @ QUIT ( -- ) the first word to be executed
 defword "QUIT", 4,, QUIT
         .int R0, RSPSTORE       @ Set up return stack
@@ -1144,190 +1365,6 @@ errpfxend:
 errsfx:
         .ascii ">\n"
 errsfxend:
-
-@ DIVMOD computes the unsigned integer division and remainder
-@ The implementation is based upon the algorithm extracted from 'ARM Software
-@ Development Toolkit User Guide v2.50' published by ARM in 1997-1998
-@ The algorithm is split in two steps: search the biggest divisor b^(2^n)
-@ lesser than a and then subtract it and all b^(2^i) (for i from 0 to n)
-@ to a.
-@ ( a b -- r q ) where a = q * b + r
-defcode "/MOD",4,,DIVMOD
-        POPDSP  r1                      @ Get b
-        POPDSP  r0                      @ Get a
-        bl _DIVMOD
-        PUSHDSP r0                      @ Put r
-        PUSHDSP r2                      @ Put q
-        NEXT
-
-@ on entry r0=numerator r1=denominator
-@ on exit r0=remainder r1=denominator r2=quotient
-_DIVMOD:                        @ Integer Divide/Modulus
-        mov     r3, r1                  @ Put b in tmp
-
-        cmp     r3, r0, LSR #1
-1:      movls   r3, r3, LSL #1          @ Double tmp
-        cmp     r3, r0, LSR #1
-        bls     1b                      @ Jump until 2 * tmp > a
-
-        mov     r2, #0                  @ Initialize q
-
-2:      cmp     r0, r3                  @ If a - tmp > 0
-        subcs   r0, r0, r3              @ a <= a - tmp
-        adc     r2, r2, r2              @ Increment q
-        mov     r3, r3, LSR #1          @ Halve tmp
-        cmp     r3, r1                  @ Jump until tmp < b
-        bhs     2b
-
-        bx lr
-
-@ on entry r0=integer r1=base r2=buffer r3=size
-@ in-use r0=num/mod r1=base r2=div r3=tmp/dig r4=pad r5=end
-@ on exit r0=addr r1=len
-_UFMT:                          @ Unsigned Integer Formatting
-        stmfd   sp!, {r4-r5,lr}         @ save in-use registers
-        add     r4, r2, r3              @ beyond the PAD
-        mov     r5, r4                  @ remember PAD end
-        cmp     r0, r1                  @ if (num >= base)
-        bhs     2f                      @ then, do DIVMOD first
-        mov     r2, #0                  @ else, initial div = 0
-1:
-        subs    r3, r0, #10             @ tmp = num - 10
-        addlt   r3, r0, #48             @ dig = '0' + num, if num < 10
-        addge   r3, r3, #65             @ dig = 'A' + tmp, if num >= 10
-        strb    r3, [r4, #-1]!          @ *(--pad) = dig
-        movs    r0, r2                  @ num = div
-        beq     3f                      @ if num == 0, we're done!
-2:
-        bl      _DIVMOD                 @ (num, base, -, -) ==> (mod, base, div, -)
-        b       1b                      @ convert next digit
-3:
-        mov     r0, r4                  @ string address
-        sub     r1, r5, r4              @ string length
-        ldmfd   sp!, {r4-r5,pc}         @ restore registers and return
-
-@ U. ( u -- ) print unsigned number and a trailing space
-defcode "U.",2,,UDOT
-        POPDSP  r0                      @ number from stack
-        ldr     r1, =var_BASE           @ address of BASE
-        ldr     r1, [r1]                @ current value of BASE
-        ldr     r2, =scratch_pad        @ buffer
-        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
-        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
-        bl      _TELL                   @ display number
-        mov     r0, #32                 @ space character
-        bl      putchar                 @ print trailing space
-        NEXT
-
-@ on entry r0=integer r1=base r2=buffer r3=size
-@ on exit r0=addr r1=len
-_IFMT:                          @ Signed Integer Formatting
-        stmfd   sp!, {lr}               @ save in-use registers
-        movs    r0, r0                  @ check sign of number
-        blt     1f                      @ if num < 0, jump to negative case
-        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
-        ldmfd   sp!, {pc}               @ restore registers and return
-1:
-        rsb     r0, r0, #0              @ num = -num
-        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
-        mov     r3, #45                 @ tmp = '-'
-        strb    r3, [r0, #-1]!          @ *(--addr) = tmp
-        add     r1, r1, #1              @ ++len
-        ldmfd   sp!, {pc}               @ restore registers and return
-
-@ . ( n -- ) print signed number and a trailing space
-defcode ".",1,,DOT
-        POPDSP  r0                      @ number from stack
-        ldr     r1, =var_BASE           @ address of BASE
-        ldr     r1, [r1]                @ current value of BASE
-        ldr     r2, =scratch_pad        @ buffer
-        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
-        bl      _IFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
-        bl      _TELL                   @ display number
-        mov     r0, #32                 @ space character
-        bl      putchar                 @ print trailing space
-        NEXT
-
-
-@ Alternative to DIVMOD: signed implementation using Euclidean division.
-defcode "S/MOD",5,,SDIVMOD
-        @ Denominator
-        POPDSP r2
-        @ Numerator
-        POPDSP r1
-
-        bl _SDIVMOD
-
-        @ Remainder
-        PUSHDSP r1
-        @ Quotient
-        PUSHDSP r0
-
-        NEXT
-
-_SDIVMOD:
-        @ Division by 0.
-        cmp r2, #0
-        beq 4f
-
-        @ r0 will store the quotient at the end.
-        mov r0, #0
-
-        @ r3 will be 1 if numerator and denominator have the same
-        @ sign, -1 otherwise.
-        @ r4 will be 1 if the numerator is positive, -1 otherwise.
-        mov r3, #1
-        mov r4, #1
-
-        rsblt r3, r3, #0 @ r3 = -r3 if negative denominator
-        rsblt r2, r2, #0 @ denominator = abs(denominator)
-
-        cmp r1, #0
-        rsblt r4, r4, #0 @ r4 = sign(numerator)
-        rsblt r3, r3, #0 @ r3 = -r3 if negative numerator
-        rsblt r1, r1, #0 @ numerator = abs(numerator)
-
-        cmp r3, #-1
-        beq 2f
-
-1:      @ Case where denominator and numerator have the same sign.
-        cmp r1, r2
-        blt 3f
-        11:
-        add r0, r0, #1
-        sub r1, r1, r2
-        cmp r1, r2
-        bge 11b
-
-        b 3f
-
-2:      @ Case where denominator and numerator have different sign.
-        cmp r1, #0
-        beq 3f
-        21:
-        sub r0, r0, #1
-        sub r1, r1, r2
-        cmp r1, #0
-        bgt 21b
-
-3:
-        @ If numerator and denominator were negative:
-        @ remainder = -remainder
-        cmp r4, #-1
-        rsbeq r1, r1, #0
-        b 5f
-
-4:      @ Error, division by 0.
-        ldr r0, =errdiv0
-        mov r1, #(errdiv0end-errdiv0)
-        bl _TELL                        @ Display error message
-
-5:
-        bx lr
-
-.section .rodata
-errdiv0: .ascii "Division by 0!\n"
-errdiv0end:
 
 @ CHAR ( -- c ) ASCII code from first character of following word
 defcode "CHAR",4,,CHAR

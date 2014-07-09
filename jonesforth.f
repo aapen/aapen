@@ -193,38 +193,6 @@
 ;
 
 (
-	PRINTING NUMBERS ----------------------------------------------------------------------
-
-	The standard FORTH word . (DOT) is very important.  It takes the number at the top
-	of the stack and prints it out.  However first I'm going to implement some lower-level
-	FORTH words:
-
-	U.R	( u width -- )	which prints an unsigned number, padded to a certain width
-	U.	( u -- )	which prints an unsigned number
-	.R	( n width -- )	which prints a signed number, padded to a certain width.
-
-	. and friends obey the current base in the variable BASE, which can range from 2 to 36.
-)
-
-( This is the underlying recursive definition of U. It will be redefined below. )
-: U.		( u -- )
-	BASE @ /MOD	( width rem quot )
-	?DUP IF			( if quotient <> 0 then )
-		RECURSE		( print the quotient )
-	THEN
-
-	( print the remainder )
-	DUP 10 < IF
-		'0'		( decimal digits 0..9 )
-	ELSE
-		10 -		( hex and beyond digits A..Z )
-		'A'
-	THEN
-	+
-	EMIT
-;
-
-(
 	FORTH word .S prints the contents of the stack.  It doesn't alter the stack.
 	Very useful for debugging.
 )
@@ -239,64 +207,6 @@
 	REPEAT
 	DROP
 ;
-
-( This word returns the width (in characters) of an unsigned number in the current base )
-: UWIDTH	( u -- width )
-	BASE @ /	( rem quot )
-	?DUP IF		( if quotient <> 0 then )
-		RECURSE 1+	( return 1+recursive call )
-	ELSE
-		1		( return 1 )
-	THEN
-;
-
-: U.R		( u width -- )
-	SWAP		( width u )
-	DUP		( width u u )
-	UWIDTH		( width u uwidth )
-	ROT		( u uwidth width )
-	SWAP -		( u width-uwidth )
-	SPACES
-	U.
-;
-
-( .R prints a signed number, padded to a certain width. )
-: .R		( n width -- )
-	SWAP		( width n )
-	DUP 0< IF
-		NEGATE		( width u )
-		1		( save a flag to remember that it was negative | width n 1 )
-		SWAP		( width 1 u )
-		ROT		( 1 u width )
-		1-		( 1 u width-1 )
-	ELSE
-		0		( width u 0 )
-		SWAP		( width 0 u )
-		ROT		( 0 u width )
-	THEN
-	SWAP		( flag width u )
-	DUP		( flag width u u )
-	UWIDTH		( flag width u uwidth )
-	ROT		( flag u uwidth width )
-	SWAP -		( flag u width-uwidth )
-
-	SPACES		( flag u )
-	SWAP		( u flag )
-
-	IF			( was it negative? print the - character )
-		'-' EMIT
-	THEN
-
-	U.
-;
-
-( Finally we can define word . in terms of .R, with a trailing space. )
-: . 0 .R SPACE ;
-
-( The real U., note the trailing space.
-  All code beyond this point will use the new definition.
-  Old code, including this definition, continues to use the old version.  )
-: U. U. SPACE ;
 
 ( ? fetches the integer at an address and prints it. )
 : ? ( addr -- ) @ . ;
