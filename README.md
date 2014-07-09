@@ -178,6 +178,9 @@ The following words are pre-defined in _pijFORTHos_
 | `U.` | ( u -- ) | print unsigned number and a trailing space |
 | `.R` | ( n width -- ) | print signed number, padded to width |
 | `U.R` | ( u width -- ) | print unsigned number, padded to width |
+| `?` | ( addr -- ) | fetch and print signed number at addr |
+| `DEPTH` | ( -- n ) | the number of items on the stack |
+| `.S` | ( -- ) | print the contents of the stack (non-destructive) |
 | `/MOD` | ( n m -- r q ) | where n = q * m + r |
 | `S/MOD` | ( n m -- r q ) | alternative signed /MOD using Euclidean division |
 | `QUIT` | ( -- ) | the first word to be executed, runs REPL |
@@ -240,10 +243,7 @@ The following words are defined in `jonesforth.f`
 | `PICK` | ( x_n ... x_0 n -- x_n ... x_0 x_n ) | DUP n-th stack item |
 | `SPACES` | ( n -- ) | print n spaces |
 | `# value` | ( b -- n ) | interpret base-b literal value w/o changing BASE |
-| `.S` | ( -- ) | print the contents of the stack (non-destructive) |
-| `?` | ( addr -- ) | fetch and print signed number at addr |
 | `WITHIN` | ( a b c -- p ) | where p = ((a >= b) && (a < c)) |
-| `DEPTH` | ( -- n ) | the number of items on the stack |
 | `ALIGNED` | ( addr -- addr' ) | round addr up to next 4-byte boundary |
 | `ALIGN` | ( -- ) | align the HERE pointer |
 | `C,` | ( c -- ) | write a byte from the stack at HERE |

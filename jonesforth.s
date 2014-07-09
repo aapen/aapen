@@ -1109,6 +1109,12 @@ _UFMT:                          @ Unsigned Integer Formatting
 @ U. ( u -- ) print unsigned number and a trailing space
 defcode "U.",2,,UDOT
         POPDSP  r0                      @ number from stack
+        bl      _UDOT
+        NEXT
+
+@ on entry r0=number
+_UDOT:
+        stmfd   sp!, {lr}               @ save in-use registers
         ldr     r1, =var_BASE           @ address of BASE
         ldr     r1, [r1]                @ current value of BASE
         ldr     r2, =scratch_pad        @ buffer
@@ -1117,7 +1123,7 @@ defcode "U.",2,,UDOT
         bl      _TELL                   @ display number
         mov     r0, #32                 @ space character
         bl      putchar                 @ print trailing space
-        NEXT
+        ldmfd   sp!, {pc}               @ restore registers and return
 
 @ U.R ( u width -- ) print unsigned number, padded to width
 defcode "U.R",3,,UDOTR
@@ -1185,6 +1191,39 @@ defcode ".R",2,,DOTR
         blt     1b                      @ }
         bl      _TELL                   @ display number
         NEXT
+
+@ ? ( addr -- ) fetch and print signed number at addr
+@ : @ . ;
+defword "?",1,,QUESTION
+        .int FETCH
+        .int DOT
+        .int EXIT
+
+@ DEPTH ( -- n ) the number of items on the stack
+: DEPTH DSP@ S0 @ SWAP - 4 / ;
+defcode "DEPTH",5,,DEPTH
+        ldr     r0, =var_S0             @ address of stack origin
+        ldr     r0, [r0                 @ stack origin value
+        sub     r0, r0, DSP             @ number of bytes on stack
+        mov     r0, r0, ASR #2          @ /4 to count cells
+        PUSHDSP r0
+        NEXT
+
+@ .S ( -- ) print the contents of the stack (non-destructive)
+defcode ".S",4,,DOTS
+        mov     r0, DSP                 @ grab original stack top
+        stmfd   sp!, {r4-r5}            @ save in-use registers (on the stack!)
+        mov     r4, r0                  @ remember original top
+        ldr     r5, =var_S0             @ address of stack origin
+        ldr     r5, [r5]                @ location = stack origin
+1:                                      @ LOOP {
+        ldr     r0, [r5, #-4]!          @     item = *--location
+        cmp     r5, r4                  @     if (location < top) EXIT
+        blge    _UDOT                   @     print item
+        bge     1b                      @ }
+        ldmfd   sp!, {r4-r5}            @ restore registers (from the stack)
+        NEXT
+
 
 @ Alternative to DIVMOD: signed implementation using Euclidean division.
 defcode "S/MOD",5,,SDIVMOD

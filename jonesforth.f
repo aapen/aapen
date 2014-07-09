@@ -192,25 +192,6 @@
         BASE !
 ;
 
-(
-	FORTH word .S prints the contents of the stack.  It doesn't alter the stack.
-	Very useful for debugging.
-)
-: .S		( -- )
-	DSP@		( get current stack pointer )
-	BEGIN
-		DUP S0 @ <
-	WHILE
-		DUP @ U.	( print the stack element )
-		SPACE
-		4+		( move up )
-	REPEAT
-	DROP
-;
-
-( ? fetches the integer at an address and prints it. )
-: ? ( addr -- ) @ . ;
-
 ( c a b WITHIN returns true if a <= c and c < b )
 (  or define without ifs: OVER - >R - R>  U<  )
 : WITHIN
@@ -226,11 +207,6 @@
 		2DROP		( b c -- )
 		FALSE
 	THEN
-;
-
-( DEPTH returns the depth of the stack. )
-: DEPTH		( -- n )
-	DSP@ S0 @ SWAP - 4 /
 ;
 
 ( ALIGNED takes an address and rounds it up (aligns it) to the next 4 byte boundary. )
