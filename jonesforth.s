@@ -185,7 +185,7 @@ var_\name :
 @  LATEST          Points to the latest (most recently defined) word in the dictionary.
         defvar "LATEST",6,,LATEST,name_EXECUTE  @ The last word defined in assembly is EXECUTE
 @  S0              Stores the address of the top of the parameter stack.
-        defvar "S0",2,,SZ
+        defvar "S0",2,,S0
 @  BASE            The current base for printing and reading numbers.
         defvar "BASE",4,,BASE,10
 
@@ -202,7 +202,7 @@ var_\name :
 @  VERSION         Is the current version of this FORTH.
         defconst "VERSION",7,,VERSION,JONES_VERSION
 @  R0              The address of the top of the return stack.
-        defconst "R0",2,,RZ,return_stack_top
+        defconst "R0",2,,R0,return_stack_top
 @  DOCOL           Pointer to DOCOL.
         defconst "DOCOL",5,,__DOCOL,DOCOL
 @  PAD             Pointer to scratch-pad buffer.
@@ -986,7 +986,7 @@ _TELL:
 
 @ QUIT ( -- ) the first word to be executed
 defword "QUIT", 4,, QUIT
-        .int RZ, RSPSTORE       @ Set up return stack
+        .int R0, RSPSTORE       @ Set up return stack
         .int INTERPRET          @ Interpret a word
         .int BRANCH,-8          @ loop
 
@@ -994,6 +994,18 @@ defword "QUIT", 4,, QUIT
 @ No need to backup callee save registers here,
 @ since we are the top level routine!
 defcode "INTERPRET",9,,INTERPRET
+        ldr r12, =var_S0                @ address of stack origin
+        ldr r12, [r12]                  @ stack origin value
+        cmp r12, DSP                    @ check stack pointer against origin
+        bge 7f                          @ go to 7, if stack is ok
+
+    @ Stack Underflow
+        mov sp, r12                     @ reset stack pointer
+        ldr r0, =errstack
+        mov r1, #(errstackend-errstack)
+        bl _TELL                        @ Print error message
+
+7:  @ Stack OK
         mov r8, #0                      @ interpret_is_lit = 0
 
         bl _WORD                        @ read a word from stdin
@@ -1008,7 +1020,7 @@ defcode "INTERPRET",9,,INTERPRET
         ldrb r6, [r0, #4]               @ read length and flags field
         bl _TCFA                        @ find code field address
         tst r6, #F_IMMED                @ if the word is immediate
-        bne 4f                          @ branch to 6 (execute)
+        bne 4f                          @ branch to 4 (execute)
         b 2f                            @ otherwise, branch to 2
 
 1:  @ Not found in dictionary
@@ -1044,7 +1056,7 @@ defcode "INTERPRET",9,,INTERPRET
                                         @ not a literal, execute now
         ldr r1, [r0]                    @ (it's important here that
         bx r1                           @  FIP address in r0, since DOCOL
-                                        @  assummes it)
+                                        @  assumes it)
 
 5:  @ Push literal on the stack
         PUSHDSP r6
@@ -1066,6 +1078,10 @@ defcode "INTERPRET",9,,INTERPRET
         NEXT
 
         .section .rodata
+errstack:
+        .ascii "STACK EMPTY!\n"
+errstackend:
+
 errpfx:
         .ascii "PARSE ERROR<"
 errpfxend:
