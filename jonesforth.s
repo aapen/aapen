@@ -644,7 +644,7 @@ defcode "DSP@",4,,DSPFETCH
 
 defcode "DSP!",4,,DSPSTORE
         POPDSP r0
-        mov r0, DSP
+        mov DSP, r0
         NEXT
 
 @ KEY ( -- c ) Reads a character from stdin
@@ -1163,6 +1163,12 @@ _DFMT:                          @ Signed Integer Formatting
 @ . ( n -- ) print signed number and a trailing space
 defcode ".",1,,DOT
         POPDSP  r0                      @ number from stack
+        bl      _DOT
+        NEXT
+
+@ on entry r0=number
+_DOT:
+        stmfd   sp!, {lr}               @ save in-use registers
         ldr     r1, =var_BASE           @ address of BASE
         ldr     r1, [r1]                @ current value of BASE
         ldr     r2, =scratch_pad        @ buffer
@@ -1171,7 +1177,7 @@ defcode ".",1,,DOT
         bl      _TELL                   @ display number
         mov     r0, #32                 @ space character
         bl      putchar                 @ print trailing space
-        NEXT
+        ldmfd   sp!, {pc}               @ restore registers and return
 
 @ .R ( n width -- ) print signed number, padded to width
 defcode ".R",2,,DOTR
@@ -1200,27 +1206,39 @@ defword "?",1,,QUESTION
         .int EXIT
 
 @ DEPTH ( -- n ) the number of items on the stack
-: DEPTH DSP@ S0 @ SWAP - 4 / ;
+@ : DEPTH DSP@ S0 @ SWAP - 4 / ;
 defcode "DEPTH",5,,DEPTH
         ldr     r0, =var_S0             @ address of stack origin
-        ldr     r0, [r0                 @ stack origin value
+        ldr     r0, [r0]                @ stack origin value
         sub     r0, r0, DSP             @ number of bytes on stack
         mov     r0, r0, ASR #2          @ /4 to count cells
         PUSHDSP r0
         NEXT
 
 @ .S ( -- ) print the contents of the stack (non-destructive)
-defcode ".S",4,,DOTS
+defcode ".S",2,,DOTS
         mov     r0, DSP                 @ grab original stack top
         stmfd   sp!, {r4-r5}            @ save in-use registers (on the stack!)
         mov     r4, r0                  @ remember original top
         ldr     r5, =var_S0             @ address of stack origin
         ldr     r5, [r5]                @ location = stack origin
-1:                                      @ LOOP {
+        ldr     r1, =var_BASE           @ address of BASE
+        ldr     r1, [r1]                @ current value of BASE
+        cmp     r1, #10
+        bne     2f
+1:                                      @ LOOP {  // signed
         ldr     r0, [r5, #-4]!          @     item = *--location
-        cmp     r5, r4                  @     if (location < top) EXIT
-        blge    _UDOT                   @     print item
-        bge     1b                      @ }
+        cmp     r5, r4                  @     if (location < top)
+        blt     3f                      @         goto EXIT
+        bl      _DOT                    @     print item
+        b       1b                      @ }
+2:                                      @ LOOP {  // unsigned
+        ldr     r0, [r5, #-4]!          @     item = *--location
+        cmp     r5, r4                  @     if (location < top)
+        blt     3f                      @         goto EXIT
+        bl      _UDOT                   @     print item
+        b       2b                      @ }
+3:                                      @ EXIT:
         ldmfd   sp!, {r4-r5}            @ restore registers (from the stack)
         NEXT
 
@@ -1307,9 +1325,10 @@ errdiv0end:
 
 @ QUIT ( -- ) the first word to be executed
 defword "QUIT", 4,, QUIT
-        .int R0, RSPSTORE       @ Set up return stack
-        .int INTERPRET          @ Interpret a word
-        .int BRANCH,-8          @ loop
+        .int R0, RSPSTORE               @ Clear return stack
+        .int S0, FETCH, DSPSTORE        @ Clear data stack
+        .int INTERPRET                  @ Interpret a word
+        .int BRANCH,-8                  @ LOOP FOREVER
 
 @ INTERPRET, reads a word from stdin and executes or compiles it.
 @ No need to backup callee save registers here,
@@ -1400,11 +1419,11 @@ defcode "INTERPRET",9,,INTERPRET
 
         .section .rodata
 errstack:
-        .ascii "STACK EMPTY!\n"
+        .ascii "Stack empty!\n"
 errstackend:
 
 errpfx:
-        .ascii "PARSE ERROR<"
+        .ascii "Unknown word <"
 errpfxend:
 
 errsfx:
@@ -1482,7 +1501,7 @@ defcode "BOOT",4,,BOOT
         NEXT
 
 .section .rodata
-errboot: .ascii "Bad Image!\n"
+errboot: .ascii "Bad image!\n"
 errbootend:
 
 @ MONITOR ( -- ) Enter bootstrap monitor
