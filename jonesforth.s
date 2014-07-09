@@ -1134,7 +1134,7 @@ _UFMT:                          @ Unsigned Integer Formatting
         add     r4, r2, r3              @ beyond the PAD
         mov     r5, r4                  @ remember PAD end
         cmp     r0, r1                  @ if (num >= base)
-        bge     2f                      @ then, do DIVMOD first
+        bhs     2f                      @ then, do DIVMOD first
         mov     r2, #0                  @ else, initial div = 0
 1:
         subs    r3, r0, #10             @ tmp = num - 10
@@ -1142,7 +1142,7 @@ _UFMT:                          @ Unsigned Integer Formatting
         addge   r3, r3, #65             @ dig = 'A' + tmp, if num >= 10
         strb    r3, [r4, #-1]!          @ *(--pad) = dig
         movs    r0, r2                  @ num = div
-        ble     3f                      @ if num <= 0, we're done!
+        beq     3f                      @ if num == 0, we're done!
 2:
         bl      _DIVMOD                 @ (num, base, -, -) ==> (mod, base, div, -)
         b       1b                      @ convert next digit
@@ -1173,7 +1173,7 @@ _IFMT:                          @ Signed Integer Formatting
         bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
         ldmfd   sp!, {pc}               @ restore registers and return
 1:
-        rsblt   r0, r0, #0              @ num = -num
+        rsb     r0, r0, #0              @ num = -num
         bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
         mov     r3, #45                 @ tmp = '-'
         strb    r3, [r0, #-1]!          @ *(--addr) = tmp
@@ -1281,6 +1281,20 @@ defcode "CHAR",4,,CHAR
         PUSHDSP r1
         NEXT
 
+@ DECIMAL ( -- ) set BASE to 10
+defcode "DECIMAL", 7,, DECIMAL
+        mov     r0, #10
+        ldr     r1, =var_BASE
+        str     r0, [r1]
+        NEXT
+
+@ HEX ( -- ) set BASE to 16
+defcode "HEX", 3,, HEX
+        mov     r0, #16
+        ldr     r1, =var_BASE
+        str     r0, [r1]
+        NEXT
+
 @ UPLOAD ( -- addr len ) XMODEM file upload to memory
 defcode "UPLOAD",6,,UPLOAD
         ldr r0, =0x10000        @ Upload buffer address
@@ -1290,7 +1304,7 @@ defcode "UPLOAD",6,,UPLOAD
         PUSHDSP r0              @ Push upload byte count on the stack
         NEXT
 
-@ DUMP ( addr length -- ) Pretty-printed memory dump
+@ DUMP ( addr len -- ) Pretty-printed memory dump
 defcode "DUMP",4,,DUMP
         POPDSP r1
         POPDSP r0
