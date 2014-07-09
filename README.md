@@ -83,6 +83,8 @@ The following constants are pre-defined in _pijFORTHos_
 | `F_IMMED` | The IMMEDIATE flag's actual value. |
 | `F_HIDDEN` | The HIDDEN flag's actual value. |
 | `F_LENMASK` | The length mask in the flags/len byte. |
+| `FALSE` | Boolean predicate False (0) |
+| `TRUE` | Boolean predicate True (1), anything != 0 is TRUE |
 
 Given the relationship between `HERE` and `PAD`, 
 the following calculates the number of free memory cells available:
@@ -126,6 +128,7 @@ The following words are pre-defined in _pijFORTHos_
 | `0>` | ( a -- p ) | where p = (a > 0) |
 | `0<=` | ( a -- p ) | where p = (a <= 0) |
 | `0>=` | ( a -- p ) | where p = (a >= 0) |
+| `NOT` | ( p -- !p ) | Boolean predicate negation |
 | `AND` | ( a b -- a&amp;b ) | bitwise and |
 | `OR` | ( a b -- a&#124;b ) | bitwise or |
 | `XOR` | ( a b -- a^b ) | bitwise xor |
@@ -199,8 +202,6 @@ The following constants are defined in `jonesforth.f`
 |----------|-------------|
 | `'\n'` | newline character (10) |
 | `BL` | blank character (32) |
-| `TRUE` | Boolean predicate True (1) |
-| `FALSE` | Boolean predicate False (0) |
 | `':'` | colon character (58) |
 | `';'` | semicolon character (59) |
 | `'('` | left parenthesis character (40) |
@@ -220,7 +221,6 @@ The following words are defined in `jonesforth.f`
 | `/` | ( a b -- q ) | integer division quotient (see /MOD) |
 | `MOD` | ( a b -- r ) | integer division remainder (see /MOD) |
 | `NEGATE` | ( n -- -n ) | integer negation |
-| `NOT` | ( p -- !p ) | Boolean predicate negation |
 | `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
 | `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
 | `RECURSE` | ( -- ) | compile recursive call to current word |

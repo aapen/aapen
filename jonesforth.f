@@ -28,10 +28,6 @@
 
 : NEGATE 0 SWAP - ;
 
-: TRUE  1 ;
-: FALSE 0 ;
-: NOT   0= ;
-
 : LITERAL IMMEDIATE ' LIT , , ;  \ takes <word> from the stack and compiles LIT <word>
 
 \ Now we can use [ and ] to insert literals which are calculated at compile time.

@@ -213,6 +213,10 @@ var_\name :
         defconst "F_HIDDEN",8,,__F_HIDDEN,F_HIDDEN
 @  F_LENMASK       The length mask in the flags/len byte.
         defconst "F_LENMASK",9,,__F_LENMASK,F_LENMASK
+@  FALSE           Boolean predicate False (0)
+        defconst "FALSE",5,,0,FALSE
+@  TRUE            Boolean predicate True (1)
+        defconst "TRUE",4,,1,TRUE
 
 
 @ DROP ( a -- ) drops the top element of the stack
@@ -462,6 +466,15 @@ defcode "0>=",3,,ZGE
         mov r0, #0
         cmp r1, r0
         movge r0, #1
+        PUSHDSP r0
+        NEXT
+
+@ : NOT 0= ;
+defcode "NOT",3,,NOT
+        POPDSP r1
+        mov r0, #0
+        cmp r1, r0
+        moveq r0, #1
         PUSHDSP r0
         NEXT
 
