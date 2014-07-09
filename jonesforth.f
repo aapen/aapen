@@ -26,9 +26,6 @@
 : '\n' 10 ;
 : BL   32 ;
 
-: CR '\n' EMIT ;  \ print newline
-: SPACE BL EMIT ;  \ print space
-
 : NEGATE 0 SWAP - ;
 
 : TRUE  1 ;
@@ -195,10 +192,6 @@
 	DROP
 ;
 
-( Standard words for manipulating BASE. )
-: DECIMAL ( -- ) 10 BASE ! ;
-: HEX ( -- ) 16 BASE ! ;
-
 (
 	PRINTING NUMBERS ----------------------------------------------------------------------
 
@@ -327,8 +320,7 @@
 
 ( DEPTH returns the depth of the stack. )
 : DEPTH		( -- n )
-	S0 @ DSP@ -
-	4-			( adjust because S0 was on the stack when we pushed DSP )
+	DSP@ S0 @ SWAP - 4 /
 ;
 
 ( ALIGNED takes an address and rounds it up (aligns it) to the next 4 byte boundary. )

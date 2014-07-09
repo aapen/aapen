@@ -272,12 +272,14 @@ defcode "2DROP",5,,TWODROP
         POPDSP r0       @ ( )
         NEXT
 
-@ : 2DUP OVER OVER ;  // duplicate top two elements of stack
+@ 2DUP ( a b -- a b a b ) duplicate top two elements of stack
+@ : 2DUP OVER OVER ;
 defword "2DUP",4,,TWODUP
         .int OVER, OVER
         .int EXIT
 
-@ : 2SWAP >R -ROT R> -ROT ;  // swap top two pairs of elements of stack
+@ 2SWAP ( a b c d -- c d a b ) swap top two pairs of elements of stack
+@ : 2SWAP >R -ROT R> -ROT ;
 defword "2SWAP",5,,TWOSWAP
         .int TOR, NROT, TOR, NROT
         .int EXIT
@@ -610,6 +612,20 @@ defcode "KEY",3,,KEY
 defcode "EMIT",4,,EMIT
         POPDSP r0
         bl putchar              @ putchar(r0);
+        NEXT
+
+@ CR ( -- ) print newline
+@ : CR '\n' EMIT ;
+defcode "CR",2,,CR
+        mov r0, #10
+        bl putchar              @ putchar('\n');
+        NEXT
+
+@ SPACE ( -- ) print space
+@ : SPACE BL EMIT ;  \ print space
+defcode "SPACE",5,,SPACE
+        mov r0, #32
+        bl putchar              @ putchar(' ');
         NEXT
 
 @ WORD ( -- addr length ) reads next word from stdin
@@ -1274,21 +1290,23 @@ _SDIVMOD:
 errdiv0: .ascii "Division by 0!\n"
 errdiv0end:
 
-@ CHAR ( -- c ) put the ASCII code of the first character of the next word on the stack
+@ CHAR ( -- c ) ASCII code from first character of following word
 defcode "CHAR",4,,CHAR
         bl _WORD
         ldrb r1, [r0]
         PUSHDSP r1
         NEXT
 
-@ DECIMAL ( -- ) set BASE to 10
+@ DECIMAL ( -- ) set number conversion BASE to 10
+@ : DECIMAL ( -- ) 10 BASE ! ;
 defcode "DECIMAL", 7,, DECIMAL
         mov     r0, #10
         ldr     r1, =var_BASE
         str     r0, [r1]
         NEXT
 
-@ HEX ( -- ) set BASE to 16
+@ HEX ( -- ) set number conversion BASE to 16
+@ : HEX ( -- ) 16 BASE ! ;
 defcode "HEX", 3,, HEX
         mov     r0, #16
         ldr     r1, =var_BASE

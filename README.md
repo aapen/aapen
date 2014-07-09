@@ -147,6 +147,8 @@ The following words are pre-defined in _pijFORTHos_
 | `DSP!` | ( addr -- ) | set data stack pointer |
 | `KEY` | ( -- c ) | read a character from input |
 | `EMIT` | ( c -- ) | write character c to output |
+| `CR` | ( -- ) | print newline |
+| `SPACE` | ( -- ) | print space |
 | `WORD` | ( -- addr len ) | read next word from input |
 | `NUMBER` | ( addr len -- n e ) | convert string to number n, with e unparsed characters |
 | `FIND` | ( addr len -- entry &#124; 0 ) | search dictionary for entry matching string |
@@ -170,6 +172,8 @@ The following words are pre-defined in _pijFORTHos_
 | `/MOD` | ( a b -- r q ) | where a = q * b + r |
 | `S/MOD` | ( a b -- r q ) | alternative signed /MOD using Euclidean division |
 | `CHAR word` | ( -- c ) | ASCII code from first character of following word |
+| `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
+| `HEX` | ( -- ) | set number conversion BASE to 16 |
 | `UPLOAD` | ( -- addr len ) | XMODEM file upload to memory image |
 | `DUMP` | ( addr len -- ) | pretty-printed memory dump |
 | `BOOT` | ( addr len -- ) | boot from memory image (see UPLOAD) |
@@ -213,8 +217,6 @@ The following words are defined in `jonesforth.f`
 |------|-------|-------------|
 | `/` | ( a b -- q ) | integer division quotient (see /MOD) |
 | `MOD` | ( a b -- r ) | integer division remainder (see /MOD) |
-| `CR` | ( -- ) | print newline |
-| `SPACE` | ( -- ) | print space |
 | `NEGATE` | ( n -- -n ) | integer negation |
 | `NOT` | ( p -- !p ) | Boolean predicate negation |
 | `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
@@ -231,8 +233,6 @@ The following words are defined in `jonesforth.f`
 | `TUCK` | ( x y -- y x y ) | `SWAP OVER` |
 | `PICK` | ( x_n ... x_0 n -- x_n ... x_0 x_n ) | DUP n-th stack item |
 | `SPACES` | ( n -- ) | print n spaces |
-| `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
-| `HEX` | ( -- ) | set number conversion BASE to 16 |
 | `U.R` | ( n width -- ) | print unsigned number, padded to width |
 | `U.` | ( n -- ) | print unsigned number and a trailing space |
 | `.R` | ( n width -- ) | print signed number, padded to width |
