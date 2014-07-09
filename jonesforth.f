@@ -192,6 +192,15 @@
 	DROP
 ;
 
+( interpret base-b literal value w/o changing BASE, e.g.: 2 # 101 produces 5 )
+: #     ( b -- n )
+        BASE @ 
+        SWAP BASE ! 
+        WORD NUMBER 
+        DROP SWAP 
+        BASE !
+;
+
 (
 	PRINTING NUMBERS ----------------------------------------------------------------------
 
@@ -346,7 +355,7 @@
 
 : S" IMMEDIATE		( -- addr len )
 	STATE @ IF	( compiling? )
-		' LITSTRING ,	( compile LITSTRING )
+		' LITS ,	( compile literal string )
 		HERE @		( save the address of the length word on the stack )
 		0 ,		( dummy length - we don't know what it is yet )
 		BEGIN
@@ -384,7 +393,7 @@
 )
 : ." IMMEDIATE		( -- )
 	STATE @ IF	( compiling? )
-		[COMPILE] S"	( read the string, and compile LITSTRING, etc. )
+		[COMPILE] S"	( read the string, and compile literal, etc. )
 		' TELL ,	( compile the final TELL )
 	ELSE
 		( In immediate mode, just read characters and print them until we get
@@ -716,7 +725,7 @@
 			4 + DUP @		( get next word which is the integer constant )
 			.			( and print it )
 		ENDOF
-		' LITSTRING OF		( is it LITSTRING ? )
+		' LITS OF		( is it LITS ? )
 			[ CHAR S ] LITERAL EMIT '"' EMIT SPACE ( print S"<space> )
 			4 + DUP @		( get the length word )
 			SWAP 4 + SWAP		( end start+4 length )

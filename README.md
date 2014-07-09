@@ -130,7 +130,7 @@ The following words are pre-defined in _pijFORTHos_
 | `OR` | ( a b -- a&#124;b ) | bitwise or |
 | `XOR` | ( a b -- a^b ) | bitwise xor |
 | `INVERT` | ( a -- ~a ) | bitwise not |
-| `LIT word` | ( -- xt ) | compile literal in FORTH word |
+| `LIT word` | ( -- ) | compile literal in FORTH word |
 | `!` | ( value addr -- ) | write value at addr |
 | `@` | ( addr -- value ) | read value from addr |
 | `+!` | ( amount addr -- ) | add amount to value at addr |
@@ -166,7 +166,7 @@ The following words are pre-defined in _pijFORTHos_
 | `' word` | ( -- xt ) | find CFA of following word (compile only) |
 | `BRANCH offset` | ( -- ) | change FIP by following offset |
 | `0BRANCH offset` | ( p -- ) | branch if the top of the stack is zero |
-| `LITSTRING addr len` | ( -- s ) | compile string in FORTH word |
+| `LITS addr len` | ( -- ) | compile literal string in FORTH word |
 | `TELL` | ( addr len -- ) | write a string to output |
 | `QUIT` | ( -- ) | the first word to be executed |
 | `/MOD` | ( a b -- r q ) | where a = q * b + r |
@@ -235,6 +235,7 @@ The following words are defined in `jonesforth.f`
 | `TUCK` | ( x y -- y x y ) | `SWAP OVER` |
 | `PICK` | ( x_n ... x_0 n -- x_n ... x_0 x_n ) | DUP n-th stack item |
 | `SPACES` | ( n -- ) | print n spaces |
+| `# value` | ( b -- n ) | interpret base-b literal value w/o changing BASE |
 | `U.R` | ( n width -- ) | print unsigned number, padded to width |
 | `U.` | ( n -- ) | print unsigned number and a trailing space |
 | `.R` | ( n width -- ) | print signed number, padded to width |

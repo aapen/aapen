@@ -970,8 +970,8 @@ defcode "0BRANCH",7,,ZBRANCH
         add FIP, FIP, #4        @ else, skip the offset
         NEXT
 
-@ LITSTRING ( -- ) as LIT but for strings
-defcode "LITSTRING",9,,LITSTRING
+@ LITS as LIT but for strings
+defcode "LITS",4,,LITS
         ldr r0, [FIP], #4       @ read length
         PUSHDSP FIP             @ push address
         PUSHDSP r0              @ push string
