@@ -214,9 +214,15 @@ var_\name :
 @  F_LENMASK       The length mask in the flags/len byte.
         defconst "F_LENMASK",9,,__F_LENMASK,F_LENMASK
 @  FALSE           Boolean predicate False (0)
-        defconst "FALSE",5,,0,FALSE
+        defcode "FALSE",5,,FALSE
+                mov r0, #0
+                PUSHDSP r0
+                NEXT
 @  TRUE            Boolean predicate True (1)
-        defconst "TRUE",4,,1,TRUE
+        defcode "TRUE",4,,TRUE
+                mov r0, #1
+                PUSHDSP r0
+                NEXT
 
 
 @ DROP ( a -- ) drops the top element of the stack
@@ -1126,7 +1132,7 @@ defcode "U.R",3,,UDOTR
         POPDSP  r2                      @ width from stack
         mov     r3, #32                 @ space character
 1:      cmp     r1, r2                  @ while (len < width) {
-        strblt  r3, [r0, #-1]!          @     *(--addr) = ' ';
+        strltb  r3, [r0, #-1]!          @     *(--addr) = ' ';
         addlt   r1, r1, #1              @     ++len;
         blt     1b                      @ }
         bl      _TELL                   @ display number
@@ -1174,7 +1180,7 @@ defcode ".R",2,,DOTR
         POPDSP  r2                      @ width from stack
         mov     r3, #32                 @ space character
 1:      cmp     r1, r2                  @ while (len < width) {
-        strblt  r3, [r0, #-1]!          @     *(--addr) = ' ';
+        strltb  r3, [r0, #-1]!          @     *(--addr) = ' ';
         addlt   r1, r1, #1              @     ++len;
         blt     1b                      @ }
         bl      _TELL                   @ display number
