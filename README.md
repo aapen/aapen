@@ -65,8 +65,7 @@ The console will be waiting for an input, press `<ENTER>`. You should then see:
 
 The FORTH REPL will be running, try typing:
 
-    16 BASE !
-    8000 100 DUMP
+    HEX 8000 DECIMAL 256 DUMP
 
 You should see something like:
 
