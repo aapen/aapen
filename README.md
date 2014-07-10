@@ -280,12 +280,12 @@ The following words are defined in `jonesforth.f`
 | `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
 | `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
 | `RECURSE` | ( -- ) | compile recursive call to current word |
-| `p IF true-part THEN` | ( p -- ) | conditional execution |
-| `p IF true-part ELSE false-part THEN` | ( p -- ) | conditional execution |
+| `IF true-part THEN` | ( p -- ) | conditional execution |
+| `IF true-part ELSE false-part THEN` | ( p -- ) | conditional execution |
 | `BEGIN loop-part p UNTIL` | ( -- ) | post-test loop |
 | `BEGIN loop-part AGAIN` | ( -- ) | infinite loop (until EXIT) |
 | `BEGIN p WHILE loop-part REPEAT` | ( -- ) | pre-test loop |
-| `p UNLESS false-part ...` | ( p -- ) | same as `p NOT IF` |
+| `UNLESS false-part ...` | ( p -- ) | same as `p NOT IF` |
 | `( comment text ) ` | ( -- ) | comment inside definition |
 | `NIP` | ( x y -- y ) | `SWAP DROP` |
 | `TUCK` | ( x y -- y x y ) | `SWAP OVER` |
@@ -310,8 +310,8 @@ The following words are defined in `jonesforth.f`
 | `?IMMEDIATE` | ( entry -- p ) | get IMMEDIATE flag from dictionary entry |
 | `WORDS` | ( -- ) | print all the words defined in the dictionary |
 | `FORGET name` | ( -- ) | reset dictionary prior to definition of name |
-| `CASE cases... default ENDCASE` | ( value -- ) | select case based on value |
-| `test OF case-body ENDOF` | ( p -- ) | execute case-body if test non-zero |
+| `CASE cases... default ENDCASE` | ( selector -- ) | select case based on selector value |
+| `value OF case-body ENDOF` | ( p -- ) | execute case-body if (selector == value) |
 | `CFA>` | ( xt -- 0 &#124; entry ) | `CFA>` is the opposite of `>CFA` |
 | `SEE word` | ( -- ) | print source code for word |
 | `:NONAME` | ( -- xt ) | define (compile) an unnamed new FORTH word |
@@ -326,28 +326,28 @@ The following words are defined in `jonesforth.f`
 
 ~~~
 0x00000000  +----------------+
-0x00001000  |                |
-0x00002000  |                |
-0x00003000  |                |
-0x00004000  |                |
-0x00005000  |                |
-0x00006000  |                |
-0x00007000  | s t a c k   ^  |
-0x00008000  +----------------+
-0x00009000  |                |
-0x0000A000  | k e r n e l    |
-0x0000B000  |                |
-0x0000C000  |                |
-0x0000D000  |                |
-0x0000E000  |                |
-0x0000F000  |                |
-0x00010000  +----------------+
-0x00011000  |                |
-0x00012000  | u p l o a d    |
-0x00013000  |                |
-0x00014000  | b u f f e r    |
-0x00015000  |                |
-0x00016000  |                |
+0x00001000  | v e c t o r s  |     | data stack       ^ |
+0x00002000  |                |     +--------------------+ 0x00008000 .text
+0x00003000  |                |    /| kernel code        |
+0x00004000  |                |   / |                    |
+0x00005000  |                |  /  +--------------------+ 0x00009960 .rodata
+0x00006000  |                | /   | built-in words     |
+0x00007000  | s t a c k   ^  |/    |         ...strings |
+0x00008000  +----------------+     +--------------------+ 0x0000A1C0 .data
+0x00009000  |                |     +--------------------+ 0x0000A220 .bss
+0x0000A000  | k e r n e l    |     | return stack (1k)  |
+0x0000B000  |                |     | user memory (16k)  | 0x0000A620 HERE
+0x0000C000  |                |     |                    |
+0x0000D000  |                |     |                    |
+0x0000E000  |                |     |                    |
+0x0000F000  |                |     |                    |
+0x00010000  +----------------+     |                    |
+0x00011000  |                |\    |                    |
+0x00012000  | u p l o a d    | \   +--------------------+ 0x0000E620 PAD
+0x00013000  |                |  \  | scratchpad (128b)  |
+0x00014000  | b u f f e r    |   \ | linebuf (256b) ... |
+0x00015000  |                |    \+--------------------+ 0x00010000
+0x00016000  |                |     | upload buffer...   |
 0x00017000  |                |
 0x00018000  +----------------+
 ~~~
