@@ -65,9 +65,28 @@ The console will be waiting for an input, press `<ENTER>`. You should then see:
 
 The FORTH REPL will be running, try typing:
 
-    DEPTH .
+    16 BASE !
+    8000 100 DUMP
 
-and press `<ENTER>`. Since nothing is on the stack, you should see `0` printed to the console.
+You should see something like:
+
+    00008000  08 10 4f e2 01 d0 a0 e1  80 e0 9f e5 02 09 a0 e3  |..O.............|
+    00008010  01 00 50 e1 44 06 00 0a  00 e0 a0 e1 7f 2c a0 e3  |..P.D........,..|
+    00008020  f8 07 b1 e8 f8 07 a0 e8  20 20 52 e2 fb ff ff ca  |........  R.....|
+    00008030  1e ff 2f e1 fe ff ff ea  1e ff 2f e1 00 10 80 e5  |../......./.....|
+    00008040  1e ff 2f e1 00 00 90 e5  1e ff 2f e1 b0 10 c0 e1  |../......./.....|
+    00008050  1e ff 2f e1 b0 00 d0 e1  1e ff 2f e1 00 10 c0 e5  |../......./.....|
+    00008060  1e ff 2f e1 00 00 d0 e5  1e ff 2f e1 0e 00 a0 e1  |../......./.....|
+    00008070  1e ff 2f e1 10 ff 2f e1  ff 5f 2d e9 f8 07 b1 e8  |../.../.._-.....|
+    00008080  f8 07 a0 e8 20 20 52 e2  fb ff ff ca ff 9f bd e8  |....  R.........|
+    00008090  34 80 00 00 14 0f 9f e5  00 d0 80 e5 10 bf 9f e5  |4...............|
+    000080a0  10 0f 9f e5 10 1f 9f e5  00 00 81 e5 0c af 9f e5  |................|
+    000080b0  04 00 9a e4 00 10 90 e5  11 ff 2f e1 04 a0 2b e5  |........../...+.|
+    000080c0  04 a0 80 e2 04 00 9a e4  00 10 90 e5 11 ff 2f e1  |............../.|
+    000080d0  04 a0 9b e4 04 00 9a e4  00 10 90 e5 11 ff 2f e1  |............../.|
+    000080e0  dc 0e 9f e5 04 00 2d e5  04 00 9a e4 00 10 90 e5  |......-.........|
+    000080f0  11 ff 2f e1 c0 0e 9f e5  04 00 2d e5 04 00 9a e4  |../.......-.....|
+
 
 ## FORTH Definitions
 
