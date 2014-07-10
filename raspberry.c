@@ -477,9 +477,6 @@ void monitor()
 
     // display banner
     uart1_eol();
-    uart1_puts("BASE=0x");
-    uart1_hex32(var_BASE);
-    uart1_eol();
     uart1_puts("^D=exit-monitor ^Z=toggle-hexadecimal ^L=xmodem-upload");
     uart1_eol();
     

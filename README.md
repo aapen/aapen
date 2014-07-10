@@ -41,9 +41,9 @@ Then, copy the firmware and kernel to a blank SD card, for example:
 
 The end state for the SD card is to have a FAT32 filesystem on it with the following files
 
+    bootcode.bin
+    start.elf
     kernel.img
-    firmware/bootcode.bin
-    firmware/start.elf
 
 Put the prepared SD card into the RPi, connect the USB-to-Serial cable (for how to connect you can reference [RPi Serial Connection](http://elinux.org/RPi_Serial_Connection)), and power-up to the console.
 
@@ -229,7 +229,7 @@ The following words are pre-defined in _pijFORTHos_
 | `.S` | ( -- ) | print the contents of the stack (non-destructive) |
 | `/MOD` | ( n m -- r q ) | where n = q * m + r |
 | `S/MOD` | ( n m -- r q ) | alternative signed /MOD using Euclidean division |
-| `QUIT` | ( -- ) | the first word to be executed, runs REPL |
+| `QUIT` | ( -- ) | clear return and data stacks, restart interpreter loop |
 | `CHAR word` | ( -- c ) | ASCII code from first character of following word |
 | `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
 | `HEX` | ( -- ) | set number conversion BASE to 16 |
