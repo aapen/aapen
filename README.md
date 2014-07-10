@@ -35,14 +35,14 @@ If you are building on the RPi, just type:
     $ make clean all
 
 If you can't compile (or cross-compile) from source,
-you can use the pre-built `kernel.img` file as a starting-point.
+you can use the pre-built `kernel.img` file.
 
 Next, copy the firmware and kernel to a blank SD card, for example:
 
     $ cp firmware/* /media/<SD-card>/
     $ cp kernel.img /media/<SD-card>/
 
-The end state for the SD card is to have a FAT32 filesystem on it with the following files
+The end state for the SD card is to have a FAT32 filesystem on it with the following files:
 
     bootcode.bin
     start.elf
