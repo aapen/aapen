@@ -34,7 +34,10 @@ If you are building on the RPi, just type:
 
     $ make clean all
 
-Then, copy the firmware and kernel to a blank SD card, for example:
+If you can't compile (or cross-compile) from source,
+you can use the pre-built `kernel.img` file as a starting-point.
+
+Next, copy the firmware and kernel to a blank SD card, for example:
 
     $ cp firmware/* /media/<SD-card>/
     $ cp kernel.img /media/<SD-card>/
