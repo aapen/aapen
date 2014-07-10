@@ -23,7 +23,7 @@ It follows the general strategy given by the excellent examples at <https://gith
 A bootloader is built in, supporting XMODEM uploads of new bare-metal kernel images.
 
 The interpreter uses the RPi miniUART as a console (115200 baud, 8 data bits, no parity, 1 stop bit).
-If you have _pijFORTHos_ on an SD card in the RPi, 
+If you have _pijFORTHos_ on an SD card in the RPi,
 you can connect it to another machine (even another RPi) using a USB-to-Serial cable <http://www.adafruit.com/products/954>.
 When the RPi is powered on (I provide power through the cable),
 a terminal program on the host machine allows access to the FORTH console.
@@ -34,12 +34,40 @@ If you are building on the RPi, just type:
 
     $ make clean all
 
-Then, copy the firmware and kernel to a blank SD card:
+Then, copy the firmware and kernel to a blank SD card, for example:
 
     $ cp firmware/* /media/<SD-card>/
     $ cp kernel.img /media/<SD-card>/
 
-Put the prepared SD card into the RPi, connect the USB-to-Serial cable, and power-up to the console.
+The end state for the SD card is to have a FAT32 filesystem on it with the following files
+
+    kernel.img
+    firmware/bootcode.bin
+    firmware/start.elf
+
+Put the prepared SD card into the RPi, connect the USB-to-Serial cable (for how to connect you can reference [RPi Serial Connection](http://elinux.org/RPi_Serial_Connection)), and power-up to the console.
+
+To get to the console, you'll need to connect. Here are two ways to try:
+
+    $ minicom -b 115200 -o -D <Port_Name>
+
+Where `<Port_Name>` is something like `/dev/ttyUSB0` or similar (wherever you plugged in your USB-to-Serial cable).
+
+Alternatively, if `minicom` is not working (this happened before), you could use screen:
+
+    $ screen <Port_Name> 115200
+
+Where `<Port_Name>` is, again, something like `/dev/ttyUSB0`.
+
+The console will be waiting for an input, press `<ENTER>`. You should then see:
+
+    pijFORTHos <version> sp=0x00008000
+
+The FORTH REPL will be running, try typing:
+
+    DEPTH .
+
+and press `<ENTER>`. Since nothing is on the stack, you should see `0` printed to the console.
 
 ## FORTH Definitions
 
@@ -86,7 +114,7 @@ The following constants are pre-defined in _pijFORTHos_
 | `FALSE` | Boolean predicate False (0) |
 | `TRUE` | Boolean predicate True (1), anything != 0 is TRUE |
 
-Given the relationship between `HERE` and `PAD`, 
+Given the relationship between `HERE` and `PAD`,
 the following calculates the number of free memory cells available:
 
     PAD        \ the base of PAD is the end of available program memory
@@ -95,7 +123,7 @@ the following calculates the number of free memory cells available:
 
 ### Built-in FORTH Words
 
-The following words are pre-defined in _pijFORTHos_ 
+The following words are pre-defined in _pijFORTHos_
 
 | Word | Stack | Description |
 |------|-------|-------------|
@@ -200,13 +228,13 @@ The following words are pre-defined in _pijFORTHos_
 Many standard words can be defined using the built-in primitives shown above.
 The file `jonesforth.f` contains important and useful definitions.
 It also serves as a significant corpus of example FORTH code.
-The entire contents of this file can simply be copy-and-pasted 
+The entire contents of this file can simply be copy-and-pasted
 into the terminal session connected to the _pijFORTHos_ console.
 Code at the end of the file displays a welcome message when processing is complete.
 
 ### Additional Constants Defined in FORTH
 
-The following constants are defined in `jonesforth.f` 
+The following constants are defined in `jonesforth.f`
 
 | Constant | Description |
 |----------|-------------|
@@ -224,7 +252,7 @@ The following constants are defined in `jonesforth.f`
 
 ### Additional Words Defined in FORTH
 
-The following words are defined in `jonesforth.f` 
+The following words are defined in `jonesforth.f`
 
 | Word | Stack | Description |
 |------|-------|-------------|
@@ -326,7 +354,7 @@ where it was just copied.
 This time, it will find that it's running at the right address
 and can proceed normally to the kernel entry point.
 
-In order for this scheme to work, 
+In order for this scheme to work,
 we have to ensure two things.
 First, the kernel image must by smaller than (32k - 256) bytes,
 to fit between 0x00008000 and 0x10000000.
@@ -358,4 +386,3 @@ From FORTH you can UPLOAD a new kernel image and BOOT it.
 
     UPLOAD   \ initiate XMODEM file transfer
     BOOT     \ jump to upload buffer address
-
