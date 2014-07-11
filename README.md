@@ -20,7 +20,7 @@ See the `/firmware/` directory for local copies used in the build process.
 
 _pijFORTHos_ is a bare-metal FORTH interpreter for the Raspberry Pi.
 It follows the general strategy given by the excellent examples at <https://github.com/dwelch67/raspberrypi>.
-A bootloader is built in, supporting XMODEM uploads of new bare-metal kernel images.
+A bootloader is built in, supporting [XMODEM](http://en.wikipedia.org/wiki/XMODEM) uploads of new bare-metal kernel images.
 
 The interpreter uses the RPi miniUART as a console (115200 baud, 8 data bits, no parity, 1 stop bit).
 If you have _pijFORTHos_ on an SD card in the RPi,
