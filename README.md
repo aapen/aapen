@@ -185,8 +185,8 @@ The following words are pre-defined in _pijFORTHos_
 | `C!` | ( c addr -- ) | write byte c at addr |
 | `C@` | ( addr -- c ) | read byte from addr |
 | `CMOVE` | ( src dst len -- ) | copy len bytes from src to dst |
-| `>R` | (S: a -- ) (R: -- a ) | move the top element from the data stack to the return stack |
-| `R>` | (S: -- a ) (R: a -- ) | move the top element from the return stack to the data stack |
+| `>R` | (S: a -- )<br />(R: -- a ) | move the top element from the data stack to the return stack |
+| `R>` | (S: -- a )<br />(R: a -- ) | move the top element from the return stack to the data stack |
 | `RDROP` | (R: a -- ) | drop the top element from the return stack |
 | `RSP@` | ( -- addr ) | get return stack pointer |
 | `RSP!` | ( addr -- ) | set return stack pointer |
@@ -325,10 +325,10 @@ The following words are defined in `jonesforth.f`
 0x00005000  |                |  /  +--------------------+ 0x00009960 .rodata
 0x00006000  |                | /   | built-in words     |
 0x00007000  | s t a c k   ^  |/    |         ...strings |
-0x00008000  +----------------+     +--------------------+ 0x0000A320 .data
-0x00009000  |                |     +--------------------+ 0x0000A380 .bss
+0x00008000  +----------------+     +--------------------+ 0x0000A5A0 .data
+0x00009000  |                |     +--------------------+ 0x0000A600 .bss
 0x0000A000  | k e r n e l    |     | return stack (1k)  |
-0x0000B000  |                |     | user memory (16k)  | 0x0000A780 HERE
+0x0000B000  |                |     | user memory (16k)  | 0x0000AA00 HERE
 0x0000C000  |                |     |                    |
 0x0000D000  |                |     |                    |
 0x0000E000  |                |     |                    |
@@ -336,7 +336,7 @@ The following words are defined in `jonesforth.f`
 0x00010000  +----------------+     |                    |
 0x00011000  |                |\    |                    |
 0x00012000  | u p l o a d    | \   |                    |
-0x00013000  |                |  \  +--------------------+ 0x0000E780 PAD
+0x00013000  |                |  \  +--------------------+ 0x0000EA00 PAD
 0x00014000  | b u f f e r    |   \ | scratch-pad (128b) |
 0x00015000  |                |    \| linebuf (256b) ... |
 0x00016000  |                |     +--------------------+ 0x00010000
