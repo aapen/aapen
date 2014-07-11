@@ -49,67 +49,16 @@
 
 \ <condition> IF <true-part> THEN <rest>
 \ <condition> IF <true-part> ELSE <false-part> THEN
-: IF IMMEDIATE
-	' 0BRANCH ,	\ compile 0BRANCH
-	HERE @		\ save location of the offset on the stack
-	0 ,		\ compile a dummy offset
-;
-: THEN IMMEDIATE
-	DUP
-	HERE @ SWAP -	\ calculate the offset from the address saved on the stack
-	SWAP !		\ store the offset in the back-filled location
-;
-: ELSE IMMEDIATE
-	' BRANCH ,	\ definite branch to just over the false-part
-	HERE @		\ save location of the offset on the stack
-	0 ,		\ compile a dummy offset
-	SWAP		\ now back-fill the original (IF) offset
-	DUP		\ same as for THEN word above
-	HERE @ SWAP -
-	SWAP !
-;
+\ UNLESS is the same as IF but the test is reversed.
 
 \ BEGIN <loop-part> <condition> UNTIL
 \ This is like do { <loop-part> } while (<condition>) in the C language
-: BEGIN IMMEDIATE
-	HERE @		\ save location on the stack
-;
-: UNTIL IMMEDIATE
-	' 0BRANCH ,	\ compile 0BRANCH
-	HERE @ -	\ calculate the offset from the address saved on the stack
-	,		\ compile the offset here
-;
 
 \ BEGIN <loop-part> AGAIN
 \ An infinite loop which can only be returned from with EXIT
-: AGAIN IMMEDIATE
-	' BRANCH ,	\ compile BRANCH
-	HERE @ -	\ calculate the offset back
-	,		\ compile the offset here
-;
 
 \ BEGIN <condition> WHILE <loop-part> REPEAT
 \ So this is like a while (<condition>) { <loop-part> } loop in the C language
-: WHILE IMMEDIATE
-	' 0BRANCH ,	\ compile 0BRANCH
-	HERE @		\ save location of the offset2 on the stack
-	0 ,		\ compile a dummy offset2
-;
-
-: REPEAT IMMEDIATE
-	' BRANCH ,	\ compile BRANCH
-	SWAP		\ get the original offset (from BEGIN)
-	HERE @ - ,	\ and compile it after BRANCH
-	DUP
-	HERE @ SWAP -	\ calculate the offset2
-	SWAP !		\ and back-fill it in the original location
-;
-
-\ UNLESS is the same as IF but the test is reversed.
-: UNLESS IMMEDIATE
-	' NOT ,		\ compile NOT (to reverse the test)
-	[COMPILE] IF	\ continue by calling the normal IF
-;
 
 \	COMMENTS ----------------------------------------------------------------------
 \
@@ -459,35 +408,7 @@
 
 	The default case may be omitted.  In fact the tests may also be omitted so that you
 	just have a default case, although this is probably not very useful.
-
-	The implementation of CASE...ENDCASE is somewhat non-trivial.  I'm following the
-	implementations from http://www.uni-giessen.de/faq/archiv/forthfaq.case_endcase/msg00000.html
 )
-: CASE IMMEDIATE
-	0		( push 0 to mark the bottom of the stack )
-;
-
-: OF IMMEDIATE
-	' OVER ,	( compile OVER )
-	' = ,		( compile = )
-	[COMPILE] IF	( compile IF )
-	' DROP ,  	( compile DROP )
-;
-
-: ENDOF IMMEDIATE
-	[COMPILE] ELSE	( ENDOF is the same as ELSE )
-;
-
-: ENDCASE IMMEDIATE
-	' DROP ,	( compile DROP )
-
-	( keep compiling THEN until we get to our zero marker )
-	BEGIN
-		?DUP
-	WHILE
-		[COMPILE] THEN
-	REPEAT
-;
 
 (
 	DECOMPILER ----------------------------------------------------------------------

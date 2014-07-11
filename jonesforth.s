@@ -89,14 +89,14 @@ jonesforth:
         ldr \reg, [DSP], #4
         .endm
 
-@ DOCOL is the assembly subroutine that is called
+@ _DOCOL is the assembly subroutine that is called
 @ at the start of every FORTH word execution.
 @ It saves the old FIP on the return stack, and
 @ makes FIP point to the first codeword.
 @ Then it calls NEXT to start interpreting the word.
         .text
         .align 2
-DOCOL:
+_DOCOL:
         PUSHRSP FIP
         add FIP, r0, #4
         NEXT
@@ -113,9 +113,9 @@ cold_start:
 @@ and FORTH constants.
 
 @ define the word flags
-        .set F_IMMED, 0x80
-        .set F_HIDDEN, 0x20
-        .set F_LENMASK, 0x1f
+        .set F_IMM, 0x80
+        .set F_HID, 0x20
+        .set F_LEN, 0x1f
 
 @ link is used to chain the words in the dictionary as they are defined
         .set link, 0
@@ -133,7 +133,7 @@ name_\label :
         .align 2                @ padding to next 4 byte boundary
         .global \label
 \label :
-        .int DOCOL              @ codeword - the interpreter
+        .int _DOCOL             @ codeword - the interpreter
         @ list of word pointers follow
         .endm
 
@@ -158,7 +158,7 @@ code_\label :                   @ assembler code follows
 
 @ EXIT is the last codeword of a FORTH word.
 @ It restores the FIP and returns to the caller using NEXT.
-@ (See DOCOL)
+@ (See _DOCOL)
 defcode "EXIT",4,,EXIT
         POPRSP FIP
         NEXT
@@ -203,16 +203,16 @@ var_\name :
         defconst "VERSION",7,,VERSION,JONES_VERSION
 @  R0              The address of the top of the return stack.
         defconst "R0",2,,R0,return_stack_top
-@  DOCOL           Pointer to DOCOL.
-        defconst "DOCOL",5,,__DOCOL,DOCOL
+@  DOCOL           Pointer to _DOCOL.
+        defconst "DOCOL",5,,DOCOL,_DOCOL
 @  PAD             Pointer to scratch-pad buffer.
         defconst "PAD",3,,PAD,scratch_pad
 @  F_IMMED         The IMMEDIATE flag's actual value.
-        defconst "F_IMMED",7,,__F_IMMED,F_IMMED
+        defconst "F_IMMED",7,,F_IMMED,F_IMM
 @  F_HIDDEN        The HIDDEN flag's actual value.
-        defconst "F_HIDDEN",8,,__F_HIDDEN,F_HIDDEN
+        defconst "F_HIDDEN",8,,F_HIDDEN,F_HID
 @  F_LENMASK       The length mask in the flags/len byte.
-        defconst "F_LENMASK",9,,__F_LENMASK,F_LENMASK
+        defconst "F_LENMASK",9,,F_LENMASK,F_LEN
 @  FALSE           Boolean predicate False (0)
         defcode "FALSE",5,,FALSE
                 mov r0, #0
@@ -388,7 +388,7 @@ defcode "NEGATE",6,,NEGATE
 @@  (for C programmers ...) 1 meaning TRUE and 0 meaning FALSE.
 
 @ = ( a b -- p ) where p is 1 when a and b are equal (0 otherwise)
-defcode "=",1,,EQU
+defcode "=",1,,EQ
         POPDSP r1
         POPDSP r0
         cmp r0, r1
@@ -398,7 +398,7 @@ defcode "=",1,,EQU
         NEXT
 
 @ <> ( a b -- p ) where p = a <> b
-defcode "<>",2,,NEQU
+defcode "<>",2,,NEQ
         POPDSP r1
         POPDSP r0
         cmp r0, r1
@@ -448,7 +448,7 @@ defcode ">=",2,,GE
         NEXT
 
 @ : 0= 0 = ;
-defcode "0=",2,,ZEQU
+defcode "0=",2,,ZEQ
         POPDSP r1
         mov r0, #0
         cmp r1, r0
@@ -457,7 +457,7 @@ defcode "0=",2,,ZEQU
         NEXT
 
 @ : 0<> 0 <> ;
-defcode "0<>",3,,ZNEQU
+defcode "0<>",3,,ZNEQ
         POPDSP r1
         mov r0, #0
         cmp r1, r0
@@ -824,7 +824,7 @@ _FIND:
         beq 4f                          @ then exit
 
         ldrb r2, [r3, #4]               @ read the length field
-        and r2, r2, #(F_HIDDEN|F_LENMASK) @ keep only length + hidden bits
+        and r2, r2, #(F_HID|F_LEN)      @ keep only length + hidden bits
         cmp r2, r1                      @ do the lengths match ?
                                         @ (note that if a word is hidden,
                                         @  the test will be always negative)
@@ -865,7 +865,7 @@ defcode ">CFA",4,,TCFA
 _TCFA:
         add r0,r0,#4            @ skip link field
         ldrb r1, [r0], #1       @ load and skip the length field
-        and r1,r1,#F_LENMASK    @ keep only the length
+        and r1,r1,#F_LEN        @ keep only the length
         add r0,r0,r1            @ skip the name field
         add r0,r0,#3            @ find the next 4-byte boundary
         and r0,r0,#~3
@@ -936,7 +936,7 @@ _COMMA:
         bx      lr
 
 @ [ ( -- ) Change interpreter state to Immediate mode
-defcode "[",1,F_IMMED,LBRAC
+defcode "[",1,F_IMM,LBRAC
         ldr     r0, =var_STATE
         mov     r1, #0
         str     r1, [r0]
@@ -949,17 +949,20 @@ defcode "]",1,,RBRAC
         str     r1, [r0]
         NEXT
 
-@ : ( -- ) Define a new FORTH word
+@ : word ( -- ) Define a new FORTH word
+@ : : WORD CREATE DOCOL , LATEST @ HIDDEN ] ;
 defword ":",1,,COLON
         .int WORD                       @ Get the name of the new word
         .int CREATE                     @ CREATE the dictionary entry / header
-        .int LIT, DOCOL, COMMA          @ Append DOCOL  (the codeword).
+@        .int LIT, _DOCOL, COMMA          @ Append _DOCOL  (the codeword).
+        .int DOCOL, COMMA               @ Append _DOCOL  (the codeword).
         .int LATEST, FETCH, HIDDEN      @ Make the word hidden
                                         @ (see below for definition).
         .int RBRAC                      @ Go into compile mode.
         .int EXIT                       @ Return from the function.
 
-defword ";",1,F_IMMED,SEMICOLON
+@ : ; IMMEDIATE LIT EXIT , LATEST @ HIDDEN [ ;
+defword ";",1,F_IMM,SEMICOLON
         .int LIT, EXIT, COMMA           @ Append EXIT (so the word will return).
         .int LATEST, FETCH, HIDDEN      @ Toggle hidden flag -- unhide the word
                                         @ (see below for definition).
@@ -967,7 +970,7 @@ defword ";",1,F_IMMED,SEMICOLON
         .int EXIT                       @ Return from the function.
 
 @ IMMEDIATE ( -- ) sets IMMEDIATE flag of last defined word
-defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
+defcode "IMMEDIATE",9,F_IMM,IMMEDIATE
         ldr r0, =var_LATEST     @
         ldr r1, [r0]            @ get the Last word
         add r1, r1, #4          @ points to the flag byte
@@ -975,7 +978,7 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
         mov r2, #0              @
         ldrb r2, [r1]           @ load the flag into r2
                                 @
-        eor r2, r2, #F_IMMED    @ r2 = r2 xor F_IMMED
+        eor r2, r2, #F_IMM      @ r2 = r2 xor F_IMMED
         strb r2, [r1]           @ update the flag
         NEXT
 
@@ -983,7 +986,7 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 defcode "HIDDEN",6,,HIDDEN
         POPDSP  r0
         ldr r1, [r0, #4]!
-        eor r1, r1, #F_HIDDEN
+        eor r1, r1, #F_HID
         str r1, [r0]
         NEXT
 
@@ -1003,14 +1006,14 @@ defcode "'",1,,TICK
 
 @ LITERAL (C: value --) (S: -- value) compile `LIT value`
 @ : LITERAL IMMEDIATE ' LIT , , ;  \ takes <word> from the stack and compiles LIT <word>
-defword "LITERAL",7,F_IMMED,LITERAL
+defword "LITERAL",7,F_IMM,LITERAL
         .int TICK, LIT, COMMA   @ compile 'LIT'
         .int COMMA              @ compile value
         .int EXIT               @ Return.
 
 @ [COMPILE] word ( -- ) compile otherwise IMMEDIATE word
 @ : [COMPILE] IMMEDIATE WORD FIND >CFA , ;
-defword "[COMPILE]",9,F_IMMED,BRKCOMPILE
+defword "[COMPILE]",9,F_IMM,BRKCOMPILE
         .int WORD               @ get the next word
         .int FIND               @ find it in the dictionary
         .int TCFA               @ get its codeword
@@ -1019,7 +1022,7 @@ defword "[COMPILE]",9,F_IMMED,BRKCOMPILE
 
 @ RECURSE ( -- ) compile recursive call to current word
 @ : RECURSE IMMEDIATE LATEST @ >CFA , ;
-defword "RECURSE",7,F_IMMED,RECURSE
+defword "RECURSE",7,F_IMM,RECURSE
         .int LATEST, FETCH      @ LATEST points to the word being compiled at the moment
         .int TCFA               @ get the codeword
         .int COMMA              @ compile it
@@ -1039,6 +1042,96 @@ defcode "0BRANCH",7,,ZBRANCH
         add FIP, FIP, #4        @ else, skip the offset
         NEXT
 
+@ IF true-part THEN ( p -- ) conditional execution
+@ : IF IMMEDIATE ' 0BRANCH , HERE @ 0 , ;
+defword "IF",2,F_IMM,IF
+        .int TICK, ZBRANCH, COMMA       @ compile 0BRANCH
+        .int HERE, FETCH                @ save location of the offset on the stack
+        .int LIT, 0, COMMA              @ compile a dummy offset
+        .int EXIT
+@ : THEN IMMEDIATE DUP HERE @ SWAP - SWAP ! ;
+defword "THEN",4,F_IMM,THEN
+        .int DUP                        @ copy address saved on the stack
+        .int HERE, FETCH, SWAP, SUB     @ calculate the offset
+        .int SWAP, STORE                @ store the offset in the back-filled location
+        .int EXIT
+@ IF true-part ELSE false-part THEN ( p -- ) conditional execution
+@ : ELSE IMMEDIATE ' BRANCH , HERE @ 0 , SWAP DUP HERE @ SWAP - SWAP ! ;
+defword "ELSE",4,F_IMM,ELSE
+        .int TICK, BRANCH, COMMA        @ definite branch to just over the false-part
+        .int HERE, FETCH                @ save location of the offset on the stack
+        .int LIT, 0, COMMA              @ compile a dummy offset
+        .int SWAP                       @ now back-fill the original (IF) offset
+        .int DUP                        @ same as for THEN word above...
+        .int HERE, FETCH, SWAP, SUB
+        .int SWAP, STORE
+        .int EXIT
+@ UNLESS false-part ... ( p -- ) same as `NOT IF`
+@ : UNLESS IMMEDIATE ' NOT , [COMPILE] IF ;
+defword "UNLESS",6,F_IMM,UNLESS
+        .int TICK, NOT, COMMA           @ compile NOT (to reverse the test)
+        .int BRKCOMPILE, IF             @ continue by calling the normal IF
+        .int EXIT
+
+@ BEGIN loop-part p UNTIL ( -- ) post-test loop
+@ : BEGIN IMMEDIATE HERE @ ;
+defword "BEGIN",5,F_IMM,BEGIN
+        .int HERE, FETCH                @ save location on the stack
+        .int EXIT
+@ : UNTIL IMMEDIATE ' 0BRANCH , HERE @ - , ;
+defword "UNTIL",5,F_IMM,UNTIL
+        .int TICK, ZBRANCH, COMMA       @ compile 0BRANCH
+        .int HERE, FETCH, SUB           @ calculate offset saved location
+        .int COMMA                      @ compile the offset here
+        .int EXIT
+@ BEGIN loop-part AGAIN ( -- ) infinite loop (until EXIT)
+@ : AGAIN IMMEDIATE ' BRANCH , HERE @ - , ;
+defword "AGAIN",5,F_IMM,AGAIN
+        .int TICK, BRANCH, COMMA        @ compile BRANCH
+        .int HERE, FETCH, SUB           @ calculate the offset back
+        .int COMMA                      @ compile the offset here
+        .int EXIT
+@ BEGIN p WHILE loop-part REPEAT ( -- ) pre-test loop
+@ : WHILE IMMEDIATE ' 0BRANCH , HERE @ 0 , ;
+defword "WHILE",5,F_IMM,WHILE
+        .int TICK, ZBRANCH, COMMA       @ compile 0BRANCH
+        .int HERE, FETCH                @ save location of the offset2 on the stack
+        .int LIT, 0, COMMA              @ compile a dummy offset2
+        .int EXIT
+@ : REPEAT IMMEDIATE ' BRANCH , SWAP HERE @ - , DUP HERE @ SWAP - SWAP ! ;
+defword "REPEAT",6,F_IMM,REPEAT
+        .int TICK, BRANCH, COMMA        @ compile BRANCH
+        .int SWAP                       @ get the original offset (from BEGIN)
+        .int HERE, FETCH, SUB, COMMA    @ and compile it after BRANCH
+        .int DUP
+        .int HERE, FETCH, SWAP, SUB     @ calculate the offset2
+        .int SWAP, STORE                @ and back-fill it in the original location
+        .int EXIT
+
+@ CASE cases... default ENDCASE ( selector -- ) select case based on selector value
+@ value OF case-body ENDOF ( -- ) execute case-body if (selector == value)
+@ : CASE IMMEDIATE 0 ;
+defword "CASE",4,F_IMM,CASE
+        .int LIT, 0                     @ push 0 to mark the bottom of the stack
+        .int EXIT
+@ : OF IMMEDIATE ' OVER , ' = , [COMPILE] IF ' DROP , ;
+defword "OF",2,F_IMM,OF
+        .int TICK, OVER, COMMA          @ compile OVER
+        .int TICK, EQ, COMMA            @ compile =
+        .int BRKCOMPILE, IF             @ compile IF
+        .int TICK, DROP, COMMA          @ compile DROP
+        .int EXIT
+@ : ENDOF IMMEDIATE [COMPILE] ELSE ;
+defword "ENDOF",5,F_IMM,ENDOF
+        .int BRKCOMPILE, ELSE           @ ENDOF is the same as ELSE
+        .int EXIT
+@ : ENDCASE IMMEDIATE ' DROP , BEGIN ?DUP WHILE [COMPILE] THEN REPEAT ;
+defword "ENDCASE",7,F_IMM,ENDCASE
+        .int TICK, DROP, COMMA          @ compile DROP
+        .int BEGIN, QDUP, WHILE         @ while we're not at our zero marker
+        .int BRKCOMPILE, THEN, REPEAT   @     keep compiling THEN
+        .int EXIT
+
 @ LITS as LIT but for strings
 defcode "LITS",4,,LITS
         ldr r0, [FIP], #4       @ read length
@@ -1051,10 +1144,11 @@ defcode "LITS",4,,LITS
 
 @ CONSTANT name ( value -- ) create named constant value
 @ : CONSTANT WORD CREATE DOCOL , ' LIT , , ' EXIT , ;
-defword "CONSTANT",7,,CONSTANT
+defword "CONSTANT",8,,CONSTANT
         .int WORD               @ get the name (the name follows CONSTANT)
         .int CREATE             @ make the dictionary entry
-        .int DOCOL, COMMA       @ append DOCOL (the codeword field of this word)
+@        .int LIT, _DOCOL, COMMA @ append _DOCOL (the codeword field of this word)
+        .int DOCOL, COMMA       @ append _DOCOL (the codeword field of this word)
         .int TICK, LIT, COMMA   @ append the codeword LIT
         .int COMMA              @ append the value on the top of the stack
         .int TICK, EXIT, COMMA  @ append the codeword EXIT
@@ -1070,18 +1164,19 @@ defword "ALLOT",5,,ALLOT
 @ CELLS ( n -- m ) number of bytes for n cells
 @ : CELLS 4 * ;
 defword "CELLS",5,,CELLS
-        .int LIT, #4, MUL       @ 4 bytes per cell
+        .int LIT, 4, MUL        @ 4 bytes per cell
         .int EXIT               @ Return.
 
 @ VARIABLE name ( -- addr ) create named variable location
-: VARIABLE 1 CELLS ALLOT WORD CREATE DOCOL , ' LIT , , ' EXIT , ;
+@ : VARIABLE 1 CELLS ALLOT WORD CREATE DOCOL , ' LIT , , ' EXIT , ;
 defword "VARIABLE",8,,VARIABLE
-	.int LIT, #4, ALLOT     @ allocate 1 cell of memory, push the pointer to this memory
-	.int WORD, CREATE       @ make the dictionary entry (the name follows VARIABLE)
-	.int DOCOL, COMMA       @ append DOCOL (the codeword field of this word)
-	.int TICK, LIT, COMMA   @ append the codeword LIT
-	.int COMMA              @ append the pointer to the new memory
-	.int TICK, EXIT, COMMA  @ append the codeword EXIT
+        .int LIT, 4, ALLOT      @ allocate 1 cell of memory, push the pointer to this memory
+        .int WORD, CREATE       @ make the dictionary entry (the name follows VARIABLE)
+@        .int LIT, _DOCOL, COMMA @ append _DOCOL (the codeword field of this word)
+        .int DOCOL, COMMA       @ append _DOCOL (the codeword field of this word)
+        .int TICK, LIT, COMMA   @ append the codeword LIT
+        .int COMMA              @ append the pointer to the new memory
+        .int TICK, EXIT, COMMA  @ append the codeword EXIT
         .int EXIT               @ Return.
 
 @ TELL ( addr length -- ) writes a string to stdout
@@ -1418,7 +1513,7 @@ defcode "INTERPRET",9,,INTERPRET
     @ Here the entry is found
         ldrb r6, [r0, #4]               @ read length and flags field
         bl _TCFA                        @ find code field address
-        tst r6, #F_IMMED                @ if the word is immediate
+        tst r6, #F_IMM                  @ if the word is immediate
         bne 4f                          @ branch to 4 (execute)
         b 2f                            @ otherwise, branch to 2
 
@@ -1454,7 +1549,7 @@ defcode "INTERPRET",9,,INTERPRET
 
                                         @ not a literal, execute now
         ldr r1, [r0]                    @ (it's important here that
-        bx r1                           @  FIP address in r0, since DOCOL
+        bx r1                           @  FIP address in r0, since _DOCOL
                                         @  assumes it)
 
 5:  @ Push literal on the stack

@@ -68,7 +68,7 @@ The console will be waiting for an input, press `<ENTER>`. You should then see:
 
 The FORTH REPL will be running, try typing:
 
-    HEX 8000 DECIMAL 256 DUMP
+    HEX 8000 DECIMAL 128 DUMP
 
 You should see something like:
 
@@ -80,14 +80,6 @@ You should see something like:
     00008050  1e ff 2f e1 b0 00 d0 e1  1e ff 2f e1 00 10 c0 e5  |../......./.....|
     00008060  1e ff 2f e1 00 00 d0 e5  1e ff 2f e1 0e 00 a0 e1  |../......./.....|
     00008070  1e ff 2f e1 10 ff 2f e1  ff 5f 2d e9 f8 07 b1 e8  |../.../.._-.....|
-    00008080  f8 07 a0 e8 20 20 52 e2  fb ff ff ca ff 9f bd e8  |....  R.........|
-    00008090  34 80 00 00 14 0f 9f e5  00 d0 80 e5 10 bf 9f e5  |4...............|
-    000080a0  10 0f 9f e5 10 1f 9f e5  00 00 81 e5 0c af 9f e5  |................|
-    000080b0  04 00 9a e4 00 10 90 e5  11 ff 2f e1 04 a0 2b e5  |........../...+.|
-    000080c0  04 a0 80 e2 04 00 9a e4  00 10 90 e5 11 ff 2f e1  |............../.|
-    000080d0  04 a0 9b e4 04 00 9a e4  00 10 90 e5 11 ff 2f e1  |............../.|
-    000080e0  dc 0e 9f e5 04 00 2d e5  04 00 9a e4 00 10 90 e5  |......-.........|
-    000080f0  11 ff 2f e1 c0 0e 9f e5  04 00 2d e5 04 00 9a e4  |../.......-.....|
 
 
 ## FORTH Definitions
@@ -219,11 +211,19 @@ The following words are pre-defined in _pijFORTHos_
 | `HIDDEN` | ( entry -- ) | set HIDDEN flag of a word |
 | `HIDE word` | ( -- ) | hide definition of following word |
 | `' word` | ( -- xt ) | find CFA of following word (compile only) |
-| `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
+| `LITERAL` | (C: value --)<br />(S: -- value) | compile `LIT value` |
 | `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
 | `RECURSE` | ( -- ) | compile recursive call to current word |
 | `BRANCH offset` | ( -- ) | change FIP by following offset |
 | `0BRANCH offset` | ( p -- ) | branch if the top of the stack is zero |
+| `IF true-part THEN` | ( p -- ) | conditional execution |
+| `IF true-part ELSE false-part THEN` | ( p -- ) | conditional execution |
+| `UNLESS false-part ...` | ( p -- ) | same as `NOT IF` |
+| `BEGIN loop-part p UNTIL` | ( -- ) | post-test loop |
+| `BEGIN loop-part AGAIN` | ( -- ) | infinite loop (until EXIT) |
+| `BEGIN p WHILE loop-part REPEAT` | ( -- ) | pre-test loop |
+| `CASE cases... default ENDCASE` | ( selector -- ) | select case based on selector value |
+| `value OF case-body ENDOF` | ( -- ) | execute case-body if (selector == value) |
 | `LITS addr len` | ( -- ) | compile literal string in FORTH word |
 | `CONSTANT name` | ( value -- ) | create named constant value |
 | `ALLOT` | ( n -- addr ) | allocate n bytes of user memory |
@@ -284,12 +284,6 @@ The following words are defined in `jonesforth.f`
 
 | Word | Stack | Description |
 |------|-------|-------------|
-| `IF true-part THEN` | ( p -- ) | conditional execution |
-| `IF true-part ELSE false-part THEN` | ( p -- ) | conditional execution |
-| `BEGIN loop-part p UNTIL` | ( -- ) | post-test loop |
-| `BEGIN loop-part AGAIN` | ( -- ) | infinite loop (until EXIT) |
-| `BEGIN p WHILE loop-part REPEAT` | ( -- ) | pre-test loop |
-| `UNLESS false-part ...` | ( p -- ) | same as `NOT IF` |
 | `( comment text ) ` | ( -- ) | comment inside definition |
 | `NIP` | ( x y -- y ) | `SWAP DROP` |
 | `TUCK` | ( x y -- y x y ) | `SWAP OVER` |
@@ -310,8 +304,6 @@ The following words are defined in `jonesforth.f`
 | `?IMMEDIATE` | ( entry -- p ) | get IMMEDIATE flag from dictionary entry |
 | `WORDS` | ( -- ) | print all the words defined in the dictionary |
 | `FORGET name` | ( -- ) | reset dictionary prior to definition of name |
-| `CASE cases... default ENDCASE` | ( selector -- ) | select case based on selector value |
-| `value OF case-body ENDOF` | ( p -- ) | execute case-body if (selector == value) |
 | `CFA>` | ( xt -- 0 &#124; entry ) | `CFA>` is the opposite of `>CFA` |
 | `SEE word` | ( -- ) | print source code for word |
 | `:NONAME` | ( -- xt ) | define (compile) an unnamed new FORTH word |
@@ -333,10 +325,10 @@ The following words are defined in `jonesforth.f`
 0x00005000  |                |  /  +--------------------+ 0x00009960 .rodata
 0x00006000  |                | /   | built-in words     |
 0x00007000  | s t a c k   ^  |/    |         ...strings |
-0x00008000  +----------------+     +--------------------+ 0x0000A1C0 .data
-0x00009000  |                |     +--------------------+ 0x0000A220 .bss
+0x00008000  +----------------+     +--------------------+ 0x0000A320 .data
+0x00009000  |                |     +--------------------+ 0x0000A380 .bss
 0x0000A000  | k e r n e l    |     | return stack (1k)  |
-0x0000B000  |                |     | user memory (16k)  | 0x0000A620 HERE
+0x0000B000  |                |     | user memory (16k)  | 0x0000A780 HERE
 0x0000C000  |                |     |                    |
 0x0000D000  |                |     |                    |
 0x0000E000  |                |     |                    |
@@ -344,7 +336,7 @@ The following words are defined in `jonesforth.f`
 0x00010000  +----------------+     |                    |
 0x00011000  |                |\    |                    |
 0x00012000  | u p l o a d    | \   |                    |
-0x00013000  |                |  \  +--------------------+ 0x0000E620 PAD
+0x00013000  |                |  \  +--------------------+ 0x0000E780 PAD
 0x00014000  | b u f f e r    |   \ | scratch-pad (128b) |
 0x00015000  |                |    \| linebuf (256b) ... |
 0x00016000  |                |     +--------------------+ 0x00010000
