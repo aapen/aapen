@@ -219,9 +219,16 @@ The following words are pre-defined in _pijFORTHos_
 | `HIDDEN` | ( entry -- ) | set HIDDEN flag of a word |
 | `HIDE word` | ( -- ) | hide definition of following word |
 | `' word` | ( -- xt ) | find CFA of following word (compile only) |
+| `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
+| `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
+| `RECURSE` | ( -- ) | compile recursive call to current word |
 | `BRANCH offset` | ( -- ) | change FIP by following offset |
 | `0BRANCH offset` | ( p -- ) | branch if the top of the stack is zero |
 | `LITS addr len` | ( -- ) | compile literal string in FORTH word |
+| `CONSTANT name` | ( value -- ) | create named constant value |
+| `ALLOT` | ( n -- addr ) | allocate n bytes of user memory |
+| `CELLS` | ( n -- m ) | number of bytes for n cells |
+| `VARIABLE name` | ( -- addr ) | create named variable location |
 | `TELL` | ( addr len -- ) | write a string to output |
 | `.` | ( n -- ) | print signed number and a trailing space |
 | `U.` | ( u -- ) | print unsigned number and a trailing space |
@@ -277,15 +284,12 @@ The following words are defined in `jonesforth.f`
 
 | Word | Stack | Description |
 |------|-------|-------------|
-| `LITERAL` | (C: value --) (S: -- value) | compile `LIT value` |
-| `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
-| `RECURSE` | ( -- ) | compile recursive call to current word |
 | `IF true-part THEN` | ( p -- ) | conditional execution |
 | `IF true-part ELSE false-part THEN` | ( p -- ) | conditional execution |
 | `BEGIN loop-part p UNTIL` | ( -- ) | post-test loop |
 | `BEGIN loop-part AGAIN` | ( -- ) | infinite loop (until EXIT) |
 | `BEGIN p WHILE loop-part REPEAT` | ( -- ) | pre-test loop |
-| `UNLESS false-part ...` | ( p -- ) | same as `p NOT IF` |
+| `UNLESS false-part ...` | ( p -- ) | same as `NOT IF` |
 | `( comment text ) ` | ( -- ) | comment inside definition |
 | `NIP` | ( x y -- y ) | `SWAP DROP` |
 | `TUCK` | ( x y -- y x y ) | `SWAP OVER` |
@@ -298,10 +302,6 @@ The following words are defined in `jonesforth.f`
 | `C,` | ( c -- ) | write a byte from the stack at HERE |
 | `S" string"` | ( -- addr len ) | create a string value |
 | `." string"` | ( -- ) | print string |
-| `CONSTANT name` | ( value -- ) | create named constant value |
-| `ALLOT` | ( n -- addr ) | allocate n bytes of user memory |
-| `CELLS` | ( n -- m ) | number of bytes for n cells |
-| `VARIABLE name` | ( -- addr ) | create named variable location |
 | `VALUE name` | ( n -- ) | create named value initialized to n |
 | `TO name` | ( n -- ) | set named value to n |
 | `+TO name` | ( d -- ) | add d to named value |
@@ -343,12 +343,12 @@ The following words are defined in `jonesforth.f`
 0x0000F000  |                |     |                    |
 0x00010000  +----------------+     |                    |
 0x00011000  |                |\    |                    |
-0x00012000  | u p l o a d    | \   +--------------------+ 0x0000E620 PAD
-0x00013000  |                |  \  | scratchpad (128b)  |
-0x00014000  | b u f f e r    |   \ | linebuf (256b) ... |
-0x00015000  |                |    \+--------------------+ 0x00010000
-0x00016000  |                |     | upload buffer...   |
-0x00017000  |                |
+0x00012000  | u p l o a d    | \   |                    |
+0x00013000  |                |  \  +--------------------+ 0x0000E620 PAD
+0x00014000  | b u f f e r    |   \ | scratch-pad (128b) |
+0x00015000  |                |    \| linebuf (256b) ... |
+0x00016000  |                |     +--------------------+ 0x00010000
+0x00017000  |                |     | upload buffer...   |
 0x00018000  +----------------+
 ~~~
 

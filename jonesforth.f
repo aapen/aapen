@@ -23,9 +23,7 @@
 : '\n' 10 ;
 : BL   32 ;
 
-: LITERAL IMMEDIATE ' LIT , , ;  \ takes <word> from the stack and compiles LIT <word>
-
-\ Now we can use [ and ] to insert literals which are calculated at compile time.
+\ We can use [ and ] to insert literals which are calculated at compile time.
 \ Within definitions, use [ ... ] LITERAL anywhere that '...' is a constant expression which you
 \ would rather only compute once (at compile time, rather than calculating it each time your word runs).
 : ':'
@@ -42,21 +40,6 @@
 : '0' [ CHAR 0 ] LITERAL ;
 : '-' [ CHAR - ] LITERAL ;
 : '.' [ CHAR . ] LITERAL ;
-
-\ While compiling, '[COMPILE] <word>' compiles <word> if it would otherwise be IMMEDIATE.
-: [COMPILE] IMMEDIATE
-	WORD		\ get the next word
-	FIND		\ find it in the dictionary
-	>CFA		\ get its codeword
-	,		\ and compile that
-;
-
-\ RECURSE makes a recursive call to the current word that is being compiled.
-: RECURSE IMMEDIATE
-	LATEST @	\ LATEST points to the word being compiled at the moment
-	>CFA		\ get the codeword
-	,		\ compile it
-;
 
 \	CONTROL STRUCTURES ----------------------------------------------------------------------
 \
@@ -310,48 +293,20 @@
 
 	Note that variables are uninitialised (but see VALUE later on which provides initialised
 	variables with a slightly simpler syntax).
-)
-: CONSTANT
-	WORD		( get the name (the name follows CONSTANT) )
-	CREATE		( make the dictionary entry )
-	DOCOL ,		( append DOCOL (the codeword field of this word) )
-	' LIT ,		( append the codeword LIT )
-	,		( append the value on the top of the stack )
-	' EXIT ,	( append the codeword EXIT )
-;
 
-(
 	To make this more general let's define a couple of words which we can use to allocate
 	arbitrary memory from the user memory.
 
 	First ALLOT, where n ALLOT allocates n bytes of memory.  (Note when calling this that
 	it's a very good idea to make sure that n is a multiple of 4, or at least that next time
 	a word is compiled that HERE has been left as a multiple of 4).
-)
-: ALLOT		( n -- addr )
-	HERE @ SWAP	( here n )
-	HERE +!		( adds n to HERE, after this the old value of HERE is still on the stack )
-;
 
-(
 	Second, CELLS.  In FORTH the phrase 'n CELLS ALLOT' means allocate n integers of whatever size
 	is the natural size for integers on this machine architecture.  On this 32 bit machine therefore
 	CELLS just multiplies the top of stack by 4.
-)
-: CELLS ( n -- n ) 4 * ;
 
-(
-	So now we can define VARIABLE easily in much the same way as CONSTANT above.  Refer to the
-	diagram above to see what the word that this creates will look like.
+	So now we can define VARIABLE easily in much the same way as CONSTANT.
 )
-: VARIABLE
-	1 CELLS ALLOT	( allocate 1 cell of memory, push the pointer to this memory )
-	WORD CREATE	( make the dictionary entry (the name follows VARIABLE) )
-	DOCOL ,		( append DOCOL (the codeword field of this word) )
-	' LIT ,		( append the codeword LIT )
-	,		( append the pointer to the new memory )
-	' EXIT ,	( append the codeword EXIT )
-;
 
 (
 	VALUES ----------------------------------------------------------------------

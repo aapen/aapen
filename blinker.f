@@ -5,11 +5,6 @@
 : '-' 45 ;
 : '.' 46 ;
 
-\ CONSTANT name ( value -- ) create named constant value
-: CONSTANT WORD CREATE DOCOL , ' LIT , , ' EXIT , ;
-
-: [COMPILE] IMMEDIATE WORD FIND >CFA , ;
-
 : IF IMMEDIATE ' 0BRANCH , HERE @ 0 , ;
 : THEN IMMEDIATE DUP HERE @ SWAP - SWAP ! ;
 : ELSE IMMEDIATE ' BRANCH , HERE @ 0 , SWAP DUP HERE @ SWAP - SWAP ! ;
@@ -50,9 +45,6 @@
 ;
 
 16# 20200004 CONSTANT GPFSEL1           \ GPIO function select (pins 10..19)
-16# 2020001C CONSTANT GPSET0            \ GPIO pin output set (pins 0..31)
-16# 20200028 CONSTANT GPCLR0            \ GPIO pin output clear (pins 0..31)
-
 16# 001C0000 CONSTANT GPIO16_FSEL       \ GPIO pin 16 function select mask
 16# 00040000 CONSTANT GPIO16_OUT        \ GPIO pin 16 function is output
 
@@ -61,6 +53,8 @@ GPIO16_FSEL INVERT AND  \ clear function for pin 16
 GPIO16_OUT OR           \ set function to output
 GPFSEL1 !               \ write GPIO function selection
 
+16# 2020001C CONSTANT GPSET0            \ GPIO pin output set (pins 0..31)
+16# 20200028 CONSTANT GPCLR0            \ GPIO pin output clear (pins 0..31)
 16# 00010000 CONSTANT GPIO16_PIN        \ GPIO pin 16 set/clear
 
 : +gpio16 GPIO16_PIN GPSET0 ! ; \ set GPIO pin 16

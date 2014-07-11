@@ -1001,6 +1001,30 @@ defcode "'",1,,TICK
         PUSHDSP r1
         NEXT
 
+@ LITERAL (C: value --) (S: -- value) compile `LIT value`
+@ : LITERAL IMMEDIATE ' LIT , , ;  \ takes <word> from the stack and compiles LIT <word>
+defword "LITERAL",7,F_IMMED,LITERAL
+        .int TICK, LIT, COMMA   @ compile 'LIT'
+        .int COMMA              @ compile value
+        .int EXIT               @ Return.
+
+@ [COMPILE] word ( -- ) compile otherwise IMMEDIATE word
+@ : [COMPILE] IMMEDIATE WORD FIND >CFA , ;
+defword "[COMPILE]",9,F_IMMED,BRKCOMPILE
+        .int WORD               @ get the next word
+        .int FIND               @ find it in the dictionary
+        .int TCFA               @ get its codeword
+        .int COMMA              @ and compile that
+        .int EXIT               @ Return.
+
+@ RECURSE ( -- ) compile recursive call to current word
+@ : RECURSE IMMEDIATE LATEST @ >CFA , ;
+defword "RECURSE",7,F_IMMED,RECURSE
+        .int LATEST, FETCH      @ LATEST points to the word being compiled at the moment
+        .int TCFA               @ get the codeword
+        .int COMMA              @ compile it
+        .int EXIT               @ Return.
+
 @ BRANCH ( -- ) changes FIP by offset which is found in the next codeword
 defcode "BRANCH",6,,BRANCH
         ldr r1, [FIP]
@@ -1024,6 +1048,41 @@ defcode "LITS",4,,LITS
         add FIP, FIP, #3        @ find the next 4-byte boundary
         and FIP, FIP, #~3
         NEXT
+
+@ CONSTANT name ( value -- ) create named constant value
+@ : CONSTANT WORD CREATE DOCOL , ' LIT , , ' EXIT , ;
+defword "CONSTANT",7,,CONSTANT
+        .int WORD               @ get the name (the name follows CONSTANT)
+        .int CREATE             @ make the dictionary entry
+        .int DOCOL, COMMA       @ append DOCOL (the codeword field of this word)
+        .int TICK, LIT, COMMA   @ append the codeword LIT
+        .int COMMA              @ append the value on the top of the stack
+        .int TICK, EXIT, COMMA  @ append the codeword EXIT
+        .int EXIT               @ Return.
+
+@ ALLOT ( n -- addr ) allocate n bytes of user memory
+@ : ALLOT HERE @ SWAP HERE +! ;
+defword "ALLOT",5,,ALLOT
+        .int HERE, FETCH, SWAP  @ ( here n )
+        .int HERE, ADDSTORE     @ adds n to HERE, the old value of HERE is still on the stack
+        .int EXIT               @ Return.
+
+@ CELLS ( n -- m ) number of bytes for n cells
+@ : CELLS 4 * ;
+defword "CELLS",5,,CELLS
+        .int LIT, #4, MUL       @ 4 bytes per cell
+        .int EXIT               @ Return.
+
+@ VARIABLE name ( -- addr ) create named variable location
+: VARIABLE 1 CELLS ALLOT WORD CREATE DOCOL , ' LIT , , ' EXIT , ;
+defword "VARIABLE",8,,VARIABLE
+	.int LIT, #4, ALLOT     @ allocate 1 cell of memory, push the pointer to this memory
+	.int WORD, CREATE       @ make the dictionary entry (the name follows VARIABLE)
+	.int DOCOL, COMMA       @ append DOCOL (the codeword field of this word)
+	.int TICK, LIT, COMMA   @ append the codeword LIT
+	.int COMMA              @ append the pointer to the new memory
+	.int TICK, EXIT, COMMA  @ append the codeword EXIT
+        .int EXIT               @ Return.
 
 @ TELL ( addr length -- ) writes a string to stdout
 defcode "TELL",4,,TELL
