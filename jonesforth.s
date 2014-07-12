@@ -1070,7 +1070,7 @@ defword "ELSE",4,F_IMM,ELSE
 @ : UNLESS IMMEDIATE ' NOT , [COMPILE] IF ;
 defword "UNLESS",6,F_IMM,UNLESS
         .int TICK, NOT, COMMA           @ compile NOT (to reverse the test)
-        .int BRKCOMPILE, IF             @ continue by calling the normal IF
+        .int IF                         @ continue by calling the normal IF
         .int EXIT
 
 @ BEGIN loop-part p UNTIL ( -- ) post-test loop
@@ -1118,18 +1118,18 @@ defword "CASE",4,F_IMM,CASE
 defword "OF",2,F_IMM,OF
         .int TICK, OVER, COMMA          @ compile OVER
         .int TICK, EQ, COMMA            @ compile =
-        .int BRKCOMPILE, IF             @ compile IF
+        .int IF                         @ compile IF
         .int TICK, DROP, COMMA          @ compile DROP
         .int EXIT
 @ : ENDOF IMMEDIATE [COMPILE] ELSE ;
 defword "ENDOF",5,F_IMM,ENDOF
-        .int BRKCOMPILE, ELSE           @ ENDOF is the same as ELSE
+        .int ELSE                       @ ENDOF is the same as ELSE
         .int EXIT
 @ : ENDCASE IMMEDIATE ' DROP , BEGIN ?DUP WHILE [COMPILE] THEN REPEAT ;
 defword "ENDCASE",7,F_IMM,ENDCASE
         .int TICK, DROP, COMMA          @ compile DROP
-        .int BEGIN, QDUP, WHILE         @ while we're not at our zero marker
-        .int BRKCOMPILE, THEN, REPEAT   @     keep compiling THEN
+        .int QDUP, ZBRANCH, 16          @ while we're not at our zero marker
+        .int THEN, BRANCH, -20          @     keep compiling THEN
         .int EXIT
 
 @ LITS as LIT but for strings
