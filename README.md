@@ -81,6 +81,8 @@ You should see something like:
     00008060  1e ff 2f e1 00 00 d0 e5  1e ff 2f e1 0e 00 a0 e1  |../......./.....|
     00008070  1e ff 2f e1 10 ff 2f e1  ff 5f 2d e9 f8 07 b1 e8  |../.../.._-.....|
 
+For something a little more interesting, try the [GPIO Morse Code](/doc/blinker.md) tutorial.
+
 
 ## FORTH Definitions
 
