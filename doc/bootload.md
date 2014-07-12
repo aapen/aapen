@@ -17,7 +17,7 @@ The FORTH return stack occupies the first 1k
 of the uninitialized memory section.
 User memory (where new FORTH word definitions are stored)
 occupies the next 16k of uninitialized memory.
-Built-in words do not consume user memory.
+Built-in words do not consume any user memory.
 They are provided in a pre-initialized data section,
 forming the base of the dictionary.
 The PAD and line-editing buffers reside past the end of user memory.

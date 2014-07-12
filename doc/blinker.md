@@ -19,6 +19,7 @@ If you get into trouble,
 you can always power-cycle the target RPi
 and start over with a fresh environment.
 
+
 ## Micro-second Timer
 
 The _pijFORTHos_ startup code initializes the ARM timer
@@ -47,6 +48,7 @@ tells us the number of microseconds elapsed.
 ;
 ~~~
 
+
 ## ACT/OK LED control via GPIO
 
 ~~~
@@ -69,6 +71,7 @@ GPFSEL1 !               \ write GPIO function selection
 : LED_ON -gpio16 ;              \ turn on ACT/OK LED (clear 16)
 : LED_OFF +gpio16 ;             \ turn off ACT/OK LED (set 16)
 ~~~
+
 
 ## Morse code
 
