@@ -23,7 +23,7 @@
         BEGIN
                 DUP             \ copy timeout
                 us@ -           \ past|future = timeout - current
-                0<=             \ loop until past
+                0<=             \ loop until not future
         UNTIL
         DROP                    \ drop timeout
 ;
@@ -44,7 +44,7 @@ GPFSEL1 !               \ write GPIO function selection
 : +gpio16 GPIO16_PIN GPSET0 ! ; \ set GPIO pin 16
 : -gpio16 GPIO16_PIN GPCLR0 ! ; \ clear GPIO pin 16
 
-: LED_ON -gpio16 ;              \ turn on ACT/OK LED (clr 16)
+: LED_ON -gpio16 ;              \ turn on ACT/OK LED (clear 16)
 : LED_OFF +gpio16 ;             \ turn off ACT/OK LED (set 16)
 
 \

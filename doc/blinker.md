@@ -26,27 +26,49 @@ The _pijFORTHos_ startup code initializes the ARM timer
 to count at 1Mhz frequency.
 The difference between two timer values
 tells us the number of microseconds elapsed.
-
+The timer counter is at address 0x2000B420,
+so we define a constant giving a name to this address.
+We define the FORTH word `us@` to fetch the value at the timer counter address.
 ~~~
 16# 2000B420 CONSTANT ARM_TIMER_CNT
 
 \ us@ ( -- t ) fetch microsecond timer value
 : us@ ARM_TIMER_CNT @ ;
-
+~~~
+It will be convenient to express elapsed time values
+by using three suffix words, `usecs`, `msecs`, and `sec`.
+~~~
 : usecs ;               \ usecs ( n -- dt ) convert microseconds to timer offset
 : msecs 1000 * ;        \ msecs ( n -- dt ) convert milliseconds to timer offset
 : secs 1000000 * ;      \ secs ( n -- dt ) convert seconds to timer offset
-
+~~~
+We define the FORTH word `us` to busy-wait for a number of microseconds.
+The timeout value is calculated as the current time plus the wait time offset.
+We keep a copy of this value on the stack for later comparison.
+The counter value runs continuously, wrapping around when it overflows.
+So, we use a signed integer subtraction to determine
+the elapsed time between our timeout and "now".
+A negative value represents relative "past".
+A positive value represents relative "future".
+~~~
 : us \ ( dt -- ) busy-wait until dt microseconds elapse
         us@ +                   \ timeout = current + dt
         BEGIN
                 DUP             \ copy timeout
                 us@ -           \ past|future = timeout - current
-                0<=             \ loop until past
+                0<=             \ loop until not future
         UNTIL
         DROP                    \ drop timeout
 ;
 ~~~
+You can test the timer code with something like this:
+~~~
+3 secs us 33 EMIT
+~~~
+After three seconds you should see '!' on the console (33 is the ASCII code for '!').
+Please note that _pijFORTHos_ **is** case sensitive.
+Built-in words and base-16 numbers are all UPPERCASE.
+However, many of the new words in this tutorial are defined in lowercase.
 
 
 ## ACT/OK LED control via GPIO
@@ -82,7 +104,6 @@ A _character_ is a single dot or dash.
 A _letter_ is a series of dot/dashes representing a letter in the alphabet.
 A _word_ is a series of letters with extra space in-between
 (not to be confused with the FORTH words we're defining).
-
 ~~~
 : '-' 45 ;                      \ ascii dash character
 : '.' 46 ;                      \ ascii dot character
@@ -114,13 +135,10 @@ A _word_ is a series of letters with extra space in-between
 : _S_ dit dit dit eol ;
 : _SOS_ dit dit dit dah dah dah dit dit dit eol ;
 ~~~
-
 Now that we've defined a partial alphabet,
 we can compose message by invoking the FORTH words that generate each letter.
-
 ~~~
 _M_ _O_ _R_ _S_ _E_ ___ _C_ _O_ _D_ _E_
 ~~~
-
 You should see the ACT/OK LED blinking out Morse code
 as the corresponding dots and dashes are printed on the console.
