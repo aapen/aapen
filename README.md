@@ -20,7 +20,7 @@ See the `/firmware/` directory for local copies used in the build process.
 
 _pijFORTHos_ is a bare-metal FORTH interpreter for the Raspberry Pi.
 It follows the general strategy given by the excellent examples at <https://github.com/dwelch67/raspberrypi>.
-A bootloader is built in, supporting [XMODEM](http://en.wikipedia.org/wiki/XMODEM) uploads of new bare-metal kernel images.
+A [bootloader](/doc/bootload.md) is built in, supporting XMODEM uploads of new bare-metal kernel images.
 
 The interpreter uses the RPi miniUART as a console (115200 baud, 8 data bits, no parity, 1 stop bit).
 If you have _pijFORTHos_ on an SD card in the RPi,
@@ -83,6 +83,9 @@ You should see something like:
 
 For something a little more interesting, try the [GPIO Morse Code](/doc/blinker.md) tutorial.
 
+There is a persistent thread on the Rasberry Pi forums with a useful collection of
+(bare-metal resource)[http://www.raspberrypi.org/forums/viewtopic.php?f=72&t=72260],
+including ARM CPU programming references and peripheral register descriptions.
 
 ## FORTH Definitions
 
@@ -315,89 +318,3 @@ The following words are defined in `jonesforth.f`
 | `ABORT` | ( -- ) | THROW exception -1 |
 | `PRINT-STACK-TRACE` | ( -- ) | walk up return stack printing values |
 | `UNUSED` | ( -- n ) | calculate number of cells remaining in user memory |
-
-## Memory Organization
-
-~~~
-0x00000000  +----------------+
-0x00001000  | v e c t o r s  |     | data stack       ^ |
-0x00002000  |                |     +--------------------+ 0x00008000 .text
-0x00003000  |                |    /| kernel code        |
-0x00004000  |                |   / |                    |
-0x00005000  |                |  /  +--------------------+ 0x00009960 .rodata
-0x00006000  |                | /   | built-in words     |
-0x00007000  | s t a c k   ^  |/    |         ...strings |
-0x00008000  +----------------+     +--------------------+ 0x0000A580 .data
-0x00009000  |                |     +--------------------+ 0x0000A5E0 .bss
-0x0000A000  | k e r n e l    |     | return stack (1k)  |
-0x0000B000  |                |     | user memory (16k)  | 0x0000A9E0 HERE
-0x0000C000  |                |     |                    |
-0x0000D000  |                |     |                    |
-0x0000E000  |                |     |                    |
-0x0000F000  |                |     |                    |
-0x00010000  +----------------+     |                    |
-0x00011000  |                |\    |                    |
-0x00012000  | u p l o a d    | \   |                    |
-0x00013000  |                |  \  +--------------------+ 0x0000E9E0 PAD
-0x00014000  | b u f f e r    |   \ | scratch-pad (128b) |
-0x00015000  |                |    \| linebuf (256b) ... |
-0x00016000  |                |     +--------------------+ 0x00010000
-0x00017000  |                |     | upload buffer...   |
-0x00018000  +----------------+
-~~~
-
-### Bootloader
-
-The bootloader has two main components.
-An XMODEM file transfer routine
-and automatic kernel relocation code.
-The relocation code allows a new kernel image
-to be uploaded at a different address
-than where it is expected to finally run.
-
-On the RPi, the kernel wants to execute starting at 0x00008000.
-We can't upload to that address, of course,
-because that's where the **current** kernel is running!
-Instead, we upload to a buffer at 0x00010000
-and start running the new kernel at that address.
-The first bit of code executed is position independent.
-It checks where it's running,
-and if it's not at 0x00008000 it copies itself there.
-When the relocation code finishes,
-it re-boots itself by jumping to the place
-where it was just copied.
-This time, it will find that it's running at the right address
-and can proceed normally to the kernel entry point.
-
-In order for this scheme to work,
-we have to ensure two things.
-First, the kernel image must by smaller than (32k - 256) bytes,
-to fit between 0x00008000 and 0x10000000.
-Second, each kernel image must begin with this automatic-relocation code:
-~~~
-@ _start is the bootstrap entry point
-        .text
-        .align 2
-        .global _start
-_start:
-        sub     r1, pc, #8      @ Where are we?
-        mov     sp, r1          @ Bootstrap stack immediately before _start
-        ldr     lr, =halt       @ Halt on "return"
-        ldr     r0, =0x8000     @ Absolute address of kernel memory
-        cmp     r0, r1          @ Are we loaded where we expect to be?
-        beq     k_start         @ Then, jump to kernel entry-point
-        mov     lr, r0          @ Otherwise, relocate ourselves
-        ldr     r2, =0x7F00     @ Copy (32k - 256) bytes
-1:      ldmia   r1!, {r3-r10}   @ Read 8 words
-        stmia   r0!, {r3-r10}   @ Write 8 words
-        subs    r2, #32         @ Decrement len
-        bgt     1b              @ More to copy?
-        bx      lr              @ Jump to bootstrap entry-point
-halt:
-        b       halt            @ Full stop
-~~~
-
-From FORTH you can UPLOAD a new kernel image and BOOT it.
-
-    UPLOAD   \ initiate XMODEM file transfer
-    BOOT     \ jump to upload buffer address

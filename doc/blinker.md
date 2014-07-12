@@ -8,7 +8,7 @@ We will also be using a timer
 to control the duration of dots and dashes,
 generating [Morse code](http://en.wikipedia.org/wiki/Morse_code).
 
-These programs can be entered
+This code can be entered
 (or copy-and-pasted)
 directly on the [_pijFORTHos_](/README.md) serial console.
 I recommend keeping your FORTH code
@@ -20,6 +20,11 @@ you can always power-cycle the target RPi
 and start over with a fresh environment.
 
 ## Micro-second Timer
+
+The _pijFORTHos_ startup code initializes the ARM timer
+to count at 1Mhz frequency.
+The difference between two timer values
+tells us the number of microseconds elapsed.
 
 ~~~
 16# 2000B420 CONSTANT ARM_TIMER_CNT
@@ -61,13 +66,19 @@ GPFSEL1 !               \ write GPIO function selection
 : +gpio16 GPIO16_PIN GPSET0 ! ; \ set GPIO pin 16
 : -gpio16 GPIO16_PIN GPCLR0 ! ; \ clear GPIO pin 16
 
-: LED_ON -gpio16 ;              \ turn on ACT/OK LED (clr 16)
+: LED_ON -gpio16 ;              \ turn on ACT/OK LED (clear 16)
 : LED_OFF +gpio16 ;             \ turn off ACT/OK LED (set 16)
 ~~~
 
 ## Morse code
 
 [Morse code](http://en.wikipedia.org/wiki/Morse_code)
+can be generated in any media that can represent an "on" and "off" state.
+Typical examples are a tone, or a light like our LED.
+A _character_ is a single dot or dash.
+A _letter_ is a series of dot/dashes representing a letter in the alphabet.
+A _word_ is a series of letters with extra space in-between
+(not to be confused with the FORTH words we're defining).
 
 ~~~
 : '-' 45 ;                      \ ascii dash character
