@@ -22,7 +22,7 @@ See the `/firmware/` directory for local copies used in the build process.
 _pijFORTHos_ is a bare-metal FORTH interpreter for the Raspberry Pi.
 It follows the general strategy given by David Welch's
 [excellent examples](https://github.com/dwelch67/raspberrypi).
-A simple [bootloader](/doc/bootload.md) is built in,
+A simple [bootloader](/doc/bootload.md#bootloader) is built in,
 supporting XMODEM uploads of new bare-metal kernel images.
 
 The interpreter uses the RPi miniUART as a console (115200 baud, 8 data bits, no parity, 1 stop bit).
@@ -100,5 +100,5 @@ The [FORTH reference](/doc/forth.md) page describes the FORTH words available in
 The [Bootloader](/doc/bootload.md) page describes the memory layout and boot process.
 
 There is a persistent thread on the Rasberry Pi forums with a useful collection of
-[bare-metal resource](http://www.raspberrypi.org/forums/viewtopic.php?f=72&t=72260),
+[bare-metal resources](http://www.raspberrypi.org/forums/viewtopic.php?f=72&t=72260),
 including ARM CPU programming references and peripheral register descriptions.
