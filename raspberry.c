@@ -546,7 +546,7 @@ void k_start(u32 sp)
     putchar(wait_for_kb());
 
     // display banner
-    uart1_puts("pijFORTHos 0.1.4 ");
+    uart1_puts("pijFORTHos 0.1.5 ");
     uart1_puts("sp=0x");
     uart1_hex32(sp);
     uart1_eol();
