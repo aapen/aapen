@@ -113,16 +113,33 @@ Try out the `LED_ON` and `LED_OFF` words to demonstrate your control of the ACT/
 ## Morse code
 
 [Morse code](http://en.wikipedia.org/wiki/Morse_code)
-can be generated in any media that can represent an "on" and "off" state.
-Typical examples are a tone, or a light like our LED.
+can be generated in any medium that can represent an "on" and "off" state.
+Typical examples are an aubile sound, or a visible light like our LED.
 A _character_ is a single dot or dash.
 A _letter_ is a series of dot/dashes representing a letter in the alphabet.
 A _word_ is a series of letters with extra space in-between
 (not to be confused with the FORTH words we're defining).
+
+To make this example more interesting,
+we will print '-' and '.' characters
+along with blinking the ACT/OK LED,
+so we define the words `'-'` and `'.'`
+to represent the ACII codes for dash and dot.
 ~~~
 : '-' 45 ;                      \ ascii dash character
 : '.' 46 ;                      \ ascii dot character
-
+~~~
+All timing in Morse code is specified in units defined by the duration of a dot.
+A dash is 3 units in duration.
+We define `units` as 50 milliseconds,
+which corresponds to a proficient operator keying about 20 words-per-minute.
+There is a 1-unit gap between characters,
+a 3-unit gap between letters,
+and a 7-unit gap between words.
+Deciding how much gap to use depends on what comes next.
+It is much easier to attach gaps as a suffix to characters and letters,
+and to treat the word-gap as a distinct "space" character.
+~~~
 : units 50 msecs * ;            \ units ( n -- dt ) convert dot-units to timer offset
 : eoc 1 units us ;              \ end of character
 : dit                           \ dot
@@ -141,6 +158,9 @@ A _word_ is a series of letters with extra space in-between
 ;
 : eol SPACE 2 units us ;        \ end of letter (assumes preceeding eoc)
 : ___ eol eol ;                 \ word-break space (assumes preceeding eol)
+~~~
+Now we are ready to define patterns for a few letters in Morse code.
+~~~
 : _C_ dah dit dah dit eol ;
 : _D_ dah dit dit eol ;
 : _E_ dit eol ;
@@ -150,10 +170,18 @@ A _word_ is a series of letters with extra space in-between
 : _S_ dit dit dit eol ;
 : _SOS_ dit dit dit dah dah dah dit dit dit eol ;
 ~~~
-Now that we've defined a partial alphabet,
-we can compose message by invoking the FORTH words that generate each letter.
+With this partial alphabet we can compose message
+by invoking the FORTH words that generate each letter.
 ~~~
 _M_ _O_ _R_ _S_ _E_ ___ _C_ _O_ _D_ _E_
 ~~~
 You should see the ACT/OK LED blinking out Morse code
-as the corresponding dots and dashes are printed on the console.
+as the corresponding dots, dashes, and spaces are printed on the console.
+
+The strategy we've taken in this tutorial
+is to build up progressively more powerful words
+in a series of domain-specific languages
+([DSL](http://en.wikipedia.org/wiki/Domain-specific_language)s).
+This approach is typical of well-structued FORTH programs.
+The result should be an elegant expression of your solution,
+described in words from the problem-domain.
