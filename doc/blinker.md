@@ -19,6 +19,10 @@ If you get into trouble,
 you can always power-cycle the target RPi
 and start over with a fresh environment.
 
+Please note that _pijFORTHos_ **is** case sensitive.
+Built-in words and base-16 numbers are all UPPERCASE.
+However, many of the new words in this tutorial are defined in lowercase.
+
 
 ## Micro-second Timer
 
@@ -36,7 +40,7 @@ We define the FORTH word `us@` to fetch the value at the timer counter address.
 : us@ ARM_TIMER_CNT @ ;
 ~~~
 It will be convenient to express elapsed time values
-by using three suffix words, `usecs`, `msecs`, and `sec`.
+by using three suffix words: `usecs`, `msecs`, and `secs`.
 ~~~
 : usecs ;               \ usecs ( n -- dt ) convert microseconds to timer offset
 : msecs 1000 * ;        \ msecs ( n -- dt ) convert milliseconds to timer offset
@@ -46,7 +50,7 @@ We define the FORTH word `us` to busy-wait for a number of microseconds.
 The timeout value is calculated as the current time plus the wait time offset.
 We keep a copy of this value on the stack for later comparison.
 The counter value runs continuously, wrapping around when it overflows.
-So, we use a signed integer subtraction to determine
+So, we use signed integer subtraction to determine
 the elapsed time between our timeout and "now".
 A negative value represents relative "past".
 A positive value represents relative "future".
@@ -66,13 +70,15 @@ You can test the timer code with something like this:
 3 secs us 33 EMIT
 ~~~
 After three seconds you should see '!' on the console (33 is the ASCII code for '!').
-Please note that _pijFORTHos_ **is** case sensitive.
-Built-in words and base-16 numbers are all UPPERCASE.
-However, many of the new words in this tutorial are defined in lowercase.
 
 
 ## ACT/OK LED control via GPIO
 
+The ACT/OK LED on the RPi is connected to GPIO pin 16.
+Function selection bits for pins 10 through 19 are at address 0x20200004.
+There are three function selection bits per pin,
+so the bits for pin 16 are 0x001C0000,
+and 0x00040000 selects the output function.
 ~~~
 16# 20200004 CONSTANT GPFSEL1           \ GPIO function select (pins 10..19)
 16# 001C0000 CONSTANT GPIO16_FSEL       \ GPIO pin 16 function select mask
@@ -82,18 +88,27 @@ GPFSEL1 @               \ read GPIO function selection
 GPIO16_FSEL INVERT AND  \ clear function for pin 16
 GPIO16_OUT OR           \ set function to output
 GPFSEL1 !               \ write GPIO function selection
-
+~~~
+GPIO pins are set and cleared by writing to addresses 0x2020001C and 0x20200028 respectively.
+Unlike the function selection register,
+there is no need to read-modify-write these registers
+because they only act on pins for which a bit is set.
+The control bit for pin 16 is 0x00010000.
+~~~
 16# 2020001C CONSTANT GPSET0            \ GPIO pin output set (pins 0..31)
 16# 20200028 CONSTANT GPCLR0            \ GPIO pin output clear (pins 0..31)
 16# 00010000 CONSTANT GPIO16_PIN        \ GPIO pin 16 set/clear
 
 : +gpio16 GPIO16_PIN GPSET0 ! ; \ set GPIO pin 16
 : -gpio16 GPIO16_PIN GPCLR0 ! ; \ clear GPIO pin 16
-
+~~~
+Since the LED is active low, it will light up when we **clear** pin 16.
+Conversely, we **set** pin 16 to turn the LED off again.
+~~~
 : LED_ON -gpio16 ;              \ turn on ACT/OK LED (clear 16)
 : LED_OFF +gpio16 ;             \ turn off ACT/OK LED (set 16)
 ~~~
-
+Try out the `LED_ON` and `LED_OFF` words to demonstrate your control of the ACT/OK LED.
 
 ## Morse code
 
