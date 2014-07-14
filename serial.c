@@ -6,14 +6,34 @@
  */
 #include "serial.h"
 
-//#define USE_SERIAL_UART0    /* select full UART for serial i/o */
-#define USE_SERIAL_UART1    /* select mini UART for serial i/o */
+#define USE_SERIAL_UART0    /* select full UART for serial i/o */
+//#define USE_SERIAL_UART1    /* select mini UART for serial i/o */
 
 #define GPFSEL1         0x20200004
 #define GPSET0          0x2020001c
 #define GPCLR0          0x20200028
 #define GPPUD           0x20200094
 #define GPPUDCLK0       0x20200098
+
+#define UART0_BASE      0x20201000
+#define UART0_DR        0x20201000
+#define UART0_RSRECR    0x20201004
+#define UART0_FR        0x20201018
+#define UART0_ILPR      0x20201020
+#define UART0_IBRD      0x20201024
+#define UART0_FBRD      0x20201028
+#define UART0_LCRH      0x2020102C
+#define UART0_CR        0x20201030
+#define UART0_IFLS      0x20201034
+#define UART0_IMSC      0x20201038
+#define UART0_RIS       0x2020103C
+#define UART0_MIS       0x20201040
+#define UART0_ICR       0x20201044
+#define UART0_DMACR     0x20201048
+#define UART0_ITCR      0x20201080
+#define UART0_ITIP      0x20201084
+#define UART0_ITOP      0x20201088
+#define UART0_TDR       0x2020108C
 
 #define AUX_ENABLES     0x20215004
 #define AUX_MU_IO_REG   0x20215040
@@ -29,13 +49,44 @@
 #define AUX_MU_BAUD_REG 0x20215068
 
 /*
- * Initialize serial UART
+ * Initialize serial UART to use GPIO pins 14 (TX) and 15 (RX)
  */
 void
 serial_init()
 {
 #ifdef USE_SERIAL_UART0
-#error NOT IMPLEMENTED!
+    u32 r0;
+    int n;
+
+    PUT_32(UART0_CR, 0);
+
+    r0 = GET_32(GPFSEL1);
+    r0 &= ~(7 << 12);           // gpio pin 14
+    r0 |= 4 << 12;              //   alt0 = full UART transmit (TX)
+    r0 &= ~(7 << 15);           // gpio pin 15
+    r0 |= 4 << 15;              //   alt0 = full UART receive (RX)
+    PUT_32(GPFSEL1, r0);
+
+    PUT_32(GPPUD,0);
+    n = 150;
+    while (n-- > 0) {           // wait for (at least) 150 clock cycles
+        NO_OP();
+    }
+
+    r0 = (1 << 14) | (1 << 15);
+    PUT_32(GPPUDCLK0, r0);
+    n = 150;
+    while (n-- > 0) {           // wait for (at least) 150 clock cycles
+        NO_OP();
+    }
+
+    PUT_32(GPPUDCLK0, 0);
+
+    PUT_32(UART0_ICR, 0x7FF);
+    PUT_32(UART0_IBRD, 1);
+    PUT_32(UART0_FBRD, 40);
+    PUT_32(UART0_LCRH, 0x70);
+    PUT_32(UART0_CR, 0x301);
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
     u32 r0;
@@ -48,25 +99,26 @@ serial_init()
     PUT_32(AUX_MU_MCR_REG, 0);
     PUT_32(AUX_MU_IER_REG, 0);
     PUT_32(AUX_MU_IIR_REG, 0xc6);
-    PUT_32(AUX_MU_BAUD_REG, 270);  // ((250,000,000/115200)/8)-1 = 270
+    /* ((250,000,000 / 115200) / 8) - 1 = 270 */
+    PUT_32(AUX_MU_BAUD_REG, 270);
 
     r0 = GET_32(GPFSEL1);
-    r0 &= ~(7 << 12); // gpio pin 14
-    r0 |= 2 << 12;    //   alt5 = mini UART transmit (TX)
-    r0 &= ~(7 << 15); // gpio pin 15
-    r0 |= 2 << 15;    //   alt5 = mini UART receive (RX)
+    r0 &= ~(7 << 12);           // gpio pin 14
+    r0 |= 2 << 12;              //   alt5 = mini UART transmit (TX)
+    r0 &= ~(7 << 15);           // gpio pin 15
+    r0 |= 2 << 15;              //   alt5 = mini UART receive (RX)
     PUT_32(GPFSEL1, r0);
 
     PUT_32(GPPUD, 0);
     n = 150;
-    while (n-- > 0) {  // wait for (at least) 150 clock cycles
+    while (n-- > 0) {           // wait for (at least) 150 clock cycles
         NO_OP();
     }
 
     r0 = (1 << 14) | (1 << 15);
     PUT_32(GPPUDCLK0, r0);
     n = 150;
-    while (n-- > 0) {  // wait for (at least) 150 clock cycles
+    while (n-- > 0) {           // wait for (at least) 150 clock cycles
         NO_OP();
     }
 
@@ -83,10 +135,10 @@ int
 serial_in_ready()
 {
 #ifdef USE_SERIAL_UART0
-#error NOT IMPLEMENTED!
+    return (GET_32(UART0_FR) & 0x10) == 0;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
-    return GET_32(AUX_MU_LSR_REG) & 0x01;
+    return (GET_32(AUX_MU_LSR_REG) & 0x01) != 0;
 #endif /* USE_SERIAL_UART1 */
 }
 
@@ -97,7 +149,7 @@ int
 serial_in()
 {
 #ifdef USE_SERIAL_UART0
-#error NOT IMPLEMENTED!
+    return GET_32(UART0_DR);
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
     return GET_32(AUX_MU_IO_REG);
@@ -111,10 +163,10 @@ int
 serial_out_ready()
 {
 #ifdef USE_SERIAL_UART0
-#error NOT IMPLEMENTED!
+    return (GET_32(UART0_FR) & 0x20) == 0;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
-    return GET_32(AUX_MU_LSR_REG) & 0x20;
+    return (GET_32(AUX_MU_LSR_REG) & 0x20) != 0;
 #endif /* USE_SERIAL_UART1 */
 }
 
@@ -125,7 +177,8 @@ int
 serial_out(u8 data)
 {
 #ifdef USE_SERIAL_UART0
-#error NOT IMPLEMENTED!
+    PUT_32(UART0_DR, (u32)data);
+    return (int)data;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
     PUT_32(AUX_MU_IO_REG, (u32)data);

@@ -20,7 +20,7 @@ rcv_timeout(int timeout)
     t0 = timer_usecs();
     t1 = t0 + timeout;
     for (;;) {
-        if (serial_in_ready()()) {
+        if (serial_in_ready()) {
             return serial_in();
         }
         t0 = timer_usecs();
