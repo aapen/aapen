@@ -16,7 +16,7 @@
 @ check them out, they are really detailed, well written and pedagogical.
 @ The original sources (with full comments) are in the /annexia/ directory.
 @
-@ DIVMOD routine taken from the ARM Software Development Toolkit User Guide 2.50.
+@ DIVMOD routine taken from the ARM Software Development Toolkit User Guide 2.50
 @
 @ This program is free software: you can redistribute it and/or modify it under
 @ the terms of the GNU Lesser General Public License as published by the Free
@@ -45,33 +45,7 @@ DSP     .req    r13
 RSP     .req    r11
 FIP     .req    r10
 
-@ Implement NEXT, which:
-@   1. finds the address of the FORTH word to execute
-@      by dereferencing the FIP
-@   2. increment FIP
-@   3. executes the FORTH word
-        .macro NEXT
-        ldr r0, [FIP], #4
-        ldr r1, [r0]
-        bx r1
-        .endm
-
-@ jonesforth is the entry point for the FORTH environment
-        .text
-        .align 2                        @ alignment 2^n (2^2 = 4 byte alignment)
-        .global jonesforth
-jonesforth:
-        ldr r0, =var_S0
-        str DSP, [r0]                   @ Save the original stack position in S0
-        ldr RSP, =return_stack_top      @ Set the initial return stack position
-        ldr r0, =data_segment           @ Get the initial data segment address
-        ldr r1, =var_HERE               @ Initialize HERE to point at
-        str r0, [r1]                    @   the beginning of data segment
-        ldr FIP, =cold_start            @ Make the FIP point to cold_start
-        NEXT                            @ Start the interpreter
-
-@ Define macros to push and pop from the data
-@ and return stacks
+@ Define macros to push and pop from the data and return stacks
 
         .macro PUSHRSP reg
         str \reg, [RSP, #-4]!
@@ -89,17 +63,48 @@ jonesforth:
         ldr \reg, [DSP], #4
         .endm
 
-@ _DOCOL is the assembly subroutine that is called
-@ at the start of every FORTH word execution.
-@ It saves the old FIP on the return stack, and
-@ makes FIP point to the first codeword.
-@ Then it calls NEXT to start interpreting the word.
+@ _NEXT is the assembly subroutine that is called
+@ at the end of every FORTH word execution.
+@ The NEXT macro is defined to simply call _NEXT
+        .macro NEXT
+        b _NEXT
+        .endm
+
+@ jonesforth is the entry point for the FORTH environment
         .text
-        .align 2
+        .align 2                        @ alignment 2^n (2^2 = 4 byte alignment)
+        .global jonesforth
+jonesforth:
+        ldr r0, =var_S0
+        str DSP, [r0]                   @ Save the original stack position in S0
+        ldr RSP, =return_stack_top      @ Set the initial return stack position
+        ldr r0, =data_segment           @ Get the initial data segment address
+        ldr r1, =var_HERE               @ Initialize HERE to point at
+        str r0, [r1]                    @   the beginning of data segment
+        ldr FIP, =cold_start            @ Make the FIP point to cold_start
+        NEXT                            @ Start the interpreter
+
+@ _DOCOL is the assembly subroutine that is called
+@ at the start of every FORTH word execution, which:
+@   0. expects the CFA of a FORTH word in r0
+@   1. saves the old FIP on the return stack
+@   2. makes FIP point to the DFA (first codeword)
+@   3. uses _NEXT to start interpreting the word
 _DOCOL:
         PUSHRSP FIP
         add FIP, r0, #4
-        NEXT
+
+@ _NEXT is the assembly subroutine that is called
+@ at the end of every FORTH word execution, which:
+@   1. finds the CFA of the FORTH word to execute
+@      by dereferencing the FIP
+@   2. increments FIP
+@   3. begins executing the routine pointed to
+@      by the CFA, with the CFA in r0
+_NEXT:
+        ldr r0, [FIP], #4
+        ldr r1, [r0]
+        bx r1
 
 @ cold_start is used to bootstrap the interpreter, 
 @ the first word executed is QUIT
