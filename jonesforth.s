@@ -668,6 +668,14 @@ defcode "CMOVE",5,,CMOVE
         bgt 1b
         NEXT
 
+@ COUNT ( addr -- addr+1 c ) extract first byte (len) of counted string
+defcode "COUNT",5,,COUNT
+        POPDSP r0
+        ldrb r1, [r0], #1       @ get byte and increment pointer
+        PUSHDSP r0
+        PUSHDSP r1
+        NEXT
+
 @ >R ( a -- ) move the top element from the data stack to the return stack
 defcode ">R",2,,TOR
         POPDSP r0

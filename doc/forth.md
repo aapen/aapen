@@ -119,6 +119,7 @@ The following words are pre-defined in _pijFORTHos_
 | `C!` | ( c addr -- ) | write byte c at addr |
 | `C@` | ( addr -- c ) | read byte from addr |
 | `CMOVE` | ( src dst len -- ) | copy len bytes from src to dst |
+| `COUNT` | ( addr -- addr+1 c ) | extract first byte (len) of counted string |
 | `>R` | (S: a -- )<br />(R: -- a ) | move the top element from the data stack to the return stack |
 | `R>` | (S: -- a )<br />(R: a -- ) | move the top element from the return stack to the data stack |
 | `RDROP` | (R: a -- ) | drop the top element from the return stack |
@@ -232,6 +233,7 @@ The following words are defined in `jonesforth.f`
 | `C,` | ( c -- ) | write a byte from the stack at `HERE` |
 | `S" string"` | ( -- addr len ) | create a string value |
 | `." string"` | ( -- ) | print string |
+| `DICT word` | ( -- 0 &#124; entry ) | dictionary entry for word, 0 if not found |
 | `VALUE name` | ( n -- ) | create named value initialized to n |
 | `TO name` | ( n -- ) | set named value to n |
 | `+TO name` | ( d -- ) | add d to named value |
