@@ -25,7 +25,7 @@ It follows the general strategy given by David Welch's
 A simple [bootloader](/doc/bootload.md#bootloader) is built in,
 supporting XMODEM uploads of new bare-metal kernel images.
 
-The interpreter uses the RPi miniUART as a console (115200 baud, 8 data bits, no parity, 1 stop bit).
+The interpreter uses the RPi serial console (115200 baud, 8 data bits, no parity, 1 stop bit).
 If you have _pijFORTHos_ on an SD card in the RPi,
 you can connect it to another machine (even another RPi)
 using a [USB-to-Serial cable](http://www.adafruit.com/products/954).
@@ -55,7 +55,7 @@ The end state for the SD card is to have a FAT32 filesystem on it with the follo
 
 Put the prepared SD card into the RPi,
 connect the USB-to-Serial cable
-(for how to connect you can reference [RPi Serial Connection](http://elinux.org/RPi_Serial_Connection)),
+(see [RPi Serial Connection](http://elinux.org/RPi_Serial_Connection) for more details),
 and power-up to the console.
 
 To get to the console, you'll need to connect. Here are two ways to try:
