@@ -82,6 +82,10 @@ The following words are pre-defined in _pijFORTHos_
 | `4-` | ( n -- n-4 ) | decrement by 4 the top element |
 | `+` | ( n m -- n+m ) | addition |
 | `-` | ( n m -- n-m ) | subtraction |
+| `2*` | ( n -- n*2 ) | double |
+| `2/` | ( n -- n/2 ) | halve |
+| `LSHIFT` | ( n m -- n<<m ) | logical shift left |
+| `RSHIFT` | ( n m -- n>>m ) | logical shift right |
 | `*` | ( n m -- n*m ) | multiplication |
 | `/` | ( n m -- n/m ) | division |
 | `MOD` | ( n m -- n%m ) | modulus |
@@ -239,5 +243,11 @@ The following words are defined in `jonesforth.f`
 | `CATCH` | ( xt -- 0 &#124; n ) | execute procedure reporting n `THROW` or 0 |
 | `THROW` | ( n -- ) | send exception n to `CATCH` |
 | `ABORT` | ( -- ) | THROW exception -1 |
+| `2+` | ( n -- n+2 ) | increment by 2 the top element |
+| `2-` | ( n -- n-2 ) | decrement by 2 the top element |
+| `BINARY` | ( -- ) | set number conversion BASE to 2 |
+| `OCTAL` | ( -- ) | set number conversion BASE to 8 |
+| `2# value` | ( -- n ) | interpret binary literal value w/o changing BASE |
+| `8# value` | ( -- n ) | interpret hexadecimal literal value w/o changing BASE |
 | `PRINT-STACK-TRACE` | ( -- ) | walk up return stack printing values |
 | `UNUSED` | ( -- n ) | calculate number of cells remaining in user memory |

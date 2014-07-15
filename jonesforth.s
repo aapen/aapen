@@ -347,6 +347,36 @@ defcode "-",1,,SUB
         PUSHDSP r0
         NEXT
 
+@ 2* ( a -- a*2 )
+defcode "2*",2,,MUL2
+        POPDSP r0
+        mov r0, r0, LSL #1
+        PUSHDSP r0
+        NEXT
+
+@ 2/ ( a -- a/2 )
+defcode "2/",2,,DIV2
+        POPDSP r0
+        mov r0, r0, ASR #1
+        PUSHDSP r0
+        NEXT
+
+@ LSHIFT ( a b -- a<<b )
+defcode "LSHIFT",6,,LSHIFT
+        POPDSP r1
+        POPDSP r0
+        mov r0, r0, LSL r1
+        PUSHDSP r0
+        NEXT
+
+@ RSHIFT ( a b -- a>>b )
+defcode "RSHIFT",6,,RSHIFT
+        POPDSP r1
+        POPDSP r0
+        mov r0, r0, LSR r1
+        PUSHDSP r0
+        NEXT
+
 @ * ( a b -- a*b )
 defcode "*",1,,MUL
         POPDSP r0
@@ -1147,7 +1177,6 @@ defcode "LITS",4,,LITS
 defword "CONSTANT",8,,CONSTANT
         .int WORD               @ get the name (the name follows CONSTANT)
         .int CREATE             @ make the dictionary entry
-@        .int LIT, _DOCOL, COMMA @ append _DOCOL (the codeword field of this word)
         .int DOCOL, COMMA       @ append _DOCOL (the codeword field of this word)
         .int TICK, LIT, COMMA   @ append the codeword LIT
         .int COMMA              @ append the value on the top of the stack
@@ -1172,7 +1201,6 @@ defword "CELLS",5,,CELLS
 defword "VARIABLE",8,,VARIABLE
         .int LIT, 4, ALLOT      @ allocate 1 cell of memory, push the pointer to this memory
         .int WORD, CREATE       @ make the dictionary entry (the name follows VARIABLE)
-@        .int LIT, _DOCOL, COMMA @ append _DOCOL (the codeword field of this word)
         .int DOCOL, COMMA       @ append _DOCOL (the codeword field of this word)
         .int TICK, LIT, COMMA   @ append the codeword LIT
         .int COMMA              @ append the pointer to the new memory

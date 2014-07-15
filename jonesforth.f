@@ -720,6 +720,13 @@
 	CR
 ;
 
+: 2+ ( n -- n+2 ) 2 + ;
+: 2- ( n -- n-2 ) 2 - ;
+: BINARY ( -- ) 2 BASE ! ;
+: OCTAL ( -- ) 8 BASE ! ;
+: 2# BASE @ 2 BASE ! WORD NUMBER DROP SWAP BASE ! ;
+: 8# BASE @ 8 BASE ! WORD NUMBER DROP SWAP BASE ! ;
+
 ( UNUSED returns the number of cells remaining in the user memory (data segment). )
 : UNUSED	( -- n )
 	PAD 		( the scratch-pad immediately follows the data segment )
