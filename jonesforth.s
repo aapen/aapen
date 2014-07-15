@@ -303,28 +303,42 @@ defcode "?DUP", 4,,QDUP
         PUSHDSP r0      @ ( a a ) it's now duplicated
 1:      NEXT            @ ( a a | 0 )
 
-@ 1+ ( a -- a+1 ) increments the top element
+@ : 1+ ( n -- n+1 ) 1 + ;  \  increments the top element
 defcode "1+",2,,INCR
         POPDSP r0
         add r0, r0, #1
         PUSHDSP r0
         NEXT
 
-@ 1- ( a -- a-1 ) decrements the top element
+@ : 1- ( n -- n-1 ) 1 - ;  \  decrements the top element
 defcode "1-",2,,DECR
         POPDSP r0
         sub r0, r0, #1
         PUSHDSP r0
         NEXT
 
-@ 4+ ( a -- a+4 ) increments by 4 the top element
+@ : 2+ ( n -- n+2 ) 2 + ;  \  increments by 2 the top element
+defcode "2+",2,,INCR2
+        POPDSP r0
+        add r0, r0, #2
+        PUSHDSP r0
+        NEXT
+
+@ : 2- ( n -- n-2 ) 2 - ;  \ decrements by 2 the top element
+defcode "2-",2,,DECR2
+        POPDSP r0
+        sub r0, r0, #2
+        PUSHDSP r0
+        NEXT
+
+@ : 4+ ( n -- n+4 ) 4 + ;  \  increments by 4 the top element
 defcode "4+",2,,INCR4
         POPDSP r0
         add r0, r0, #4
         PUSHDSP r0
         NEXT
 
-@ 4- ( a -- a-4 ) decrements by 4 the top element
+@ : 4- ( n -- n-4 ) 4 - ;  \ decrements by 4 the top element
 defcode "4-",2,,DECR4
         POPDSP r0
         sub r0, r0, #4
@@ -358,6 +372,20 @@ defcode "2*",2,,MUL2
 defcode "2/",2,,DIV2
         POPDSP r0
         mov r0, r0, ASR #1
+        PUSHDSP r0
+        NEXT
+
+@ 4* ( a -- a*4 )
+defcode "4*",2,,MUL4
+        POPDSP r0
+        mov r0, r0, LSL #2
+        PUSHDSP r0
+        NEXT
+
+@ 4/ ( a -- a/4 )
+defcode "4/",2,,DIV4
+        POPDSP r0
+        mov r0, r0, ASR #2
         PUSHDSP r0
         NEXT
 
@@ -1191,9 +1219,9 @@ defword "ALLOT",5,,ALLOT
         .int EXIT               @ Return.
 
 @ CELLS ( n -- m ) number of bytes for n cells
-@ : CELLS 4 * ;
+@ : CELLS 4* ;
 defword "CELLS",5,,CELLS
-        .int LIT, 4, MUL        @ 4 bytes per cell
+        .int MUL4               @ 4 bytes per cell
         .int EXIT               @ Return.
 
 @ VARIABLE name ( -- addr ) create named variable location

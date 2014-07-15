@@ -15,7 +15,7 @@
 : ( IMMEDIATE 1 BEGIN KEY DUP '(' = IF DROP 1+ ELSE ')' = IF 1- THEN THEN DUP 0= UNTIL DROP ;
 : NIP ( x y -- y ) SWAP DROP ;
 : TUCK ( x y -- y x y ) SWAP OVER ;
-: PICK ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u ) 1+ 4 * DSP@ + @ ;
+: PICK ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u ) 1+ 4* DSP@ + @ ;
 : SPACES ( n -- ) BEGIN DUP 0> WHILE SPACE 1- REPEAT DROP ;
 : # ( b -- n ) BASE @ SWAP BASE ! WORD NUMBER DROP SWAP BASE ! ;
 : WITHIN -ROT OVER <= IF > IF TRUE ELSE FALSE THEN ELSE 2DROP FALSE THEN ;
@@ -98,13 +98,11 @@
 		DUP CFA> ?DUP IF 2DUP ID. [ CHAR + ] LITERAL EMIT SWAP >DFA 4+ - . THEN
 	ENDCASE 4+ REPEAT DROP CR
 ;
-: 2+ ( n -- n+2 ) 2 + ;
-: 2- ( n -- n-2 ) 2 - ;
 : BINARY ( -- ) 2 BASE ! ;
 : OCTAL ( -- ) 8 BASE ! ;
 : 2# BASE @ 2 BASE ! WORD NUMBER DROP SWAP BASE ! ;
 : 8# BASE @ 8 BASE ! WORD NUMBER DROP SWAP BASE ! ;
-: UNUSED ( -- n ) PAD HERE @ - 4 / ;
+: UNUSED ( -- n ) PAD HERE @ - 4/ ;
 : WELCOME
 	S" TEST-MODE" FIND NOT IF
 		." JONESFORTH VERSION " VERSION . CR

@@ -57,7 +57,7 @@ the following calculates the number of free memory cells available:
 
     PAD        \ the base of PAD is the end of available program memory
     HERE @ -   \ subtract the base address of free memory
-    4 /        \ divide by 4 to convert bytes to (32-bit) cells
+    4/         \ divide by 4 to convert bytes to (32-bit) cells
 
 
 ### Built-in FORTH Words
@@ -78,12 +78,16 @@ The following words are pre-defined in _pijFORTHos_
 | `?DUP` | ( 0 -- 0 &#124; a -- a a ) | duplicate if non-zero |
 | `1+` | ( n -- n+1 ) | increment the top element |
 | `1-` | ( n -- n-1 ) | decrement the top element |
+| `2+` | ( n -- n+2 ) | increment by 2 the top element |
+| `2-` | ( n -- n-2 ) | decrement by 2 the top element |
 | `4+` | ( n -- n+4 ) | increment by 4 the top element |
 | `4-` | ( n -- n-4 ) | decrement by 4 the top element |
 | `+` | ( n m -- n+m ) | addition |
 | `-` | ( n m -- n-m ) | subtraction |
 | `2*` | ( n -- n*2 ) | double |
 | `2/` | ( n -- n/2 ) | halve |
+| `4*` | ( n -- n*4 ) | quadruple |
+| `4/` | ( n -- n/4 ) | quarter |
 | `LSHIFT` | ( n m -- n<<m ) | logical shift left |
 | `RSHIFT` | ( n m -- n>>m ) | logical shift right |
 | `*` | ( n m -- n*m ) | multiplication |
@@ -243,8 +247,6 @@ The following words are defined in `jonesforth.f`
 | `CATCH` | ( xt -- 0 &#124; n ) | execute procedure reporting n `THROW` or 0 |
 | `THROW` | ( n -- ) | send exception n to `CATCH` |
 | `ABORT` | ( -- ) | THROW exception -1 |
-| `2+` | ( n -- n+2 ) | increment by 2 the top element |
-| `2-` | ( n -- n-2 ) | decrement by 2 the top element |
 | `BINARY` | ( -- ) | set number conversion BASE to 2 |
 | `OCTAL` | ( -- ) | set number conversion BASE to 8 |
 | `2# value` | ( -- n ) | interpret binary literal value w/o changing BASE |
