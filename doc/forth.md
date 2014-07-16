@@ -67,14 +67,15 @@ The following words are pre-defined in _pijFORTHos_
 | Word | Stack | Description |
 |------|-------|-------------|
 | `DROP` | ( a -- ) | drop the top element of the stack |
-| `SWAP` | ( a b -- b a ) | swap the two top elements |
 | `DUP` | ( a -- a a ) | duplicate the top element |
+| `SWAP` | ( a b -- b a ) | swap the two top elements |
 | `OVER` | ( a b -- a b a ) | push copy of second element on top |
 | `ROT` | ( a b c -- b c a ) | stack rotation |
 | `-ROT` | ( a b c -- c a b ) | backwards rotation |
-| `2DROP` | ( a b -- ) | drop the top two elements of the stack |
-| `2DUP` | ( a b -- a b a b ) | duplicate top two elements of stack |
-| `2SWAP` | ( a b c d -- c d a b ) | swap top two pairs of elements of stack |
+| `2DROP` | ( a b -- ) | drop the top two stack elements |
+| `2DUP` | ( a b -- a b a b ) | duplicate top two stack elements |
+| `2SWAP` | ( a b c d -- c d a b ) | swap top two pairs of stack elements |
+| `2OVER` | ( a b c d -- a b c d a b ) | copy second pair of stack elements |
 | `NIP` | ( a b -- b ) | drop the second element of the stack |
 | `TUCK` | ( a b -- b a b ) | push copy of top element below second |
 | `PICK` | ( a_n ... a_0 n -- a_n ... a_0 a_n ) | copy n-th stack item |

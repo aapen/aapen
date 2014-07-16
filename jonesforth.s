@@ -259,17 +259,17 @@ defcode "DROP",4,,DROP
         add DSP, DSP, #4        @ ( )
         NEXT
 
+@ DUP ( a -- a a ) duplicates the top element
+defcode "DUP",3,,DUP
+        ldr r0, [DSP]           @ ( a ), r0 = a
+        PUSHDSP r0              @ ( a a ), r0 = a
+        NEXT
+
 @ SWAP ( a b -- b a ) swaps the two top elements
 defcode "SWAP",4,,SWAP
         POP2 DSP                @ ( ), r1 = a, r0 = b
         PUSHDSP r0              @ ( b ), r1 = a, r0 = b
         PUSHDSP r1              @ ( b a ), r1 = a, r0 = b
-        NEXT
-
-@ DUP ( a -- a a ) duplicates the top element
-defcode "DUP",3,,DUP
-        ldr r0, [DSP]           @ ( a ), r0 = a
-        PUSHDSP r0              @ ( a a ), r0 = a
         NEXT
 
 @ OVER ( a b -- a b a ) push copy of second element on top
@@ -280,9 +280,9 @@ defcode "OVER",4,,OVER
 
 @ ROT ( a b c -- b c a ) rotation
 defcode "ROT",3,,ROT
-        POPDSP r1               @ ( a b ) r1 = c
-        POPDSP r2               @ ( a ) r2 = b
-        POPDSP r0               @ ( ) r0 = a
+        POPDSP r1               @ ( a b ), r1 = c
+        POPDSP r2               @ ( a ), r2 = b
+        POPDSP r0               @ ( ), r0 = a
         PUSH3 DSP               @ ( b c a ), r2 = b, r1 = c, r0 = a
         NEXT
 
@@ -302,7 +302,7 @@ defcode "2DROP",5,,TWODROP
 @ 2DUP ( a b -- a b a b ) duplicate top two elements of stack
 @ : 2DUP OVER OVER ;
 defcode "2DUP",4,,TWODUP
-        ldmdb DSP, {r0,r1}      @ ( a b ), r1 = a, r0 = b
+        ldmia DSP, {r0,r1}      @ ( a b ), r1 = a, r0 = b
         PUSH2 DSP               @ ( a b a b ), r1 = a, r0 = b
         NEXT
 
@@ -313,6 +313,13 @@ defcode "2SWAP",5,,TWOSWAP
         PUSH2 DSP               @ ( c d ), r3 = a, r2 = b, r1 = c, r0 = d
         PUSHDSP r3              @ ( c d a ), r3 = a, r2 = b, r1 = c, r0 = d
         PUSHDSP r2              @ ( c d a b ), r3 = a, r2 = b, r1 = c, r0 = d
+        NEXT
+
+@ 2OVER ( a b c d -- a b c d a b ) copy second pair of stack elements
+defcode "2OVER",5,,TWOOVER
+        ldr r0, [DSP, #8]       @ ( a b c d ), r0 = b
+        ldr r1, [DSP, #12]      @ ( a b c d ), r1 = a, r0 = b
+        PUSH2 DSP               @ ( a b c d a b ), r1 = a, r0 = b
         NEXT
 
 @ NIP ( a b -- b ) drop the second element of the stack
