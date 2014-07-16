@@ -396,17 +396,15 @@ defcode "4-",2,,DECR4
 
 @ + ( a b -- a+b )
 defcode "+",1,,ADD
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
         add r0, r0, r1
         PUSHDSP r0
         NEXT
 
 @ - ( a b -- a-b )
 defcode "-",1,,SUB
-        POPDSP r1
-        POPDSP r0
-        sub r0, r0, r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        sub r0, r1, r0
         PUSHDSP r0
         NEXT
 
@@ -440,44 +438,41 @@ defcode "4/",2,,DIV4
 
 @ LSHIFT ( a b -- a<<b )
 defcode "LSHIFT",6,,LSHIFT
-        POPDSP r1
-        POPDSP r0
-        mov r0, r0, LSL r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        mov r0, r1, LSL r0
         PUSHDSP r0
         NEXT
 
 @ RSHIFT ( a b -- a>>b )
 defcode "RSHIFT",6,,RSHIFT
-        POPDSP r1
-        POPDSP r0
-        mov r0, r0, LSR r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        mov r0, r1, LSR r0
         PUSHDSP r0
         NEXT
 
 @ * ( a b -- a*b )
 defcode "*",1,,MUL
-        POPDSP r0
-        POPDSP r1
-        mul r2, r0, r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        mul r2, r1, r0
         PUSHDSP r2
         NEXT
 
 @ / ( n m -- q ) integer division quotient (see /MOD)
 @ : / /MOD SWAP DROP ;
 defcode "/",1,,DIV
-        POPDSP  r1                      @ Get b
-        POPDSP  r0                      @ Get a
+        POPDSP  r1              @ ( n ), r1 = m
+        POPDSP  r0              @ ( ), r0 = n, r1 = m
         bl _DIVMOD
-        PUSHDSP r2                      @ Put q
+        PUSHDSP r2              @ ( q ), r0 = r, r1 = m, r2 = q
         NEXT
 
 @ MOD ( n m -- r ) integer division remainder (see /MOD)
 @ : MOD /MOD DROP ;
 defcode "MOD",3,,MOD
-        POPDSP  r1                      @ Get b
-        POPDSP  r0                      @ Get a
+        POPDSP  r1              @ ( n ), r1 = m
+        POPDSP  r0              @ ( ), r0 = n, r1 = m
         bl _DIVMOD
-        PUSHDSP r0                      @ Put r
+        PUSHDSP r0              @ ( r ), r0 = r, r1 = m, r2 = q
         NEXT
 
 @ NEGATE ( n -- -n ) integer negation
@@ -490,9 +485,8 @@ defcode "NEGATE",6,,NEGATE
 
 @ = ( a b -- p ) where p is 1 when a and b are equal (0 otherwise)
 defcode "=",1,,EQ
-        POPDSP r1
-        POPDSP r0
-        cmp r0, r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        cmp r1, r0
         mvneq r0, #0
         movne r0, #0
         PUSHDSP r0
@@ -500,9 +494,8 @@ defcode "=",1,,EQ
 
 @ <> ( a b -- p ) where p = a <> b
 defcode "<>",2,,NEQ
-        POPDSP r1
-        POPDSP r0
-        cmp r0, r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        cmp r1, r0
         mvnne r0, #0
         moveq r0, #0
         PUSHDSP r0
@@ -510,9 +503,8 @@ defcode "<>",2,,NEQ
 
 @ < ( a b -- p ) where p = a < b
 defcode "<",1,,LT
-        POPDSP r1
-        POPDSP r0
-        cmp r0, r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        cmp r1, r0
         mvnlt r0, #0
         movge r0, #0
         PUSHDSP r0
@@ -520,9 +512,8 @@ defcode "<",1,,LT
 
 @ > ( a b -- p ) where p = a > b
 defcode ">",1,,GT
-        POPDSP r1
-        POPDSP r0
-        cmp r0, r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        cmp r1, r0
         mvngt r0, #0
         movle r0, #0
         PUSHDSP r0
@@ -530,9 +521,8 @@ defcode ">",1,,GT
 
 @ <= ( a b -- p ) where p = a <= b
 defcode "<=",2,,LE
-        POPDSP r1
-        POPDSP r0
-        cmp r0, r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        cmp r1, r0
         mvnle r0, #0
         movgt r0, #0
         PUSHDSP r0
@@ -540,9 +530,8 @@ defcode "<=",2,,LE
 
 @ >= ( a b -- p ) where p = a >= b
 defcode ">=",2,,GE
-        POPDSP r1
-        POPDSP r0
-        cmp r0, r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        cmp r1, r0
         mvnge r0, #0
         movlt r0, #0
         PUSHDSP r0
@@ -604,33 +593,25 @@ defcode "0>=",3,,ZGE
 
 @ : NOT 0= ;
 defcode "NOT",3,,NOT
-        POPDSP r1
-        mov r0, #0
-        cmp r1, r0
-        mvneq r0, #0
-        PUSHDSP r0
-        NEXT
+        b code_ZEQ              @ same at 0=
 
 @ AND ( a b -- a&b ) bitwise and
 defcode "AND",3,,AND
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
         and r0, r1, r0
         PUSHDSP r0
         NEXT
 
 @ OR ( a b -- a|b ) bitwise or
 defcode "OR",2,,OR
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
         orr r0, r1, r0
         PUSHDSP r0
         NEXT
 
 @ XOR ( a b -- a^b ) bitwise xor
 defcode "XOR",3,,XOR
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = a, r0 = b
         eor r0, r1, r0
         PUSHDSP r0
         NEXT
@@ -653,8 +634,7 @@ defcode "LIT", 3,, LIT
 
 @ ! ( value address -- ) write value at address
 defcode "!",1,,STORE
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = value, r0 = address
         str r1, [r0]
         NEXT
 
@@ -667,8 +647,7 @@ defcode "@",1,,FETCH
 
 @ +! ( amount address -- ) add amount to value at address
 defcode "+!",2,,ADDSTORE
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = amount, r0 = address
         ldr r2, [r0]
         add r2, r1
         str r2, [r0]
@@ -676,21 +655,19 @@ defcode "+!",2,,ADDSTORE
 
 @ -! ( amount address -- ) subtract amount to value at address
 defcode "-!",2,,SUBSTORE
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = amount, r0 = address
         ldr r2, [r0]
         sub r2, r1
         str r2, [r0]
         NEXT
 
-@ C! and @! are STORE and FETCH for bytes
-
+@ C! ( c addr -- ) write byte c at addr
 defcode "C!",2,,STOREBYTE
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = c, r0 = addr
         strb r1, [r0]
         NEXT
 
+@ C@ ( addr -- c ) read byte from addr
 defcode "C@",2,,FETCHBYTE
         POPDSP r1
         ldrb r0, [r1]
@@ -700,9 +677,7 @@ defcode "C@",2,,FETCHBYTE
 @ CMOVE ( source dest length -- ) copies a chunk of length bytes from source
 @ address to dest address  [FIXME: handle overlapping regions properly]
 defcode "CMOVE",5,,CMOVE
-        POPDSP r0
-        POPDSP r1
-        POPDSP r2
+        POP3 DSP                @ ( ), r2 = source, r1 = dest, r0 = length
 1:
         cmp r0, #0              @ while length > 0
         ldrgtb r3, [r2], #1     @ read character from source
@@ -982,11 +957,12 @@ _TCFA:
 
 @ >DFA ( dictionary_address -- data_field_address )
 @ Return the address of the first data field
-defword ">DFA",4,,TDFA
-        .int TCFA
-        .int INCR4
-        .int EXIT
-
+defcode ">DFA",4,,TDFA
+        POPDSP r0
+        bl _TCFA
+        add r0,r0,#4            @ DFA follows CFA
+        PUSHDSP r0
+        NEXT
 
 @ CREATE ( address length -- ) Creates a new dictionary entry
 @ in the data segment.
@@ -1064,41 +1040,35 @@ defword ":",1,,COLON
         .int WORD                       @ Get the name of the new word
         .int CREATE                     @ CREATE the dictionary entry / header
         .int DOCOL, COMMA               @ Append DOCOL (the codeword).
-        .int LATEST, FETCH, HIDDEN      @ Make the word hidden
-                                        @ (see below for definition).
+        .int LATEST, FETCH, HIDDEN      @ Make the word hidden (see definition below).
         .int RBRAC                      @ Go into compile mode.
         .int EXIT                       @ Return from the function.
 
 @ : ; IMMEDIATE LIT EXIT , LATEST @ HIDDEN [ ;
 defword ";",1,F_IMM,SEMICOLON
         .int LIT, EXIT, COMMA           @ Append EXIT (so the word will return).
-        .int LATEST, FETCH, HIDDEN      @ Toggle hidden flag -- unhide the word
-                                        @ (see below for definition).
+        .int LATEST, FETCH, HIDDEN      @ Unhide the word (hidden by COLON).
         .int LBRAC                      @ Go back to IMMEDIATE mode.
         .int EXIT                       @ Return from the function.
 
-@ IMMEDIATE ( -- ) sets IMMEDIATE flag of last defined word
+@ IMMEDIATE ( -- ) set IMMEDIATE flag of last defined word
 defcode "IMMEDIATE",9,F_IMM,IMMEDIATE
-        ldr r0, =var_LATEST     @
-        ldr r1, [r0]            @ get the Last word
-        add r1, r1, #4          @ points to the flag byte
-                                @
-        mov r2, #0              @
-        ldrb r2, [r1]           @ load the flag into r2
-                                @
-        eor r2, r2, #F_IMM      @ r2 = r2 xor F_IMMEDIATE
-        strb r2, [r1]           @ update the flag
+        ldr r0, =var_LATEST     @ address of last word defined
+        ldr r0, [r0]            @ get dictionary entry
+        ldrb r1, [r0, #4]!      @ get len/flag byte
+        orr r1, r1, #F_IMM      @ set F_IMMEDIATE
+        strb r1, [r0]           @ update len/flag
         NEXT
 
-@ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
+@ HIDDEN ( dictionary_address -- ) toggle HIDDEN flag of a word
 defcode "HIDDEN",6,,HIDDEN
         POPDSP  r0
-        ldr r1, [r0, #4]!
-        eor r1, r1, #F_HID
-        str r1, [r0]
+        ldrb r1, [r0, #4]!      @ get len/flag byte
+        eor r1, r1, #F_HID      @ toggle F_HIDDEN
+        strb r1, [r0]           @ update len/flag
         NEXT
 
-@ HIDE ( -- ) hide a word
+@ HIDE ( -- ) hide a word, FIND fails if already hidden
 defword "HIDE",4,,HIDE
         .int WORD               @ Get the word (after HIDE).
         .int FIND               @ Look up in the dictionary.
@@ -1751,8 +1721,7 @@ defcode "DUMP",4,,DUMP
 
 @ BOOT ( addr len -- ) Boot from memory image (see UPLOAD)
 defcode "BOOT",4,,BOOT
-        POPDSP r0
-        POPDSP r1
+        POP2 DSP                @ ( ), r1 = addr, r0 = len
         cmp r0, #0              @ len = -1 on upload failure
         bxge r1                 @ jump to boot address if len >= 0
         ldr r0, =errboot

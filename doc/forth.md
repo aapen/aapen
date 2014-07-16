@@ -193,7 +193,7 @@ so you can see related words together.
 | `: name` | ( -- ) | define (compile) a new FORTH word |
 | `;` | ( -- ) | end FORTH word definition |
 | `IMMEDIATE` | ( -- ) | set IMMEDIATE flag of last defined word |
-| `HIDDEN` | ( entry -- ) | set HIDDEN flag of a word |
+| `HIDDEN` | ( entry -- ) | toggle HIDDEN flag of a word |
 | `HIDE word` | ( -- ) | hide definition of following word |
 | `' word` | ( -- xt ) | find CFA of following word (compile only) |
 | `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
