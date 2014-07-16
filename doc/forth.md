@@ -72,18 +72,19 @@ so you can see related words together.
 |------|-------|-------------|
 | `DROP` | ( a -- ) | drop the top element of the stack |
 | `DUP` | ( a -- a a ) | duplicate the top element |
-| `SWAP` | ( a b -- b a ) | swap the two top elements |
+| `SWAP` | ( a b -- b a ) | swap the top two elements |
 | `OVER` | ( a b -- a b a ) | push copy of second element on top |
 | `ROT` | ( a b c -- b c a ) | stack rotation |
 | `-ROT` | ( a b c -- c a b ) | backwards rotation |
+| `NIP` | ( a b -- b ) | drop the second element of the stack |
+| `TUCK` | ( a b -- b a b ) | push copy of top element below second |
+| `PICK` | ( a_n ... a_0 n <br />-- a_n ... a_0 a_n ) | copy n-th stack item |
 | `2DROP` | ( a b -- ) | drop the top two stack elements |
 | `2DUP` | ( a b -- a b a b ) | duplicate top two stack elements |
 | `2SWAP` | ( a b c d -- c d a b ) | swap top two pairs of stack elements |
 | `2OVER` | ( a b c d -- a b c d a b ) | copy second pair of stack elements |
-| `NIP` | ( a b -- b ) | drop the second element of the stack |
-| `TUCK` | ( a b -- b a b ) | push copy of top element below second |
-| `PICK` | ( a_n ... a_0 n <br />-- a_n ... a_0 a_n ) | copy n-th stack item |
 | `?DUP` | ( 0 -- 0 &#124; a -- a a ) | duplicate if non-zero |
+| `DEPTH` | ( -- n ) | the number of items on the stack |
 | `>R` | (S: a -- )<br />(R: -- a ) | move the top element from the data stack to the return stack |
 | `R>` | (S: -- a )<br />(R: a -- ) | move the top element from the return stack to the data stack |
 | `RDROP` | (R: a -- ) | drop the top element from the return stack |
@@ -111,7 +112,7 @@ so you can see related words together.
 | `4+` | ( n -- n+4 ) | increment by 4 |
 | `4-` | ( n -- n-4 ) | decrement by 4 |
 | `2*` | ( n -- n*2 ) | double |
-| `2/` | ( n -- n/2 ) | halve |
+| `2/` | ( n -- n/2 ) | halve (arithmetic shift right) |
 | `4*` | ( n -- n*4 ) | quadruple |
 | `4/` | ( n -- n/4 ) | quarter |
 
@@ -120,14 +121,14 @@ so you can see related words together.
 | Word | Stack | Description |
 |------|-------|-------------|
 | `=` | ( n m -- p ) | where p is TRUE when (n == m), FALSE otherwise |
-| `<>` | ( n m -- p ) | where p = (n <> m) |
+| `<>` | ( n m -- p ) | where p = (n != m) |
 | `<` | ( n m -- p ) | where p = (n < m) |
 | `>` | ( n m -- p ) | where p = (n > m) |
 | `<=` | ( n m -- p ) | where p = (n <= m) |
 | `>=` | ( n m -- p ) | where p = (n >= m) |
 | `NOT` | ( p -- !p ) | Boolean predicate not |
 | `0=` | ( n -- p ) | where p = (n == 0) |
-| `0<>` | ( n -- p ) | where p = (n <> 0) |
+| `0<>` | ( n -- p ) | where p = (n != 0) |
 | `0<` | ( n -- p ) | where p = (n < 0) |
 | `0>` | ( n -- p ) | where p = (n > 0) |
 | `0<=` | ( n -- p ) | where p = (n <= 0) |
@@ -143,15 +144,38 @@ so you can see related words together.
 
 | Word | Stack | Description |
 |------|-------|-------------|
-| `!` | ( value addr -- ) | write value at addr |
-| `@` | ( addr -- value ) | read value from addr |
+| `@` | ( addr -- value ) | read (fetch) value from addr |
+| `!` | ( value addr -- ) | write (store) value at addr |
 | `+!` | ( amount addr -- ) | add amount to value at addr |
-| `-!` | ( amount addr -- ) | subtract amount to value at addr |
+| `-!` | ( amount addr -- ) | subtract amount from value at addr |
 | `C!` | ( c addr -- ) | write byte c at addr |
 | `C@` | ( addr -- c ) | read byte from addr |
 | `CMOVE` | ( src dst len -- ) | copy len bytes from src to dst |
 | `COUNT` | ( addr -- addr+1 c ) | extract first byte (len) of counted string |
 | `CHAR word` | ( -- c ) | ASCII code of first character in word |
+
+#### Input and Output
+
+| Word | Stack | Description |
+|------|-------|-------------|
+| `KEY` | ( -- c ) | read a character from input |
+| `EMIT` | ( c -- ) | write character c to output |
+| `CR` | ( -- ) | print newline |
+| `SPACE` | ( -- ) | print space |
+| `WORD` | ( -- addr len ) | read next word from input |
+| `NUMBER` | ( addr len -- n e ) | convert string to number n, with e unparsed characters |
+| `TELL` | ( addr len -- ) | write a string to output |
+| `.` | ( n -- ) | print signed number and a trailing space |
+| `U.` | ( u -- ) | print unsigned number and a trailing space |
+| `.R` | ( n width -- ) | print signed number, padded to width |
+| `U.R` | ( u width -- ) | print unsigned number, padded to width |
+| `?` | ( addr -- ) | fetch and print signed number at addr |
+| `.S` | ( -- ) | print the contents of the stack (non-destructive) |
+| `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
+| `HEX` | ( -- ) | set number conversion BASE to 16 |
+| `10# value` | ( -- n ) | interpret decimal literal value w/o changing BASE |
+| `16# value` | ( -- n ) | interpret hexadecimal literal value w/o changing BASE |
+| `DUMP` | ( addr len -- ) | pretty-printed memory dump |
 
 #### Definition and Compilation
 
@@ -194,30 +218,6 @@ so you can see related words together.
 | `BEGIN p WHILE loop-part REPEAT` | ( -- ) | pre-test loop |
 | `CASE cases... default ENDCASE` | ( selector -- ) | select case based on selector value |
 | `value OF case-body ENDOF` | ( -- ) | execute case-body if (selector == value) |
-
-#### Input and Output
-
-| Word | Stack | Description |
-|------|-------|-------------|
-| `KEY` | ( -- c ) | read a character from input |
-| `EMIT` | ( c -- ) | write character c to output |
-| `CR` | ( -- ) | print newline |
-| `SPACE` | ( -- ) | print space |
-| `WORD` | ( -- addr len ) | read next word from input |
-| `NUMBER` | ( addr len -- n e ) | convert string to number n, with e unparsed characters |
-| `TELL` | ( addr len -- ) | write a string to output |
-| `.` | ( n -- ) | print signed number and a trailing space |
-| `U.` | ( u -- ) | print unsigned number and a trailing space |
-| `.R` | ( n width -- ) | print signed number, padded to width |
-| `U.R` | ( u width -- ) | print unsigned number, padded to width |
-| `?` | ( addr -- ) | fetch and print signed number at addr |
-| `DEPTH` | ( -- n ) | the number of items on the stack |
-| `.S` | ( -- ) | print the contents of the stack (non-destructive) |
-| `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
-| `HEX` | ( -- ) | set number conversion BASE to 16 |
-| `10# value` | ( -- n ) | interpret decimal literal value w/o changing BASE |
-| `16# value` | ( -- n ) | interpret hexadecimal literal value w/o changing BASE |
-| `DUMP` | ( addr len -- ) | pretty-printed memory dump |
 
 #### System Operations
 
