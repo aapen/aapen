@@ -223,9 +223,9 @@ var_\name :
                 mov r0, #0
                 PUSHDSP r0
                 NEXT
-@  TRUE            Boolean predicate True (1)
+@  TRUE            Boolean predicate True (-1)
         defcode "TRUE",4,,TRUE
-                mov r0, #1
+                mvn r0, #0
                 PUSHDSP r0
                 NEXT
 
@@ -302,11 +302,10 @@ defword "2SWAP",5,,TWOSWAP
 @ ?DUP ( 0 -- 0 | a -- a a ) duplicates if non-zero
 defcode "?DUP", 4,,QDUP
         @ (x --)
-        ldr r0, [DSP]   @ r0 = x
-        cmp r0, #0      @ test if x==0
-        beq 1f          @ if x==0 we jump to 1
-        PUSHDSP r0      @ ( a a ) it's now duplicated
-1:      NEXT            @ ( a a | 0 )
+        ldr r0, [DSP]           @ r0 = x
+        cmp r0, #0              @ test if x==0
+        strne r0, [DSP, #-4]!   @ copy if x!=0
+        NEXT                    @ ( a a | 0 )
 
 @ : 1+ ( n -- n+1 ) 1 + ;  \  increments the top element
 defcode "1+",2,,INCR
@@ -444,18 +443,12 @@ defcode "NEGATE",6,,NEGATE
         PUSHDSP r0
         NEXT
 
-@@  ANS FORTH says that the comparison words should return
-@@  all (binary) 1's for TRUE and all 0's for FALSE.
-@@  However this is a bit of a strange convention
-@@  so this FORTH breaks it and returns the more normal
-@@  (for C programmers ...) 1 meaning TRUE and 0 meaning FALSE.
-
 @ = ( a b -- p ) where p is 1 when a and b are equal (0 otherwise)
 defcode "=",1,,EQ
         POPDSP r1
         POPDSP r0
         cmp r0, r1
-        moveq r0, #1
+        mvneq r0, #0
         movne r0, #0
         PUSHDSP r0
         NEXT
@@ -465,7 +458,7 @@ defcode "<>",2,,NEQ
         POPDSP r1
         POPDSP r0
         cmp r0, r1
-        movne r0, #1
+        mvnne r0, #0
         moveq r0, #0
         PUSHDSP r0
         NEXT
@@ -475,7 +468,7 @@ defcode "<",1,,LT
         POPDSP r1
         POPDSP r0
         cmp r0, r1
-        movlt r0, #1
+        mvnlt r0, #0
         movge r0, #0
         PUSHDSP r0
         NEXT
@@ -485,7 +478,7 @@ defcode ">",1,,GT
         POPDSP r1
         POPDSP r0
         cmp r0, r1
-        movgt r0, #1
+        mvngt r0, #0
         movle r0, #0
         PUSHDSP r0
         NEXT
@@ -495,7 +488,7 @@ defcode "<=",2,,LE
         POPDSP r1
         POPDSP r0
         cmp r0, r1
-        movle r0, #1
+        mvnle r0, #0
         movgt r0, #0
         PUSHDSP r0
         NEXT
@@ -505,7 +498,7 @@ defcode ">=",2,,GE
         POPDSP r1
         POPDSP r0
         cmp r0, r1
-        movge r0, #1
+        mvnge r0, #0
         movlt r0, #0
         PUSHDSP r0
         NEXT
@@ -515,7 +508,7 @@ defcode "0=",2,,ZEQ
         POPDSP r1
         mov r0, #0
         cmp r1, r0
-        moveq r0, #1
+        mvneq r0, #0
         PUSHDSP r0
         NEXT
 
@@ -524,7 +517,7 @@ defcode "0<>",3,,ZNEQ
         POPDSP r1
         mov r0, #0
         cmp r1, r0
-        movne r0, #1
+        mvnne r0, #0
         PUSHDSP r0
         NEXT
 
@@ -533,7 +526,7 @@ defcode "0<",2,,ZLT
         POPDSP r1
         mov r0, #0
         cmp r1, r0
-        movlt r0, #1
+        mvnlt r0, #0
         PUSHDSP r0
         NEXT
 
@@ -542,7 +535,7 @@ defcode "0>",2,,ZGT
         POPDSP r1
         mov r0, #0
         cmp r1, r0
-        movgt r0, #1
+        mvngt r0, #0
         PUSHDSP r0
         NEXT
 
@@ -551,7 +544,7 @@ defcode "0<=",3,,ZLE
         POPDSP r1
         mov r0, #0
         cmp r1, r0
-        movle r0, #1
+        mvnle r0, #0
         PUSHDSP r0
         NEXT
 
@@ -560,7 +553,7 @@ defcode "0>=",3,,ZGE
         POPDSP r1
         mov r0, #0
         cmp r1, r0
-        movge r0, #1
+        mvnge r0, #0
         PUSHDSP r0
         NEXT
 
@@ -569,7 +562,7 @@ defcode "NOT",3,,NOT
         POPDSP r1
         mov r0, #0
         cmp r1, r0
-        moveq r0, #1
+        mvneq r0, #0
         PUSHDSP r0
         NEXT
 
@@ -978,7 +971,7 @@ defcode "CREATE",6,,CREATE
         ldrb r6,[r0,r7] @ read and store a character
         strb r6,[r3,r7]
 
-        add r7,r7,#1    @ ready to rad the next character
+        add r7,r7,#1    @ ready to read the next character
 
         b 1b
 
@@ -1009,14 +1002,14 @@ _COMMA:
 @ [ ( -- ) Change interpreter state to Immediate mode
 defcode "[",1,F_IMM,LBRAC
         ldr     r0, =var_STATE
-        mov     r1, #0
+        mov     r1, #0                  @ FALSE
         str     r1, [r0]
         NEXT
 
 @ ] ( -- ) Change interpreter state to Compilation mode
 defcode "]",1,,RBRAC
         ldr     r0, =var_STATE
-        mov     r1, #1
+        mvn     r1, #0                  @ TRUE
         str     r1, [r0]
         NEXT
 
@@ -1025,8 +1018,7 @@ defcode "]",1,,RBRAC
 defword ":",1,,COLON
         .int WORD                       @ Get the name of the new word
         .int CREATE                     @ CREATE the dictionary entry / header
-@        .int LIT, _DOCOL, COMMA          @ Append _DOCOL  (the codeword).
-        .int DOCOL, COMMA               @ Append _DOCOL  (the codeword).
+        .int DOCOL, COMMA               @ Append DOCOL (the codeword).
         .int LATEST, FETCH, HIDDEN      @ Make the word hidden
                                         @ (see below for definition).
         .int RBRAC                      @ Go into compile mode.
@@ -1049,7 +1041,7 @@ defcode "IMMEDIATE",9,F_IMM,IMMEDIATE
         mov r2, #0              @
         ldrb r2, [r1]           @ load the flag into r2
                                 @
-        eor r2, r2, #F_IMM      @ r2 = r2 xor F_IMMED
+        eor r2, r2, #F_IMM      @ r2 = r2 xor F_IMMEDIATE
         strb r2, [r1]           @ update the flag
         NEXT
 
@@ -1447,8 +1439,8 @@ defcode ".S",2,,DOTS
         ldr     r5, [r5]                @ location = stack origin
         ldr     r1, =var_BASE           @ address of BASE
         ldr     r1, [r1]                @ current value of BASE
-        cmp     r1, #10
-        bne     2f
+        cmp     r1, #10                 @ if BASE is 10
+        bne     2f                      @ print signed, otherwise unsigned
 1:                                      @ LOOP {  // signed
         ldr     r0, [r5, #-4]!          @     item = *--location
         cmp     r5, r4                  @     if (location < top)

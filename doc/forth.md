@@ -50,7 +50,7 @@ The following constants are pre-defined in _pijFORTHos_
 | `F_HIDDEN` | The HIDDEN flag's actual value. |
 | `F_LENMASK` | The length mask in the flags/len byte. |
 | `FALSE` | Boolean predicate False (0) |
-| `TRUE` | Boolean predicate True (1), anything != 0 is TRUE |
+| `TRUE` | Boolean predicate True (-1), anything != 0 is TRUE |
 
 Given the relationship between `HERE` and `PAD`,
 the following calculates the number of free memory cells available:
