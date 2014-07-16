@@ -695,7 +695,7 @@ defcode "CMOVE",5,,CMOVE
         ldrb r3, [r2], #1       @    read character from source
         strb r3, [r1], #1       @    and write it to dest (increment both pointers)
         sub r0, r0, #1          @    decrement length
-        b 1b
+        b 2b
 3:
         NEXT
 
