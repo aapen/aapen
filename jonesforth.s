@@ -674,16 +674,29 @@ defcode "C@",2,,FETCHBYTE
         PUSHDSP r0
         NEXT
 
-@ CMOVE ( source dest length -- ) copies a chunk of length bytes from source
-@ address to dest address  [FIXME: handle overlapping regions properly]
+@ CMOVE ( source dest length -- ) copy length bytes from source to dest
 defcode "CMOVE",5,,CMOVE
         POP3 DSP                @ ( ), r2 = source, r1 = dest, r0 = length
+        cmp r2, r1              @ account for potential overlap
+        bge 2f                  @ copy forward if s >= d, backward otherwise
+        sub r3, r0, #1          @ (length - 1)
+        add r2, r3              @ end of source
+        add r1, r3              @ end of dest
 1:
         cmp r0, #0              @ while length > 0
-        ldrgtb r3, [r2], #1     @ read character from source
-        strgtb r3, [r1], #1     @ and write it to dest (increment both pointers)
-        subgt r0, r0, #1        @ decrement length
-        bgt 1b
+        ble 3f
+        ldrb r3, [r2], #-1      @    read character from source
+        strb r3, [r1], #-1      @    and write it to dest (decrement both pointers)
+        sub r0, r0, #1          @    decrement length
+        b 1b
+2:
+        cmp r0, #0              @ while length > 0
+        ble 3f
+        ldrb r3, [r2], #1       @    read character from source
+        strb r3, [r1], #1       @    and write it to dest (increment both pointers)
+        sub r0, r0, #1          @    decrement length
+        b 1b
+3:
         NEXT
 
 @ COUNT ( addr -- addr+1 c ) extract first byte (len) of counted string

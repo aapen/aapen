@@ -208,6 +208,7 @@ so you can see related words together.
 
 | Word | Stack | Description |
 |------|-------|-------------|
+| `EXIT` | ( -- ) | restore FIP and return to caller |
 | `BRANCH offset` | ( -- ) | change FIP by following offset |
 | `0BRANCH offset` | ( p -- ) | branch if the top of the stack is zero |
 | `IF true-part THEN` | ( p -- ) | conditional execution |
