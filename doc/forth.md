@@ -62,7 +62,11 @@ the following calculates the number of free memory cells available:
 
 ### Built-in FORTH Words
 
-The following words are pre-defined in _pijFORTHos_
+There are many words pre-defined in _pijFORTHos_.
+They are presented here by category,
+so you can see related words together.
+
+#### Stack Manipulation
 
 | Word | Stack | Description |
 |------|-------|-------------|
@@ -78,44 +82,67 @@ The following words are pre-defined in _pijFORTHos_
 | `2OVER` | ( a b c d -- a b c d a b ) | copy second pair of stack elements |
 | `NIP` | ( a b -- b ) | drop the second element of the stack |
 | `TUCK` | ( a b -- b a b ) | push copy of top element below second |
-| `PICK` | ( a_n ... a_0 n -- a_n ... a_0 a_n ) | copy n-th stack item |
+| `PICK` | ( a_n ... a_0 n <br />-- a_n ... a_0 a_n ) | copy n-th stack item |
 | `?DUP` | ( 0 -- 0 &#124; a -- a a ) | duplicate if non-zero |
-| `1+` | ( n -- n+1 ) | increment the top element |
-| `1-` | ( n -- n-1 ) | decrement the top element |
-| `2+` | ( n -- n+2 ) | increment by 2 the top element |
-| `2-` | ( n -- n-2 ) | decrement by 2 the top element |
-| `4+` | ( n -- n+4 ) | increment by 4 the top element |
-| `4-` | ( n -- n-4 ) | decrement by 4 the top element |
+| `>R` | (S: a -- )<br />(R: -- a ) | move the top element from the data stack to the return stack |
+| `R>` | (S: -- a )<br />(R: a -- ) | move the top element from the return stack to the data stack |
+| `RDROP` | (R: a -- ) | drop the top element from the return stack |
+| `RSP@` | ( -- addr ) | get return stack pointer |
+| `RSP!` | ( addr -- ) | set return stack pointer |
+| `DSP@` | ( -- addr ) | get data stack pointer |
+| `DSP!` | ( addr -- ) | set data stack pointer |
+
+#### Arithmetic Operations
+
+| Word | Stack | Description |
+|------|-------|-------------|
+| `NEGATE` | ( n -- -n ) | negation |
 | `+` | ( n m -- n+m ) | addition |
 | `-` | ( n m -- n-m ) | subtraction |
+| `*` | ( n m -- n*m ) | multiplication |
+| `/` | ( n m -- n/m ) | division |
+| `MOD` | ( n m -- n%m ) | modulus |
+| `/MOD` | ( n m -- r q ) | where n = q * m + r |
+| `S/MOD` | ( n m -- r q ) | alternative signed /MOD using Euclidean division |
+| `1+` | ( n -- n+1 ) | increment |
+| `1-` | ( n -- n-1 ) | decrement |
+| `2+` | ( n -- n+2 ) | increment by 2 |
+| `2-` | ( n -- n-2 ) | decrement by 2 |
+| `4+` | ( n -- n+4 ) | increment by 4 |
+| `4-` | ( n -- n-4 ) | decrement by 4 |
 | `2*` | ( n -- n*2 ) | double |
 | `2/` | ( n -- n/2 ) | halve |
 | `4*` | ( n -- n*4 ) | quadruple |
 | `4/` | ( n -- n/4 ) | quarter |
-| `LSHIFT` | ( n m -- n<<m ) | logical shift left |
-| `RSHIFT` | ( n m -- n>>m ) | logical shift right |
-| `*` | ( n m -- n*m ) | multiplication |
-| `/` | ( n m -- n/m ) | division |
-| `MOD` | ( n m -- n%m ) | modulus |
-| `NEGATE` | ( n -- -n ) | negation |
-| `=` | ( n m -- p ) | where p is 1 when (n == m), 0 otherwise |
+
+#### Logical and Bitwise Operations
+
+| Word | Stack | Description |
+|------|-------|-------------|
+| `=` | ( n m -- p ) | where p is TRUE when (n == m), FALSE otherwise |
 | `<>` | ( n m -- p ) | where p = (n <> m) |
 | `<` | ( n m -- p ) | where p = (n < m) |
 | `>` | ( n m -- p ) | where p = (n > m) |
 | `<=` | ( n m -- p ) | where p = (n <= m) |
 | `>=` | ( n m -- p ) | where p = (n >= m) |
+| `NOT` | ( p -- !p ) | Boolean predicate not |
 | `0=` | ( n -- p ) | where p = (n == 0) |
 | `0<>` | ( n -- p ) | where p = (n <> 0) |
 | `0<` | ( n -- p ) | where p = (n < 0) |
 | `0>` | ( n -- p ) | where p = (n > 0) |
 | `0<=` | ( n -- p ) | where p = (n <= 0) |
 | `0>=` | ( n -- p ) | where p = (n >= 0) |
-| `NOT` | ( p -- !p ) | Boolean predicate not |
+| `INVERT` | ( a -- ~a ) | bitwise not |
 | `AND` | ( a b -- a&amp;b ) | bitwise and |
 | `OR` | ( a b -- a&#124;b ) | bitwise or |
 | `XOR` | ( a b -- a^b ) | bitwise xor |
-| `INVERT` | ( a -- ~a ) | bitwise not |
-| `LIT word` | ( -- ) | compile literal in FORTH word |
+| `LSHIFT` | ( a n -- a<<n ) | logical shift left |
+| `RSHIFT` | ( a n -- a>>n ) | logical shift right |
+
+#### Memory Access
+
+| Word | Stack | Description |
+|------|-------|-------------|
 | `!` | ( value addr -- ) | write value at addr |
 | `@` | ( addr -- value ) | read value from addr |
 | `+!` | ( amount addr -- ) | add amount to value at addr |
@@ -124,19 +151,14 @@ The following words are pre-defined in _pijFORTHos_
 | `C@` | ( addr -- c ) | read byte from addr |
 | `CMOVE` | ( src dst len -- ) | copy len bytes from src to dst |
 | `COUNT` | ( addr -- addr+1 c ) | extract first byte (len) of counted string |
-| `>R` | (S: a -- )<br />(R: -- a ) | move the top element from the data stack to the return stack |
-| `R>` | (S: -- a )<br />(R: a -- ) | move the top element from the return stack to the data stack |
-| `RDROP` | (R: a -- ) | drop the top element from the return stack |
-| `RSP@` | ( -- addr ) | get return stack pointer |
-| `RSP!` | ( addr -- ) | set return stack pointer |
-| `DSP@` | ( -- addr ) | get data stack pointer |
-| `DSP!` | ( addr -- ) | set data stack pointer |
-| `KEY` | ( -- c ) | read a character from input |
-| `EMIT` | ( c -- ) | write character c to output |
-| `CR` | ( -- ) | print newline |
-| `SPACE` | ( -- ) | print space |
-| `WORD` | ( -- addr len ) | read next word from input |
-| `NUMBER` | ( addr len -- n e ) | convert string to number n, with e unparsed characters |
+| `CHAR word` | ( -- c ) | ASCII code of first character in word |
+
+#### Definition and Compilation
+
+| Word | Stack | Description |
+|------|-------|-------------|
+| `LIT word` | ( -- ) | compile literal in FORTH word |
+| `LITS addr len` | ( -- ) | compile literal string in FORTH word |
 | `FIND` | ( addr len -- entry &#124; 0 ) | search dictionary for entry matching string |
 | `>CFA` | ( entry -- xt ) | get code field address from dictionary entry |
 | `>DFA` | ( entry -- addr ) | get data field address from dictionary entry |
@@ -150,9 +172,18 @@ The following words are pre-defined in _pijFORTHos_
 | `HIDDEN` | ( entry -- ) | set HIDDEN flag of a word |
 | `HIDE word` | ( -- ) | hide definition of following word |
 | `' word` | ( -- xt ) | find CFA of following word (compile only) |
-| `LITERAL` | (C: value --)<br />(S: -- value) | compile `LIT value` |
 | `[COMPILE] word` | ( -- ) | compile otherwise IMMEDIATE word |
 | `RECURSE` | ( -- ) | compile recursive call to current word |
+| `LITERAL` | (C: value --)<br />(S: -- value) | compile `LIT value` |
+| `CONSTANT name` | ( value -- ) | create named constant value |
+| `ALLOT` | ( n -- addr ) | allocate n bytes of user memory |
+| `CELLS` | ( n -- m ) | number of bytes for n cells |
+| `VARIABLE name` | ( -- addr ) | create named variable location |
+
+#### Control Structures
+
+| Word | Stack | Description |
+|------|-------|-------------|
 | `BRANCH offset` | ( -- ) | change FIP by following offset |
 | `0BRANCH offset` | ( p -- ) | branch if the top of the stack is zero |
 | `IF true-part THEN` | ( p -- ) | conditional execution |
@@ -163,11 +194,17 @@ The following words are pre-defined in _pijFORTHos_
 | `BEGIN p WHILE loop-part REPEAT` | ( -- ) | pre-test loop |
 | `CASE cases... default ENDCASE` | ( selector -- ) | select case based on selector value |
 | `value OF case-body ENDOF` | ( -- ) | execute case-body if (selector == value) |
-| `LITS addr len` | ( -- ) | compile literal string in FORTH word |
-| `CONSTANT name` | ( value -- ) | create named constant value |
-| `ALLOT` | ( n -- addr ) | allocate n bytes of user memory |
-| `CELLS` | ( n -- m ) | number of bytes for n cells |
-| `VARIABLE name` | ( -- addr ) | create named variable location |
+
+#### Input and Output
+
+| Word | Stack | Description |
+|------|-------|-------------|
+| `KEY` | ( -- c ) | read a character from input |
+| `EMIT` | ( c -- ) | write character c to output |
+| `CR` | ( -- ) | print newline |
+| `SPACE` | ( -- ) | print space |
+| `WORD` | ( -- addr len ) | read next word from input |
+| `NUMBER` | ( addr len -- n e ) | convert string to number n, with e unparsed characters |
 | `TELL` | ( addr len -- ) | write a string to output |
 | `.` | ( n -- ) | print signed number and a trailing space |
 | `U.` | ( u -- ) | print unsigned number and a trailing space |
@@ -176,16 +213,18 @@ The following words are pre-defined in _pijFORTHos_
 | `?` | ( addr -- ) | fetch and print signed number at addr |
 | `DEPTH` | ( -- n ) | the number of items on the stack |
 | `.S` | ( -- ) | print the contents of the stack (non-destructive) |
-| `/MOD` | ( n m -- r q ) | where n = q * m + r |
-| `S/MOD` | ( n m -- r q ) | alternative signed /MOD using Euclidean division |
-| `QUIT` | ( -- ) | clear return and data stacks, restart interpreter loop |
-| `CHAR word` | ( -- c ) | ASCII code from first character of following word |
 | `DECIMAL` | ( -- ) | set number conversion BASE to 10 |
 | `HEX` | ( -- ) | set number conversion BASE to 16 |
 | `10# value` | ( -- n ) | interpret decimal literal value w/o changing BASE |
 | `16# value` | ( -- n ) | interpret hexadecimal literal value w/o changing BASE |
-| `UPLOAD` | ( -- addr len ) | XMODEM file upload to memory image |
 | `DUMP` | ( addr len -- ) | pretty-printed memory dump |
+
+#### System Operations
+
+| Word | Stack | Description |
+|------|-------|-------------|
+| `QUIT` | ( -- ) | clear return and data stacks, restart interpreter loop |
+| `UPLOAD` | ( -- addr len ) | XMODEM file upload to memory image |
 | `BOOT` | ( addr len -- ) | boot from memory image (see UPLOAD) |
 | `MONITOR` | ( -- ) | enter bootstrap monitor |
 | `EXECUTE` | ( xt -- ) | call procedure indicated by CFA |
