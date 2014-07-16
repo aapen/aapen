@@ -13,11 +13,7 @@
 : '-' [ CHAR - ] LITERAL ;
 : '.' [ CHAR . ] LITERAL ;
 : ( IMMEDIATE 1 BEGIN KEY DUP '(' = IF DROP 1+ ELSE ')' = IF 1- THEN THEN DUP 0= UNTIL DROP ;
-: NIP ( x y -- y ) SWAP DROP ;
-: TUCK ( x y -- y x y ) SWAP OVER ;
-: PICK ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u ) 1+ 4* DSP@ + @ ;
 : SPACES ( n -- ) BEGIN DUP 0> WHILE SPACE 1- REPEAT DROP ;
-: # ( b -- n ) BASE @ SWAP BASE ! WORD NUMBER DROP SWAP BASE ! ;
 : WITHIN -ROT OVER <= IF > IF TRUE ELSE FALSE THEN ELSE 2DROP FALSE THEN ;
 : ALIGNED ( c-addr -- a-addr ) 3 + 3 INVERT AND ;
 : ALIGN HERE @ ALIGNED HERE ! ;
@@ -103,6 +99,7 @@
 : OCTAL ( -- ) 8 BASE ! ;
 : 2# BASE @ 2 BASE ! WORD NUMBER DROP SWAP BASE ! ;
 : 8# BASE @ 8 BASE ! WORD NUMBER DROP SWAP BASE ! ;
+: # ( b -- n ) BASE @ SWAP BASE ! WORD NUMBER DROP SWAP BASE ! ;
 : UNUSED ( -- n ) PAD HERE @ - 4/ ;
 : WELCOME
 	S" TEST-MODE" FIND NOT IF

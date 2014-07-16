@@ -48,19 +48,43 @@ FIP     .req    r10
 @ Define macros to push and pop from the data and return stacks
 
         .macro PUSHRSP reg
-        str \reg, [RSP, #-4]!
+        str     \reg, [RSP, #-4]!
         .endm
 
         .macro POPRSP reg
-        ldr \reg, [RSP], #4
+        ldr     \reg, [RSP], #4
         .endm
 
         .macro PUSHDSP reg
-        str \reg, [DSP, #-4]!
+        str     \reg, [DSP, #-4]!
         .endm
 
         .macro POPDSP reg
-        ldr \reg, [DSP], #4
+        ldr     \reg, [DSP], #4
+        .endm
+
+        .macro PUSH2 reg
+        stmdb   \reg!, {r0-r1}          @ ( -- r1 r0 )
+        .endm
+
+        .macro POP2 reg
+        ldmia   \reg!, {r0-r1}          @ ( r1 r0 -- )
+        .endm
+
+        .macro PUSH3 reg
+        stmdb   \reg!, {r0-r2}          @ ( -- r2 r1 r0 )
+        .endm
+
+        .macro POP3 reg
+        ldmia   \reg!, {r0-r2}          @ ( r2 r1 r0 -- )
+        .endm
+
+        .macro PUSH4 reg
+        stmdb   \reg!, {r0-r3}          @ ( -- r3 r2 r1 r0 )
+        .endm
+
+        .macro POP4 reg
+        ldmia   \reg!, {r0-r3}          @ ( r3 r2 r1 r0 -- )
         .endm
 
 @ _NEXT is the assembly subroutine that is called
@@ -232,79 +256,93 @@ var_\name :
 
 @ DROP ( a -- ) drops the top element of the stack
 defcode "DROP",4,,DROP
-        POPDSP r0       @ ( )
+        add DSP, DSP, #4        @ ( )
         NEXT
 
 @ SWAP ( a b -- b a ) swaps the two top elements
 defcode "SWAP",4,,SWAP
-        @ ( a b -- )
-        POPDSP r0       @ ( a ) , r0 = b
-        POPDSP r1       @ (  ) , r0 = b, r1 = a
-        PUSHDSP r0      @ ( b  ) , r0 = b, r1 = a
-        PUSHDSP r1      @ ( b a  ) , r0 = b, r1 = a
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        PUSHDSP r0              @ ( b ), r1 = a, r0 = b
+        PUSHDSP r1              @ ( b a ), r1 = a, r0 = b
         NEXT
 
 @ DUP ( a -- a a ) duplicates the top element
 defcode "DUP",3,,DUP
-        @ ( a -- )
-        POPDSP r0       @ (  ) , r0 = a
-        PUSHDSP r0      @ ( a  ) , r0 = a
-        PUSHDSP r0      @ ( a a  ) , r0 = a
+        ldr r0, [DSP]           @ ( a ), r0 = a
+        PUSHDSP r0              @ ( a a ), r0 = a
         NEXT
 
-@ OVER ( a b c -- a b c b ) pushes the second element on top
+@ OVER ( a b -- a b a ) push copy of second element on top
 defcode "OVER",4,,OVER
-        @ ( a b c ) r0 = b we take the element at DSP + 4
-        @ and since DSP is the top of the stack we will load
-        @ the second element of the stack in r0
-        ldr r0, [DSP, #4]
-        PUSHDSP r0      @ ( a b c b )
+        ldr r0, [DSP, #4]       @ ( a b ), r0 = a
+        PUSHDSP r0              @ ( a b a )
         NEXT
 
 @ ROT ( a b c -- b c a ) rotation
 defcode "ROT",3,,ROT
-        POPDSP r0       @ ( a b ) r0 = c
-        POPDSP r1       @ ( a ) r1 = b
-        POPDSP r2       @ ( ) r2 = a
-        PUSHDSP r1      @ ( b )
-        PUSHDSP r0      @ ( b c )
-        PUSHDSP r2      @ ( b c a )
+        POPDSP r1               @ ( a b ) r1 = c
+        POPDSP r2               @ ( a ) r2 = b
+        POPDSP r0               @ ( ) r0 = a
+        PUSH3 DSP               @ ( b c a ), r2 = b, r1 = c, r0 = a
         NEXT
 
 @ -ROT ( a b c -- c a b ) backwards rotation
 defcode "-ROT",4,,NROT
-        POPDSP r0       @ ( a b ) r0 = c
-        POPDSP r1       @ ( a ) r1 = b
-        POPDSP r2       @ ( ) r2 = a
-        PUSHDSP r0      @ ( c )
-        PUSHDSP r2      @ ( c a )
-        PUSHDSP r1      @ ( c a b )
+        POP3 DSP                @ ( ), r2 = a, r1 = b, r0 = c
+        PUSHDSP r0              @ ( c )
+        PUSHDSP r2              @ ( c a )
+        PUSHDSP r1              @ ( c a b )
         NEXT
 
 @ 2DROP ( a b -- ) drops the top two elements of the stack
 defcode "2DROP",5,,TWODROP
-        POPDSP r0       @ ( a )
-        POPDSP r0       @ ( )
+        add DSP, DSP, #8        @ ( )
         NEXT
 
 @ 2DUP ( a b -- a b a b ) duplicate top two elements of stack
 @ : 2DUP OVER OVER ;
-defword "2DUP",4,,TWODUP
-        .int OVER, OVER
-        .int EXIT
+defcode "2DUP",4,,TWODUP
+        ldmdb DSP, {r0,r1}      @ ( a b ), r1 = a, r0 = b
+        PUSH2 DSP               @ ( a b a b ), r1 = a, r0 = b
+        NEXT
 
 @ 2SWAP ( a b c d -- c d a b ) swap top two pairs of elements of stack
 @ : 2SWAP >R -ROT R> -ROT ;
-defword "2SWAP",5,,TWOSWAP
-        .int TOR, NROT, TOR, NROT
-        .int EXIT
+defcode "2SWAP",5,,TWOSWAP
+        POP4 DSP                @ ( ), r3 = a, r2 = b, r1 = c, r0 = d
+        PUSH2 DSP               @ ( c d ), r3 = a, r2 = b, r1 = c, r0 = d
+        PUSHDSP r3              @ ( c d a ), r3 = a, r2 = b, r1 = c, r0 = d
+        PUSHDSP r2              @ ( c d a b ), r3 = a, r2 = b, r1 = c, r0 = d
+        NEXT
+
+@ NIP ( a b -- b ) drop the second element of the stack
+@ : NIP SWAP DROP ;
+defcode "NIP",3,,NIP
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        PUSHDSP r0              @ ( b ), r1 = a, r0 = b
+        NEXT
+
+@ TUCK ( a b -- b a b ) push copy of top element below second
+@ : TUCK SWAP OVER ;
+defcode "TUCK",4,,TUCK
+        POP2 DSP                @ ( ), r1 = a, r0 = b
+        PUSHDSP r0              @ ( b ), r1 = a, r0 = b
+        PUSH2 DSP               @ ( b a b ), r1 = a, r0 = b
+        NEXT
+
+@ PICK ( a_n ... a_0 n -- a_n ... a_0 a_n ) copy n-th stack item
+@ : PICK 1+ 4* DSP@ + @ ;
+defcode "PICK",4,,PICK
+        POPDSP r0               @ ( a_n ... a_0 ), r0 = n
+        ldr r1, [DSP,r0,LSL #2] @ ( a_n ... a_0 ), r0 = n, r1 = a_n
+        PUSHDSP r1              @ ( a_n ... a_0 a_n ), r0 = n, r1 = a_n
+        NEXT
 
 @ ?DUP ( 0 -- 0 | a -- a a ) duplicates if non-zero
 defcode "?DUP", 4,,QDUP
-        @ (x --)
-        ldr r0, [DSP]           @ r0 = x
-        cmp r0, #0              @ test if x==0
-        strne r0, [DSP, #-4]!   @ copy if x!=0
+        ldr r0, [DSP]           @ r0 = a
+        cmp r0, #0              @ test if a==0
+        strne r0, [DSP, #-4]!   @ copy if a!=0
         NEXT                    @ ( a a | 0 )
 
 @ : 1+ ( n -- n+1 ) 1 + ;  \  increments the top element

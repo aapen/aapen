@@ -69,12 +69,15 @@ The following words are pre-defined in _pijFORTHos_
 | `DROP` | ( a -- ) | drop the top element of the stack |
 | `SWAP` | ( a b -- b a ) | swap the two top elements |
 | `DUP` | ( a -- a a ) | duplicate the top element |
-| `OVER` | ( a b c -- a b c b ) | push the second element on top |
+| `OVER` | ( a b -- a b a ) | push copy of second element on top |
 | `ROT` | ( a b c -- b c a ) | stack rotation |
 | `-ROT` | ( a b c -- c a b ) | backwards rotation |
 | `2DROP` | ( a b -- ) | drop the top two elements of the stack |
 | `2DUP` | ( a b -- a b a b ) | duplicate top two elements of stack |
 | `2SWAP` | ( a b c d -- c d a b ) | swap top two pairs of elements of stack |
+| `NIP` | ( a b -- b ) | drop the second element of the stack |
+| `TUCK` | ( a b -- b a b ) | push copy of top element below second |
+| `PICK` | ( a_n ... a_0 n -- a_n ... a_0 a_n ) | copy n-th stack item |
 | `?DUP` | ( 0 -- 0 &#124; a -- a a ) | duplicate if non-zero |
 | `1+` | ( n -- n+1 ) | increment the top element |
 | `1-` | ( n -- n-1 ) | decrement the top element |
@@ -222,11 +225,7 @@ The following words are defined in `jonesforth.f`
 | Word | Stack | Description |
 |------|-------|-------------|
 | `( comment text ) ` | ( -- ) | comment inside definition |
-| `NIP` | ( x y -- y ) | `SWAP DROP` |
-| `TUCK` | ( x y -- y x y ) | `SWAP OVER` |
-| `PICK` | ( x_n ... x_0 n -- x_n ... x_0 x_n ) | `DUP` n-th stack item |
 | `SPACES` | ( n -- ) | print n spaces |
-| `# value` | ( b -- n ) | interpret base-b literal value w/o changing `BASE` |
 | `WITHIN` | ( a b c -- p ) | where p = ((a >= b) && (a < c)) |
 | `ALIGNED` | ( addr -- addr' ) | round addr up to next 4-byte boundary |
 | `ALIGN` | ( -- ) | align the `HERE` pointer |
@@ -253,5 +252,6 @@ The following words are defined in `jonesforth.f`
 | `OCTAL` | ( -- ) | set number conversion BASE to 8 |
 | `2# value` | ( -- n ) | interpret binary literal value w/o changing BASE |
 | `8# value` | ( -- n ) | interpret hexadecimal literal value w/o changing BASE |
+| `# value` | ( b -- n ) | interpret base-b literal value w/o changing `BASE` |
 | `PRINT-STACK-TRACE` | ( -- ) | walk up return stack printing values |
 | `UNUSED` | ( -- n ) | calculate number of cells remaining in user memory |
