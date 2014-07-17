@@ -80,6 +80,12 @@ GET_PC:			@ u32 GET_PC();
 BRANCH_TO:		@ void BRANCH_TO(u32 addr);
 	bx	r0
 
+	.globl SPIN
+SPIN:			@ void SPIN(u32 count);
+	subs	r0, #1		@ decrement count
+	bge	SPIN		@ until negative
+	bx	lr
+
 	.globl asm_copy32
 asm_copy32:		@ void asm_copy32(u32* dst, u32* src, int len);
 	push	{r0-r12,lr}	@ save everything on the stack

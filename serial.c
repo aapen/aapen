@@ -56,7 +56,6 @@ serial_init()
 {
 #ifdef USE_SERIAL_UART0
     u32 r0;
-    int n;
 
     PUT_32(UART0_CR, 0);
 
@@ -68,18 +67,10 @@ serial_init()
     PUT_32(GPFSEL1, r0);
 
     PUT_32(GPPUD,0);
-    n = 150;
-    while (n-- > 0) {           // wait for (at least) 150 clock cycles
-        NO_OP();
-    }
-
+    SPIN(150);                  // wait for (at least) 150 clock cycles
     r0 = (1 << 14) | (1 << 15);
     PUT_32(GPPUDCLK0, r0);
-    n = 150;
-    while (n-- > 0) {           // wait for (at least) 150 clock cycles
-        NO_OP();
-    }
-
+    SPIN(150);                  // wait for (at least) 150 clock cycles
     PUT_32(GPPUDCLK0, 0);
 
     PUT_32(UART0_ICR, 0x7FF);
@@ -90,7 +81,6 @@ serial_init()
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
     u32 r0;
-    int n;
 
     PUT_32(AUX_ENABLES, 1);
     PUT_32(AUX_MU_IER_REG, 0);
@@ -110,18 +100,10 @@ serial_init()
     PUT_32(GPFSEL1, r0);
 
     PUT_32(GPPUD, 0);
-    n = 150;
-    while (n-- > 0) {           // wait for (at least) 150 clock cycles
-        NO_OP();
-    }
-
+    SPIN(150);                  // wait for (at least) 150 clock cycles
     r0 = (1 << 14) | (1 << 15);
     PUT_32(GPPUDCLK0, r0);
-    n = 150;
-    while (n-- > 0) {           // wait for (at least) 150 clock cycles
-        NO_OP();
-    }
-
+    SPIN(150);                  // wait for (at least) 150 clock cycles
     PUT_32(GPPUDCLK0, 0);
 
     PUT_32(AUX_MU_CNTL_REG, 3);
