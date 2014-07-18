@@ -128,10 +128,10 @@ int
 serial_in()
 {
 #ifdef USE_SERIAL_UART0
-    return UART0[FU_DR];
+    return UART0[FU_DR] & 0xff;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
-    return UART1[MU_IO];
+    return UART1[MU_IO] & 0xff;
 #endif /* USE_SERIAL_UART1 */
 }
 
