@@ -9,44 +9,66 @@
 #define USE_SERIAL_UART0    /* select full UART for serial i/o */
 //#define USE_SERIAL_UART1    /* select mini UART for serial i/o */
 
-#define GPFSEL1         0x20200004
-#define GPSET0          0x2020001c
-#define GPCLR0          0x20200028
-#define GPPUD           0x20200094
-#define GPPUDCLK0       0x20200098
+#define GPIO            ((u32*)0x20200000)
+#define GPFSEL1         0x04
+#define GPSET0          0x1c
+#define GPCLR0          0x28
+#define GPPUD           0x94
+#define GPPUDCLK0       0x98
 
-#define UART0_BASE      0x20201000
-#define UART0_DR        0x20201000
-#define UART0_RSRECR    0x20201004
-#define UART0_FR        0x20201018
-#define UART0_ILPR      0x20201020
-#define UART0_IBRD      0x20201024
-#define UART0_FBRD      0x20201028
-#define UART0_LCRH      0x2020102C
-#define UART0_CR        0x20201030
-#define UART0_IFLS      0x20201034
-#define UART0_IMSC      0x20201038
-#define UART0_RIS       0x2020103C
-#define UART0_MIS       0x20201040
-#define UART0_ICR       0x20201044
-#define UART0_DMACR     0x20201048
-#define UART0_ITCR      0x20201080
-#define UART0_ITIP      0x20201084
-#define UART0_ITOP      0x20201088
-#define UART0_TDR       0x2020108C
+volatile struct uart0 {
+    u32         DR;     //_00;
+    u32         RSRECR; //_04;
+    u32         _08;
+    u32         _0c;
+    u32         _10;
+    u32         _14;
+    u32         FR;     //_18;
+    u32         _1c;
+    u32         ILPR;   //_20;
+    u32         IBRD;   //_24;
+    u32         FBRD;   //_28;
+    u32         LCRH;   //_2c;
+    u32         CR;     //_30;
+    u32         IFLS;   //_34;
+    u32         IMSC;   //_38;
+    u32         RIS;    //_3c;
+    u32         MIS;    //_40;
+    u32         ICR;    //_44;
+    u32         DMACR;  //_48;
+};
+#define UART0           ((struct uart0 *)0x20201000)
 
-#define AUX_ENABLES     0x20215004
-#define AUX_MU_IO_REG   0x20215040
-#define AUX_MU_IER_REG  0x20215044
-#define AUX_MU_IIR_REG  0x20215048
-#define AUX_MU_LCR_REG  0x2021504c
-#define AUX_MU_MCR_REG  0x20215050
-#define AUX_MU_LSR_REG  0x20215054
-#define AUX_MU_MSR_REG  0x20215058
-#define AUX_MU_SCRATCH  0x2021505c
-#define AUX_MU_CNTL_REG 0x20215060
-#define AUX_MU_STAT_REG 0x20215064
-#define AUX_MU_BAUD_REG 0x20215068
+volatile struct uart1 {
+    u32         _00;
+    u32         ENABLES;//_04;
+    u32         _08;
+    u32         _0c;
+    u32         _10;
+    u32         _14;
+    u32         _18;
+    u32         _1c;
+    u32         _20;
+    u32         _24;
+    u32         _28;
+    u32         _2c;
+    u32         _30;
+    u32         _34;
+    u32         _38;
+    u32         _3c;
+    u32         IO;     //_40;
+    u32         IER;    //_44;
+    u32         IIR;    //_48;
+    u32         LCR;    //_4c;
+    u32         MCR;    //_50;
+    u32         LSR;    //_54;
+    u32         MSR;    //_58;
+    u32         _5c;
+    u32         CNTL;   //_60;
+    u32         STAT;   //_64;
+    u32         BAUD;   //_68;
+};
+#define UART1           ((struct uart1 *)0x20215000)
 
 /*
  * Initialize serial UART to use GPIO pins 14 (TX) and 15 (RX)
@@ -57,56 +79,56 @@ serial_init()
 #ifdef USE_SERIAL_UART0
     u32 r0;
 
-    PUT_32(UART0_CR, 0);
+    UART0->CR = 0;
 
-    r0 = GET_32(GPFSEL1);
+    r0 = GPIO[GPFSEL1];
     r0 &= ~(7 << 12);           // gpio pin 14
     r0 |= 4 << 12;              //   alt0 = full UART transmit (TX)
     r0 &= ~(7 << 15);           // gpio pin 15
     r0 |= 4 << 15;              //   alt0 = full UART receive (RX)
-    PUT_32(GPFSEL1, r0);
+    GPIO[GPFSEL1] = r0;
 
-    PUT_32(GPPUD,0);
+    GPIO[GPPUD] = 0;
     SPIN(150);                  // wait for (at least) 150 clock cycles
     r0 = (1 << 14) | (1 << 15);
-    PUT_32(GPPUDCLK0, r0);
+    GPIO[GPPUDCLK0] = r0;
     SPIN(150);                  // wait for (at least) 150 clock cycles
-    PUT_32(GPPUDCLK0, 0);
+    GPIO[GPPUDCLK0] = 0;
 
-    PUT_32(UART0_ICR, 0x7FF);
-    PUT_32(UART0_IBRD, 1);
-    PUT_32(UART0_FBRD, 40);
-    PUT_32(UART0_LCRH, 0x70);
-    PUT_32(UART0_CR, 0x301);
+    UART0->ICR = 0x7FF;
+    UART0->IBRD = 1;
+    UART0->FBRD = 40;
+    UART0->LCRH = 0x70;
+    UART0->CR = 0x301;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
     u32 r0;
 
-    PUT_32(AUX_ENABLES, 1);
-    PUT_32(AUX_MU_IER_REG, 0);
-    PUT_32(AUX_MU_CNTL_REG, 0);
-    PUT_32(AUX_MU_LCR_REG, 3);
-    PUT_32(AUX_MU_MCR_REG, 0);
-    PUT_32(AUX_MU_IER_REG, 0);
-    PUT_32(AUX_MU_IIR_REG, 0xc6);
+    UART1->ENABLES = 1;
+    UART1->IER = 0;
+    UART1->CNTL = 0;
+    UART1->LCR = 3;
+    UART1->MCR = 0;
+    UART1->IER = 0;
+    UART1->IIR = 0xc6;
     /* ((250,000,000 / 115200) / 8) - 1 = 270 */
-    PUT_32(AUX_MU_BAUD_REG, 270);
+    UART1->BAUD = 270;
 
-    r0 = GET_32(GPFSEL1);
+    r0 = GPIO[GPFSEL1];
     r0 &= ~(7 << 12);           // gpio pin 14
     r0 |= 2 << 12;              //   alt5 = mini UART transmit (TX)
     r0 &= ~(7 << 15);           // gpio pin 15
     r0 |= 2 << 15;              //   alt5 = mini UART receive (RX)
-    PUT_32(GPFSEL1, r0);
+    GPIO[GPFSEL1] = r0;
 
-    PUT_32(GPPUD, 0);
+    GPIO[GPPUD] = 0;
     SPIN(150);                  // wait for (at least) 150 clock cycles
     r0 = (1 << 14) | (1 << 15);
-    PUT_32(GPPUDCLK0, r0);
+    GPIO[GPPUDCLK0] = r0;
     SPIN(150);                  // wait for (at least) 150 clock cycles
-    PUT_32(GPPUDCLK0, 0);
+    GPIO[GPPUDCLK0] = 0;
 
-    PUT_32(AUX_MU_CNTL_REG, 3);
+    UART1->CNTL = 3;
 #endif /* USE_SERIAL_UART1 */
 }
 
@@ -117,10 +139,10 @@ int
 serial_in_ready()
 {
 #ifdef USE_SERIAL_UART0
-    return (GET_32(UART0_FR) & 0x10) == 0;
+    return (UART0->FR & 0x10) == 0;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
-    return (GET_32(AUX_MU_LSR_REG) & 0x01) != 0;
+    return (UART1->LSR & 0x01) != 0;
 #endif /* USE_SERIAL_UART1 */
 }
 
@@ -131,10 +153,10 @@ int
 serial_in()
 {
 #ifdef USE_SERIAL_UART0
-    return GET_32(UART0_DR);
+    return UART0->DR;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
-    return GET_32(AUX_MU_IO_REG);
+    return UART1->IO;
 #endif /* USE_SERIAL_UART1 */
 }
 
@@ -145,10 +167,10 @@ int
 serial_out_ready()
 {
 #ifdef USE_SERIAL_UART0
-    return (GET_32(UART0_FR) & 0x20) == 0;
+    return (UART0->FR & 0x20) == 0;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
-    return (GET_32(AUX_MU_LSR_REG) & 0x20) != 0;
+    return (UART1->LSR & 0x20) != 0;
 #endif /* USE_SERIAL_UART1 */
 }
 
@@ -159,11 +181,11 @@ int
 serial_out(u8 data)
 {
 #ifdef USE_SERIAL_UART0
-    PUT_32(UART0_DR, (u32)data);
+    UART0->DR = (u32)data;
     return (int)data;
 #endif /* USE_SERIAL_UART0 */
 #ifdef USE_SERIAL_UART1
-    PUT_32(AUX_MU_IO_REG, (u32)data);
+    UART1->IO = (u32)data);
     return (int)data;
 #endif /* USE_SERIAL_UART1 */
 }

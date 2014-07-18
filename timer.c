@@ -6,8 +6,21 @@
  */
 #include "timer.h"
 
-#define ARM_TIMER_CTL   0x2000B408
-#define ARM_TIMER_CNT   0x2000B420
+volatile struct timer {
+    u32         _00;
+    u32         _04;
+    u32         CTL;    //_08;
+    u32         _0c;
+    u32         _10;
+    u32         _14;
+    u32         _18;
+    u32         _1c;
+    u32         CNT;    //_20;
+    u32         _24;
+    u32         _28;
+    u32         _2c;
+};
+#define TIMER           ((struct timer *)0x2000b400)
 
 /*
  * Initialize 1Mhz timer
@@ -15,8 +28,8 @@
 void
 timer_init()
 {
-    PUT_32(ARM_TIMER_CTL, 0x00F90000);  // 0xF9+1 = 250
-    PUT_32(ARM_TIMER_CTL, 0x00F90200);  // 250MHz/250 = 1MHz
+    TIMER->CTL = 0x00F90000;    // 0xF9+1 = 250
+    TIMER->CTL = 0x00F90200;    // 250MHz/250 = 1MHz
 }
 
 /*
@@ -25,7 +38,7 @@ timer_init()
 int
 timer_usecs()
 {
-    return GET_32(ARM_TIMER_CNT);
+    return TIMER->CNT;
 }
 
 /*
