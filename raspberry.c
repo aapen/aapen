@@ -275,7 +275,7 @@ k_start(u32 sp)
     putchar(wait_for_kb());
 
     // display banner
-    serial_puts("pijFORTHos 0.1.7 ");
+    serial_puts("pijFORTHos 0.1.8 ");
     serial_puts("sp=0x");
     serial_hex32(sp);
     serial_eol();
