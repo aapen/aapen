@@ -35,6 +35,8 @@ a terminal program on the host machine allows access to the FORTH console.
 
 ## Build and run instructions
 
+_**NOTE**: HEAD is in active development, for a stable version the latest release is recommended._
+
 If you are building on the RPi, just type:
 
     $ make clean all
