@@ -6,7 +6,7 @@
  */
 #include "timer.h"
 
-volatile struct timer {
+struct timer {
     u32         _00;
     u32         _04;
     u32         CTL;    //_08;
@@ -20,7 +20,7 @@ volatile struct timer {
     u32         _28;
     u32         _2c;
 };
-#define TIMER           ((struct timer *)0x2000b400)
+#define TIMER           ((volatile struct timer *)0x2000b400)
 
 /*
  * Initialize 1Mhz timer
