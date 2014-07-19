@@ -128,5 +128,5 @@ rcv_xmodem(u8* buf, int limit)
     serial_write(CAN);  // I tell you three times...
     serial_write(CAN);
     serial_write(CAN);
-    return -1;  // FAIL!
+    return 0;  // FAIL!
 }

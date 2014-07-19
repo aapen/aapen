@@ -107,5 +107,5 @@ From FORTH you can UPLOAD a new kernel image and BOOT it.
     UPLOAD   \ initiate XMODEM file transfer
     BOOT     \ jump to upload buffer address
 
-If the UPLOAD fails it will report a length of -1
+If the UPLOAD fails it reports a length of 0
 and BOOT will print an error message.

@@ -1735,8 +1735,8 @@ defcode "DUMP",4,,DUMP
 @ BOOT ( addr len -- ) Boot from memory image (see UPLOAD)
 defcode "BOOT",4,,BOOT
         POP2 DSP                @ ( ), r1 = addr, r0 = len
-        cmp r0, #0              @ len = -1 on upload failure
-        bxge r1                 @ jump to boot address if len >= 0
+        cmp r0, #0              @ len = 0 on upload failure
+        bxgt r1                 @ jump to boot address if len > 0
         ldr r0, =errboot
         mov r1, #(errbootend-errboot)
         bl _TELL                @ write error message to console
