@@ -51,31 +51,6 @@ GET_32:			@ u32 GET_32(u32 addr);
 	ldr	r0, [r0]
 	bx	lr
 
-	.globl PUT_16
-PUT_16:			@ void PUT_32(u32 addr, u16 data);
-	strh	r1, [r0]
-	bx	lr
-
-	.globl GET_16
-GET_16:			@ u16 GET_16(u32 addr);
-	ldrh	r0, [r0]
-	bx	lr
-
-	.globl PUT_8
-PUT_8:			@ void PUT_32(u32 addr, u8 data);
-	strb	r1, [r0]
-	bx	lr
-
-	.globl GET_8
-GET_8:			@ u8 GET_8(u32 addr);
-	ldrb	r0, [r0]
-	bx	lr
-
-	.globl GET_PC
-GET_PC:			@ u32 GET_PC();
-	mov	r0,lr
-	bx	lr
-
 	.globl BRANCH_TO
 BRANCH_TO:		@ void BRANCH_TO(u32 addr);
 	bx	r0
@@ -85,13 +60,3 @@ SPIN:			@ void SPIN(u32 count);
 	subs	r0, #1		@ decrement count
 	bge	SPIN		@ until negative
 	bx	lr
-
-	.globl asm_copy32
-asm_copy32:		@ void asm_copy32(u32* dst, u32* src, int len);
-	push	{r0-r12,lr}	@ save everything on the stack
-1:	ldmia	r1!, {r3-r10}	@ read 8 words
-	stmia	r0!, {r3-r10}	@ write 8 words
-	subs	r2, #32		@ decrement len
-	bgt	1b		@ more to copy?
-	pop	{r0-r12,pc}	@ restore everything and return
-

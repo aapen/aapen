@@ -15,7 +15,6 @@ extern u32 GET_32(u32 addr);
 extern void NO_OP();
 extern void SPIN(u32 count);
 extern void BRANCH_TO(u32 addr);
-extern void asm_copy32(u32* dst, u32* src, int len);
 
 /* Macros to enhance efficiency */
 #define PUT_32(addr, data)      (*((volatile u32*)(addr)) = (data))
