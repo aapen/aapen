@@ -1324,13 +1324,12 @@ _DIVMOD:                        @ Integer Divide/Modulus
 
         bx lr
 
-@ on entry r0=integer r1=base r2=buffer r3=size
-@ in-use r0=num/mod r1=base r2=div r3=tmp/dig r4=pad r5=end
-@ on exit r0=addr r1=len
+@ on entry r0=integer r1=base
+@ in-use r0=num/mod r1=base r2=div r3=tmp/dig r4=pad
+@ on exit r0=addr r1=len r2=end
 _UFMT:                          @ Unsigned Integer Formatting
-        stmfd   sp!, {r4-r5,lr}         @ save in-use registers
-        add     r4, r2, r3              @ beyond the PAD
-        mov     r5, r4                  @ remember PAD end
+        stmfd   sp!, {r4,lr}            @ save in-use registers
+        ldr     r4, =scratch_pad_top    @ start beyond the PAD
         cmp     r0, r1                  @ if (num >= base)
         bhs     2f                      @ then, do DIVMOD first
         mov     r2, #0                  @ else, initial div = 0
@@ -1346,58 +1345,50 @@ _UFMT:                          @ Unsigned Integer Formatting
         b       1b                      @ convert next digit
 3:
         mov     r0, r4                  @ string address
-        sub     r1, r5, r4              @ string length
-        ldmfd   sp!, {r4-r5,pc}         @ restore registers and return
+        ldr     r2, =scratch_pad_top    @ get PAD end
+        sub     r1, r2, r4              @ string length
+        ldmfd   sp!, {r4,pc}            @ restore registers and return
 
 @ U. ( u -- ) print unsigned number and a trailing space
 defcode "U.",2,,UDOT
         POPDSP  r0                      @ number from stack
+        ldr     r1, =var_BASE           @ address of BASE
+        ldr     r1, [r1]                @ current value of BASE
         bl      _UDOT
         NEXT
 
-@ on entry r0=number
+@ on entry r0=number, r1=base
+@ on exit r0=- r1=base
 _UDOT:
-        stmfd   sp!, {lr}               @ save in-use registers
-        ldr     r1, =var_BASE           @ address of BASE
-        ldr     r1, [r1]                @ current value of BASE
-        ldr     r2, =scratch_pad        @ buffer
-        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
-        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        stmfd   sp!, {r1,lr}            @ save in-use registers
+        bl      _UFMT                   @ (num, base, -, -) ==> (addr, len, end, -)
         bl      _TELL                   @ display number
         mov     r0, #32                 @ space character
         bl      putchar                 @ print trailing space
-        ldmfd   sp!, {pc}               @ restore registers and return
+        ldmfd   sp!, {r1,pc}            @ restore registers and return
 
 @ U.R ( u width -- ) print unsigned number, padded to width
 defcode "U.R",3,,UDOTR
-        POPDSP  r2                      @ width from stack
-        POPDSP  r0                      @ number from stack
-        PUSHDSP r2                      @ width to stack
+        ldr     r0, [DSP, #4]           @ number from stack
         ldr     r1, =var_BASE           @ address of BASE
         ldr     r1, [r1]                @ current value of BASE
-        ldr     r2, =scratch_pad        @ buffer
-        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
-        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
-        POPDSP  r2                      @ width from stack
-        mov     r3, #32                 @ space character
-1:      cmp     r1, r2                  @ while (len < width) {
-        strltb  r3, [r0, #-1]!          @     *(--addr) = ' ';
-        addlt   r1, r1, #1              @     ++len;
-        blt     1b                      @ }
-        bl      _TELL                   @ display number
+        bl      _UFMT                   @ (num, base, -, -) ==> (addr, len, end, -)
+        ldr     r2, [DSP]               @ width from stack
+        bl      _DOTR                   @ (addr, len, width, -) ==> (addr, len, width, -)
+        add     DSP, DSP, #8            @ remove number and width before return
         NEXT
 
-@ on entry r0=integer r1=base r2=buffer r3=size
-@ on exit r0=addr r1=len
+@ on entry r0=integer r1=base
+@ on exit r0=addr r1=len r2=end
 _DFMT:                          @ Signed Integer Formatting
         stmfd   sp!, {lr}               @ save in-use registers
         movs    r0, r0                  @ check sign of number
         blt     1f                      @ if num < 0, jump to negative case
-        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        bl      _UFMT                   @ (num, base, -, -) ==> (addr, len, end, -)
         ldmfd   sp!, {pc}               @ restore registers and return
 1:
         rsb     r0, r0, #0              @ num = -num
-        bl      _UFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        bl      _UFMT                   @ (num, base, -, -) ==> (addr, len, end, -)
         mov     r3, #45                 @ tmp = '-'
         strb    r3, [r0, #-1]!          @ *(--addr) = tmp
         add     r1, r1, #1              @ ++len
@@ -1406,40 +1397,43 @@ _DFMT:                          @ Signed Integer Formatting
 @ . ( n -- ) print signed number and a trailing space
 defcode ".",1,,DOT
         POPDSP  r0                      @ number from stack
+        ldr     r1, =var_BASE           @ address of BASE
+        ldr     r1, [r1]                @ current value of BASE
         bl      _DOT
         NEXT
 
-@ on entry r0=number
+@ on entry r0=number, r1=base
+@ on exit r0=- r1=base
 _DOT:
-        stmfd   sp!, {lr}               @ save in-use registers
-        ldr     r1, =var_BASE           @ address of BASE
-        ldr     r1, [r1]                @ current value of BASE
-        ldr     r2, =scratch_pad        @ buffer
-        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
-        bl      _DFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
+        stmfd   sp!, {r1,lr}            @ save in-use registers
+        bl      _DFMT                   @ (num, base, -, -) ==> (addr, len, end, -)
         bl      _TELL                   @ display number
         mov     r0, #32                 @ space character
         bl      putchar                 @ print trailing space
-        ldmfd   sp!, {pc}               @ restore registers and return
+        ldmfd   sp!, {r1,pc}            @ restore registers and return
 
 @ .R ( n width -- ) print signed number, padded to width
 defcode ".R",2,,DOTR
-        POPDSP  r2                      @ width from stack
-        POPDSP  r0                      @ number from stack
-        PUSHDSP r2                      @ width to stack
+        ldr     r0, [DSP, #4]           @ number from stack
         ldr     r1, =var_BASE           @ address of BASE
         ldr     r1, [r1]                @ current value of BASE
-        ldr     r2, =scratch_pad        @ buffer
-        mov     r3, #(scratch_pad_top-scratch_pad)  @ size
-        bl      _DFMT                   @ (num, base, buf, size) ==> (addr, len, -, -)
-        POPDSP  r2                      @ width from stack
+        bl      _DFMT                   @ (num, base, -, -) ==> (addr, len, end, -)
+        ldr     r2, [DSP]               @ width from stack
+        bl      _DOTR                   @ (addr, len, width, -) ==> (addr, len, width, -)
+        add     DSP, DSP, #8            @ remove number and width before return
+        NEXT
+
+@ on entry r0=addr r1=len r2=width
+@ on exit r0=addr r1=len r2=width
+_DOTR:                          @ Pad to field width
+        stmfd   sp!, {lr}               @ save in-use registers
         mov     r3, #32                 @ space character
 1:      cmp     r1, r2                  @ while (len < width) {
         strltb  r3, [r0, #-1]!          @     *(--addr) = ' ';
         addlt   r1, r1, #1              @     ++len;
         blt     1b                      @ }
         bl      _TELL                   @ display number
-        NEXT
+        ldmfd   sp!, {pc}               @ restore registers and return
 
 @ ? ( addr -- ) fetch and print signed number at addr
 @ : @ . ;
@@ -1473,13 +1467,13 @@ defcode ".S",2,,DOTS
         ldr     r0, [r5, #-4]!          @     item = *--location
         cmp     r5, r4                  @     if (location < top)
         blt     3f                      @         goto EXIT
-        bl      _DOT                    @     print item
+        bl      _DOT                    @     print item (preserves r1)
         b       1b                      @ }
 2:                                      @ LOOP {  // unsigned
         ldr     r0, [r5, #-4]!          @     item = *--location
         cmp     r5, r4                  @     if (location < top)
         blt     3f                      @         goto EXIT
-        bl      _UDOT                   @     print item
+        bl      _UDOT                   @     print item (preserves r1)
         b       2b                      @ }
 3:                                      @ EXIT:
         ldmfd   sp!, {r4-r5}            @ restore registers (from the stack)
@@ -1488,18 +1482,11 @@ defcode ".S",2,,DOTS
 
 @ Alternative to DIVMOD: signed implementation using Euclidean division.
 defcode "S/MOD",5,,SDIVMOD
-        @ Denominator
-        POPDSP r2
-        @ Numerator
-        POPDSP r1
-
+        POPDSP r2                       @ Denominator
+        POPDSP r1                       @ Numerator
         bl _SDIVMOD
-
-        @ Remainder
-        PUSHDSP r1
-        @ Quotient
-        PUSHDSP r0
-
+        PUSHDSP r1                      @ Remainder
+        PUSHDSP r0                      @ Quotient
         NEXT
 
 _SDIVMOD:
