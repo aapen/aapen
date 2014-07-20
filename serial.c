@@ -12,7 +12,7 @@
 #define GPIO_BASE       0x20200000
 #define GPFSEL1         (*((volatile u32*)(GPIO_BASE + 0x04)))
 #define GPSET0          (*((volatile u32*)(GPIO_BASE + 0x1c)))
-#define GPCLR0          (*(((volatile u32*)(GPIO_BASE + 0x28)))
+#define GPCLR0          (*((volatile u32*)(GPIO_BASE + 0x28)))
 #define GPPUD           (*((volatile u32*)(GPIO_BASE + 0x94)))
 #define GPPUDCLK0       (*((volatile u32*)(GPIO_BASE + 0x98)))
 
