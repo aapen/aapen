@@ -140,7 +140,7 @@ Deciding how much gap to use depends on what comes next.
 It is much easier to attach gaps as a suffix to characters and letters,
 and to treat the word-gap as a distinct "space" character.
 ~~~
-: units 50 msecs * ;            \ units ( n -- dt ) convert dot-units to timer offset
+: units 50 msecs * ;            \ units ( n -- dt ) dot-units to timer offset
 : eoc 1 units us ;              \ end of character
 : dit                           \ dot
         '.' EMIT                \       print dot
@@ -185,3 +185,30 @@ in a series of domain-specific languages
 This approach is typical of well-structued FORTH programs.
 The result should be an elegant expression of your solution,
 described in words from the problem-domain.
+
+## Update for Raspberry Pi Model B+
+
+\[_This section was generously provided by Uwe._\]
+
+This model has the LED moved to GPIO pin #47.
+Also the logic here is that the LED goes ON when you set the pin.
+~~~
+16# 20200010 CONSTANT GPFSEL4           \ GPIO function select (pins 40..49)
+16# 00E00000 CONSTANT GPIO47_FSEL       \ GPIO pin 47 function select mask
+16# 00200000 CONSTANT GPIO47_OUT        \ GPIO pin 47 function is output
+
+GPFSEL4 @                               \ read GPIO function selection
+GPIO47_FSEL INVERT AND                  \ clear function for pin 47
+GPIO47_OUT OR                           \ set function to output
+GPFSEL4 !                               \ write GPIO function selection
+
+16# 20200020 CONSTANT GPSET1            \ GPIO pin output set (pins 32..53)
+16# 2020002C CONSTANT GPCLR1            \ GPIO pin output clear (pins 32..53)
+16# 00008000 CONSTANT GPIO47_PIN        \ GPIO pin 47 set/clear
+
+: +gpio47 GPIO47_PIN GPSET1 ! ;         \ set GPIO pin 47
+: -gpio47 GPIO47_PIN GPCLR1 ! ;         \ clear GPIO pin 47
+
+: LED_ON +gpio47 ;                      \ turn on ACT/OK LED (set 47)
+: LED_OFF -gpio47 ;                     \ turn off ACT/OK LED (clear 47)
+~~~
