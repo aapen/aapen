@@ -188,7 +188,7 @@ described in words from the problem-domain.
 
 ## Update for Raspberry Pi Model B+
 
-\[_This section was generously provided by Uwe._\]
+\[_This section was generously provided by [Uwe Lange](https://github.com/ul5255)._\]
 
 This model has the LED moved to GPIO pin #47.
 Also the logic here is that the LED goes ON when you set the pin.
