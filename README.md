@@ -41,6 +41,13 @@ If you are building on the RPi, just type:
 
     $ make clean all
 
+If you're cross-compiling, type:
+
+    $ CROSS=arm-linux-gnueabi- clean all
+
+...where CROSS corresponds to the ARM cross-compiler
+toolchain you have installed.
+
 If you can't compile (or cross-compile) from source,
 you can use the pre-built `kernel.img` file.
 

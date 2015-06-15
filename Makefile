@@ -2,9 +2,11 @@
 # Makefile for pijFORTHos -- Raspberry Pi JonesFORTH Operating System
 #
 
-AS=	as
-CC=	gcc -g -Wall -O2 -nostdlib -nostartfiles -ffreestanding
-LD=	ld
+AS=	$(CROSS)as
+CC=	$(CROSS)gcc -g -Wall -O2 -nostdlib -nostartfiles -ffreestanding
+LD=	$(CROSS)ld
+OBJDUMP = $(CROSS)objdump
+OBJCOPY = $(CROSS)objcopy
 
 KOBJS=	start.o jonesforth.o raspberry.o timer.o serial.o xmodem.o
 
@@ -21,10 +23,10 @@ jonesforth.o: jonesforth.s
 
 kernel.img: loadmap $(KOBJS)
 	$(LD) $(KOBJS) -T loadmap -o pijFORTHos.elf
-	objdump -D pijFORTHos.elf > pijFORTHos.list
-	objcopy pijFORTHos.elf -O ihex pijFORTHos.hex
-	objcopy --only-keep-debug pijFORTHos.elf kernel.sym
-	objcopy pijFORTHos.elf -O binary kernel.img
+	$(OBJDUMP) -D pijFORTHos.elf > pijFORTHos.list
+	$(OBJCOPY) pijFORTHos.elf -O ihex pijFORTHos.hex
+	$(OBJCOPY) --only-keep-debug pijFORTHos.elf kernel.sym
+	$(OBJCOPY) pijFORTHos.elf -O binary kernel.img
 
 .c.o:
 	$(CC) -c $<
