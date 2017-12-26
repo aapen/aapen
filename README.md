@@ -19,7 +19,7 @@ See the `/firmware/` directory for local copies used in the build process.
 
 ## What is this ?
 
-_pijFORTHos_ is a bare-metal FORTH interpreter for the Raspberry Pi.
+_pijFORTHos_ is a bare-metal FORTH interpreter for the [Raspberry Pi](https://en.wikipedia.org/wiki/Raspberry_Pi) (original, Model B).
 It follows the general strategy given by David Welch's
 [excellent examples](https://github.com/dwelch67/raspberrypi).
 A simple [bootloader](/doc/bootload.md#bootloader) is built in,
