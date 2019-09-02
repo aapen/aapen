@@ -252,6 +252,11 @@ var_\name :
                 mvn r0, #0
                 PUSHDSP r0
                 NEXT
+@  ANS FORTH says that the comparison words should return
+@  all (binary) 1's for TRUE and all 0's for FALSE.
+@  JonesForth chose to use the C-language convention instead.
+@  We prefer the ANS recommendation in this implementation.
+@  Code that just uses TRUE and FALSE will work as expected.
 
 
 @ DROP ( a -- ) drops the top element of the stack
