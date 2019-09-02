@@ -38,7 +38,7 @@ Here is an example using the `BASE` variable:
 
 Constants are words that place pre-defined value on the stack.
 They are useful mnemonics and help us avoid "magic" numbers in our code.
-The following constants are pre-defined in _pijFORTHos_
+The following constants are pre-defined in _pijFORTHos_:
 
 | Variable | Description |
 |----------|-------------|
@@ -49,9 +49,10 @@ The following constants are pre-defined in _pijFORTHos_
 | `F_IMMED` | The IMMEDIATE flag's actual value. |
 | `F_HIDDEN` | The HIDDEN flag's actual value. |
 | `F_LENMASK` | The length mask in the flags/len byte. |
-| `FALSE` | Boolean predicate False (0) |
-| `TRUE` | Boolean predicate True (-1), anything != 0 is TRUE |
+| `FALSE` | Boolean predicate False (0), only == 0 is False |
+| `TRUE` | Boolean predicate True (-1), anything != 0 is True |
 
+Following ANS recommendations, `FALSE` is all-bits-clear and `TRUE` is all-bits-set. 
 Given the relationship between `HERE` and `PAD`,
 the following calculates the number of free memory cells available:
 
