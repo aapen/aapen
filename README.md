@@ -1,3 +1,5 @@
+NOTE: this fork is currently broken. I'm attempting to port this from RPi 1 to RPi 4... it's a totally different architecture so the boot code is different, the interrupt controller is different, timers are different, etc.
+
 # Raspberry Pi JonesFORTH O/S
 
 A bare-metal operating system for Raspberry Pi,
@@ -32,10 +34,11 @@ using a [USB-to-Serial cable](http://www.adafruit.com/products/954).
 When the RPi is powered on (I provide power through the cable),
 a terminal program on the host machine allows access to the FORTH console.
 
+## Board support
+
+Currently supports Raspberry Pi 1a+ only.
 
 ## Build and run instructions
-
-_**NOTE**: HEAD is in active development, for a stable version the latest release is recommended._
 
 If you are building on the RPi, just type:
 
@@ -84,6 +87,16 @@ The console will be waiting for an input, press `<ENTER>`. You should then see:
 
     pijFORTHos <version> sp=0x00008000
 
+## Running under emulation
+
+You can install the QEMU ARM support package, then run:
+
+    make emulate
+    
+This will start `qemu-system-arm` (32-bit mode) emulating a Raspberry Pi model 1a+
+with its serial I/O connected to your terminal's stdin/stdout.
+
+(This seems to work right up until GPIO or timers are needed. The blinker sample hangs on `3 secs us 33 EMIT`.)
 
 ## Where to go from HERE ?
 
