@@ -1,5 +1,17 @@
 NOTE: this fork is currently broken. I'm attempting to port this from RPi 1 to RPi 4... it's a totally different architecture so the boot code is different, the interrupt controller is different, timers are different, etc.
 
+Currently working:
+
+- Build instructions
+- Running under emulation
+- Debugging under emulation
+- Downloading firmware
+
+Currently not working:
+
+- Running on hardware
+- Forth
+
 # Raspberry Pi JonesFORTH O/S
 
 A bare-metal operating system for Raspberry Pi,
@@ -16,8 +28,7 @@ The algorithm for our unsigned DIVMOD instruction is extracted from 'ARM
 Software Development Toolkit User Guide v2.50' published by ARM in 1997-1998
 
 Firmware files to make bootable images are maintained at <https://github.com/raspberrypi/firmware>.
-See the `/firmware/` directory for local copies used in the build process.
-
+A script in this repository will download these for you.
 
 ## What is this ?
 
@@ -36,39 +47,45 @@ a terminal program on the host machine allows access to the FORTH console.
 
 ## Board support
 
-Currently supports Raspberry Pi 1a+ only.
+Currently supports Raspberry Pi 3b only.
 
 ## Build and run instructions
 
-If you are building on the RPi, just type:
+### One-time host setup for cross-compilation
 
-    $ make clean all
+Install [Crosstool-NG](https://crosstool-ng.github.io/docs/) on your host.
+
+Use it to build a toolchain for `aarch64-unknown-linux-gnu`:
+
+    $ ct-ng aarch64-unknown-linux-gnu
+
+Then add the resulting toolchain bin directory to your PATH:
+
+    $ PATH=~/x-tool/aarch64-unknown-linux-gnu/bin:$PATH
+
+### One-time project setup for firmware
+
+Get the firmware binaries from https://github.com/raspberrypi/firmware
+
+    $ ./scripts/fetch_firmware.sh
+
+### Building Forth
 
 If you're cross-compiling, type:
 
-    $ CROSS=arm-linux-gnueabi- clean all
+    $ make clean all
 
-...where CROSS corresponds to the ARM cross-compiler
-toolchain you have installed.
-
-If you can't compile (or cross-compile) from source,
-you can use the pre-built `kernel.img` file.
-
-Next, copy the firmware and kernel to a blank SD card, for example:
+Next, copy the firmware and kernel to a blank FAT32-formatted SD card, for example:
 
     $ cp firmware/* /media/<SD-card>/
-    $ cp kernel.img /media/<SD-card>/
+    $ cp kernel8.img /media/<SD-card>/
+    $ cp sdfiles/config.txt /media/<SD-card>/
 
-The end state for the SD card is to have a FAT32 filesystem on it with the following files:
-
-    bootcode.bin
-    start.elf
-    kernel.img
-
-Put the prepared SD card into the RPi,
-connect the USB-to-Serial cable
+Put the prepared SD card into the RPi, connect the USB-to-Serial cable
 (see [RPi Serial Connection](http://elinux.org/RPi_Serial_Connection) for more details),
 and power-up to the console.
+
+
 
 To get to the console, you'll need to connect. Here are two ways to try:
 
@@ -93,10 +110,26 @@ You can install the QEMU ARM support package, then run:
 
     make emulate
     
-This will start `qemu-system-arm` (32-bit mode) emulating a Raspberry Pi model 1a+
+This will start `qemu-system-aarch64` emulating a Raspberry Pi model 3b
 with its serial I/O connected to your terminal's stdin/stdout.
 
-(This seems to work right up until GPIO or timers are needed. The blinker sample hangs on `3 secs us 33 EMIT`.)
+You can use the Crosstool-built version of GDB to debug the
+QEMU-hosted binary. In one terminal window, run:
+
+    $ make debug_emulate
+
+This will tell QEMU to allow GDB remote debugging, and to wait until
+the debugger is attached before running the software. To attach GDB,
+in another terminal, run:
+
+    $ aarch64-unknown-linux-gnu-gdb kernel8.elf
+    (gdb) target remote localhost:1234
+    (gdb) layout split
+    (gdb) break _start
+    (gdb) continue
+
+Use `stepi` (or `si` for short) to step by assembly instruction or
+`step` to step by source line.
 
 ## Where to go from HERE ?
 

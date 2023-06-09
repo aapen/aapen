@@ -5,3 +5,4 @@
 *.elf
 *.img
 a.out
+firmware/*
