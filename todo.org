@@ -1,0 +1,24 @@
+* Milestone: Run a kernel
+** DONE Perform "Hello world" as RPi3 under QEMU
+** NEXT Perform "Hello world" on RPi3 hardware
+** TODO Perform "Hello world" on RPi4 hardware
+* Milestone: Interact
+** TODO Read from serial input on RPi3 under QEMU
+Read and echo characters.
+This will actually be the host machine's keyboard in a terminal, proxied to the PL011 UART in the emulated device.
+** TODO Read from serial input on RPi3 & RPi4 hardware
+Read and echo characters.
+** TODO Read from USB keyboard input on RPi3 & RPi4 hardware
+Read and echo characters.
+* Milestone: Get Ziggy
+** TODO Replace C stubs with equivalent Zig
+** TODO Use Zig cross-compilation instead of crosstools
+* Milestone: Show the World
+** TODO Read from USB keyboard on RPi 400
+** TODO Initialize video system on RPi 400
+HDMI output, videocode
+** TODO Clear screen on RPi 400
+** TODO Display a text cursor
+** TODO Write characters to the screen
+** TODO Echo typed characters to the screen
+* Milestone: Set Forth
