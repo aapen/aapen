@@ -24,7 +24,7 @@ return is not a concern.
 
 Per https://www.qemu.org/docs/master/about/emulation.html#semihosting,
 we can use ~SYS_EXIT~ (0x18) as the operation number. The parameter in
-X0 points to a 2 a struct of 2 u64's which indicates /why/ the exit is
+X1 points to a 2 a struct of 2 u64's which indicates /why/ the exit is
 taken. We will use ~ADP_Stopped_ApplicationExit~ (0x20026) for
 field 1. Field 2 will have the exit status code we want to
 signal. QEMU will then use that status code as it's own exit code, so
