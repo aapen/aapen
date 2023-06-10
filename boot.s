@@ -21,7 +21,7 @@ _start:
 
         // Initialize BSS section to zero
         ldr x0, =__bss_start
-        ldr w1, =__bss_end
+        ldr w1, =__bss_end_exclusive
 
 .L_bss_init_loop:
         cmp x0, x1
@@ -31,14 +31,16 @@ _start:
 
 .L_initialize_stack:
         // Initialize stack
-        // (for now) the stack starts at _start and grows downward.
-        // this is limiting... once we're in kernel space we will
-        // reset this
-        ldr x1, =_start
-        mov sp, x1
+        adrp x0, __boot_core_stack_end_exclusive
+        add  x0, x0, #:lo12:__boot_core_stack_end_exclusive
+        mov sp, x0
 
         // Jump to main()
-        b main
+        bl main
+
+        // TEMP: tell QEMU to quit
+        ldr x2,=0
+        bl _qemu_exit
 
         // if main returns, fall through to park the core
 

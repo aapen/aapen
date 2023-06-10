@@ -19,7 +19,7 @@ OBJCOPY = $(CROSS)objcopy
 QEMU_EXEC       = qemu-system-aarch64
 QEMU_BOARD_ARGS = -M raspi3b
 QEMU_DEBUG_ARGS = -s -S
-QEMU_TEST_ARGS  = -serial stdio -display none
+QEMU_TEST_ARGS  = -serial stdio -display none -semihosting
 
 CFILES = $(wildcard *.c)
 SFILES = $(wildcard *.s)
@@ -33,8 +33,8 @@ all: kernel8.img
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-kernel8.elf: $(OFILES)
-	$(LD) $(LDFLAGS) $(OFILES) -T linker.ld -o kernel8.elf
+kernel8.elf: $(OFILES) kernel.ld
+	$(LD) $(LDFLAGS) $(OFILES) -T kernel.ld -o kernel8.elf
 
 kernel8.img: kernel8.elf
 	$(OBJCOPY) kernel8.elf -O binary kernel8.img
