@@ -6,6 +6,8 @@
 CONST_CORE_ID_MASK = 0b11
 BOOT_CORE_ID       =    0
 
+        .globl _start
+        .type  _start,@function
 _start:
         // Check we are on the main core
         //
@@ -36,7 +38,7 @@ _start:
         mov sp, x0
 
         // Jump to main()
-        bl main
+        bl kernel_main
 
         // TEMP: tell QEMU to quit
         // At the moment this is unconditional and will also be
