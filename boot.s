@@ -39,10 +39,11 @@ _start:
         bl main
 
         // TEMP: tell QEMU to quit
+        // At the moment this is unconditional and will also be
+        // compiled into builds for hardware. This should migrate to a
+        // test harness that only runs under emulation.
         ldr x2,=0
         bl _qemu_exit
-
-        // if main returns, fall through to park the core
 
         // Park the core
 .L_parking_loop:
