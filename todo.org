@@ -1,3 +1,42 @@
+* Quality of Life
+** NEXT Figure out how to have the system under test exit QEMU
+This will be useful for writing tests
+*** Notes & References
+The technique needed is "semihosting". This allows certain traps to
+act as a syscall to communicate with the emulator.
+
+We can use this to tell QEMU to exit with some particular status code.
+
+It is also possible to use this as another text channel, though we
+probably don't want to use it that way. That channel and any messages
+sent on it would never be visible when using real hardware.
+
+According to
+https://www.qemu.org/docs/master/about/emulation.html#semihosting, the
+instruction used differs per ARM processor. Our target devices all use
+Cortex-A series processors in 64-bit mode, so we use ~HLT #0xF000~ to
+invoke the semihosting interface.
+
+Before executing the HLT, we put the "operation number" in W0 and a
+single parameter number in X1. After the HLT, X0 holds the return code
+from the semihosted call, although we mostly want to exit QEMU so
+return is not a concern.
+
+Per https://www.qemu.org/docs/master/about/emulation.html#semihosting,
+we can use ~SYS_EXIT~ (0x18) as the operation number. The parameter in
+X1 points to a 2 a struct of 2 u64's which indicates /why/ the exit is
+taken. We will use ~ADP_Stopped_ApplicationExit~ (0x20026) for
+field 1. Field 2 will have the exit status code we want to
+signal. QEMU will then use that status code as it's own exit code, so
+the parent process can see what the kernel wanted to indicate.
+
+QEMU docs on semihosting: https://www.qemu.org/docs/master/about/emulation.html#semihosting
+
+ARM docs on the semihosting interface: https://github.com/ARM-software/abi-aa/blob/main/semihosting/semihosting.rst
+** TODO Consider a two-stage kernel
+Stage 1 on the SD card
+Stage 2 downloaded via USB after early boot
+This will speed up testing on physical hardware
 * Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** NEXT Perform "Hello world" on RPi3 hardware
@@ -5,11 +44,19 @@
 * Milestone: Interact
 ** TODO Read from serial input on RPi3 under QEMU
 Read and echo characters.
+Polling is fine.
 This will actually be the host machine's keyboard in a terminal, proxied to the PL011 UART in the emulated device.
 ** TODO Read from serial input on RPi3 & RPi4 hardware
 Read and echo characters.
+Polling is fine.
 ** TODO Read from USB keyboard input on RPi3 & RPi4 hardware
 Read and echo characters.
+* Milestone: Memory Manager
+** TODO Set up interrupt table
+** TODO Copy kernel to high mem
+** TODO Set up page translation table
+** TODO Map pages for peripheral IO
+** TODO Enable MMU
 * Milestone: Get Ziggy
 ** TODO Replace C stubs with equivalent Zig
 ** TODO Use Zig cross-compilation instead of crosstools

@@ -21,7 +21,7 @@ _start:
 
         // Initialize BSS section to zero
         ldr x0, =__bss_start
-        ldr w1, =__bss_end
+        ldr w1, =__bss_end_exclusive
 
 .L_bss_init_loop:
         cmp x0, x1
@@ -31,16 +31,19 @@ _start:
 
 .L_initialize_stack:
         // Initialize stack
-        // (for now) the stack starts at _start and grows downward.
-        // this is limiting... once we're in kernel space we will
-        // reset this
-        ldr x1, =_start
-        mov sp, x1
+        adrp x0, __boot_core_stack_end_exclusive
+        add  x0, x0, #:lo12:__boot_core_stack_end_exclusive
+        mov sp, x0
 
         // Jump to main()
-        b main
+        bl main
 
-        // if main returns, fall through to park the core
+        // TEMP: tell QEMU to quit
+        // At the moment this is unconditional and will also be
+        // compiled into builds for hardware. This should migrate to a
+        // test harness that only runs under emulation.
+        ldr x2,=0
+        bl _qemu_exit
 
         // Park the core
 .L_parking_loop:
