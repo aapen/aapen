@@ -4,18 +4,19 @@ const UniformRegister = reg.UniformRegister;
 const peripheral_base: u64 = 0x3f000000; // RPi 3
 //  const peripheral_base: u64 = 0xfe000000;   // RPi 4
 
+//
+//
+// PL011 UART registers and their structures
+//
 const pl011_uart_base: u64 = peripheral_base + 0x201000;
 
-//
-// Registers and their structures
-//
 const pl011_uart_dr_layout = packed struct {
     data: u8,
     framing_error: u1 = 0,
     parity_error: u1 = 0,
     break_error: u1 = 0,
     overrun_error: u1 = 0,
-    unused_reserved: u20 = 0,
+    _unused_reserved: u20 = 0,
 };
 const pl011_uart_dr = UniformRegister(pl011_uart_dr_layout).init(pl011_uart_base + 0x00);
 
