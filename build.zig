@@ -28,5 +28,10 @@ pub fn build(b: *std.Build) void {
     });
 
     objcopy.step.dependOn(&exe.step);
-    b.default_step.dependOn(&objcopy.step);
+
+    const install_elf = b.addInstallFile(exe.getOutputSource(), "kernel8.elf");
+    b.getInstallStep().dependOn(&install_elf.step);
+
+    const install_obj = b.addInstallFile(objcopy.getOutputSource(), "kernel8.img");
+    b.getInstallStep().dependOn(&install_obj.step);
 }
