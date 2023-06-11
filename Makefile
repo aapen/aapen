@@ -13,6 +13,18 @@ GDB_ARGS        = --tui --ex "target remote localhost:1234"
 KERNEL_ELF      = zig-out/kernel8.elf
 KERNEL          = zig-out/kernel8.img
 
+all: init emulate
+
+init: download_firmware dirs
+
+dirs:
+	mkdir -p zig-out
+
+download_firmware: firmware/COPYING.linux
+
+firmware/COPYING.linux:
+	./scripts/fetch_firmware.sh
+
 emulate:
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_TEST_ARGS) -kernel $(KERNEL)
 
