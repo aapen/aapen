@@ -22,15 +22,15 @@ pub fn build(b: *std.Build) void {
     const kernel = b.addExecutable(.{
         .name = "kernel8.elf",
         .target = target,
-        .root_source_file = .{ .path = "main.zig" },
+        .root_source_file = .{ .path = "src/main.zig" },
         .optimize = optimize,
         .link_libc = false,
     });
 
-    addModule(kernel, io);
+    addModule(kernel, "io", "lib/io.zig");
 
-    kernel.addAssemblyFile("boot.s");
-    kernel.addAssemblyFile("qemu.s");
+    kernel.addAssemblyFile("src/boot.s");
+    kernel.addAssemblyFile("src/qemu.s");
     kernel.setLinkerScriptPath(.{ .path = "kernel.ld" });
 
     const objcopy = b.addObjCopy(kernel.getOutputSource(), .{
@@ -47,10 +47,7 @@ pub fn build(b: *std.Build) void {
     b.getInstallStep().dependOn(&install_obj.step);
 }
 
-fn addModule(cs: *Build.CompileStep, module: Module) void {
+fn addModule(cs: *Build.CompileStep, name: []const u8, source: []const u8) void {
     const b = cs.step.owner;
-    const name = module.name;
-
-    // I don't understand why name has to be duplicated here.
-    cs.addModule(name, b.addModule(name, .{ .source_file = .{ .path = module.source } }));
+    cs.addModule(name, b.addModule(name, .{ .source_file = .{ .path = source } }));
 }

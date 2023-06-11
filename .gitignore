@@ -7,3 +7,4 @@
 a.out
 firmware/*
 zig-cache
+zig-out
