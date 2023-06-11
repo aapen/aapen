@@ -13,13 +13,13 @@ const gpio_function_alt5: u64 = 2;
 
 const pull_none: u64 = 0;
 
-fn mmio_write(reg: *u64, val: u64) void {
+pub fn mmio_write(reg: *u64, val: u64) void {
     reg.* = val;
     //     std.debug.print("write: {x}", .{val});
     //     std.debug.print("to: {x}", .{reg});
 }
 
-fn mmio_read(reg: *volatile u64) u64 {
+pub fn mmio_read(reg: *volatile u64) u64 {
     return reg.*;
     //return reg.*;
     // std.debug.print("read: {x}", .{reg});
@@ -59,8 +59,3 @@ fn gpio_call(pin_number: u64, value: u64, base: u64, field_size: u64, field_max:
 //     std.debug.print("bar: {d}\n", .{bar});
 //     _ = gpio_call(7, 999, peripheral_base, 16, 64);
 // }
-
-export fn kernel_main() callconv(.C) void {
-    var foo: u64 = 1234;
-    mmio_write(&foo, 777);
-}
