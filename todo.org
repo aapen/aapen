@@ -71,3 +71,13 @@ HDMI output, videocode
 ** TODO Write characters to the screen
 ** TODO Echo typed characters to the screen
 * Milestone: Set Forth
+
+
+* Next steps
+- Transition from EL2 to EL1
+- copy kernel to high memory
+- learn how Zig allocators work
+  - reference https://ziglang.org/documentation/0.10.1/#Memory
+- set up a page allocator
+- set up MMU tables
+- set up interrupt vector entries
