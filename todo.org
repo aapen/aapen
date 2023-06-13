@@ -1,5 +1,5 @@
 * Quality of Life
-** NEXT Figure out how to have the system under test exit QEMU
+** DONE Figure out how to have the system under test exit QEMU
 This will be useful for writing tests
 *** Notes & References
 The technique needed is "semihosting". This allows certain traps to
@@ -33,24 +33,26 @@ the parent process can see what the kernel wanted to indicate.
 QEMU docs on semihosting: https://www.qemu.org/docs/master/about/emulation.html#semihosting
 
 ARM docs on the semihosting interface: https://github.com/ARM-software/abi-aa/blob/main/semihosting/semihosting.rst
-** TODO Consider a two-stage kernel
+** DONE Use the old chainboot kernel & jtag boot from https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials
 Stage 1 on the SD card
-Stage 2 downloaded via USB after early boot
-This will speed up testing on physical hardware
+Stage 2 (the chainboot) downloaded automatically by minipush.rb
+Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 * Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
-** NEXT Perform "Hello world" on RPi3 hardware
+** DONE Perform "Hello world" on RPi3 hardware
 ** TODO Perform "Hello world" on RPi4 hardware
 * Milestone: Interact
-** TODO Read from serial input on RPi3 under QEMU
+** DONE Read from serial input on RPi3 under QEMU
 Read and echo characters.
 Polling is fine.
 This will actually be the host machine's keyboard in a terminal, proxied to the PL011 UART in the emulated device.
-** TODO Read from serial input on RPi3 & RPi4 hardware
+** TODO Read from serial input on RPi3
 Read and echo characters.
 Polling is fine.
+** TODO Read from serial input on RPi4
 ** TODO Read from USB keyboard input on RPi3 & RPi4 hardware
 Read and echo characters.
+** TODO Switch to using interrupts instead of polling
 * Milestone: Memory Manager
 ** TODO Set up interrupt table
 ** TODO Copy kernel to high mem
@@ -58,8 +60,8 @@ Read and echo characters.
 ** TODO Map pages for peripheral IO
 ** TODO Enable MMU
 * Milestone: Get Ziggy
-** TODO Replace C stubs with equivalent Zig
-** TODO Use Zig cross-compilation instead of crosstools
+** DONE Replace C stubs with equivalent Zig
+** DONE Use Zig cross-compilation instead of crosstools
 * Milestone: Show the World
 ** TODO Read from USB keyboard on RPi 400
 ** TODO Initialize video system on RPi 400
