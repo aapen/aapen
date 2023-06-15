@@ -1,11 +1,12 @@
+/// Counter-timer hypervisor control register
+///
+/// See
+/// https://developer.arm.com/documentation/ddi0595/2021-12/AArch64-Registers/CNTHCTL-EL2--Counter-timer-Hypervisor-Control-register
 const types = @import("../system_register.zig");
-
-// See
-// https://developer.arm.com/documentation/ddi0595/2021-12/AArch64-Registers/CNTHCTL-EL2--Counter-timer-Hypervisor-Control-register
 
 // This version of the layout applies if the CPU has FEAT_VHE _and_
 // HCR_EL2.E2H is set.
-const CNTHCTL_VHE_layout = packed struct {
+pub const VHE_layout = packed struct {
     /// EL0 physical counter trap enable
     EL0PCTENL: types.TrapEnableBitN,
     // EL0 virtual counter trap enable
@@ -50,11 +51,10 @@ const CNTHCTL_VHE_layout = packed struct {
     },
     _unused_reserved: u46 = 0,
 };
-pub const CNTHCTL_VHE_EL2 = types.UniformSystemRegister("CNTHCTL_EL2", CNTHCTL_VHE_layout);
 
 // This version of the layout applies if either the CPU lacks FEAT_VHE _or_
 // HCR_EL2.E2H is not set.
-const CNTHCTL_EL2_layout = packed struct {
+pub const layout = packed struct {
     // Physical counter trap enable
     EL1PCTEN: types.TrapEnableBitN = .trap_enable,
     // Physical timer trap enable
@@ -92,4 +92,3 @@ const CNTHCTL_EL2_layout = packed struct {
     } = .low_bits,
     _unused_reserved_1: u46 = 0,
 };
-pub const CNTHCTL_EL2 = types.UniformSystemRegister("CNTHCTL_EL2", CNTHCTL_EL2_layout);

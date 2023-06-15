@@ -2,7 +2,7 @@ const types = @import("../system_register.zig");
 
 /// See
 /// https://developer.arm.com/documentation/ddi0595/2021-12/AArch64-Registers/HCR-EL2--Hypervisor-Configuration-Register
-const HCR_EL2_layout = packed struct {
+pub const layout = packed struct {
     // virtualization enable
     VM: enum(u1) {
         disable = 0,
@@ -160,4 +160,3 @@ const HCR_EL2_layout = packed struct {
     // TWE delay
     TWEDEL: u4,
 };
-pub const HCR_EL2 = types.UniformSystemRegister("HCR_EL2", HCR_EL2_layout);
