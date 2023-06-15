@@ -1,4 +1,4 @@
-const reg = @import("register.zig");
+const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
 
 const peripheral_base: u64 = 0x3f000000; // RPi 3

@@ -8,8 +8,6 @@ const Module = struct {
     source: []const u8,
 };
 
-const io = Module{ .name = "io", .source = "lib/io.zig" };
-
 pub fn build(b: *std.Build) void {
     const target = std.zig.CrossTarget{
         .cpu_arch = Target.Cpu.Arch.aarch64,
@@ -27,7 +25,8 @@ pub fn build(b: *std.Build) void {
         .link_libc = false,
     });
 
-    addModule(kernel, "io", "lib/io.zig");
+    addModule(kernel, "architecture", "lib/architecture.zig");
+    addModule(kernel, "bsp", "lib/bsp.zig");
 
     kernel.addAssemblyFile("src/boot.s");
     kernel.addAssemblyFile("src/qemu.s");

@@ -1,4 +1,6 @@
-// comptime: Create a type describing a register.
+// comptime: Create a type describing a register. Use this for
+// memory-mapped IO registers.
+//
 // The returned type allows raw read & write as well as structured.
 // Read and Write should be packed structs that describe the
 // interpretation of bits as they are read and as they are written.
