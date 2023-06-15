@@ -18,8 +18,6 @@ pub const TrapEnableBitP = enum(u1) {
 // interpretation of bits as they are read and as they are written.
 pub fn SystemRegister(comptime name: []const u8, comptime Read: type, comptime Write: type) type {
     return struct {
-        const Self = @This();
-
         pub fn read_raw() u64 {
             return asm ("mrs %[ret], " ++ name
                 : [ret] "={X0}" (-> u64),
