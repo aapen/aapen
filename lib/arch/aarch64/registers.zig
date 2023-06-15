@@ -1,3 +1,4 @@
+pub const cntp_ctl = @import("registers/cntp_ctl.zig");
 pub const cnthctl_el2 = @import("registers/cnthctl_el2.zig");
 pub const hcr_el2 = @import("registers/hcr_el2.zig");
 pub const sctlr_el1 = @import("registers/sctlr_el1.zig");
@@ -49,8 +50,24 @@ pub const SP_EL1 = R("SP_EL1", *u8);
 // EL0 (Application)
 // ----------------------------------------------------------------------
 
+// Counter-timer physical control register
+pub const CNTP_CTL_EL0 = R("CNTP_CTL_EL0", cntp_ctl.layout);
+
+// Counter-timer physical compare value register
+pub const CNTP_CVAL_EL0 = R("CNTP_CVAL_EL0", u64);
+
+// Counter-timer timer value register
+pub const CNTP_TVAL_EL0 = R("CNTP_TVAL_EL0", u64);
+
+// System clock frequency (in Hz)
 // TODO: technically this is a read only register. Should we have a
 // separate type for that?
+pub const CNTFRQ_EL0 = R("CNTFRQ_EL0", u64);
+
+// Physical count value
+pub const CNTPCT_EL0 = R("CNTPCT_EL0", u64);
+
+// TODO: another read-only register
 pub const CNTVCT_EL0 = R("CNTVCT_EL0", u64);
 
 /// Saved Program Status Register (EL1)

@@ -23,5 +23,10 @@ export fn kernel_main() callconv(.C) u8 {
 
     io.pl011_uart_init();
     io.pl011_uart_write_text("Hello, world!\n");
+
+    cpu.time.spin(cpu.time.Duration{ .seconds = 7 }) catch unreachable;
+
+    io.pl011_uart_write_text("... and hello again\n");
+
     return 0;
 }
