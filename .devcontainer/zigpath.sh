@@ -1,0 +1,1 @@
+PATH="/opt/zig:$PATH"

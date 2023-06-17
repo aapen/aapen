@@ -1,0 +1,7 @@
+{
+	"name": "pijFORTHos",
+	"build": {
+		// Path is relataive to the devcontainer.json file.
+		"dockerfile": "Dockerfile"
+	}
+}
