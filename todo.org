@@ -1,4 +1,11 @@
 * Quality of Life
+** TODO Make codespaces work
+- [ ] Question: can the codespaces config require an aarch64 container?
+- [ ] Set up container with tools: zig (pin to a release?), qemu, gdb-mutliarch
+** TODO Discuss device tree & DTBs with Russ
+*** Notes and references
+https://github.com/devicetree-org/devicetree-specification
+
 ** DONE Figure out how to have the system under test exit QEMU
 This will be useful for writing tests
 *** Notes & References
@@ -40,6 +47,13 @@ Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 * Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware
+** TODO Prepare for "real" operating modde
+- [ ] copy kernel to high memory
+- [ ] Set up translation tables
+- [ ] Reserve the device pages, mark them in TT properly
+- [ ] Mark kernel text pages as RX, kernel data (GOT, stack, BSS) as RW/NX
+- [ ] Set up interrupt handler tables, point everything to a "panic" that dumps state on UART
+- [ ] Transition from EL2 to EL1
 ** TODO Perform "Hello world" on RPi4 hardware
 * Milestone: Interact
 ** DONE Read from serial input on RPi3 under QEMU
@@ -51,6 +65,8 @@ Read and echo characters.
 Polling is fine.
 ** TODO Read from serial input on RPi4
 ** TODO Read from USB keyboard input on RPi3 & RPi4 hardware
+*** Notes and references
+
 Read and echo characters.
 ** TODO Switch to using interrupts instead of polling
 * Milestone: Memory Manager
@@ -73,11 +89,5 @@ HDMI output, videocode
 * Milestone: Set Forth
 
 
-* Next steps
-- Transition from EL2 to EL1
-- copy kernel to high memory
-- learn how Zig allocators work
-  - reference https://ziglang.org/documentation/0.10.1/#Memory
-- set up a page allocator
 - set up MMU tables
 - set up interrupt vector entries
