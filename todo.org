@@ -69,12 +69,6 @@ Polling is fine.
 
 Read and echo characters.
 ** TODO Switch to using interrupts instead of polling
-* Milestone: Memory Manager
-** TODO Set up interrupt table
-** TODO Copy kernel to high mem
-** TODO Set up page translation table
-** TODO Map pages for peripheral IO
-** TODO Enable MMU
 * Milestone: Get Ziggy
 ** DONE Replace C stubs with equivalent Zig
 ** DONE Use Zig cross-compilation instead of crosstools
