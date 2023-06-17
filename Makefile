@@ -6,7 +6,7 @@ ZIG             = zig
 ZIG_BUILD_ARGS  = -Doptimize=Debug
 
 QEMU_EXEC       = qemu-system-aarch64
-QEMU_BOARD_ARGS = -M raspi3b
+QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
 QEMU_DEBUG_ARGS = -s -S
 QEMU_TEST_ARGS  = -serial stdio -display none -semihosting
 
