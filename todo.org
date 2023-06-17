@@ -1,8 +1,18 @@
 * Quality of Life
-** TODO Make codespaces work
-- [ ] Question: can the codespaces config require an aarch64 container?
-- [ ] Set up container with tools: zig (pin to a release?), qemu, gdb-mutliarch
+** DONE Make codespaces work
+- [X] Question: can the codespaces config require an aarch64 container?
+        Answer: no it cannot
+- [X] Set up container with tools: zig (pinned to a dev snapshot), qemu, gdb-multiarch
 ** TODO Discuss device tree & DTBs with Russ
+Advantages: 
+- Common, open-source mechanism to describe per-board variations in e.g., memory locations of GPIO, UART, mailbox, etc.
+- OpenFirmware and Devicetree.org have tons of .dts (source files) available, including all the devices we're interested in.
+Disadvantages:
+- Variability brings complexity. But so does a generalization / abstraction layer. Will we get enough boost from .dtbs to be worth the added complexity of supporting them?
+Unknowns: 
+- How does the .dtb get fed into the kernel? Is there a firware-level command line stored somewhere before _start is called?
+- How would we integrate this with our toolchain? We're already grabbing the .dtbs, but we don't have a compiler to create them from source. Nor do we have a runtime library for parsing them. Do we need to make a Zig module for reading the binary format? Do we need to make a Zig compiler to emit the binary format?
+
 *** Notes and references
 https://github.com/devicetree-org/devicetree-specification
 
@@ -60,6 +70,10 @@ Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 Read and echo characters.
 Polling is fine.
 This will actually be the host machine's keyboard in a terminal, proxied to the PL011 UART in the emulated device.
+** TODO Make the GPIO pins available for blinkenlights, or even useful stuff. They should be super-easy to use from Forth
+- [ ] Define a ziggish API (@russ)
+- [ ] Make the register dance support that API (@mike)
+- [ ] Define forthish words (@russ) for pin operations
 ** TODO Read from serial input on RPi3
 Read and echo characters.
 Polling is fine.
@@ -85,3 +99,5 @@ HDMI output, videocode
 * Open Questions
 ** Should we use device tree?
 ** Should we replace the jtag boot & chainloader with our own?
+** Do we need to worry about endianness, or can we just go with whatever RPi uses as a default? 
+** Speaking of which, what _does_ it use as a default?
