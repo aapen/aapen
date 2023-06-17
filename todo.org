@@ -80,8 +80,8 @@ HDMI output, videocode
 ** TODO Display a text cursor
 ** TODO Write characters to the screen
 ** TODO Echo typed characters to the screen
+** TODO Make panics write to the screen
 * Milestone: Set Forth
-
-
-- set up MMU tables
-- set up interrupt vector entries
+* Open Questions
+** Should we use device tree?
+** Should we replace the jtag boot & chainloader with our own?
