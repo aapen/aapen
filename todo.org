@@ -16,6 +16,12 @@ Unknowns:
 *** Notes and references
 https://github.com/devicetree-org/devicetree-specification
 
+Linux device tree compiler: https://git.kernel.org/pub/scm/utils/dtc/dtc.git
+- Can be installed on ubuntu with `apt install device-tree-compiler`
+- The compiler `dtc` can also decompile the binaries: `dtc -I dtb -O dts bcm2711-rpi-4-b.dtb` is _very_ interesting!
+
+The low-level boot code that runs on the GPU (start*.elf) seems to pull the device tree binary into memory for us. By the time `_start` is called, register X0 contains the address of the device tree data. (It starts with the magic word '0xd00dfeed'.)
+
 ** DONE Figure out how to have the system under test exit QEMU
 This will be useful for writing tests
 *** Notes & References
