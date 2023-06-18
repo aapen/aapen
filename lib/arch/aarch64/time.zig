@@ -32,7 +32,7 @@ fn frequency() u32 {
 }
 
 fn read_cntpct() u32 {
-    barrier.isb(barrier.BarrierType.SY);
+    barrier.isb();
     return registers.CNTPCT_EL0.read();
 }
 

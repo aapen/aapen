@@ -17,6 +17,10 @@ pub fn dmb(ty: BarrierType) void {
     asm volatile ("dmb " ++ @tagName(ty));
 }
 
-pub fn isb(ty: BarrierType) void {
-    asm volatile ("isb " ++ @tagName(ty));
+pub fn dsb(ty: BarrierType) void {
+    asm volatile ("dsb " ++ @tagName(ty));
+}
+
+pub fn isb() void {
+    asm volatile ("isb sy");
 }
