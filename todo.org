@@ -10,9 +10,16 @@ Advantages:
 Disadvantages:
 - Variability brings complexity. But so does a generalization / abstraction layer. Will we get enough boost from .dtbs to be worth the added complexity of supporting them?
 Unknowns: 
-- How does the .dtb get fed into the kernel? Is there a firware-level command line stored somewhere before _start is called?
 - How would we integrate this with our toolchain? We're already grabbing the .dtbs, but we don't have a compiler to create them from source. Nor do we have a runtime library for parsing them. Do we need to make a Zig module for reading the binary format? Do we need to make a Zig compiler to emit the binary format?
 
+Alternative: Use the .dtb for our reference, but don't parse it in code at boot
+Advantages:
+- Simplicity. Dev speed (at first).
+
+Disadvantages:
+- Difficult to support a plethora of devices.
+
+Maybe we use the dtbs as references for our own use rather than writing code to parse them at boot time.
 *** Notes and references
 https://github.com/devicetree-org/devicetree-specification
 
@@ -20,7 +27,10 @@ Linux device tree compiler: https://git.kernel.org/pub/scm/utils/dtc/dtc.git
 - Can be installed on ubuntu with `apt install device-tree-compiler`
 - The compiler `dtc` can also decompile the binaries: `dtc -I dtb -O dts bcm2711-rpi-4-b.dtb` is _very_ interesting!
 
-The low-level boot code that runs on the GPU (start*.elf) seems to pull the device tree binary into memory for us. By the time `_start` is called, register X0 contains the address of the device tree data. (It starts with the magic word '0xd00dfeed'.)
+The low-level boot code that runs on the GPU (start*.elf) seems to
+pull the device tree binary into memory for us. By the time ~_start~ is
+called, register X0 contains the address of the device tree data. (It
+starts with the magic word '0xd00dfeed'.)
 
 ** DONE Figure out how to have the system under test exit QEMU
 This will be useful for writing tests
@@ -60,6 +70,7 @@ ARM docs on the semihosting interface: https://github.com/ARM-software/abi-aa/bl
 Stage 1 on the SD card
 Stage 2 (the chainboot) downloaded automatically by minipush.rb
 Stage 3 (the real kernel) loaded via gdb (connected via openocd)
+** Use Python and the Python binding to libfdt to parse .dtb files?
 * Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware
@@ -103,7 +114,12 @@ HDMI output, videocode
 ** TODO Make panics write to the screen
 * Milestone: Set Forth
 * Open Questions
-** Should we use device tree?
+** Should we use device tree? If so, how?
 ** Should we replace the jtag boot & chainloader with our own?
-** Do we need to worry about endianness, or can we just go with whatever RPi uses as a default? 
+* Closed Questions
+** Do we need to worry about endianness, or can we just go with whatever RPi uses as a default?
+   Answer: Best to stick with the default at boot.
 ** Speaking of which, what _does_ it use as a default?
+   Answer: Big endian
+** How does the RPi 400 keyboard work? Is it just USB connected internally?
+   Answer: According to https://www.40percent.club/2020/11/raspberry-pi-400-keyboard-controller.html, the Pi 400 keyboard goes through a custom microcontroller (Holtek HT45R0072) which then goes into one of the 4 USB ports on the builtin controller. So it presents as a USB HID.
