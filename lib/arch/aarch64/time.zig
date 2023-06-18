@@ -1,5 +1,6 @@
 const std = @import("std");
 const registers = @import("registers.zig");
+const barrier = @import("barrier.zig");
 
 // TODO: is there a way to integrate this with std.time?
 
@@ -30,8 +31,13 @@ fn frequency() u32 {
     return @truncate(u32, registers.CNTFRQ_EL0.read());
 }
 
+fn read_cntpct() u32 {
+    barrier.isb(barrier.BarrierType.SY);
+    return registers.CNTPCT_EL0.read();
+}
+
 pub fn uptime() Duration {
-    var current_count = registers.CNTPCT_EL0.read();
+    var current_count = read_cntpct();
 
     // TODO: seems like overflow is possible?
     return Duration.from_u64_nanos((current_count * nanos_per_second) / frequency());
