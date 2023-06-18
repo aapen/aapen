@@ -108,7 +108,7 @@ pub const layout = packed struct {
     TEA: types.TrapEnableBitP,
     // Mismatched inner/outer cacheable non-coherency enable
     MIOCNCE: u1,
-    _unused_reserved_0: u1,
+    _unused_reserved_0: u1 = 0,
     // Trap pointer authentication registers
     APK: types.TrapEnableBitN,
     // Trap pointer authentication instructions
@@ -125,7 +125,7 @@ pub const layout = packed struct {
     FWB: u1,
     // Fault injection enable
     FIEN: types.TrapEnableBitN,
-    _unused_reserved_1: u1,
+    _unused_reserved_1: u1 = 0,
     // Trap ID group 4
     TID4: types.TrapEnableBitP,
     // Trap ICIALLUIS/IC IALLUIS cache instructions
