@@ -9,6 +9,14 @@ pub const spsr = @import("registers/spsr.zig");
 const R = @import("system_register.zig").UniformSystemRegister;
 
 // ----------------------------------------------------------------------
+// EL3 (Secure monitor)
+// ----------------------------------------------------------------------
+
+/// Vector Base Address Register (EL3)
+/// Pointer to the exception vector table for this EL
+pub const VBAR_EL3 = R("VBAR_EL3", u64);
+
+// ----------------------------------------------------------------------
 // EL2 (Hypervisor)
 // ----------------------------------------------------------------------
 
@@ -35,6 +43,10 @@ pub const SP_EL2 = R("SP_EL2", u64);
 /// Saved Program Status Register (EL2)
 pub const SPSR_EL2 = R("SPSR_EL2", spsr.layout);
 
+/// Vector Base Address Register (EL2)
+/// Pointer to the exception vector table for this EL
+pub const VBAR_EL2 = R("VBAR_EL2", u64);
+
 // ----------------------------------------------------------------------
 // EL1 (Kernel)
 // ----------------------------------------------------------------------
@@ -53,6 +65,10 @@ pub const SP_EL1 = R("SP_EL1", u64);
 
 /// Saved Program Status Register (EL1)
 pub const SPSR_EL1 = R("SPSR_EL1", spsr.layout);
+
+/// Vector Base Address Register (EL1)
+/// Pointer to the exception vector table for this EL
+pub const VBAR_EL1 = R("VBAR_EL1", u64);
 
 // ----------------------------------------------------------------------
 // EL0 (Application)
