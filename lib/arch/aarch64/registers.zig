@@ -12,6 +12,9 @@ const R = @import("system_register.zig").UniformSystemRegister;
 // EL3 (Secure monitor)
 // ----------------------------------------------------------------------
 
+/// System Control Register (EL3)
+pub const SCTLR_EL3 = R("SCTLR_EL3", sctlr.layout_el3);
+
 /// Vector Base Address Register (EL3)
 /// Pointer to the exception vector table for this EL
 pub const VBAR_EL3 = R("VBAR_EL3", u64);

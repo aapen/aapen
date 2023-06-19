@@ -264,3 +264,76 @@ pub const layout_el2 = packed struct {
     // Trap "implementation defined" functionality
     TIDCP: u1 = 0,
 };
+
+pub const layout_el3 = packed struct {
+    MMU_ENABLE: enum(1) {
+        disable = 0,
+        enable = 1,
+    },
+    // Alignment check enable
+    A: enum(1) {
+        disable = 0,
+        enable = 1,
+    },
+    // Cacheability control
+    C: u1,
+    // Stack pointer alignment check enable
+    SA: u1,
+    _unused_reserved_0: u2 = 0b11,
+    // Non-aligned access trap
+    nAA: types.TrapEnableBitN,
+    _unused_reserved_1: u4 = 0,
+    EOS: u1,
+    // Stage 1 instruction access cacheability control
+    I: u1 = 0,
+    // Enable pointer authentication
+    EnDB: u1 = 0,
+    _unused_reserved_2: u2 = 0,
+    _unused_reserved_3: u1 = 1,
+    _unused_reserved_4: u1 = 0,
+    _unused_reserved_5: u1 = 1,
+    // Write permission implies execute-never (NX)
+    WXN: u1,
+    _unused_reserved_5: u1 = 0,
+    // Implicit error synchronization event enable
+    IESB: u1 = 0,
+    // Exception Entry is Context Switching
+    EIS: u1 = 1,
+    _unused_reserved_6: u1 = 1,
+    _unused_reserved_7: u1 = 0,
+    // Endianness at EL3
+    EE: enum(1) {
+        little_endian = 0,
+        big_endian = 1,
+    },
+    _unused_reserved_8: u1 = 0,
+    // Enable pointer authentication using APDAKey_EL1
+    EnDA: u1 = 0,
+    _unused_reserved_9: u2 = 0b11,
+    // Enable pointer auth using APIBKey_EL1
+    EnIB: u1 = 0,
+    // Enable pointer auth using APIAKey_EL1 of instr addresses
+    EnIA: u1 = 0,
+    _unused_reserved_10: u4 = 0,
+    // PAC branch type compatibility at EL3
+    BT: u1 = 0,
+    // Instuction tag fault synchronization bit
+    ITFSB: u1 = 0,
+    _unused_reserved_11: u2 = 0,
+    // Tag check fault in EL3
+    TCF: enum(u2) {
+        no_effect = 0b00,
+        synchronous_exception = 0b01,
+        asynchronous_accumulate = 0b10,
+        exception_on_read_accumulate_on_writes = 0b11,
+    } = .no_effect,
+    _unused_reserved_12: u1 = 0,
+    // Allocation tag access in EL1
+    ATA: enum(u1) {
+        not_allowed = 0,
+        allowed = 1,
+    } = 0,
+    // Default SSBS value on exception entry
+    DSSBS: u1 = 0,
+    _unused_reserved_13: u20 = 0,
+};
