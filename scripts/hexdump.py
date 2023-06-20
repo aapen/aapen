@@ -39,6 +39,8 @@ class HexDump(gdb.Command):
         else:
              bytes = 500
 
+        # print(' parsed arg1 as %s' % addr , end="")
+
         inferior = gdb.selected_inferior()
 
         align = gdb.parameter('hex-dump-align')
@@ -47,7 +49,7 @@ class HexDump(gdb.Command):
             width = 16
 
         mem = inferior.read_memory(addr, bytes)
-        pr_addr = int(str(addr), 16)
+        pr_addr = int(str(addr).split()[0], 16)
         pr_offset = width
 
         if align:
