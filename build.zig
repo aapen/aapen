@@ -25,8 +25,31 @@ pub fn build(b: *std.Build) void {
         .link_libc = false,
     });
 
-    addModule(kernel, "architecture", "lib/architecture.zig");
-    addModule(kernel, "bsp", "lib/bsp.zig");
+    const bsp = b.createModule(.{
+        .source_file = .{ .path = "lib/bsp.zig" },
+    });
+    kernel.addModule("bsp", bsp);
+
+    // TODO: It bugs me that the architecture module depends on the
+    // BSP. Seems like the main module should inject the BSP into the
+    // architecture, but I don't know how to do that in Zig yet.
+    const arch = b.createModule(.{
+        .source_file = .{
+            .path = "lib/architecture.zig",
+        },
+        .dependencies = &.{
+            .{
+                .name = "bsp",
+                .module = bsp,
+            },
+        },
+    });
+    // TODO: this should be in a module, not the main executable
+    // should it not?
+    kernel.addAssemblyFile("lib/arch/aarch64/exceptions.s");
+
+    kernel.addModule("bsp", bsp);
+    kernel.addModule("architecture", arch);
 
     kernel.addAssemblyFile("src/boot.s");
     kernel.addAssemblyFile("src/qemu.s");
