@@ -33,10 +33,10 @@ firmware/COPYING.linux:
 $(KERNEL):
 	$(ZIG) build $(ZIG_BUILD_ARGS)
 
-emulate: $(KERNEL)
+emulate: $(KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_TEST_ARGS) -kernel $(KERNEL)
 
-debug_emulate: $(KERNEL)
+debug_emulate: $(KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_DEBUG_ARGS) $(QEMU_TEST_ARGS) -kernel $(KERNEL)
 
 gdb: $(KERNEL)
