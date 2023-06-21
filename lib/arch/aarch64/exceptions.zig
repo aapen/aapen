@@ -4,7 +4,7 @@ const registers = @import("registers.zig");
 const __exception_handler_table: *u64 = @extern(*u64, .{ .name = "__exception_handler_table" });
 
 pub fn init() void {
-    registers.VBAR_EL2.write(@ptrToInt(__exception_handler_table));
+    // registers.VBAR_EL2.write(@ptrToInt(__exception_handler_table));
     registers.VBAR_EL1.write(@ptrToInt(__exception_handler_table));
 }
 

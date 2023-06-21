@@ -1,3 +1,14 @@
+PAGE_SIZE = 64K;
+PAGE_MASK = PAGE_SIZE-1;
+
+/* The kernel's virtual address range will be:
+ *
+ * START:  max(u64) - __kernel_virt_addr_space_size + 1
+ * END:    max(u64)
+ */
+__kernel_virt_addr_space_size = 1024 * 1024 * 1024;
+__kernel_virt_start_addr = ((0xffffffffffffffff - __kernel_virt_addr_space_size) + 1);
+
 __rpi_physical_ram_start_addr   = 0;
 
 /* Load address for kernel binary is defined by RPi's firmware */
@@ -8,34 +19,52 @@ ENTRY(__rpi_physical_binary_load_addr)
 /* Define program headers to load with correct protections. */
 PHDRS
 {
-        segment_boot_core_stack PT_LOAD FLAGS(6);  /* RW */
         segment_code            PT_LOAD FLAGS(5);  /* RX */
         segment_data            PT_LOAD FLAGS(6);  /* RW */
+        segment_heap            PT_LOAD FLAGS(6);  /* RW */
+        segment_boot_core_stack PT_LOAD FLAGS(6);  /* RW */
 }
 
 SECTIONS
 {
         . = __rpi_physical_ram_start_addr;
 
-        /* Stack for the boot core tucks in from 0x00000 - 0x7ffff. */
-        /* Stack grows downward (toward low memory) */
+        /***********************************************************************
+        * Boot core stack
+        ***********************************************************************/
         .boot_core_stack (NOLOAD) :
         {
+                __boot_core_stack_start = .;
                 . += __rpi_physical_binary_load_addr;
                 __boot_core_stack_end_exclusive = .;
         } :segment_boot_core_stack
 
-        .text :
+        ASSERT((. & PAGE_MASK) == 0, "End of boot core stack is not page aligned")
+
+        /***********************************************************************
+        * Code
+        ***********************************************************************/
+        __code_start = .;
+        .text : AT(__rpi_physical_binary_load_addr)
         {
-                KEEP(*(.text.boot))
-                *(.text .text.*)
+                KEEP(*(.text._start))
+                *(.text*)
         } :segment_code
+
+        .got : { *(.got*) }
 
         .rodata : ALIGN(8)
         {
                 *(.rodata*)
-        } :segment_code
+        } :segment_data
 
+        . = ALIGN(PAGE_SIZE);
+        __code_end_exclusive = .;
+
+        /***********************************************************************
+        * Data + BSS
+        ***********************************************************************/
+        __data_start = .;
         .data :
         {
                 *(.data*)
@@ -44,11 +73,43 @@ SECTIONS
         .bss (NOLOAD) : ALIGN(16)
         {
                 __bss_start = .;
-                *(.bss*)
+                *(.bss*);
+                . = ALIGN(16);
                 __bss_end_exclusive = .;
         } :segment_data
 
-        _end = .;
+        . = ALIGN(PAGE_SIZE);
+        __data_end_exclusive = .;
+
+        /***********************************************************************
+        * Heap
+        ***********************************************************************/
+        __heap_start = .;
+        .heap (NOLOAD) :
+        {
+                . += 16 * 1024 * 1024;
+        } :segment_heap
+        __heap_end_exclusive = .;
+
+        ASSERT((. & PAGE_MASK) == 0, "Heap is not page aligned")
+
+        /***********************************************************************
+        * MMIO
+        ***********************************************************************/
+        __mmio_remap_start = .;
+        . += 8 * 1024 * 1024;
+        __mmio_remap_end_exclusive = .;
+
+        ASSERT((. & PAGE_MASK) == 0, "MMIO remap reservation is not page aligned")
+
+        /***********************************************************************
+        * Guard page
+        ***********************************************************************/
+        . += PAGE_SIZE;
+
+        /***********************************************************************
+        * Junk and gunk
+        ***********************************************************************/
 
         /DISCARD/ :
         {
@@ -58,5 +119,3 @@ SECTIONS
                 *(.eh_frame*)
         }
 }
-
-__bss_size = (__bss_end_exclusive - __bss_start) >> 3;

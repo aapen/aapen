@@ -16,12 +16,20 @@ BOOT_CORE_ID        = 0x00
 // Macros
 // ----------------------------------------------------------------------
 
-// Load address of a symbol in a register.
+// Load the PC-relative address of a symbol in a register.
 //
 // The symbol can be at most +/- 4 GiB of the PC
 .macro LDR_REL register, symbol
         adrp \register, \symbol
         add  \register, \register, #:lo12:\symbol
+.endm
+
+// Load the absolute address of a symbol in a register.
+.macro LDR_ABS register, symbol
+        movz \register, #:abs_g3:\symbol
+        movk \register, #:abs_g2_nc:\symbol
+        movk \register, #:abs_g1_nc:\symbol
+        movk \register, #:abs_g0_nc:\symbol
 .endm
 
 // ----------------------------------------------------------------------
@@ -32,7 +40,7 @@ BOOT_CORE_ID        = 0x00
 // Clobbers: x0, x1
 // ----------------------------------------------------------------------
 
-        .section ".text.boot"
+        .section .text._start
 
         .global _start
         .type   _start, @function
@@ -67,23 +75,23 @@ _start:
 
 L_bss_init_loop:
         cmp x0, x1                            // Has x0 reached __bss_end_exclusive?
-        b.eq L_initialize_stack               // If so, we're done
+        b.eq L_prepare_for_zig                // If so, we're done
         stp xzr, xzr, [x0], #16               // Otherwise, store 64 bits of zeros and
-                                              // post-increment x0
+                                              // post-increment x0 by 16
         b L_bss_init_loop                     // Repeat until done
 
+L_prepare_for_zig:
         // Set up the stack.
         //
         // __boot_core_stack_end_exclusive is provided by the linker
         // script which puts it right below _start itself
-
-L_initialize_stack:
         LDR_REL x0, __boot_core_stack_end_exclusive
         mov sp, x0
 
-        bl kernel_main                        // Jump to function provided by main.zig
+        // Jump to Zig code, with x0, x1, and x2 as function arguments
+        b _start_zig
 
-        bl _qemu_exit                         // TEMP: Tell qemu to quit
+        // unreachable
 
         // Park the core
 L_parking_loop:
