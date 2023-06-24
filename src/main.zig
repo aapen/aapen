@@ -1,7 +1,7 @@
 const std = @import("std");
-const arch = @import("architecture");
+const arch = @import("architecture.zig");
 const cpu = arch.cpu;
-const bsp = @import("bsp");
+const bsp = @import("bsp.zig");
 const io = bsp.io;
 
 export fn kernel_init() callconv(.Naked) u8 {

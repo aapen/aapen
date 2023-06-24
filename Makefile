@@ -18,6 +18,11 @@ GDB_TARGET_DEV  = --ex "target remote :3333"
 KERNEL_ELF      = zig-out/kernel8.elf
 KERNEL          = zig-out/kernel8.img
 
+rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+
+# How to recursively find all files that match a pattern
+SRCS           := $(call rwildcard,src/,*.zig)
+
 all: init emulate
 
 init: download_firmware dirs
@@ -30,7 +35,7 @@ download_firmware: firmware/COPYING.linux
 firmware/COPYING.linux:
 	./scripts/fetch_firmware.sh
 
-$(KERNEL):
+$(KERNEL): $(SRCS)
 	$(ZIG) build $(ZIG_BUILD_ARGS)
 
 emulate: $(KERNEL) firmware/COPYING.linux

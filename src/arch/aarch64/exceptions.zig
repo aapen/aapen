@@ -1,4 +1,6 @@
-const io = @import("bsp").io;
+// TODO: Is this really the right thing to do? Seems very odd to have
+// the directory traversal here!
+const io = @import("../../bsp.zig").io;
 const registers = @import("registers.zig");
 
 const __exception_handler_table: *u64 = @extern(*u64, .{ .name = "__exception_handler_table" });

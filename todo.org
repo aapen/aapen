@@ -1,10 +1,11 @@
 * Quality of Life
-** TODO Changing a .zig file in a module doesn't trigger recompilation. Why not?
-We have to use ~make clean~ too often as a result. Not sure if this is a problem in our ~build.zig~ or in the Zig Build system.
 ** DONE Make codespaces work
 - [X] Question: can the codespaces config require an aarch64 container?
         Answer: no it cannot
 - [X] Set up container with tools: zig (pinned to a dev snapshot), qemu, gdb-multiarch
+** DONE Make devpod.sh work
+** TODO Get devpod.sh to work on Mike's personal machine.
+There seems to be a docker network problem. Devpod.sh works great on the macOS laptop.
 ** TODO Discuss device tree & DTBs with Russ
 Advantages: 
 - Common, open-source mechanism to describe per-board variations in e.g., memory locations of GPIO, UART, mailbox, etc.
@@ -73,8 +74,6 @@ Stage 1 on the SD card
 Stage 2 (the chainboot) downloaded automatically by minipush.rb
 Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 ** Use Python and the Python binding to libfdt to parse .dtb files?
-** TODO Get devpod.sh to work on Mike's personal machine.
-There seems to be a docker network problem. Devpod.sh works great on the macOS laptop.
 * Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware
@@ -123,6 +122,8 @@ Right now the architecture module @import's the BSP. This seems backwards. The e
 ** Should we use device tree? If so, how?
 ** Should we replace the jtag boot & chainloader with our own?
 * Closed Questions
+** DONE Changing a .zig file in a module doesn't trigger recompilation. Why not?
+The Makefile didn't even invoke ~zig build~ because there was no rule that depended on the source files themselves.
 ** Do we need to worry about endianness, or can we just go with whatever RPi uses as a default?
    Answer: Best to stick with the default at boot.
 ** Speaking of which, what _does_ it use as a default?
