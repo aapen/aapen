@@ -10,12 +10,15 @@ pub const TrapEnableBitP = enum(u1) {
     trap_enable = 1,
 };
 
-// comptime: Create a type describing an AArch64 system register (CPU
-// register). Use this for registers accessed with `mrs` and `msr` instructions.
-//
-// The returned type allows raw read & write as well as structured.
-// Read and Write should be packed structs that describe the
-// interpretation of bits as they are read and as they are written.
+/// comptime: Create a type describing an AArch64 system register (CPU
+/// register). Use this for registers accessed with `mrs` and `msr` instructions.
+///
+/// The returned type allows raw read & write as well as structured.
+/// Read and Write should be packed structs that describe the
+/// interpretation of bits as they are read and as they are written.
+///
+/// Credit to jamie@scatteredthoughts.net for this approach:
+/// https://www.scattered-thoughts.net/writing/mmio-in-zig/
 pub fn SystemRegister(comptime name: []const u8, comptime Read: type, comptime Write: type) type {
     return struct {
         pub fn read_raw() u64 {
