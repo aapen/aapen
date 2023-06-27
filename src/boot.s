@@ -45,7 +45,7 @@ BOOT_CORE_ID        = 0x00
         .global _start
         .type   _start, @function
 _start:
-        // At boot time, the core should be executing in EL2 (low
+        // At boot time, the core should be executing in EL2 (high
         // privilege). If it is not, we are in a strange state and
         // should not proceed
 
