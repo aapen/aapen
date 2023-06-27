@@ -9,16 +9,16 @@
 /// Section and page references are from the revision dated 21 April
 /// 2023
 const std = @import("std");
-const memory = @import("../memory");
-const raspi = @import("../../../bsp/raspi3/memory");
+//const memory = @import("../memory");
+//const raspi = @import("../../../bsp/raspi3/memory");
 
 /// The enum value is the "shift" implied by the granule size. This is
 /// the number of bits to right shift a byte address to get a page
 /// table index.
 pub const Granule = enum(u32) {
-    _4KB = 4 * memory.KiB,
-    _16KB = 16 * memory.KiB,
-    _64KB = 64 * memory.KiB,
+    _4KB = 4 * 1024,
+    _16KB = 16 * 1024,
+    _64KB = 64 * 1024,
 };
 
 pub const Stage = enum {
@@ -44,9 +44,6 @@ fn memoryBlockShift(block_size: u64) u8 {
     return trailing_zeroes;
 }
 
-const BlockSize512MB = 512 * memory.MiB;
-const BlockShift512MB = memoryBlockShift(BlockSize512MB);
-
 pub fn FixedSizeTranslationTable(comptime table_count: u32) type {
     return struct {
         const Self = @This();
@@ -55,10 +52,6 @@ pub fn FixedSizeTranslationTable(comptime table_count: u32) type {
         level3: [table_count][8192]PageDescriptor,
     };
 }
-
-pub const level_2_table_count = raspi.layout.max_virtual_address_inclusive >> BlockShift512MB;
-
-pub const KernelTranslationTable = FixedSizeTranslationTable(level_2_table_count);
 
 /// This function builds a struct type for a table descriptor. That is
 /// an entry in one translation table that points to another,
@@ -84,8 +77,8 @@ pub fn TableDescriptor(comptime stage: Stage, comptime granule: Granule) type {
             descriptor_type: enum(u1) {
                 table = 1,
             } = .table,
-            ignored: IgnoredBits,
-            next_level_table: AddressBits,
+            ignored: IgnoredBits = 0,
+            next_level_table: AddressBits = 0,
             _unused_reserved_0: u4 = 0,
             _unused_reserved_1: u7 = 0,
             pxn_table: u1 = 0,
@@ -102,8 +95,8 @@ pub fn TableDescriptor(comptime stage: Stage, comptime granule: Granule) type {
                 block = 0,
                 table = 1,
             } = .table,
-            ignored: IgnoredBits,
-            next_level_table: AddressBits,
+            ignored: IgnoredBits = 0,
+            next_level_table: AddressBits = 0,
             _unused_reserved_0: u4 = 0,
             _unused_ignored: u7 = 0,
             _unused_reserved_1: u5 = 0,
@@ -138,28 +131,28 @@ pub fn PageDescriptor(comptime stage: Stage, comptime granule: Granule) type {
             // [1]
             descriptor_type: enum(u1) { page = 1 } = .page,
             // [4:2]
-            memory_attributes_index: u3,
+            memory_attributes_index: u3 = 0,
             // [5]
-            nonsecure: u1,
+            nonsecure: u1 = 0,
             // [7:6]
             access_permissions: enum(u2) {
                 ReadWrite_EL1 = 0b00,
                 ReadWrite_EL1_EL0 = 0b01,
                 ReadOnly_EL1 = 0b10,
                 ReadOnly_EL1_EL0 = 0b11,
-            },
+            } = .ReadWrite_EL1_EL0,
             // [9:8]
             shareability: enum(u2) {
                 OuterShareable = 0b10,
                 InnerShareable = 0b11,
-            },
+            } = .OuterShareable,
             // [10]
-            access_flag: u1,
+            access_flag: u1 = 0,
             // [11]
-            not_global: u1,
+            not_global: u1 = 0,
             // next two fields together are [47:12]
-            reserved: IgnoredBits,
-            output_address: AddressBits,
+            reserved: IgnoredBits = 0,
+            output_address: AddressBits = 0,
             // [49:48]
             _unused_reserved_0: u2 = 0,
             // [50]
@@ -169,9 +162,9 @@ pub fn PageDescriptor(comptime stage: Stage, comptime granule: Granule) type {
             // [52]
             contiguous: u1 = 0,
             // [53]
-            privileged_execute_never: u1,
+            privileged_execute_never: u1 = 0,
             // [54]
-            unprivileged_execute_never: u1,
+            unprivileged_execute_never: u1 = 0,
             // [58:55]
             _unused_ignored_0: u4 = 0, // Reference manual says "reserved for software use"
             // [62:59]

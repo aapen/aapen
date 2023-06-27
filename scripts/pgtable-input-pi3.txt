@@ -1,0 +1,4 @@
+0x000000000,  512K, RW_DATA, Kernel stack
+0x000080000,   64K, CODE,    Kernel boot code
+0x000090000,  256M, RW_DATA, Non-trusted DRAM
+0x03f000000,   16M, DEVICE,  MMIO block

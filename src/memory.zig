@@ -4,6 +4,10 @@
 /// on any processor's MMU.
 const arch_mmu = @import("arch/aarch64/memory.zig");
 
+const KiB = 1024;
+const MiB = 1024 * KiB;
+const GiB = 1024 * MiB;
+
 // ----------------------------------------------------------------------
 // Control the MMU itself
 // ----------------------------------------------------------------------
@@ -28,6 +32,16 @@ pub const AddressProperties = struct {
     memory_attributes: MemoryAttributes,
     execute_never: bool,
 };
+
+pub fn AddressSpace(address_space_size: u64) type {
+    return struct {
+        const Self = @This();
+
+        pub fn max_address() u64 {
+            return address_space_size;
+        }
+    };
+}
 
 pub const KernelVirtualLayout = struct {
     max_virtual_address_inclusive: usize,
