@@ -4,18 +4,32 @@ const cpu = arch.cpu;
 const bsp = @import("bsp.zig");
 const io = bsp.io;
 
-export fn kernel_init() callconv(.Naked) u8 {
+// extern fn mmu_on() void;
+extern fn _qemu_exit(exit_status: u8) void;
+
+export fn kernel_init() callconv(.Naked) void {
     arch.cpu.exceptions.init();
     // arch.memory.init();
+    // mmu_on();
 
     io.pl011_uart_init();
     io.pl011_uart_write_text("Hello, world!\n");
 
-    cpu.time.spin(cpu.time.Duration{ .seconds = 1 }) catch unreachable;
+    var cont = true;
+    while (cont) {
+        var ch = io.pl011_uart_blocking_read_byte();
+        io.pl011_uart_blocking_write_byte(ch);
+        if (ch == 'q') break;
+    }
+
+    cont = true;
+
+    //    cpu.time.spin(cpu.time.Duration{ .seconds = 1 }) catch unreachable;
 
     cpu.exceptions.debug_write("... and hello again\n");
 
-    return 0;
+    // Does not return
+    _qemu_exit(0);
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {

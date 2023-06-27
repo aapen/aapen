@@ -6,7 +6,7 @@
 ** DONE Make devpod.sh work
 ** TODO Get devpod.sh to work on Mike's personal machine.
 There seems to be a docker network problem. Devpod.sh works great on the macOS laptop.
-** TODO Discuss device tree & DTBs with Russ
+** DONE Discuss device tree & DTBs with Russ
 Advantages: 
 - Common, open-source mechanism to describe per-board variations in e.g., memory locations of GPIO, UART, mailbox, etc.
 - OpenFirmware and Devicetree.org have tons of .dts (source files) available, including all the devices we're interested in.
@@ -73,7 +73,7 @@ ARM docs on the semihosting interface: https://github.com/ARM-software/abi-aa/bl
 Stage 1 on the SD card
 Stage 2 (the chainboot) downloaded automatically by minipush.rb
 Stage 3 (the real kernel) loaded via gdb (connected via openocd)
-** Use Python and the Python binding to libfdt to parse .dtb files?
+** HOLD Use Python and the Python binding to libfdt to parse .dtb files?                                        :HOLD:
 * Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware
@@ -130,9 +130,10 @@ Tool to generate assembly code for a fixed memory layout: https://github.com/ash
 * Open Questions
 ** What is the right "ziggish" way to inject the BSP into the architecture?
 Right now the architecture module @import's the BSP. This seems backwards. The evidence is in ~build.zig~ where we see a dependency from the architecture module (which is meant to be specific to the _CPU_ architecture) to the BSP module (which is the board the CPU is in). This seems logically backwards to me. Moreover, it cements the choice of board as a comptime decision and I still have the hope of making it a boottime decision.
-** Should we use device tree? If so, how?
 ** Should we replace the jtag boot & chainloader with our own?
 * Closed Questions
+** DONE Should we use device tree? If so, how?
+   Answer: Not yet. We need to keep things as simple as possible while we get up and running. Rather than doing a bunch of things dynamically at boot based on hardware discovery, we want to get a single model working first. That means we accept that some things (such as MMIO address) will be built in at compile time.
 ** DONE Changing a .zig file in a module doesn't trigger recompilation. Why not?
 The Makefile didn't even invoke ~zig build~ because there was no rule that depended on the source files themselves.
 ** Do we need to worry about endianness, or can we just go with whatever RPi uses as a default?
