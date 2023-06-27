@@ -5,10 +5,10 @@
 ZIG             = zig
 ZIG_BUILD_ARGS  = -Doptimize=Debug
 
-QEMU_EXEC       = qemu-system-aarch64
+QEMU_EXEC       = qemu-system-aarch64 -display none -semihosting
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
-QEMU_DEBUG_ARGS = -s -S
-QEMU_TEST_ARGS  = -serial stdio -display none -semihosting
+QEMU_DEBUG_ARGS = -s -S -serial pty
+QEMU_NOBUG_ARGS = -serial stdio
 
 GDB_EXEC        = aarch64-unknown-linux-gnu-gdb
 GDB_ARGS        = -s lib
@@ -39,7 +39,7 @@ $(KERNEL): $(SRCS)
 	$(ZIG) build $(ZIG_BUILD_ARGS)
 
 emulate: $(KERNEL) firmware/COPYING.linux
-	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_TEST_ARGS) -kernel $(KERNEL)
+	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(KERNEL)
 
 debug_emulate: $(KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_DEBUG_ARGS) $(QEMU_TEST_ARGS) -kernel $(KERNEL)
