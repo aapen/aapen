@@ -11,6 +11,15 @@
 import gdb
 from curses.ascii import isgraph
 
+def print_bits(value, low_bit, bit_count, label):
+    field = (value >> low_bit) & ((1 << bit_count) - 1)
+    if bit_count > 1:
+        bitfield = "[{}:{}]".format(low_bit + bit_count - 1, low_bit)
+    else:
+        bitfield = "[{}]".format(low_bit)
+    padded_binary = "{:0{}b}".format(field, bit_count)
+    print("{:<8}{:<6} 0b{}".format(bitfield, label, padded_binary))
+
 class DataAbortDecode():
     def decode_iss(self, frame, iss):
         isv = (iss >> 23) & 0x1
@@ -92,26 +101,19 @@ class InstructionAbortDecode():
     }
 
     def decode_iss(self, frame, iss):
-        pfv = (iss >> 14) & 0x1
-        _set = (iss >> 10) & 0x3
+        print_bits(iss, 14, 1, "PFV")
+        print_bits(iss, 11, 2, "SET")
+        print_bits(iss, 10, 1, "FnV")
         fnv = (iss >> 9) & 0x1
-        ea = (iss >> 8) & 0x1
-        s1ptw = (iss >> 6) & 0x1
-        ifsc = iss & 0x1f
-
-        print("[14]    PFV   ", bin(pfv))
-        print("[12:11] SET   ", format(_set, "#04b"))
-        print("[10]    FnV   ", bin(fnv))
         if not fnv:
             value = int(frame.read_register("FAR_EL1"))
             print("        FAR   ", format(value, "#018x"))
-        print("[9]     EA    ", bin(ea))
-        print("[7]     S1ptw ", bin(s1ptw))
-        print("[5:0]   IFSC  ", format(ifsc, "#08b"), " (", hex(ifsc), ")")
+        print_bits(iss, 9, 1,  "EA")
+        print_bits(iss, 7, 1,  "S1ptw")
+        print_bits(iss, 0, 6,  "IFSC")
+        ifsc = iss & 0x3f
         if ifsc in self.instruction_abort_ifsc:
             print("              ", self.instruction_abort_ifsc[ifsc])
-
-
 
 class Armv8AException(gdb.Command):
     def __init__(self):
@@ -170,22 +172,34 @@ class Armv8AException(gdb.Command):
         value = int(frame.read_register("ESR_EL1"))
         if value == 0:
             return None
-        iss2 = (value >> 32) & 0x1ff
-        ec = (value >> 26) & 0x3ff
-        il = (value >> 25) & 0x1
-        iss = value & 0xffffff
+
 
         print("[63:56] RES0  ")
-        print("[55:32] ISS2  ", format(iss2, "#026b"), " (", hex(iss2), ")")
-        print("[31:26] EC    ", format(ec, "#08b"),    " (", hex(ec),   ")")
-        print("[25]    IL    ", bin(il))
-        print("[24:0]  ISS   ", format(iss, "#027b"),  " (", hex(iss),  ")")
-
+        print_bits(value, 32, 24, "ISS2")
+        print_bits(value, 26, 6,  "EC")
+        ec = (value >> 26) & 0x3ff
         if ec in self.error_codes:
             print("              ", self.error_codes[ec])
 
+        print_bits(value, 25, 1,  "IL")
+        print_bits(value, 0, 24,  "ISS")
+
+        iss = value & 0xffffff
         if ec in self.decoders:
             self.decoders[ec].decode_iss(frame, iss)
 
+class Armv8ARegisterTCR(gdb.Command):
+    def __init__(self):
+        super (Armv8ARegisterTCR, self).__init__ ("armv8a-tcr-el1", gdb.COMMAND_DATA)
+
+    def invoke(self, arg, from_tty):
+        frame = gdb.selected_frame()
+        value = int(frame.read_register("TCR_EL1"))
+        print_bits(value, 10, 2, "ORGN0")
+        print_bits(value, 8, 2,  "IRGN0")
+        print_bits(value, 7, 1,  "EPD0")
+        print_bits(value, 0, 6,  "T0SZ")
+
 
 Armv8AException()
+Armv8ARegisterTCR()
