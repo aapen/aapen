@@ -1,4 +1,4 @@
-PAGE_SIZE = 64K;
+PAGE_SIZE = 4K;
 PAGE_MASK = PAGE_SIZE-1;
 
 /* The kernel's virtual address range will be:
@@ -13,6 +13,7 @@ __rpi_physical_ram_start_addr   = 0;
 
 /* Load address for kernel binary is defined by RPi's firmware */
 __rpi_physical_binary_load_addr = 0x80000;
+__page_table_start              = 0x90000;
 
 ENTRY(__rpi_physical_binary_load_addr)
 
@@ -58,12 +59,19 @@ SECTIONS
                 *(.rodata*)
         } :segment_data
 
-        . = ALIGN(PAGE_SIZE);
+        . = ALIGN(512K);
         __code_end_exclusive = .;
 
         /***********************************************************************
         * Data + BSS
         ***********************************************************************/
+        .page_tables(NOLOAD) : ALIGN(16)
+        {
+                __page_tables_start = .;
+                . += 32K;
+                __page_tables_end_exclusive = .;
+        } :segment_data
+
         __data_start = .;
         .data :
         {
@@ -87,7 +95,7 @@ SECTIONS
         __heap_start = .;
         .heap (NOLOAD) :
         {
-                . += 16 * 1024 * 1024;
+                . += 512 * 1024 * 1024; /* 512MB heap */
         } :segment_heap
         __heap_end_exclusive = .;
 
@@ -96,11 +104,11 @@ SECTIONS
         /***********************************************************************
         * MMIO
         ***********************************************************************/
-        __mmio_remap_start = .;
-        . += 8 * 1024 * 1024;
-        __mmio_remap_end_exclusive = .;
+        /* __mmio_remap_start = .; */
+        /* . += 8 * 1024 * 1024; */
+        /* __mmio_remap_end_exclusive = .; */
 
-        ASSERT((. & PAGE_MASK) == 0, "MMIO remap reservation is not page aligned")
+        /* ASSERT((. & PAGE_MASK) == 0, "MMIO remap reservation is not page aligned") */
 
         /***********************************************************************
         * Guard page
