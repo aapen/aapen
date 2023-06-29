@@ -11,7 +11,7 @@ pub fn Register(comptime Read: type, comptime Write: type) type {
         const Self = @This();
 
         pub fn init(address: usize) Self {
-            return .{ .raw_ptr = @intToPtr(*volatile u32, address) };
+            return .{ .raw_ptr = @as(*volatile u32, @ptrFromInt(address)) };
         }
 
         pub fn read_raw(self: Self) u32 {
@@ -23,11 +23,11 @@ pub fn Register(comptime Read: type, comptime Write: type) type {
         }
 
         pub fn read(self: Self) Read {
-            return @bitCast(Read, self.raw_ptr.*);
+            return @bitCast(self.raw_ptr.*);
         }
 
         pub fn write(self: Self, value: Write) void {
-            self.raw_ptr.* = @bitCast(u32, value);
+            self.raw_ptr.* = @bitCast(value);
         }
 
         pub fn modify(self: Self, new_value: anytype) void {

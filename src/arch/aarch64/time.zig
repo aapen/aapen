@@ -28,7 +28,7 @@ pub const Duration = struct {
 };
 
 fn frequency() u32 {
-    return @truncate(u32, registers.CNTFRQ_EL0.read());
+    return @truncate(registers.CNTFRQ_EL0.read());
 }
 
 fn read_cntpct() u32 {

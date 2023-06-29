@@ -17,9 +17,9 @@ export fn kernel_init() callconv(.Naked) void {
     io.pl011_uart_init();
     io.pl011_uart_write_text("Hello, world!\n");
 
-    var cont = true;
+    var cont: bool = true;
     while (cont) {
-        var ch = io.pl011_uart_blocking_read_byte();
+        var ch: u8 = io.pl011_uart_blocking_read_byte();
         io.pl011_uart_blocking_write_byte(ch);
         if (ch == 'q') break;
     }
@@ -58,7 +58,7 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 
     // fake a return stack pointer and exception link register to a function
     // this function will begin executing when we do `eret` from here
-    cpu.registers.ELR_EL2.write(@ptrToInt(&kernel_init));
+    cpu.registers.ELR_EL2.write(@intFromPtr(&kernel_init));
     cpu.registers.SP_EL1.write(phys_boot_core_stack_end_exclusive);
 
     cpu.eret();

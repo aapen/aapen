@@ -38,11 +38,11 @@ pub fn SystemRegister(comptime name: []const u8, comptime Read: type, comptime W
         }
 
         pub fn read() Read {
-            return @bitCast(Read, read_raw());
+            return @bitCast(read_raw());
         }
 
         pub fn write(value: Write) void {
-            write_raw(@bitCast(u64, value));
+            write_raw(@bitCast(value));
         }
 
         pub fn modify(new_value: anytype) void {
