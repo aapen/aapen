@@ -7,7 +7,6 @@ const qemu = @import("qemu.zig");
 
 extern fn pagetable_init() void;
 extern fn mmu_on() void;
-//extern fn _qemu_exit(exit_status: u8) void;
 
 export fn kernel_init() callconv(.Naked) void {
     arch.cpu.exceptions.init();
@@ -17,8 +16,7 @@ export fn kernel_init() callconv(.Naked) void {
     io.pl011_uart_init();
     io.pl011_uart_write_text("Hello, world!\n");
 
-    var cont: bool = true;
-    while (cont) {
+    while (true) {
         var ch: u8 = io.pl011_uart_blocking_read_byte();
         io.pl011_uart_blocking_write_byte(ch);
         if (ch == 'q') break;
