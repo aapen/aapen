@@ -175,7 +175,10 @@
  * Not reentrant!
  */
 	FUNC64 pagetable_init		//
-	adrp    x20, __page_tables_start// base address
+
+// save x19, x20, x21, x22
+
+        adrp    x20, __page_tables_start// base address
 /* zero_out_tables */
 	mov     x2,x20			//
 	MOV64   x3, 0x5000		// combined length of all tables

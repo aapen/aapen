@@ -13,7 +13,6 @@ __rpi_physical_ram_start_addr   = 0;
 
 /* Load address for kernel binary is defined by RPi's firmware */
 __rpi_physical_binary_load_addr = 0x80000;
-__page_table_start              = 0x90000;
 
 ENTRY(__rpi_physical_binary_load_addr)
 
@@ -68,14 +67,8 @@ SECTIONS
         .page_tables(NOLOAD) : ALIGN(16)
         {
                 __page_tables_start = .;
-                . += 32K;
+                . += 0x5000;
                 __page_tables_end_exclusive = .;
-        } :segment_data
-
-        __data_start = .;
-        .data :
-        {
-                *(.data*)
         } :segment_data
 
         .bss (NOLOAD) : ALIGN(16)
@@ -84,6 +77,12 @@ SECTIONS
                 *(.bss*);
                 . = ALIGN(16);
                 __bss_end_exclusive = .;
+        } :segment_data
+
+        __data_start = .;
+        .data :
+        {
+                *(.data*)
         } :segment_data
 
         . = ALIGN(PAGE_SIZE);
@@ -100,15 +99,6 @@ SECTIONS
         __heap_end_exclusive = .;
 
         ASSERT((. & PAGE_MASK) == 0, "Heap is not page aligned")
-
-        /***********************************************************************
-        * MMIO
-        ***********************************************************************/
-        /* __mmio_remap_start = .; */
-        /* . += 8 * 1024 * 1024; */
-        /* __mmio_remap_end_exclusive = .; */
-
-        /* ASSERT((. & PAGE_MASK) == 0, "MMIO remap reservation is not page aligned") */
 
         /***********************************************************************
         * Guard page
