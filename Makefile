@@ -33,7 +33,7 @@ dirs:
 download_firmware: firmware/COPYING.linux
 
 firmware/COPYING.linux:
-	./scripts/fetch_firmware.sh
+	./tools/fetch_firmware.sh
 
 $(KERNEL): $(SRCS)
 	$(ZIG) build $(ZIG_BUILD_ARGS)

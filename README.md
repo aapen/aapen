@@ -53,21 +53,17 @@ Currently supports Raspberry Pi 3b only.
 
 ### One-time host setup for cross-compilation
 
-Install [Crosstool-NG](https://crosstool-ng.github.io/docs/) on your host.
-
-Use it to build a toolchain for `aarch64-unknown-linux-gnu`:
-
-    $ ct-ng aarch64-unknown-linux-gnu
-
-Then add the resulting toolchain bin directory to your PATH:
-
-    $ PATH=~/x-tool/aarch64-unknown-linux-gnu/bin:$PATH
+Install a recent Zig build (as of June 2023, we are using nightly builds in the 0.11 series) from https://ziglang.org/download/.
 
 ### One-time project setup for firmware
 
 Get the firmware binaries from https://github.com/raspberrypi/firmware
 
-    $ ./scripts/fetch_firmware.sh
+    $ make download_firmware
+
+### One-time install of terminal endpoint
+
+Install https://github.com/tio/tio
 
 ### Building Forth
 
@@ -85,11 +81,9 @@ Put the prepared SD card into the RPi, connect the USB-to-Serial cable
 (see [RPi Serial Connection](http://elinux.org/RPi_Serial_Connection) for more details),
 and power-up to the console.
 
-
-
 To get to the console, you'll need to connect. Here are two ways to try:
 
-    $ minicom -b 115200 -o -D <device>
+    $ tio /dev/ttyUSB0
 
 Where `<device>` is something like `/dev/ttyUSB0` or similar
 (wherever you plugged in your USB-to-Serial cable).
@@ -122,7 +116,7 @@ This will tell QEMU to allow GDB remote debugging, and to wait until
 the debugger is attached before running the software. To attach GDB,
 in another terminal, run:
 
-    $ aarch64-unknown-linux-gnu-gdb kernel8.elf
+    $ make gdb
     (gdb) target remote localhost:1234
     (gdb) layout split
     (gdb) break _start
