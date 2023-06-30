@@ -16,19 +16,11 @@ export fn kernel_init() callconv(.C) void {
     io.pl011_uart_init();
     io.pl011_uart_write_text("Hello, world!\n");
 
-    var days_left: u8 = 2;
-    var cont: bool = true;
-    var chars: u8 = 0;
-    while (cont) {
+    while (true) {
         var ch: u8 = io.pl011_uart_blocking_read_byte();
         io.pl011_uart_blocking_write_byte(ch);
-        chars += 1;
-        if (ch == 'q') {
-            break;
-        }
+        if (ch == 'q') break;
     }
-
-    days_left -= 1;
 
     // Does not return
     qemu.exit(0);

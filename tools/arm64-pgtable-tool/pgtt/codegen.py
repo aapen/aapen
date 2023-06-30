@@ -132,7 +132,7 @@ if args.ttbr1:
 _newline = "\n"
 _tmp =f"""/*
  * This file was automatically generated using arm64-pgtable-tool.
- * See: https://github.com/42Bastian Schick/arm64-pgtable-tool
+ * See: https://github.com/42Bastian/arm64-pgtable-tool
  * Forked from: https://github.com/ashwio/arm64-pgtable-tool
  *
  *
@@ -184,64 +184,22 @@ _tmp =f"""/*
  *  msr     mair_el1, x1
  */
 
-     /* some handy macros */
-#ifdef __IAR_SYSTEMS_ASM__
-FUNC64 MACRO
-    SECTION .text_\\1:CODE:NOROOT(3)
-    EXPORT  \\1
-\\1
-    ENDM
-
-ENDFUNC MACRO
-    ALIGNROM 3
-    LTORG
-\\1_size:    EQU . - \\1
-    ENDM
-
-  MOV64:    MACRO   reg,value
-    if (value & 0xffff) || (value == 0)
-    movz    reg,#value & 0xffff
-    endif
-    if value > 0xffff && ((value>>16) & 0xffff) != 0
-    if (value & 0xffff)
-    movk    reg,#(value>>16) & 0xffff,lsl #16
-    else
-    movz    reg,#(value>>16) & 0xffff,lsl #16
-    endif
-    endif
-    if value > 0xffffffff && ((value>>32) & 0xffff) != 0
-    if value & 0xffffffff
-    movk    reg,#(value>>32) & 0xffff,lsl #32
-    else
-    movz    reg,#(value>>32) & 0xffff,lsl #32
-    endif
-    endif
-    if value > 0xffffffffffff && ((value>>48) & 0xffff) != 0
-    if value & 0xffffffffffff
-    movk    reg,#(value>>48) & 0xffff,lsl #48
-    else
-    movz    reg,#(value>>48) & 0xffff,lsl #48
-    endif
-    endif
-    ENDM
-#else
-#define END .end
-    .macro  FUNC64 name
-    .section .text.\\name,"ax"
-    .type   \\name,%function
-    .globl  \\name
+.macro  FUNC64 name
+    .section .text.\\name
+    .type    \\name, @function
+    .global  \\name
 \\name:
-    .endm
+.endm
 
-    .macro  ENDFUNC name
+.macro  ENDFUNC name
     .align  3
     .pool
-    .globl  \\name\\()_end
+    .global \\name\\()_end
 \\name\\()_end:
     .size   \\name,.-\\name
-    .endm
+.endm
 
-    .macro  MOV64 reg,value
+.macro  MOV64 reg,value
     .if \\value & 0xffff || (\\value == 0)
     movz    \\reg,#\\value & 0xffff
     .endif
@@ -266,13 +224,19 @@ ENDFUNC MACRO
     movz    \\reg,#(\\value>>48) & 0xffff,lsl #48
     .endif
     .endif
-    .endm
-#endif
+.endm
+
 /**
  * Setup the page table.
  * Not reentrant!
  */
     FUNC64 pagetable_init{args.label} //
+
+    // Save x19, x20, x21, x22
+    sub     sp, sp, #16 * 2
+    stp     x19, x20, [sp, #16 * 0]
+    stp     x21, x22, [sp, #16 * 1]
+
     adrp    x20, {args.ttb} // base address
 /* zero_out_tables */
     mov     x2,x20 //
@@ -283,20 +247,19 @@ ptclear{args.label}:
     add     x2, x2, #16     //
     b.ne    ptclear{args.label}            //
 {_mk_asm()}
+
+    // Restore x19, x20, x21, x22
+    ldp x19, x20, [sp, #16 * 0]
+    ldp x21, x22, [sp, #16 * 1]
+    add sp, sp, #16 * 2
+
     ret                             // done!
     ENDFUNC pagetable_init{args.label}  //
 
-#ifdef __IAR_SYSTEMS_ASM__
-    SECTION noinit_mmu:DATA
-    EXPORT {args.ttb}
-    ALIGNRAM 12
-{args.ttb}: DS8 {hex(args.tg * len(table.Table._allocated))}
-#else
     .section .noinit.mmu,"aw",@nobits
-    .globl {args.ttb}
+    .global {args.ttb}
     .align 12
 {args.ttb}: .space {hex(args.tg * len(table.Table._allocated))}
-#endif
 """
 
 mmu_on = f"""
@@ -304,9 +267,6 @@ mmu_on = f"""
  * Set translation table and enable MMU
  */
     FUNC64 mmu_on //
-    adrp    x1, mmu_init            // get 4KB page containing mmu_init
-    ldr     w2, [x1,#:lo12:mmu_init]    // read mmu_init
-    cbz     w2, .                   // init not done, endless loop
 
     adrp    x6, {args.ttb}      // address of first table
     msr     {ttbr}_el{args.el}, x6  //
@@ -359,5 +319,5 @@ if not args.no_mmuon:
         elif not " *" and not "/*" and not "*/" in line:
             line = f"\t"+line.rstrip().lstrip()
         output += f"{line}\n"
-output += f"\tEND\n"
+
 [log.verbose(line) for line in output.splitlines()]

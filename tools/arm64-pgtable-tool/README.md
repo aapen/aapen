@@ -1,8 +1,10 @@
 # arm64-pgtable-tool
 
-This version has been changed a lot for my personal preferences. For the original version go to
+This tool has a lineage:
 
-[arm64-pgtable-tool](https://github.com/ashwio/arm64-pgtable-tool).
+- Originally [ashwio/arm64-pgtable-tool](https://github.com/ashwio/arm64-pgtable-tool)
+- Forked as [42Bastian/arm64-pgtable-tool](https://github.com/42Bastian/arm64-pgtable-tool) with some additional options.
+- Vendored into [mtnygard/pijFORTHos](https://github.com/mtnygard/pijFORTHos) to adapt the code generation.
 
 ## Introduction
 
@@ -142,7 +144,7 @@ Generates the following `mmu_setup.S` GNU assembly file:
 ```
 /*
  * This file was automatically generated using arm64-pgtable-tool.
- * See: https://github.com/42Bastian Schick/arm64-pgtable-tool
+ * See: https://github.com/42Bastian/arm64-pgtable-tool
  * Forked from: https://github.com/ashwio/arm64-pgtable-tool
  *
  *
@@ -218,197 +220,233 @@ Generates the following `mmu_setup.S` GNU assembly file:
  *
  * The programmer must also ensure that the virtual memory region containing the
  * translation tables is itself marked as NORMAL in the memory map file.
+ * MAIR should be set like this:
+ *
+ * 0 = b00000000 = Device-nGnRnE
+ * 1 = b11111111 = Normal, Inner/Outer WB/WA/RA
+ * 2 = b01000100 = Normal, Inner/Outer Non-Cacheable
+ * 3 = b10111011 = Normal, Inner/Outer WT/WA/RA
+ *
+ * For example
+ *
+ *  MOV64   x1, 0xbb44ff00               // program mair on this CPU
+ *  msr     mair_el1, x1
  */
 
-     /* some handy macros */
-    .macro  FUNC64 name
-    .section .text.\name,"ax"
-    .type   \name,%function
-    .globl  \name
+.macro  FUNC64 name
+    .section .text.\name
+    .type    \name, @function
+    .global  \name
 \name:
-    .endm
+.endm
 
-    .macro  ENDFUNC name
+.macro  ENDFUNC name
     .align  3
     .pool
-    .globl  \name\()_end
+    .global \name\()_end
 \name\()_end:
     .size   \name,.-\name
-    .endm
+.endm
 
-    .macro  MOV64 reg,value
+.macro  MOV64 reg,value
+    .if \value & 0xffff || (\value == 0)
     movz    \reg,#\value & 0xffff
+    .endif
     .if \value > 0xffff && ((\value>>16) & 0xffff) != 0
+    .if \value & 0xffff
     movk    \reg,#(\value>>16) & 0xffff,lsl #16
+    .else
+    movz    \reg,#(\value>>16) & 0xffff,lsl #16
+    .endif
     .endif
     .if \value > 0xffffffff && ((\value>>32) & 0xffff) != 0
+    .if \value & 0xffffffff
     movk    \reg,#(\value>>32) & 0xffff,lsl #32
+    .else
+    movz    \reg,#(\value>>32) & 0xffff,lsl #32
+    .endif
     .endif
     .if \value > 0xffffffffffff && ((\value>>48) & 0xffff) != 0
+    .if \value & 0xffffffffffff
     movk    \reg,#(\value>>48) & 0xffff,lsl #48
+    .else
+    movz    \reg,#(\value>>48) & 0xffff,lsl #48
     .endif
-    .endm
+    .endif
+.endm
 
 /**
  * Setup the page table.
  * Not reentrant!
  */
-        FUNC64 pagetable_init           //
-        adrp    x20, mmu_table          // base address
+	FUNC64 pagetable_init		//
+
+					// Save x19, x20, x21, x22
+    sub     sp, sp, #16 * 2
+    stp     x19, x20, [sp, #16 * 0]
+    stp     x21, x22, [sp, #16 * 1]
+
+	adrp    x20, mmu_table		// base address
 /* zero_out_tables */
-        mov     x2,x20                  //
-        MOV64   x3, 0x8000              // combined length of all tables
-1:
-        stp     xzr, xzr, [x2]          // zero out 2 table entries at a time
-        subs    x3, x3, #16             //
-        add     x2, x2, #16             //
-        b.ne    1b                      //
+	mov     x2,x20			//
+	MOV64   x3, 0x8000		// combined length of all tables
+ptclear:
+	stp     xzr, xzr, [x2]		// zero out 2 table entries at a time
+	subs    x3, x3, #16		//
+	add     x2, x2, #16		//
+	b.ne    ptclear			//
 
 /* program_table_0 */
-        MOV64   x21, 0x0                // base address of this table
-        add     x21, x21, x20           // add global base
-        MOV64   x22, 0x8000000000       // chunk size
-        MOV64   x11, 0x1000             // next-level table address
-        add     x11, x11, x20           // add base address
-        orr     x11, x11, #0x3          // next-level table descriptor
-        str     x11, [x21, #0*8]        // write entry[0] into table
+	MOV64   x21, 0x0		// base address of this table
+	add     x21, x21, x20		// add global base
+	MOV64   x22, 0x8000000000	// chunk size
+	MOV64   x11, 0x1000		// next-level table address
+	add     x11, x11, x20		// add base address
+	orr     x11, x11, #0x3		// next-level table descriptor
+	str     x11, [x21, #0*8]	// write entry[0] into table
 /* program_table_1 */
-        MOV64   x21, 0x1000             // base address of this table
-        add     x21, x21, x20           // add global base
-        MOV64   x22, 0x40000000         // chunk size
-        MOV64   x11, 0x2000             // next-level table address
-        add     x11, x11, x20           // add base address
-        orr     x11, x11, #0x3          // next-level table descriptor
-        str     x11, [x21, #0*8]        // write entry[0] into table
+	MOV64   x21, 0x1000		// base address of this table
+	add     x21, x21, x20		// add global base
+	MOV64   x22, 0x40000000		// chunk size
+	MOV64   x11, 0x2000		// next-level table address
+	add     x11, x11, x20		// add base address
+	orr     x11, x11, #0x3		// next-level table descriptor
+	str     x11, [x21, #0*8]	// write entry[0] into table
 /* Non-Trusted DRAM */
 /* page:0x0 SH:0x0 AF:0x1 nG:0x1 attrindx:0x3 NS:0x0 xn:0x1 pxn:0x1 AP:0x0  */
-        MOV64    x9, 0x60000000000c0d   //
-        MOV64   x10, 2                  // index: 2
-        MOV64   x12, 0x80000000         // output address of entry[index]
-        orr     x12, x12, x9            // merge output address with template
-        str     x12, [x21, x10, lsl #3] // write entry into table
+	MOV64    x9, 0x60000000000c0d	//
+	MOV64   x10, 2			// index: 2
+	MOV64   x12, 0x80000000		// output address of entry[index]
+	orr     x12, x12, x9		// merge output address with template
+	str     x12, [x21, x10, lsl #3]	// write entry into table
 
-        MOV64   x11, 0x7000             // next-level table address
-        add     x11, x11, x20           // add base address
-        orr     x11, x11, #0x3          // next-level table descriptor
-        str     x11, [x21, #3*8]        // write entry[3] into table
+	MOV64   x11, 0x7000		// next-level table address
+	add     x11, x11, x20		// add base address
+	orr     x11, x11, #0x3		// next-level table descriptor
+	str     x11, [x21, #3*8]	// write entry[3] into table
 /* program_table_2 */
-        MOV64   x21, 0x2000             // base address of this table
-        add     x21, x21, x20           // add global base
-        MOV64   x22, 0x200000           // chunk size
-        MOV64   x11, 0x3000             // next-level table address
-        add     x11, x11, x20           // add base address
-        orr     x11, x11, #0x3          // next-level table descriptor
-        str     x11, [x21, #224*8]      // write entry[224] into table
-        MOV64   x11, 0x4000             // next-level table address
-        add     x11, x11, x20           // add base address
-        orr     x11, x11, #0x3          // next-level table descriptor
-        str     x11, [x21, #352*8]      // write entry[352] into table
-        MOV64   x11, 0x5000             // next-level table address
-        add     x11, x11, x20           // add base address
-        orr     x11, x11, #0x3          // next-level table descriptor
-        str     x11, [x21, #368*8]      // write entry[368] into table
-        MOV64   x11, 0x6000             // next-level table address
-        add     x11, x11, x20           // add base address
-        orr     x11, x11, #0x3          // next-level table descriptor
-        str     x11, [x21, #376*8]      // write entry[376] into table
+	MOV64   x21, 0x2000		// base address of this table
+	add     x21, x21, x20		// add global base
+	MOV64   x22, 0x200000		// chunk size
+	MOV64   x11, 0x3000		// next-level table address
+	add     x11, x11, x20		// add base address
+	orr     x11, x11, #0x3		// next-level table descriptor
+	str     x11, [x21, #224*8]	// write entry[224] into table
+	MOV64   x11, 0x4000		// next-level table address
+	add     x11, x11, x20		// add base address
+	orr     x11, x11, #0x3		// next-level table descriptor
+	str     x11, [x21, #352*8]	// write entry[352] into table
+	MOV64   x11, 0x5000		// next-level table address
+	add     x11, x11, x20		// add base address
+	orr     x11, x11, #0x3		// next-level table descriptor
+	str     x11, [x21, #368*8]	// write entry[368] into table
+	MOV64   x11, 0x6000		// next-level table address
+	add     x11, x11, x20		// add base address
+	orr     x11, x11, #0x3		// next-level table descriptor
+	str     x11, [x21, #376*8]	// write entry[376] into table
 /* program_table_3 */
-        MOV64   x21, 0x3000             // base address of this table
-        add     x21, x21, x20           // add global base
-        MOV64   x22, 0x1000             // chunk size
+	MOV64   x21, 0x3000		// base address of this table
+	add     x21, x21, x20		// add global base
+	MOV64   x22, 0x1000		// chunk size
 /* UART0 */
 /* page:0x1 SH:0x0 AF:0x1 nG:0x1 attrindx:0x0 NS:0x0 xn:0x1 pxn:0x1 AP:0x0  */
-        MOV64    x9, 0x60000000000c03   //
-        MOV64   x10, 144                // index: 144
-        MOV64   x12, 0x1c090000         // output address of entry[index]
-        orr     x12, x12, x9            // merge output address with template
-        str     x12, [x21, x10, lsl #3] // write entry into table
+	MOV64    x9, 0x60000000000c03	//
+	MOV64   x10, 144		// index: 144
+	MOV64   x12, 0x1c090000		// output address of entry[index]
+	orr     x12, x12, x9		// merge output address with template
+	str     x12, [x21, x10, lsl #3]	// write entry into table
 
 /* program_table_4 */
-        MOV64   x21, 0x4000             // base address of this table
-        add     x21, x21, x20           // add global base
-        MOV64   x22, 0x1000             // chunk size
+	MOV64   x21, 0x4000		// base address of this table
+	add     x21, x21, x20		// add global base
+	MOV64   x22, 0x1000		// chunk size
 /* GICC */
 /* page:0x1 SH:0x0 AF:0x1 nG:0x1 attrindx:0x0 NS:0x0 xn:0x1 pxn:0x1 AP:0x0  */
-        MOV64    x9, 0x60000000000c03   //
-        MOV64   x10, 0                  // index: 0
-        MOV64   x11, 2                  // to 2 (2 entries)
-        MOV64   x12, 0x2c000000         // output address of entry[index]
-1:
-        orr     x12, x12, x9            // merge output address with template
-        str     X12, [x21, x10, lsl #3] // write entry into table
-        add     x10, x10, #1            // prepare for next entry
-        add     x12, x12, x22           // add chunk to address
-        cmp     x10, x11                // last index?
-        b.ne    1b                      //
+	MOV64    x9, 0x60000000000c03	//
+	MOV64   x10, 0			// index: 0
+	MOV64   x11, 2			// to 2 (2 entries)
+	MOV64   x12, 0x2c000000		// output address of entry[index]
+pt0x2c000000:
+	orr     x12, x12, x9		// merge output address with template
+	str     X12, [x21, x10, lsl #3]	// write entry into table
+	add     x10, x10, #1		// prepare for next entry
+	add     x12, x12, x22		// add chunk to address
+	cmp     x10, x11		// last index?
+	b.ne    pt0x2c000000		//
 
 /* program_table_5 */
-        MOV64   x21, 0x5000             // base address of this table
-        add     x21, x21, x20           // add global base
-        MOV64   x22, 0x1000             // chunk size
+	MOV64   x21, 0x5000		// base address of this table
+	add     x21, x21, x20		// add global base
+	MOV64   x22, 0x1000		// chunk size
 /* Non-Trusted SRAM */
 /* page:0x1 SH:0x0 AF:0x1 nG:0x1 attrindx:0x1 NS:0x0 xn:0x1 pxn:0x1 AP:0x0  */
-        MOV64    x9, 0x60000000000c07   //
-        MOV64   x10, 0                  // index: 0
-        MOV64   x11, 16                 // to 16 (16 entries)
-        MOV64   x12, 0x2e000000         // output address of entry[index]
-1:
-        orr     x12, x12, x9            // merge output address with template
-        str     X12, [x21, x10, lsl #3] // write entry into table
-        add     x10, x10, #1            // prepare for next entry
-        add     x12, x12, x22           // add chunk to address
-        cmp     x10, x11                // last index?
-        b.ne    1b                      //
+	MOV64    x9, 0x60000000000c07	//
+	MOV64   x10, 0			// index: 0
+	MOV64   x11, 16			// to 16 (16 entries)
+	MOV64   x12, 0x2e000000		// output address of entry[index]
+pt0x2e000000:
+	orr     x12, x12, x9		// merge output address with template
+	str     X12, [x21, x10, lsl #3]	// write entry into table
+	add     x10, x10, #1		// prepare for next entry
+	add     x12, x12, x22		// add chunk to address
+	cmp     x10, x11		// last index?
+	b.ne    pt0x2e000000		//
 
 /* program_table_6 */
-        MOV64   x21, 0x6000             // base address of this table
-        add     x21, x21, x20           // add global base
-        MOV64   x22, 0x1000             // chunk size
+	MOV64   x21, 0x6000		// base address of this table
+	add     x21, x21, x20		// add global base
+	MOV64   x22, 0x1000		// chunk size
 /* GICv3 GICD */
 /* page:0x1 SH:0x0 AF:0x1 nG:0x1 attrindx:0x0 NS:0x0 xn:0x1 pxn:0x1 AP:0x0  */
-        MOV64    x9, 0x60000000000c03   //
-        MOV64   x10, 0                  // index: 0
-        MOV64   x11, 16                 // to 16 (16 entries)
-        MOV64   x12, 0x2f000000         // output address of entry[index]
-1:
-        orr     x12, x12, x9            // merge output address with template
-        str     X12, [x21, x10, lsl #3] // write entry into table
-        add     x10, x10, #1            // prepare for next entry
-        add     x12, x12, x22           // add chunk to address
-        cmp     x10, x11                // last index?
-        b.ne    1b                      //
+	MOV64    x9, 0x60000000000c03	//
+	MOV64   x10, 0			// index: 0
+	MOV64   x11, 16			// to 16 (16 entries)
+	MOV64   x12, 0x2f000000		// output address of entry[index]
+pt0x2f000000:
+	orr     x12, x12, x9		// merge output address with template
+	str     X12, [x21, x10, lsl #3]	// write entry into table
+	add     x10, x10, #1		// prepare for next entry
+	add     x12, x12, x22		// add chunk to address
+	cmp     x10, x11		// last index?
+	b.ne    pt0x2f000000		//
 
 /* GICv3 GICR */
 /* page:0x1 SH:0x0 AF:0x1 nG:0x1 attrindx:0x0 NS:0x0 xn:0x1 pxn:0x1 AP:0x0  */
-        MOV64    x9, 0x60000000000c03   //
-        MOV64   x10, 256                // index: 256
-        MOV64   x11, 512                // to 512 (256 entries)
-        MOV64   x12, 0x2f100000         // output address of entry[index]
-1:
-        orr     x12, x12, x9            // merge output address with template
-        str     X12, [x21, x10, lsl #3] // write entry into table
-        add     x10, x10, #1            // prepare for next entry
-        add     x12, x12, x22           // add chunk to address
-        cmp     x10, x11                // last index?
-        b.ne    1b                      //
+	MOV64    x9, 0x60000000000c03	//
+	MOV64   x10, 256		// index: 256
+	MOV64   x11, 512		// to 512 (256 entries)
+	MOV64   x12, 0x2f100000		// output address of entry[index]
+pt0x2f100000:
+	orr     x12, x12, x9		// merge output address with template
+	str     X12, [x21, x10, lsl #3]	// write entry into table
+	add     x10, x10, #1		// prepare for next entry
+	add     x12, x12, x22		// add chunk to address
+	cmp     x10, x11		// last index?
+	b.ne    pt0x2f100000		//
 
 /* program_table_7 */
-        MOV64   x21, 0x7000             // base address of this table
-        add     x21, x21, x20           // add global base
-        MOV64   x22, 0x200000           // chunk size
+	MOV64   x21, 0x7000		// base address of this table
+	add     x21, x21, x20		// add global base
+	MOV64   x22, 0x200000		// chunk size
 /* CODE */
 /* page:0x0 SH:0x0 AF:0x1 nG:0x1 attrindx:0x1 NS:0x0 xn:0x1 pxn:0x0 AP:0x2  */
-        MOV64    x9, 0x40000000000c85   //
-        MOV64   x10, 0                  // index: 0
-        MOV64   x12, 0xc0000000         // output address of entry[index]
-        orr     x12, x12, x9            // merge output address with template
-        str     x12, [x21, x10, lsl #3] // write entry into table
+	MOV64    x9, 0x40000000000c85	//
+	MOV64   x10, 0			// index: 0
+	MOV64   x12, 0xc0000000		// output address of entry[index]
+	orr     x12, x12, x9		// merge output address with template
+	str     x12, [x21, x10, lsl #3]	// write entry into table
 
-        ret                             // done!
-        ENDFUNC pagetable_init          //
+
+					// Restore x19, x20, x21, x22
+    ldp x19, x20, [sp, #16 * 0]
+    ldp x21, x22, [sp, #16 * 1]
+    add sp, sp, #16 * 2
+
+	ret				// done!
+	ENDFUNC pagetable_init		//
 
     .section .noinit.mmu,"aw",@nobits
-    .globl mmu_table
+    .global mmu_table
     .align 12
 mmu_table: .space 0x8000
 ```
