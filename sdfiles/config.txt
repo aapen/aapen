@@ -1,5 +1,6 @@
-core_freq_min=500
 arm_64bit=1
+
+core_freq_min=500
 init_uart_clock=48000000
 enable_jtag_gpio=1
-
+uart_2ndstage=1
