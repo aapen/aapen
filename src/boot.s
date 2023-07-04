@@ -8,10 +8,6 @@
 // Constants
 // ----------------------------------------------------------------------
 
-CONST_CURRENTEL_EL2 = 0x08
-CONST_CORE_ID_MASK  = 0xff
-BOOT_CORE_ID        = 0x00
-
 // ----------------------------------------------------------------------
 // Macros
 // ----------------------------------------------------------------------
@@ -50,16 +46,15 @@ _start:
         // should not proceed
 
         mrs x0, CurrentEL                     // Get execution level from CPU into x0
-        cmp x0, #CONST_CURRENTEL_EL2          // It should be EL2 at boot time
+        cmp x0, 0x08                          // It should be EL2 at boot time
         b.ne L_parking_loop                   // If not, something is wrong, park the core
 
         // All cores boot from the same image. We're going to have one core
         // handle system initialization. It will later activate the other cores.
 
         mrs x0, MPIDR_EL1                     // Get the core ID from the CPU's multiprocessor affinity register
-        and x0, x0, #CONST_CORE_ID_MASK       // The lower 8 bits hold the core number
-        ldr x1, =BOOT_CORE_ID                 // The boot core is core 0
-        cmp x0, x1                            // Are we on the boot core?
+        and x0, x0, #0xff                     // The lower 8 bits hold the core number
+        cmp x0, 0x00                          // Are we on the boot core?
         b.ne L_parking_loop                   // If not, park the core
 
         // We're on the main core. Initialize memory and stack.
