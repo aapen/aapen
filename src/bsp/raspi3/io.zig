@@ -4,6 +4,37 @@ const UniformRegister = reg.UniformRegister;
 const peripheral_base: u64 = 0x3f000000; // RPi 3
 //  const peripheral_base: u64 = 0xfe000000;   // RPi 4
 
+extern fn spin_delay(cpu_cycles: u32) void;
+
+// const GPIOPin = enum(u8) {
+//   pin3 = 2,
+//   pin5 = 3,
+//   pin7 = 4,
+//   pin11 = 17,
+//   pin13 = 27,
+//   pin15 = 22,
+//   pin19 = 10,
+//   pin21 = 9,
+//   pin23 = 11,
+//   pin29 = 5,
+//   pin31 = 6,
+//   pin33 = 13,
+//   pin35 = 19,
+//   pin37 = 26,
+//   pin8 = 14,
+//   pin10 = 15,
+//   pin12 = 18,
+//   pin16 = 23,
+//   pin18 = 24,
+//   pin22 = 25,
+//   pin24 = 8,
+//   pin26 = 7,
+//   pin32 = 12,
+//   pin36 = 16,
+//   pin38 = 20,
+//   pin40 = 21,
+// };
+
 //
 // GPIO registers and their structures
 // Note: this is incomplete... at the moment, it only contains enough
@@ -21,101 +52,127 @@ pub const GPIOFunctionSelect = enum(u3) {
     alt5 = 0b010,
 };
 
-const gpio_function_select_0_layout = packed struct {
-    fsel0: GPIOFunctionSelect,
-    fsel1: GPIOFunctionSelect,
-    fsel2: GPIOFunctionSelect,
-    fsel3: GPIOFunctionSelect,
-    fsel4: GPIOFunctionSelect,
-    fsel5: GPIOFunctionSelect,
-    fsel6: GPIOFunctionSelect,
-    fsel7: GPIOFunctionSelect,
-    fsel8: GPIOFunctionSelect,
-    fsel9: GPIOFunctionSelect,
-    _unused_reserved: u2,
+const gpio_function_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x00),
+    UniformRegister(u32).init(gpio_base + 0x04),
+    UniformRegister(u32).init(gpio_base + 0x08),
+    UniformRegister(u32).init(gpio_base + 0x0c),
+    UniformRegister(u32).init(gpio_base + 0x10),
+    UniformRegister(u32).init(gpio_base + 0x14),
 };
-const gpio_function_select_0 = UniformRegister(gpio_function_select_0_layout).init(gpio_base + 0x00);
 
-const gpio_function_select_1_layout = packed struct {
-    fsel10: GPIOFunctionSelect,
-    fsel11: GPIOFunctionSelect,
-    fsel12: GPIOFunctionSelect,
-    fsel13: GPIOFunctionSelect,
-    fsel14: GPIOFunctionSelect,
-    fsel15: GPIOFunctionSelect,
-    fsel16: GPIOFunctionSelect,
-    fsel17: GPIOFunctionSelect,
-    fsel18: GPIOFunctionSelect,
-    fsel19: GPIOFunctionSelect,
-    _unused_reserved: u2,
+const gpio_output_set_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x1c),
+    UniformRegister(u32).init(gpio_base + 0x20),
 };
-const gpio_function_select_1 = UniformRegister(gpio_function_select_1_layout).init(gpio_base + 0x04);
 
-const gpio_function_select_2_layout = packed struct {
-    fsel20: GPIOFunctionSelect,
-    fsel21: GPIOFunctionSelect,
-    fsel22: GPIOFunctionSelect,
-    fsel23: GPIOFunctionSelect,
-    fsel24: GPIOFunctionSelect,
-    fsel25: GPIOFunctionSelect,
-    fsel26: GPIOFunctionSelect,
-    fsel27: GPIOFunctionSelect,
-    fsel28: GPIOFunctionSelect,
-    fsel29: GPIOFunctionSelect,
-    _unused_reserved: u2,
+const gpio_output_clear_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x28),
+    UniformRegister(u32).init(gpio_base + 0x2c),
 };
-const gpio_function_select_2 = UniformRegister(gpio_function_select_2_layout).init(gpio_base + 0x08);
 
-const gpio_function_select_3_layout = packed struct {
-    fsel30: GPIOFunctionSelect,
-    fsel31: GPIOFunctionSelect,
-    fsel32: GPIOFunctionSelect,
-    fsel33: GPIOFunctionSelect,
-    fsel34: GPIOFunctionSelect,
-    fsel35: GPIOFunctionSelect,
-    fsel36: GPIOFunctionSelect,
-    fsel37: GPIOFunctionSelect,
-    fsel38: GPIOFunctionSelect,
-    fsel39: GPIOFunctionSelect,
-    _unused_reserved: u2,
+const gpio_level_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x34),
+    UniformRegister(u32).init(gpio_base + 0x38),
 };
-const gpio_function_select_3 = UniformRegister(gpio_function_select_3_layout).init(gpio_base + 0x0c);
 
-const gpio_function_select_4_layout = packed struct {
-    fsel40: GPIOFunctionSelect,
-    fsel41: GPIOFunctionSelect,
-    fsel42: GPIOFunctionSelect,
-    fsel43: GPIOFunctionSelect,
-    fsel44: GPIOFunctionSelect,
-    fsel45: GPIOFunctionSelect,
-    fsel46: GPIOFunctionSelect,
-    fsel47: GPIOFunctionSelect,
-    fsel48: GPIOFunctionSelect,
-    fsel49: GPIOFunctionSelect,
-    _unused_reserved: u2,
+const gpio_event_detect_status_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x40),
+    UniformRegister(u32).init(gpio_base + 0x44),
 };
-const gpio_function_select_4 = UniformRegister(gpio_function_select_4_layout).init(gpio_base + 0x10);
 
-const gpio_function_select_5_layout = packed struct {
-    fsel50: GPIOFunctionSelect,
-    fsel51: GPIOFunctionSelect,
-    fsel52: GPIOFunctionSelect,
-    fsel53: GPIOFunctionSelect,
-    _unused_reserved: u20,
+const gpio_rising_edge_detect_enable_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x4c),
+    UniformRegister(u32).init(gpio_base + 0x50),
 };
-const gpio_function_select_5 = UniformRegister(gpio_function_select_5_layout).init(gpio_base + 0x14);
 
-const gpio_set_layout = packed struct {
-    set: u32,
+const gpio_falling_edge_detect_enable_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x58),
+    UniformRegister(u32).init(gpio_base + 0x5c),
 };
-const gpio_set_0 = UniformRegister(gpio_set_layout).init(gpio_base + 0x1c);
-const gpio_set_1 = UniformRegister(gpio_set_layout).init(gpio_base + 0x20);
 
-const gpio_clear_layout = packed struct {
-    clear: u32,
+const gpio_pin_high_detect_enable_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x64),
+    UniformRegister(u32).init(gpio_base + 0x68),
 };
-const gpio_clear_0 = UniformRegister(gpio_clear_layout).init(gpio_base + 0x28);
-const gpio_clear_1 = UniformRegister(gpio_clear_layout).init(gpio_base + 0x2c);
+
+const gpio_pin_low_detect_enable_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x70),
+    UniformRegister(u32).init(gpio_base + 0x74),
+};
+
+const gpio_pull_up_pull_down_enable_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x94),
+};
+
+const gpio_pull_up_pull_down_enable_clock_registers = [_]UniformRegister(u32){
+    UniformRegister(u32).init(gpio_base + 0x98),
+    UniformRegister(u32).init(gpio_base + 0x9c),
+};
+
+const GPIOPin = struct {
+    const Self = @This();
+    
+    physical_id: u8,
+    broadcom_id: u8,
+    function_select_register_index: u8,
+    function_select_register_shift: u5,
+    data_register_index: u8,
+    data_register_shift: u5,
+    getset_mask: u32,
+
+    fn define(physical_id: u8, broadcom_id: u8) Self {
+        var fsel_bitstart: u5 = @truncate(@mod(broadcom_id * 3, 30));
+        var fsel_register_index: u8 = broadcom_id / 10;
+        var data_register_index: u8 = broadcom_id / 32;
+        var data_register_shift: u5 = @truncate(@mod(broadcom_id, 32));
+        var getset_mask: u32 = @as(u32, 1) << data_register_shift;
+
+        return .{
+                 .physical_id = physical_id,
+                 .broadcom_id = broadcom_id,
+                 .function_select_register_index = fsel_register_index,
+                 .function_select_register_shift = fsel_bitstart,
+                 .data_register_index = data_register_index,
+                 .data_register_shift = data_register_shift,
+                 .getset_mask = getset_mask,
+                };
+    }
+
+    fn select_function(self: *const Self, fsel: GPIOFunctionSelect) void {
+        var val = gpio_function_registers[self.function_select_register_index].read_raw();
+        val &= ~(@as(u32, 7) << self.function_select_register_shift);
+        val |= (@as(u32, @intFromEnum(fsel)) << self.function_select_register_shift);
+        gpio_function_registers[self.function_select_register_index].write_raw(val);
+    }
+
+    fn enable(self: *const Self) void {
+        gpio_pull_up_pull_down_enable_registers[0].write_raw(0);
+        spin_delay(150);
+        gpio_pull_up_pull_down_enable_clock_registers[self.data_register_index].write_raw(self.getset_mask);
+        spin_delay(150);
+        gpio_pull_up_pull_down_enable_registers[0].write_raw(0);
+        gpio_pull_up_pull_down_enable_clock_registers[self.data_register_index].write_raw(0);
+    }
+
+    fn set(self: *const Self) void {
+        gpio_output_set_registers[self.data_register_index].write_raw(self.getset_mask);
+    }
+    
+    fn clear(self: *const Self) void {
+        gpio_output_clear_registers[self.data_register_index].write_raw(self.getset_mask);
+    }
+
+    fn get(self: *const Self) bool {
+        var levels = gpio_level_registers[self.data_register_index].read_raw();
+        return (levels & self.getset_mask) != 0;
+    }
+};
+
+pub const pins = struct {
+    const Pin14 = GPIOPin.define(8, 14);
+    const Pin15 = GPIOPin.define(10, 15);
+};
 
 //
 // PL011 UART registers and their structures
@@ -330,10 +387,16 @@ pub fn pl011_uart_blocking_read_byte() u8 {
 
 pub fn pl011_uart_init() void {
     // Configure GPIO pins for serial I/O
-    gpio_function_select_1.modify(.{
-        .fsel14 = .alt0,
-        .fsel15 = .alt0,
-    });
+    pins.Pin14.enable();
+    pins.Pin15.enable();
+
+    pins.Pin14.select_function(GPIOFunctionSelect.alt0);
+    pins.Pin15.select_function(GPIOFunctionSelect.alt0);
+
+    // gpio_function_select_1.modify(.{
+    //     .fsel14 = .alt0,
+    //     .fsel15 = .alt0,
+    // });
 
     // Turn UART off while initializing
     pl011_uart_cr.write(.{ .uart_enable = .disable });
