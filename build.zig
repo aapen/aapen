@@ -23,6 +23,7 @@ pub fn build(b: *std.Build) void {
     kernel.addAssemblyFile("src/arch/aarch64/exceptions.s");
     kernel.addAssemblyFile("src/boot.s");
     kernel.addAssemblyFile("src/mmu.s");
+    kernel.addAssemblyFile("src/util.s");
     kernel.setLinkerScriptPath(.{ .path = "kernel.ld" });
 
     b.installArtifact(kernel);
