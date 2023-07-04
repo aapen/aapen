@@ -10,7 +10,7 @@ const peripheral_base: u64 = 0x3f000000; // RPi 3
 // to get a serial connection
 const gpio_base = peripheral_base + 0x200000;
 
-pub const FunctionSelect = enum(u3) {
+pub const GPIOFunctionSelect = enum(u3) {
     input = 0b000,
     output = 0b001,
     alt0 = 0b100,
@@ -22,85 +22,85 @@ pub const FunctionSelect = enum(u3) {
 };
 
 const gpio_function_select_0_layout = packed struct {
-    fsel0: FunctionSelect,
-    fsel1: FunctionSelect,
-    fsel2: FunctionSelect,
-    fsel3: FunctionSelect,
-    fsel4: FunctionSelect,
-    fsel5: FunctionSelect,
-    fsel6: FunctionSelect,
-    fsel7: FunctionSelect,
-    fsel8: FunctionSelect,
-    fsel9: FunctionSelect,
+    fsel0: GPIOFunctionSelect,
+    fsel1: GPIOFunctionSelect,
+    fsel2: GPIOFunctionSelect,
+    fsel3: GPIOFunctionSelect,
+    fsel4: GPIOFunctionSelect,
+    fsel5: GPIOFunctionSelect,
+    fsel6: GPIOFunctionSelect,
+    fsel7: GPIOFunctionSelect,
+    fsel8: GPIOFunctionSelect,
+    fsel9: GPIOFunctionSelect,
     _unused_reserved: u2,
 };
 const gpio_function_select_0 = UniformRegister(gpio_function_select_0_layout).init(gpio_base + 0x00);
 
 const gpio_function_select_1_layout = packed struct {
-    fsel10: FunctionSelect,
-    fsel11: FunctionSelect,
-    fsel12: FunctionSelect,
-    fsel13: FunctionSelect,
-    fsel14: FunctionSelect,
-    fsel15: FunctionSelect,
-    fsel16: FunctionSelect,
-    fsel17: FunctionSelect,
-    fsel18: FunctionSelect,
-    fsel19: FunctionSelect,
+    fsel10: GPIOFunctionSelect,
+    fsel11: GPIOFunctionSelect,
+    fsel12: GPIOFunctionSelect,
+    fsel13: GPIOFunctionSelect,
+    fsel14: GPIOFunctionSelect,
+    fsel15: GPIOFunctionSelect,
+    fsel16: GPIOFunctionSelect,
+    fsel17: GPIOFunctionSelect,
+    fsel18: GPIOFunctionSelect,
+    fsel19: GPIOFunctionSelect,
     _unused_reserved: u2,
 };
 const gpio_function_select_1 = UniformRegister(gpio_function_select_1_layout).init(gpio_base + 0x04);
 
 const gpio_function_select_2_layout = packed struct {
-    fsel20: FunctionSelect,
-    fsel21: FunctionSelect,
-    fsel22: FunctionSelect,
-    fsel23: FunctionSelect,
-    fsel24: FunctionSelect,
-    fsel25: FunctionSelect,
-    fsel26: FunctionSelect,
-    fsel27: FunctionSelect,
-    fsel28: FunctionSelect,
-    fsel29: FunctionSelect,
+    fsel20: GPIOFunctionSelect,
+    fsel21: GPIOFunctionSelect,
+    fsel22: GPIOFunctionSelect,
+    fsel23: GPIOFunctionSelect,
+    fsel24: GPIOFunctionSelect,
+    fsel25: GPIOFunctionSelect,
+    fsel26: GPIOFunctionSelect,
+    fsel27: GPIOFunctionSelect,
+    fsel28: GPIOFunctionSelect,
+    fsel29: GPIOFunctionSelect,
     _unused_reserved: u2,
 };
 const gpio_function_select_2 = UniformRegister(gpio_function_select_2_layout).init(gpio_base + 0x08);
 
 const gpio_function_select_3_layout = packed struct {
-    fsel30: FunctionSelect,
-    fsel31: FunctionSelect,
-    fsel32: FunctionSelect,
-    fsel33: FunctionSelect,
-    fsel34: FunctionSelect,
-    fsel35: FunctionSelect,
-    fsel36: FunctionSelect,
-    fsel37: FunctionSelect,
-    fsel38: FunctionSelect,
-    fsel39: FunctionSelect,
+    fsel30: GPIOFunctionSelect,
+    fsel31: GPIOFunctionSelect,
+    fsel32: GPIOFunctionSelect,
+    fsel33: GPIOFunctionSelect,
+    fsel34: GPIOFunctionSelect,
+    fsel35: GPIOFunctionSelect,
+    fsel36: GPIOFunctionSelect,
+    fsel37: GPIOFunctionSelect,
+    fsel38: GPIOFunctionSelect,
+    fsel39: GPIOFunctionSelect,
     _unused_reserved: u2,
 };
 const gpio_function_select_3 = UniformRegister(gpio_function_select_3_layout).init(gpio_base + 0x0c);
 
 const gpio_function_select_4_layout = packed struct {
-    fsel40: FunctionSelect,
-    fsel41: FunctionSelect,
-    fsel42: FunctionSelect,
-    fsel43: FunctionSelect,
-    fsel44: FunctionSelect,
-    fsel45: FunctionSelect,
-    fsel46: FunctionSelect,
-    fsel47: FunctionSelect,
-    fsel48: FunctionSelect,
-    fsel49: FunctionSelect,
+    fsel40: GPIOFunctionSelect,
+    fsel41: GPIOFunctionSelect,
+    fsel42: GPIOFunctionSelect,
+    fsel43: GPIOFunctionSelect,
+    fsel44: GPIOFunctionSelect,
+    fsel45: GPIOFunctionSelect,
+    fsel46: GPIOFunctionSelect,
+    fsel47: GPIOFunctionSelect,
+    fsel48: GPIOFunctionSelect,
+    fsel49: GPIOFunctionSelect,
     _unused_reserved: u2,
 };
 const gpio_function_select_4 = UniformRegister(gpio_function_select_4_layout).init(gpio_base + 0x10);
 
 const gpio_function_select_5_layout = packed struct {
-    fsel50: FunctionSelect,
-    fsel51: FunctionSelect,
-    fsel52: FunctionSelect,
-    fsel53: FunctionSelect,
+    fsel50: GPIOFunctionSelect,
+    fsel51: GPIOFunctionSelect,
+    fsel52: GPIOFunctionSelect,
+    fsel53: GPIOFunctionSelect,
     _unused_reserved: u20,
 };
 const gpio_function_select_5 = UniformRegister(gpio_function_select_5_layout).init(gpio_base + 0x14);
