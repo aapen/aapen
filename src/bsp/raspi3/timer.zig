@@ -1,6 +1,7 @@
 const io = @import("io.zig");
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
+const interrupts = @import("interrupts.zig");
 const peripheral_base = @import("peripheral.zig").peripheral_base;
 pub const system_timer_base = peripheral_base + 0x3000;
 
@@ -33,12 +34,32 @@ const timer_compare_2 = UniformRegister(timer_compare).init(system_timer_base + 
 const timer_compare_3 = UniformRegister(timer_compare).init(system_timer_base + 0x18);
 
 // ----------------------------------------------------------------------
+// Timer interrupts
+// ----------------------------------------------------------------------
+pub const TimerIRQs = struct {
+    pub const SystemTimerIRQ0: u32 = 0b0001;
+    pub const SystemTimerIRQ1: u32 = 0b0010;
+    pub const SystemTimerIRQ2: u32 = 0b0100;
+    pub const SystemTimerIRQ3: u32 = 0b1000;
+};
+
+pub fn enable_timer_irq(which: u32) void {
+    interrupts.enable_irq(which);
+}
+
+pub fn disable_timer_irq(which: u32) void {
+    interrupts.disable_irq(which);
+}
+
+// ----------------------------------------------------------------------
 // Repeating timer
 // ----------------------------------------------------------------------
 const timer_quantum = 200000;
 var next_tick: u32 = undefined;
 
 pub fn timer_init() void {
+    enable_timer_irq(TimerIRQs.SystemTimerIRQ1);
+
     next_tick = timer_count_low.read();
     next_tick += timer_quantum;
     timer_compare_1.write(next_tick);
