@@ -1,8 +1,6 @@
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
-
-const peripheral_base: u64 = 0x3f000000; // RPi 3
-//  const peripheral_base: u64 = 0xfe000000;   // RPi 4
+const peripheral_base = @import("peripheral.zig").peripheral_base;
 
 extern fn spin_delay(cpu_cycles: u32) void;
 
@@ -112,7 +110,7 @@ const gpio_pull_up_pull_down_enable_clock_registers = [_]UniformRegister(u32){
 
 const GPIOPin = struct {
     const Self = @This();
-    
+
     physical_id: u8,
     broadcom_id: u8,
     function_select_register_index: u8,
@@ -129,14 +127,14 @@ const GPIOPin = struct {
         var getset_mask: u32 = @as(u32, 1) << data_register_shift;
 
         return .{
-                 .physical_id = physical_id,
-                 .broadcom_id = broadcom_id,
-                 .function_select_register_index = fsel_register_index,
-                 .function_select_register_shift = fsel_bitstart,
-                 .data_register_index = data_register_index,
-                 .data_register_shift = data_register_shift,
-                 .getset_mask = getset_mask,
-                };
+            .physical_id = physical_id,
+            .broadcom_id = broadcom_id,
+            .function_select_register_index = fsel_register_index,
+            .function_select_register_shift = fsel_bitstart,
+            .data_register_index = data_register_index,
+            .data_register_shift = data_register_shift,
+            .getset_mask = getset_mask,
+        };
     }
 
     fn select_function(self: *const Self, fsel: GPIOFunctionSelect) void {
@@ -158,7 +156,7 @@ const GPIOPin = struct {
     fn set(self: *const Self) void {
         gpio_output_set_registers[self.data_register_index].write_raw(self.getset_mask);
     }
-    
+
     fn clear(self: *const Self) void {
         gpio_output_clear_registers[self.data_register_index].write_raw(self.getset_mask);
     }

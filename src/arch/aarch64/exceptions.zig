@@ -2,8 +2,12 @@
 // the directory traversal here!
 const io = @import("../../bsp.zig").io;
 const registers = @import("registers.zig");
+const irq = @import("../../bsp.zig").interrupts;
 
 const __exception_handler_table: *u64 = @extern(*u64, .{ .name = "__exception_handler_table" });
+
+extern fn global_disable_irq() void;
+extern fn global_enable_irq() void;
 
 pub fn init() void {
     registers.VBAR_EL1.write(@intFromPtr(__exception_handler_table));
@@ -38,7 +42,7 @@ const ExceptionContext = struct {
 
 pub fn default_exception_handler(context: *const ExceptionContext) void {
     _ = context;
-    debug_write("DEH.\n");
+    debug_write("Unhandled exception.\n");
 }
 
 /// Stub functions for the various ways of getting an exception
@@ -59,7 +63,11 @@ export fn current_elx_synchronous(context: *const ExceptionContext) void {
 }
 
 export fn current_elx_irq(context: *const ExceptionContext) void {
-    default_exception_handler(context);
+    _ = context;
+    global_disable_irq();
+    defer global_enable_irq();
+
+    irq.handle_irq();
 }
 
 export fn current_elx_serror(context: *const ExceptionContext) void {

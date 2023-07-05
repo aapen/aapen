@@ -3,15 +3,22 @@ const arch = @import("architecture.zig");
 const cpu = arch.cpu;
 const bsp = @import("bsp.zig");
 const io = bsp.io;
+const timer = bsp.timer;
+const interrupts = bsp.interrupts;
 const qemu = @import("qemu.zig");
 
 extern fn pagetable_init() void;
 extern fn mmu_on() void;
+extern fn global_enable_irq() void;
 
 export fn kernel_init() callconv(.C) void {
     arch.cpu.exceptions.init();
     pagetable_init();
     mmu_on();
+
+    interrupts.enable_timer_irq(interrupts.TimerIRQs.SystemTimerIRQ1);
+    timer.timer_init();
+    global_enable_irq();
 
     io.pl011_uart_init();
     io.pl011_uart_write_text("Hello, world!\n");
