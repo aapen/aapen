@@ -1,14 +1,11 @@
-extern fn global_enable_irq() void;
-extern fn global_disable_irq() void;
-
 pub fn init() void {
-    global_enable_irq();
+    enable();
 }
 
 pub fn disable() void {
-    global_disable_irq();
+    asm volatile ("msr daifset, #2");
 }
 
 pub fn enable() void {
-    global_enable_irq();
+    asm volatile ("msr daifclr, #2");
 }

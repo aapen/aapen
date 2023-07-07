@@ -1,13 +1,11 @@
 // TODO: Is this really the right thing to do? Seems very odd to have
 // the directory traversal here!
-const io = @import("../../bsp.zig").io;
+const bsp = @import("../../bsp.zig");
+const io = bsp.io;
 const registers = @import("registers.zig");
-const irq = @import("../../bsp.zig").interrupts;
+const irq = @import("irq.zig");
 
 const __exception_handler_table: *u64 = @extern(*u64, .{ .name = "__exception_handler_table" });
-
-extern fn global_disable_irq() void;
-extern fn global_enable_irq() void;
 
 pub fn init() void {
     registers.VBAR_EL1.write(@intFromPtr(__exception_handler_table));
@@ -64,10 +62,10 @@ export fn current_elx_synchronous(context: *const ExceptionContext) void {
 
 export fn current_elx_irq(context: *const ExceptionContext) void {
     _ = context;
-    global_disable_irq();
-    defer global_enable_irq();
+    irq.disable();
+    defer irq.enable();
 
-    irq.handle_irq();
+    bsp.interrupts.handle_irq();
 }
 
 export fn current_elx_serror(context: *const ExceptionContext) void {
