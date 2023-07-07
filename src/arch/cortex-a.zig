@@ -10,3 +10,7 @@ pub const irq = @import("aarch64/irq.zig");
 pub inline fn eret() void {
     asm volatile ("eret");
 }
+
+pub inline fn wait_for_interrupt() void {
+    asm volatile ("wfe");
+}

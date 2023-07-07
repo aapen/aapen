@@ -10,12 +10,12 @@ export fn kernel_init() callconv(.C) void {
 
     bsp.timer.timer_init();
 
-    bsp.io.pl011_uart_init();
-    bsp.io.pl011_uart_write_text("Hello, world!\n");
+    bsp.io.uart_init();
+    bsp.io.send_string("Hello, world!\n");
 
     while (true) {
-        var ch: u8 = bsp.io.pl011_uart_blocking_read_byte();
-        bsp.io.pl011_uart_blocking_write_byte(ch);
+        var ch: u8 = bsp.io.receive();
+        bsp.io.send(ch);
         if (ch == 'q') break;
     }
 

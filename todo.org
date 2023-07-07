@@ -81,9 +81,9 @@ Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 - [X] Set up interrupt handler tables, point everything to a "panic" that dumps state on UART
 - [X] Transition from EL2 to EL1
 - [ ] copy kernel to high memory
-- [ ] Set up translation tables
-- [ ] Reserve the device pages, mark them in TT properly
-- [ ] Mark kernel text pages as RX, kernel data (GOT, stack, BSS) as RW/NX
+- [X] Set up translation tables
+- [X] Reserve the device pages, mark them in TT properly
+- [X] Mark kernel text pages as RX, kernel data (GOT, stack, BSS) as RW/NX
 ** TODO Perform "Hello world" on RPi4 hardware
 * Milestone: Interact
 ** DONE Read from serial input on RPi3 under QEMU
@@ -91,23 +91,23 @@ Read and echo characters.
 Polling is fine.
 This will actually be the host machine's keyboard in a terminal, proxied to the PL011 UART in the emulated device.
 ** TODO Make the GPIO pins available for blinkenlights, or even useful stuff. They should be super-easy to use from Forth
-- [ ] Define a ziggish API (@russ)
-- [ ] Make the register dance support that API (@mike)
+- [X] Define a ziggish API (@russ)
+- [X] Make the register dance support that API (@mike)
 - [ ] Define forthish words (@russ) for pin operations
 ** TODO Read from serial input on RPi3
-Read and echo characters.
-Polling is fine.
+- [X] Read and echo characters.
+- [X] Use UART interrupts, don't spinloop
 ** TODO Read from serial input on RPi4
 ** TODO Read from USB keyboard input on RPi3 & RPi4 hardware
-*** Notes and references
-
-Read and echo characters.
-** TODO Switch to using interrupts instead of polling
+** DONE Switch to using interrupts instead of polling
 * Milestone: Get Ziggy
 ** DONE Replace C stubs with equivalent Zig
 ** DONE Use Zig cross-compilation instead of crosstools
 * Milestone: Show the World
 ** TODO Read from USB keyboard on RPi 400
+** TODO Create interface for "mailbox" from CPU to GPU
+** TODO Enable DMA for video blitting
+** TODO Create a "character ROM" for displaying text
 ** TODO Initialize video system on RPi 400
 HDMI output, videocode
 ** TODO Clear screen on RPi 400

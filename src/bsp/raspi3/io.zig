@@ -1,5 +1,8 @@
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
+const interrupts = @import("interrupts.zig");
+const ring = @import("../../ring.zig");
+const arch = @import("../../architecture.zig");
 const peripheral_base = @import("peripheral.zig").peripheral_base;
 
 extern fn spin_delay(cpu_cycles: u32) void;
@@ -288,69 +291,196 @@ const pl011_uart_ifls_layout = packed struct {
 };
 const pl011_uart_ifls = UniformRegister(pl011_uart_ifls_layout).init(pl011_uart_base + 0x34);
 
+const InterruptBit = enum(u1) {
+    not_raised = 0,
+    raised = 1,
+};
+
 const pl011_uart_imsc_layout = packed struct {
     _unused_rimm: u1 = 0,
-    clear_to_send_modem_interrupt_mask: u1 = 0,
+    clear_to_send_modem_interrupt_mask: InterruptBit = .not_raised,
     _unused_dcdmim: u1 = 0,
     _unused_dsrmim: u1 = 0,
-    receive_interrupt_mask: u1 = 0,
-    transmit_interrupt_mask: u1 = 0,
-    receive_timeout_interrupt_mask: u1 = 0,
-    framing_error_interrupt_mask: u1 = 0,
-    parity_error_interrupt_mask: u1 = 0,
-    break_error_interrupt_mask: u1 = 0,
-    overrun_error_interrupt_mask: u1 = 0,
+    receive_interrupt_mask: InterruptBit = .not_raised,
+    transmit_interrupt_mask: InterruptBit = .not_raised,
+    receive_timeout_interrupt_mask: InterruptBit = .not_raised,
+    framing_error_interrupt_mask: InterruptBit = .not_raised,
+    parity_error_interrupt_mask: InterruptBit = .not_raised,
+    break_error_interrupt_mask: InterruptBit = .not_raised,
+    overrun_error_interrupt_mask: InterruptBit = .not_raised,
     _unused_reserved: u21,
 };
 const pl011_uart_imsc = UniformRegister(pl011_uart_imsc_layout).init(pl011_uart_base + 0x38);
 
 const pl011_uart_ris_layout = packed struct {
     _unused_rirmis: u1 = 0,
-    clear_to_send_modem_interrupt_status: u1 = 0,
+    clear_to_send_modem_interrupt_status: InterruptBit = .not_raised,
     _unused_dcdrmis: u1 = 0,
     _unused_dsrrmis: u1 = 0,
-    receive_interrupt_status: u1 = 0,
-    transmit_interrupt_status: u1 = 0,
-    receive_timeout_interrupt_status: u1 = 0,
-    framing_error_interrupt_status: u1 = 0,
-    parity_error_interrupt_status: u1 = 0,
-    break_error_interrupt_status: u1 = 0,
-    overrun_error_interrupt_status: u1 = 0,
+    receive_interrupt_status: InterruptBit = .not_raised,
+    transmit_interrupt_status: InterruptBit = .not_raised,
+    receive_timeout_interrupt_status: InterruptBit = .not_raised,
+    framing_error_interrupt_status: InterruptBit = .not_raised,
+    parity_error_interrupt_status: InterruptBit = .not_raised,
+    break_error_interrupt_status: InterruptBit = .not_raised,
+    overrun_error_interrupt_status: InterruptBit = .not_raised,
     _unused_reserved: u20 = 0,
 };
 const pl011_uart_ris = UniformRegister(pl011_uart_ris_layout).init(pl011_uart_base + 0x3c);
 
 const pl011_uart_mis_layout = packed struct {
-    _unused_rimmis: u1 = 0,
-    clear_to_send_masked_interrupt_status: u1 = 0,
-    _unused_dcdmmis: u1 = 0,
-    _unused_dsrmmis: u1 = 0,
-    receive_masked_interrupt_status: u1 = 0,
-    transmit_masked_interrupt_status: u1 = 0,
-    receive_timeout_masked_interrupt_status: u1 = 0,
-    framing_error_masked_interrupt_status: u1 = 0,
-    parity_error_masked_interrupt_status: u1 = 0,
-    break_error_masked_interrupt_status: u1 = 0,
-    overrun_error_masked_interrupt_status: u1 = 0,
-    _unused_reserved: u20 = 0,
+    _unused_rimmis: u1 = 0, // [0]
+    clear_to_send_masked_interrupt_status: InterruptBit = .not_raised, // [1]
+    _unused_dcdmmis: u1 = 0, // [2]
+    _unused_dsrmmis: u1 = 0, // [3]
+    receive_masked_interrupt_status: InterruptBit = .not_raised, // [4]
+    transmit_masked_interrupt_status: InterruptBit = .not_raised, // [5]
+    receive_timeout_masked_interrupt_status: InterruptBit = .not_raised, // [6]
+    framing_error_masked_interrupt_status: InterruptBit = .not_raised, // [7]
+    parity_error_masked_interrupt_status: InterruptBit = .not_raised, // [8]
+    break_error_masked_interrupt_status: InterruptBit = .not_raised, // [9]
+    overrun_error_masked_interrupt_status: InterruptBit = .not_raised, // [10]
+    _unused_reserved: u21 = 0,
 };
 const pl011_uart_mis = UniformRegister(pl011_uart_mis_layout).init(pl011_uart_base + 0x40);
 
 const pl011_uart_icr_layout = packed struct {
     _unused_rimic: u1 = 0,
-    clear_to_send_interrupt_clear: u1 = 0,
+    clear_to_send_interrupt_clear: InterruptBit = .not_raised,
     _unused_dcdmic: u1 = 0,
     _unused_dsrmic: u1 = 0,
-    receive_interrupt_clear: u1 = 0,
-    transmit_interrupt_clear: u1 = 0,
-    receive_timeout_interrupt_clear: u1 = 0,
-    framing_error_interrupt_clear: u1 = 0,
-    parity_error_interrupt_clear: u1 = 0,
-    break_error_interrupt_clear: u1 = 0,
-    overrun_error_interrupt_clear: u1 = 0,
-    _unused_reserved: u20 = 0,
+    receive_interrupt_clear: InterruptBit = .not_raised,
+    transmit_interrupt_clear: InterruptBit = .not_raised,
+    receive_timeout_interrupt_clear: InterruptBit = .not_raised,
+    framing_error_interrupt_clear: InterruptBit = .not_raised,
+    parity_error_interrupt_clear: InterruptBit = .not_raised,
+    break_error_interrupt_clear: InterruptBit = .not_raised,
+    overrun_error_interrupt_clear: InterruptBit = .not_raised,
+    _unused_reserved: u21 = 0,
 };
 const pl011_uart_icr = UniformRegister(pl011_uart_icr_layout).init(pl011_uart_base + 0x44);
+
+//
+// PL011 Interrupts
+//
+pub const PL011Interrupts = struct {
+    pub const UARTInterrupt: u64 = 1 << 57; // See BCM2837 ARM Peripherals, section 7.5
+};
+
+pub fn enable_pl011_interrupts() void {
+    interrupts.enable_irq(PL011Interrupts.UARTInterrupt);
+}
+
+pub fn disable_pl011_interrupts() void {
+    interrupts.disable_irq(PL011Interrupts.UARTInterrupt);
+}
+
+pub fn handle_pl011_interrupt() void {
+    var interrupts_raised = pl011_uart_mis.read();
+
+    if (interrupts_raised.receive_masked_interrupt_status == .raised) {
+        receive_immediate();
+        // pl011_uart_icr.write(.{
+        //     .receive_interrupt_clear = .raised,
+        // });
+    }
+
+    if (interrupts_raised.transmit_masked_interrupt_status == .raised) {
+        transmit_immediate();
+        // pl011_uart_icr.write(.{
+        //     .transmit_interrupt_clear = .raised,
+        // });
+    }
+}
+
+// ----------------------------------------------------------------------
+// Buffered IO - interrupt fill of ring buffer
+// ----------------------------------------------------------------------
+
+//
+// Caller side: blocking read from buffer, blocking write to buffer
+//
+
+pub fn send_string(str: []const u8) void {
+    // mask interrupts so we don't get interrupted in the middle of this function.
+    arch.cpu.irq.disable();
+    defer arch.cpu.irq.enable();
+
+    // enable transmit interrupt (even if it already was)
+    pl011_uart_imsc.modify(.{
+        .transmit_interrupt_mask = .raised,
+    });
+
+    var rest = str;
+
+    // if ready to send
+    if (pl011_uart_is_write_byte_ready()) {
+        // take first ch from string, write it to data register
+        // when this ch is done sending, will raise a UARTTXINTR
+        var ch = str[0];
+        rest = str[1..];
+        pl011_uart_blocking_write_byte(ch);
+    }
+
+    // enqueue rest of str, these will be send from the interrupt handler
+    for (rest) |ch| {
+        write_buffer.enqueue(ch);
+    }
+}
+
+pub fn send(ch: u8) void {
+    // mask interrupts so we don't get interrupted in the middle of this function.
+    arch.cpu.irq.disable();
+    defer arch.cpu.irq.enable();
+
+    // if ready to send
+    if (pl011_uart_is_write_byte_ready()) {
+        // when this ch is done sending, will raise a UARTTXINTR
+        pl011_uart_blocking_write_byte(ch);
+    } else {
+        // enable transmit interrupt (even if it already was)
+        pl011_uart_imsc.modify(.{
+            .transmit_interrupt_mask = .raised,
+        });
+        // something is already sending, enqueue this for when it finishes
+        write_buffer.enqueue(ch);
+    }
+}
+
+pub fn receive() u8 {
+    while (read_buffer.empty()) {
+        // block
+        arch.cpu.wait_for_interrupt();
+    }
+
+    return read_buffer.dequeue();
+}
+
+//
+// Interior side: interrupt-driven fill/drain of rings
+//
+fn receive_immediate() void {
+    var ch = pl011_uart_dr.read().data;
+    read_buffer.enqueue(ch);
+}
+
+fn transmit_immediate() void {
+    var ch = write_buffer.dequeue();
+    pl011_uart_dr.write(.{ .data = ch });
+
+    if (write_buffer.empty()) {
+        pl011_uart_imsc.modify(.{
+            .transmit_interrupt_mask = .not_raised,
+        });
+    }
+}
+
+var read_buffer = ring.Ring(u8).init();
+var write_buffer = ring.Ring(u8).init();
+
+// ----------------------------------------------------------------------
+// Unbuffered IO - spins on status register
+// ----------------------------------------------------------------------
 
 fn pl011_uart_is_write_byte_ready() bool {
     return (pl011_uart_fr.read().transmit_fifo_full == 0);
@@ -416,20 +546,18 @@ pub fn pl011_uart_init() void {
     pl011_uart_fbrd.write(.{ .fractional_baud_rate_divisor = 0x10 });
     pl011_uart_lcrh.write(.{
         .word_length = .eight_bits,
-        .fifo_enable = .enable,
+        .fifo_enable = .disable,
     });
 
-    // Set the receive and transmit FIFOs fill level at one-eighth
-    pl011_uart_ifls.modify(.{
-        .receive_interrupt_fifo_level_select = .one_eighth,
-        .transmit_interrupt_fifo_level_select = .one_eighth,
-    });
+    // Set the receive and transmit FIFOs interrupt level at one-eighth full
+    // pl011_uart_ifls.modify(.{
+    //     .receive_interrupt_fifo_level_select = .one_eighth,
+    //     .transmit_interrupt_fifo_level_select = .one_eighth,
+    // });
 
-    // Enable receive and receive timeout interrupts
+    // Enable receive interrupts. Transmit interrupts are enabled when data is written.
     pl011_uart_imsc.modify(.{
-        .receive_interrupt_mask = 1,
-        .receive_timeout_interrupt_mask = 1,
-        .transmit_interrupt_mask = 1,
+        .receive_interrupt_mask = .raised,
     });
 
     pl011_uart_cr.modify(.{
@@ -441,4 +569,9 @@ pub fn pl011_uart_init() void {
     pl011_uart_cr.modify(.{
         .uart_enable = .enable,
     });
+}
+
+pub fn uart_init() void {
+    pl011_uart_init();
+    enable_pl011_interrupts();
 }
