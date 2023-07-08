@@ -1,21 +1,35 @@
 const std = @import("std");
 const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
+const debug_writer = bsp.io.debug_writer;
 const qemu = @import("qemu.zig");
+const mem = @import("mem.zig");
 
-const os = struct {
-    .page_allocator = @import("mem.zig"),
+const Freestanding = struct {
+    page_allocator: std.mem.Allocator,
 };
 
-export fn kernel_init() callconv(.C) void {
+var os = Freestanding{
+    .page_allocator = undefined,
+};
+
+fn kernel_init() !void {
     arch.cpu.exceptions.init();
     arch.cpu.mmu.init();
     arch.cpu.irq.init();
 
     bsp.timer.timer_init();
-
     bsp.io.uart_init();
-    bsp.io.send_string("Hello, world!\n");
+
+    var heap_bounds = bsp.memory.get_heap_bounds();
+    var heap_allocator = mem.HeapAllocator{
+        .first_available = heap_bounds[0],
+        .last_available = heap_bounds[1],
+    };
+    os.page_allocator = heap_allocator.allocator();
+
+    try debug_writer.print("Heap start: 0x{X:0>8}\n", .{@intFromPtr(heap_allocator.first_available)});
+    try debug_writer.print("Heap end:   0x{X:0>8}\n", .{@intFromPtr(heap_allocator.last_available)});
 
     while (true) {
         var ch: u8 = bsp.io.receive();

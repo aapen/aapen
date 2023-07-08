@@ -1,3 +1,4 @@
+const std = @import("std");
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
 const interrupts = @import("interrupts.zig");
@@ -308,7 +309,7 @@ const pl011_uart_imsc_layout = packed struct {
     parity_error_interrupt_mask: InterruptBit = .not_raised,
     break_error_interrupt_mask: InterruptBit = .not_raised,
     overrun_error_interrupt_mask: InterruptBit = .not_raised,
-    _unused_reserved: u21,
+    _unused_reserved: u21 = 0,
 };
 const pl011_uart_imsc = UniformRegister(pl011_uart_imsc_layout).init(pl011_uart_base + 0x38);
 
@@ -324,7 +325,7 @@ const pl011_uart_ris_layout = packed struct {
     parity_error_interrupt_status: InterruptBit = .not_raised,
     break_error_interrupt_status: InterruptBit = .not_raised,
     overrun_error_interrupt_status: InterruptBit = .not_raised,
-    _unused_reserved: u20 = 0,
+    _unused_reserved: u21 = 0,
 };
 const pl011_uart_ris = UniformRegister(pl011_uart_ris_layout).init(pl011_uart_base + 0x3c);
 
@@ -413,8 +414,10 @@ pub fn send_string(str: []const u8) void {
 
     var rest = str;
 
-    // if ready to send
-    if (pl011_uart_is_write_byte_ready()) {
+    // if ready to send and no interrupt raised
+    var interrupt_is_raised = pl011_uart_ris.read().transmit_interrupt_status == .raised;
+
+    if (pl011_uart_is_write_byte_ready() and !interrupt_is_raised) {
         // take first ch from string, write it to data register
         // when this ch is done sending, will raise a UARTTXINTR
         var ch = str[0];
@@ -575,3 +578,46 @@ pub fn uart_init() void {
     pl011_uart_init();
     enable_pl011_interrupts();
 }
+
+// ----------------------------------------------------------------------
+// Interface to Zig's std.io.Writer
+// ----------------------------------------------------------------------
+
+// Use like:
+//
+// var uart_writer = uartWriter();
+// const debug_writer = uart_writer.writer();
+
+/// Wrapper type that can supply a Writer when requested.
+pub fn UartWriter() type {
+    return struct {
+        bytes_written: u64,
+
+        pub const Error = error{
+            Undefined,
+        };
+        pub const Writer = std.io.Writer(*Self, Error, write);
+
+        const Self = @This();
+
+        pub fn write(self: *Self, bytes: []const u8) Error!usize {
+            send_string(bytes);
+            self.bytes_written += bytes.len;
+            return bytes.len;
+        }
+
+        pub fn writer(self: *Self) Writer {
+            return .{ .context = self };
+        }
+    };
+}
+
+/// Convenience function to construct a Writer wrapper
+pub fn uartWriter() UartWriter() {
+    return .{
+        .bytes_written = 0,
+    };
+}
+
+var uart_writer = uartWriter();
+pub const debug_writer = uart_writer.writer();

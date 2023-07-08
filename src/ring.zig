@@ -76,6 +76,23 @@ test "consume up to capacity items" {
     }
 }
 
+test "consumer chases producer" {
+    const expect = std.testing.expect;
+    var ring = Ring(u8).init();
+    inline for (65..75) |c| {
+        ring.enqueue(c);
+    }
+    inline for (65..75) |e| {
+        try expect(e == ring.dequeue());
+    }
+    inline for (75..85) |c| {
+        ring.enqueue(c);
+    }
+    inline for (75..85) |e| {
+        try expect(e == ring.dequeue());
+    }
+}
+
 test "items are overwritten" {
     const expect = std.testing.expect;
     var ring = Ring(usize).init();
@@ -86,4 +103,5 @@ test "items are overwritten" {
     for (1..65) |i| {
         try expect(i == ring.dequeue());
     }
+    try expect(ring.empty());
 }
