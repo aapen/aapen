@@ -12,5 +12,5 @@ pub inline fn eret() void {
 }
 
 pub inline fn wait_for_interrupt() void {
-    asm volatile ("wfe");
+    asm volatile ("wfi");
 }
