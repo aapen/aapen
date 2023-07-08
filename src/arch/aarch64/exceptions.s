@@ -14,8 +14,10 @@
 
         // Insert a small routine to halt the processor on receipt of
         // a fast interrupt request (FIQ).
-.macro FIQ_SUSPEND offset
+.macro FIQ_SUSPEND offset, label
         .org \offset
+        .type __fiq_suspend_\label, @function
+__fiq_suspend_\label:
 1:      wfe
         b 1b
 .endm
@@ -131,27 +133,27 @@ __exception_handler_table:
         // From EL0 to EL0
         EXC_HANDLER 0x000, current_el0_synchronous, 0, 1
         EXC_HANDLER 0x080, current_el0_irq, 0, 0
-        FIQ_SUSPEND 0x100
+        FIQ_SUSPEND 0x100, current_el0
         EXC_HANDLER 0x180, current_el0_serror, 0, 0
 
         // From ELx to ELx (x > 0)
         EXC_HANDLER 0x200, current_elx_synchronous, 0, 1
         EXC_HANDLER 0x280, current_elx_irq, 0, 0
-        FIQ_SUSPEND 0x300
+        FIQ_SUSPEND 0x300, current_elx
         EXC_HANDLER 0x380, current_elx_serror, 0, 0
 
         // From lower EL, where the level immediately lower than
         // target is using AArch64
         EXC_HANDLER 0x400, lower_aarch64_synchronous, 1, 1
         EXC_HANDLER 0x480, lower_aarch64_irq, 1, 0
-        FIQ_SUSPEND 0x500
+        FIQ_SUSPEND 0x500, lower_aarch64
         EXC_HANDLER 0x580, lower_aarch64_serror, 1, 0
 
         // From lower EL, where the level immediatley lower than
         // target is using AArch32
         EXC_HANDLER 0x600, lower_aarch32_synchronous, 1, 1
         EXC_HANDLER 0x680, lower_aarch32_irq, 1, 0
-        FIQ_SUSPEND 0x700
+        FIQ_SUSPEND 0x700, lower_aarch32
         EXC_HANDLER 0x780, lower_aarch32_serror, 1, 0
 
         // ----------------------------------------------------------------------

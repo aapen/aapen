@@ -3,9 +3,13 @@ const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
 const qemu = @import("qemu.zig");
 
+const os = struct {
+    .page_allocator = @import("mem.zig"),
+};
+
 export fn kernel_init() callconv(.C) void {
     arch.cpu.exceptions.init();
-    arch.cpu.memory.init();
+    arch.cpu.mmu.init();
     arch.cpu.irq.init();
 
     bsp.timer.timer_init();
