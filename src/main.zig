@@ -28,8 +28,14 @@ fn kernel_init() !void {
     };
     os.page_allocator = heap_allocator.allocator();
 
-    try debug_writer.print("Heap start: 0x{X:0>8}\n", .{@intFromPtr(heap_allocator.first_available)});
-    try debug_writer.print("Heap end:   0x{X:0>8}\n", .{@intFromPtr(heap_allocator.last_available)});
+    try debug_writer.print("Heap start: 0x{x:0>8}\n", .{@intFromPtr(heap_allocator.first_available)});
+    try debug_writer.print("Heap end:   0x{x:0>8}\n", .{@intFromPtr(heap_allocator.last_available)});
+
+    var buf: []u8 = try os.page_allocator.alloc(u8, 255);
+    try debug_writer.print("allocated {} bytes at 0x{x:0>8}\n", .{ buf.len, @intFromPtr(buf.ptr) });
+
+    var buf2: []u32 = try os.page_allocator.alloc(u32, 1024);
+    try debug_writer.print("allocated {} 32-bit words at 0x{x:0>8}\n", .{ buf.len, @intFromPtr(buf2.ptr) });
 
     while (true) {
         var ch: u8 = bsp.io.receive();
