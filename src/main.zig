@@ -76,6 +76,9 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
     registers.ELR_EL2.write(@intFromPtr(&kernel_init));
     registers.SP_EL1.write(phys_boot_core_stack_end_exclusive);
 
+    asm volatile ("mov x29, xzr");
+    asm volatile ("mov x30, xzr");
+
     arch.cpu.eret();
 
     unreachable;

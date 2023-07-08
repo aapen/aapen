@@ -1,7 +1,9 @@
 // TODO: Is this really the right thing to do? Seems very odd to have
 // the directory traversal here!
+const arch = @import("../../architecture.zig");
 const bsp = @import("../../bsp.zig");
 const io = bsp.io;
+const debug_writer = io.debug_writer;
 const registers = @import("registers.zig");
 const irq = @import("irq.zig");
 
@@ -11,15 +13,8 @@ pub fn init() void {
     registers.VBAR_EL1.write(@intFromPtr(__exception_handler_table));
 }
 
-pub const DebugWrite = fn ([]const u8) void;
-
-// TODO: This induces a dependency from the CPU architecture module to
-// the board support module. That seems very strange. There's got to
-// be a better way to inject the output writer here.
-pub const debug_write: DebugWrite = io.pl011_uart_write_text;
-
 /// Context passed in to every exception handler.
-/// This is created by the EXC_HANDLER macro in `exceptions.s`
+/// This is created by the KERNEL_ENTRY macro in `exceptions.s`
 const ExceptionContext = struct {
     /// General purpose registers' stored state
     gpr: [30]u64,
@@ -38,26 +33,8 @@ const ExceptionContext = struct {
     esr: u64,
 };
 
-pub fn default_exception_handler(context: *const ExceptionContext) void {
-    _ = context;
-    debug_write("Unhandled exception.\n");
-}
-
-/// Stub functions for the various ways of getting an exception
-export fn current_el0_synchronous(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn current_el0_irq(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn current_el0_serror(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn current_elx_synchronous(context: *const ExceptionContext) void {
-    default_exception_handler(context);
+export fn show_invalid_entry_message(entry_type: u64, esr: u64, elr: u64) void {
+    debug_writer.print("Unhandled exception: {x:0>8}\nESR: {x:0>8}\nELR: {x:0>8}\n", .{ entry_type, esr, elr }) catch {};
 }
 
 export fn current_elx_irq(context: *const ExceptionContext) void {
@@ -66,32 +43,4 @@ export fn current_elx_irq(context: *const ExceptionContext) void {
     defer irq.enable();
 
     bsp.interrupts.handle_irq();
-}
-
-export fn current_elx_serror(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn lower_aarch64_synchronous(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn lower_aarch64_irq(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn lower_aarch64_serror(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn lower_aarch32_synchronous(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn lower_aarch32_irq(context: *const ExceptionContext) void {
-    default_exception_handler(context);
-}
-
-export fn lower_aarch32_serror(context: *const ExceptionContext) void {
-    default_exception_handler(context);
 }

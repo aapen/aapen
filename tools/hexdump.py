@@ -58,9 +58,9 @@ class HexDump(gdb.Command):
         start=(pr_addr) & 0xff;
 
 
-        print ('            ' , end="")
+        print ('          ' , end="")
         print ('  '.join(['%01X' % (i&0x0f,) for i in range(start,start+width)]) , end="")
-        print ('  ' , end="")
+        print (' ' , end="")
         print (' '.join(['%01X' % (i&0x0f,) for i in range(start,start+width)]) )
 
         for group in groups_of(mem, width, pr_offset):
