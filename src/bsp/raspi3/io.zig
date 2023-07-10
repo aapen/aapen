@@ -8,36 +8,6 @@ const peripheral_base = @import("peripheral.zig").peripheral_base;
 
 extern fn spin_delay(cpu_cycles: u32) void;
 
-// const GPIOPin = enum(u8) {
-//   pin3 = 2,
-//   pin5 = 3,
-//   pin7 = 4,
-//   pin11 = 17,
-//   pin13 = 27,
-//   pin15 = 22,
-//   pin19 = 10,
-//   pin21 = 9,
-//   pin23 = 11,
-//   pin29 = 5,
-//   pin31 = 6,
-//   pin33 = 13,
-//   pin35 = 19,
-//   pin37 = 26,
-//   pin8 = 14,
-//   pin10 = 15,
-//   pin12 = 18,
-//   pin16 = 23,
-//   pin18 = 24,
-//   pin22 = 25,
-//   pin24 = 8,
-//   pin26 = 7,
-//   pin32 = 12,
-//   pin36 = 16,
-//   pin38 = 20,
-//   pin40 = 21,
-// };
-
-//
 // GPIO registers and their structures
 // Note: this is incomplete... at the moment, it only contains enough
 // to get a serial connection
@@ -217,15 +187,17 @@ const pl011_uart_fbrd_layout = packed struct {
 };
 const pl011_uart_fbrd = UniformRegister(pl011_uart_fbrd_layout).init(pl011_uart_base + 0x28);
 
+const EnableBitP = enum(u1) {
+    disable = 0,
+    enable = 1,
+};
+
 const pl011_uart_lcrh_layout = packed struct {
     send_break: u1 = 0,
     parity_enable: u1 = 0,
     even_parity_select: u1 = 0,
     two_stop_bit_select: u1 = 0,
-    fifo_enable: enum(u1) {
-        disable = 0,
-        enable = 1,
-    } = .disable,
+    fifo_enable: EnableBitP = .disable,
     word_length: enum(u2) {
         eight_bits = 0b11,
         seven_bits = 0b10,
@@ -238,56 +210,33 @@ const pl011_uart_lcrh_layout = packed struct {
 const pl011_uart_lcrh = UniformRegister(pl011_uart_lcrh_layout).init(pl011_uart_base + 0x2c);
 
 const pl011_uart_cr_layout = packed struct {
-    uart_enable: enum(u1) {
-        disable = 0,
-        enable = 1,
-    } = .disable,
+    uart_enable: EnableBitP = .disable,
     _unused_siren: u1 = 0,
     _unused_sirlp: u1 = 0,
     _unused_reserved: u3 = 0,
-    loopback_enable: enum(u1) {
-        disable = 0,
-        enable = 1,
-    } = .disable,
-    transmit_enable: enum(u1) {
-        disable = 0,
-        enable = 1,
-    } = .disable,
-    receive_enable: enum(u1) {
-        disable = 0,
-        enable = 1,
-    } = .disable,
+    loopback_enable: EnableBitP = .disable,
+    transmit_enable: EnableBitP = .disable,
+    receive_enable: EnableBitP = .disable,
     _unused_dtr: u1 = 0,
     request_to_send: u1 = 0,
     _unused_out1: u1 = 0,
     _unused_out2: u1 = 0,
-    request_to_send_flow_control_enable: enum(u1) {
-        disable = 0,
-        enable = 1,
-    } = .disable,
-    clear_to_send_flow_control_enable: enum(u1) {
-        disable = 0,
-        enable = 1,
-    } = .disable,
+    request_to_send_flow_control_enable: EnableBitP = .disable,
+    clear_to_send_flow_control_enable: EnableBitP = .disable,
     _unused_reserved_2: u17 = 0,
 };
 const pl011_uart_cr = UniformRegister(pl011_uart_cr_layout).init(pl011_uart_base + 0x30);
 
+const FifoLevelSelect = enum(u3) {
+    one_eighth = 0b000,
+    one_quarter = 0b001,
+    one_half = 0b010,
+    three_quarters = 0b011,
+    seven_eighths = 0b100,
+};
 const pl011_uart_ifls_layout = packed struct {
-    transmit_interrupt_fifo_level_select: enum(u3) {
-        one_eighth = 0b000,
-        one_quarter = 0b001,
-        one_half = 0b010,
-        three_quarters = 0b011,
-        seven_eighths = 0b100,
-    } = .one_eighth,
-    receive_interrupt_fifo_level_select: enum(u3) {
-        one_eighth = 0b000,
-        one_quarter = 0b001,
-        one_half = 0b010,
-        three_quarters = 0b011,
-        seven_eighths = 0b100,
-    } = .one_eighth,
+    transmit_interrupt_fifo_level_select: FifoLevelSelect = .one_eighth,
+    receive_interrupt_fifo_level_select: FifoLevelSelect = .one_eighth,
     _unused_reserved: u26 = 0,
 };
 const pl011_uart_ifls = UniformRegister(pl011_uart_ifls_layout).init(pl011_uart_base + 0x34);
@@ -380,27 +329,28 @@ pub fn handle_pl011_interrupt() void {
     var interrupts_raised = pl011_uart_mis.read();
 
     if (interrupts_raised.receive_masked_interrupt_status == .raised) {
-        receive_immediate();
-        // pl011_uart_icr.write(.{
-        //     .receive_interrupt_clear = .raised,
-        // });
+        var ch = pl011_uart_dr.read().data;
+        read_buffer.enqueue(ch);
     }
 
     if (interrupts_raised.transmit_masked_interrupt_status == .raised) {
-        transmit_immediate();
-        // pl011_uart_icr.write(.{
-        //     .transmit_interrupt_clear = .raised,
-        // });
+        var ch = write_buffer.dequeue();
+        pl011_uart_dr.write(.{ .data = ch });
+
+        if (write_buffer.empty()) {
+            pl011_uart_imsc.modify(.{
+                .transmit_interrupt_mask = .not_raised,
+            });
+        }
     }
 }
 
 // ----------------------------------------------------------------------
-// Buffered IO - interrupt fill of ring buffer
+// Buffered IO - interrupt-driven with ring buffer
 // ----------------------------------------------------------------------
 
-//
-// Caller side: blocking read from buffer, blocking write to buffer
-//
+var read_buffer = ring.Ring(u8).init();
+var write_buffer = ring.Ring(u8).init();
 
 pub fn send_string(str: []const u8) void {
     // mask interrupts so we don't get interrupted in the middle of this function.
@@ -459,28 +409,6 @@ pub fn receive() u8 {
     return read_buffer.dequeue();
 }
 
-//
-// Interior side: interrupt-driven fill/drain of rings
-//
-fn receive_immediate() void {
-    var ch = pl011_uart_dr.read().data;
-    read_buffer.enqueue(ch);
-}
-
-fn transmit_immediate() void {
-    var ch = write_buffer.dequeue();
-    pl011_uart_dr.write(.{ .data = ch });
-
-    if (write_buffer.empty()) {
-        pl011_uart_imsc.modify(.{
-            .transmit_interrupt_mask = .not_raised,
-        });
-    }
-}
-
-var read_buffer = ring.Ring(u8).init();
-var write_buffer = ring.Ring(u8).init();
-
 // ----------------------------------------------------------------------
 // Unbuffered IO - spins on status register
 // ----------------------------------------------------------------------
@@ -521,11 +449,6 @@ pub fn pl011_uart_init() void {
     pins.Pin14.select_function(GPIOFunctionSelect.alt0);
     pins.Pin15.select_function(GPIOFunctionSelect.alt0);
 
-    // gpio_function_select_1.modify(.{
-    //     .fsel14 = .alt0,
-    //     .fsel15 = .alt0,
-    // });
-
     // Turn UART off while initializing
     pl011_uart_cr.write(.{ .uart_enable = .disable });
 
@@ -541,19 +464,13 @@ pub fn pl011_uart_init() void {
     // updated on a single write strobe generated by a LCR_H write. So, to internally update the
     // contents of IBRD or FBRD, a LCR_H write must always be performed at the end.
     //
-    // Set the baud rate, 8N1 and FIFO enabled.
+    // Set the baud rate, 8N1 and FIFO disabled.
     pl011_uart_ibrd.write(.{ .integer_baud_rate_divisor = 0x03 });
     pl011_uart_fbrd.write(.{ .fractional_baud_rate_divisor = 0x10 });
     pl011_uart_lcrh.write(.{
         .word_length = .eight_bits,
         .fifo_enable = .disable,
     });
-
-    // Set the receive and transmit FIFOs interrupt level at one-eighth full
-    // pl011_uart_ifls.modify(.{
-    //     .receive_interrupt_fifo_level_select = .one_eighth,
-    //     .transmit_interrupt_fifo_level_select = .one_eighth,
-    // });
 
     // Enable receive interrupts. Transmit interrupts are enabled when data is written.
     pl011_uart_imsc.modify(.{
@@ -588,8 +505,6 @@ pub fn uart_init() void {
 /// Wrapper type that can supply a Writer when requested.
 pub fn UartWriter() type {
     return struct {
-        bytes_written: u64,
-
         pub const Error = error{
             Undefined,
         };
@@ -598,8 +513,8 @@ pub fn UartWriter() type {
         const Self = @This();
 
         pub fn write(self: *Self, bytes: []const u8) Error!usize {
+            _ = self;
             send_string(bytes);
-            self.bytes_written += bytes.len;
             return bytes.len;
         }
 
@@ -609,12 +524,6 @@ pub fn UartWriter() type {
     };
 }
 
-/// Convenience function to construct a Writer wrapper
-pub fn uartWriter() UartWriter() {
-    return .{
-        .bytes_written = 0,
-    };
-}
+var uart_writer = UartWriter(){};
 
-var uart_writer = uartWriter();
 pub const debug_writer = uart_writer.writer();

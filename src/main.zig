@@ -31,24 +31,6 @@ fn kernel_init() !void {
     try debug_writer.print("Heap start: 0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.first_available)});
     try debug_writer.print("Heap end:   0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.last_available)});
 
-    var buf: []u8 = try os.page_allocator.alloc(u8, 255);
-    try debug_writer.print("allocated {} bytes at 0x{x:0>8}\r\n", .{ buf.len, @intFromPtr(buf.ptr) });
-
-    var buf2: []u32 = try os.page_allocator.alloc(u32, 1024);
-    try debug_writer.print("allocated {} 32-bit words at 0x{x:0>8}\r\n", .{ buf.len, @intFromPtr(buf2.ptr) });
-
-    try debug_writer.print("mailbox 0 @ 0x{x:0>8}\r\n", .{bsp.mailbox.mailbox_base});
-    try debug_writer.print("mailbox 0 status: {}\r\n", .{bsp.mailbox.mailbox_0_status.read()});
-
-    for (std.enums.values(bsp.mailbox.PowerDomain)) |d| {
-        try print_power_state(d);
-    }
-
-    try print_clock_rate(bsp.mailbox.ClockType.emmc);
-    try print_clock_rate(bsp.mailbox.ClockType.uart);
-    try print_clock_rate(bsp.mailbox.ClockType.arm);
-    try print_clock_rate(bsp.mailbox.ClockType.core);
-
     while (true) {
         var ch: u8 = bsp.io.receive();
         bsp.io.send(ch);
@@ -59,22 +41,6 @@ fn kernel_init() !void {
     qemu.exit(0);
 
     unreachable;
-}
-
-fn print_power_state(domain: bsp.mailbox.PowerDomain) !void {
-    if (bsp.mailbox.get_power_status(domain)) |status| {
-        try debug_writer.print("Power state {s}: {}\r\n", .{ @tagName(domain), status[1].power_state });
-    } else |err| {
-        try debug_writer.print("Error getting power state {s}: {}\r\n", .{ @tagName(domain), err });
-    }
-}
-
-fn print_clock_rate(clock_type: bsp.mailbox.ClockType) !void {
-    if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
-        try debug_writer.print("{s} clock: {}\r\n", .{ @tagName(clock[1].clock_type), clock[1].rate });
-    } else |err| {
-        try debug_writer.print("Error getting clock: {}\r\n", .{err});
-    }
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {

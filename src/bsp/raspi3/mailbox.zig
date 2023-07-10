@@ -248,8 +248,6 @@ pub fn MailboxMessageType(comptime tag: rpi_firmware_property_tag, comptime requ
                 return Error.InsufficientBufferSpace;
             }
 
-            try debug_writer.print("request type {s}, content_size {}\r\n", .{ @tagName(tag), content_size });
-
             self.buffer[0] = self.buffer.len * @sizeOf(u32);
             self.buffer[1] = RPI_FIRMWARE_STATUS_REQUEST;
             self.buffer[2] = @intFromEnum(tag);
