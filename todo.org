@@ -128,6 +128,13 @@ Sold direct: https://oshpark.com/shared_projects/fBq76nP9
 BOM not included... needs JTAG header, GPIO header, 4 LEDs, some resistors (330 Ohm? 4.7K? who knows.)
 ** MMU
 Video on address translation & the interaction of granule size with L0-L3 tables: https://www.youtube.com/watch?v=yTKpniRaEoI
+** GPU interface
+Communication from CPU to GPU is via a "mailbox" interface.
+
+Many of the mailbox commands ("tags") require addresses. These must be translated to the GPU's view of address space, as described in section 1.2 of "Broadcom BCM2837 Peripheral Reference" (titled "Address Map") and section 1.2 of "Broadcom BCM2711 ARM Peripherals" (also titled "Address Map").
+*** References
+- [[https://github.com/hackerspace/rpi-linux/blob/lr-raspberry-pi-new-mailbox/drivers/mailbox/bcm2835-mailbox.c][bcm2835-ipc.c]] by Lubomir Rintel and Broadcom
+- [[https://github.com/raspberrypi/firmware/wiki/Mailbox-property-interface][Raspberry Pi Firmware wiki]]
 * Open Questions
 ** How should we set up a default allocator for zig?
 *** Notes and references

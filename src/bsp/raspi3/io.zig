@@ -502,9 +502,6 @@ pub fn pl011_uart_blocking_write_byte(ch: u8) void {
 
 pub fn pl011_uart_write_text(buffer: []const u8) void {
     for (buffer) |ch| {
-        if (ch == '\n') {
-            pl011_uart_blocking_write_byte('\r');
-        }
         pl011_uart_blocking_write_byte(ch);
     }
 }

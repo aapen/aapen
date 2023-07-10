@@ -47,15 +47,16 @@ _start:
 
         mrs x0, CurrentEL                     // Get execution level from CPU into x0
         cmp x0, 0x08                          // It should be EL2 at boot time
-        b.ne L_parking_loop                   // If not, something is wrong, park the core
+        b.ne pe_hang                          // If not, something is wrong, park the core
 
         // All cores boot from the same image. We're going to have one core
         // handle system initialization. It will later activate the other cores.
 
-        mrs x0, MPIDR_EL1                     // Get the core ID from the CPU's multiprocessor affinity register
+        mrs x0, MPIDR_EL1                     // Get the core ID from the CPU's
+                                              // multiprocessor affinity register
         and x0, x0, #0xff                     // The lower 8 bits hold the core number
-        cmp x0, 0x00                          // Are we on the boot core?
-        b.ne L_parking_loop                   // If not, park the core
+        cbnz x0, pe_hang                      // Are we on the boot core?  If not, park
+                                              // the core
 
         // We're on the main core. Initialize memory and stack.
         //
@@ -66,16 +67,9 @@ _start:
         // are specified. We're required to zero out that range of memory.
 
         LDR_REL x0, __bss_start               // Put the starting address in x0
-        LDR_REL x1, __bss_end_exclusive       // Put the last addres + 1 in x1
+        LDR_REL x1, __bss_end_exclusive       // Put the last address + 1 in x1
+        bl memzero
 
-L_bss_init_loop:
-        cmp x0, x1                            // Has x0 reached __bss_end_exclusive?
-        b.eq L_prepare_for_zig                // If so, we're done
-        stp xzr, xzr, [x0], #16               // Otherwise, store 64 bits of zeros and
-                                              // post-increment x0 by 16
-        b L_bss_init_loop                     // Repeat until done
-
-L_prepare_for_zig:
         // Set up the stack.
         //
         // __boot_core_stack_end_exclusive is provided by the linker
@@ -88,9 +82,11 @@ L_prepare_for_zig:
 
         // unreachable
 
-        // Park the core
-L_parking_loop:
+        .global pe_hang
+        .type pe_hang, @function
+        // Park the PE
+pe_hang:
         wfe                                   // wait for an event
-        b L_parking_loop                      // if one arrives, loop and wait some more
+        b pe_hang                             // if one arrives, loop and wait some more
 
         .size _start, . - _start              // Tell the assembler how big this symbol is

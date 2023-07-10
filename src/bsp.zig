@@ -4,3 +4,4 @@ pub const io = @import("bsp/raspi3/io.zig");
 pub const interrupts = @import("bsp/raspi3/interrupts.zig");
 pub const timer = @import("bsp/raspi3/timer.zig");
 pub const memory = @import("bsp/raspi3/memory.zig");
+pub const mailbox = @import("bsp/raspi3/mailbox.zig");

@@ -50,3 +50,8 @@ pub fn Register(comptime Read: type, comptime Write: type) type {
 pub fn UniformRegister(comptime Read: type) type {
     return Register(Read, Read);
 }
+
+// Memory barrier for device read
+pub fn memory_barrier() void {
+    asm volatile ("DSB SY");
+}
