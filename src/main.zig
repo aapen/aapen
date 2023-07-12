@@ -31,6 +31,11 @@ fn kernel_init() !void {
     try debug_writer.print("Heap start: 0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.first_available)});
     try debug_writer.print("Heap end:   0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.last_available)});
 
+    try print_clock_rate(.emmc);
+    try print_clock_rate(.uart);
+    try print_clock_rate(.core);
+    try print_clock_rate(.arm);
+
     while (true) {
         var ch: u8 = bsp.io.receive();
         bsp.io.send(ch);
@@ -41,6 +46,14 @@ fn kernel_init() !void {
     qemu.exit(0);
 
     unreachable;
+}
+
+fn print_clock_rate(clock_type: bsp.mailbox.ClockRate.Clock) !void {
+    if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
+        try debug_writer.print("{s} clock: {}\r\n", .{ @tagName(clock_type), clock[1] });
+    } else |err| {
+        try debug_writer.print("Error getting clock: {}\r\n", .{err});
+    }
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {

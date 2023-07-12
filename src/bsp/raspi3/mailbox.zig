@@ -1,3 +1,5 @@
+const std = @import("std");
+const assert = std.debug.assert;
 const io = @import("io.zig");
 const debug_writer = io.debug_writer;
 const reg = @import("../mmio_register.zig");
@@ -195,7 +197,6 @@ fn mail_full() bool {
 pub fn mailbox_write(channel: MailboxChannel, data: u32) void {
     while (mail_full()) {}
 
-    // var val = (@as(u28, @truncate(data)) << 4) | @intFromEnum(channel);
     var val = (data & 0xfffffff0) | @intFromEnum(channel);
     mailbox_0_write.write(val);
 }
@@ -222,65 +223,125 @@ pub fn mailbox_read(channel_expected: MailboxChannel) u32 {
 }
 
 // ----------------------------------------------------------------------
-// Serializers for several message types
+// Support for marshalling / unmarshalling
 // ----------------------------------------------------------------------
 
-// request_size and max_response_size are the number of u32 words needed
-pub fn MailboxMessageType(comptime tag: rpi_firmware_property_tag, comptime request_size: u32, comptime max_response_size: u32) type {
-    return struct {
-        const Error = error{
-            InsufficientBufferSpace,
-            Overflow,
-            Underflow,
-        };
-        const Self = @This();
-        // the request and response share memory, so the content is
-        // the larger of the two.
-        const content_size: u32 = @max(request_size, max_response_size);
-        // total size includes the content size plus 6 extra u32's for
-        // the header and terminator
-        const total_size: u32 = content_size + 6;
-
-        buffer: [total_size]u32 = undefined,
-
-        fn fill(self: *Self, request: []u32) !void {
-            if (self.buffer.len < total_size) {
-                return Error.InsufficientBufferSpace;
-            }
-
-            self.buffer[0] = self.buffer.len * @sizeOf(u32);
-            self.buffer[1] = RPI_FIRMWARE_STATUS_REQUEST;
-            self.buffer[2] = @intFromEnum(tag);
-            self.buffer[3] = content_size * @sizeOf(u32);
-            self.buffer[4] = request_size * @sizeOf(u32);
-            for (request, 0..) |w, idx| {
-                self.buffer[5 + idx] = w;
-            }
-            self.buffer[self.buffer.len - 1] = @intFromEnum(rpi_firmware_property_tag.RPI_FIRMWARE_PROPERTY_END);
-        }
-
-        fn has_response(self: *Self) bool {
-            return (self.buffer[1] == RPI_FIRMWARE_STATUS_SUCCESS) or (self.buffer[1] == RPI_FIRMWARE_STATUS_ERROR);
-        }
-
-        fn is_successful(self: *Self) bool {
-            return self.buffer[1] == RPI_FIRMWARE_STATUS_SUCCESS;
-        }
-
-        fn get_response_body(self: *Self) []u32 {
-            return self.buffer[5..];
-        }
-
-        fn call(self: *Self, channel: MailboxChannel, request: []u32) !u32 {
-            try self.fill(request);
-
-            // TODO: do we need to translate this address?
-            mailbox_write(channel, @as(u32, @truncate(@intFromPtr(&self.buffer))));
-            // _ = debug_writer.print("mailbox_status: {any}\r\n", .{mailbox_0_status.read()}) catch 0;
-            return mailbox_read(channel);
-        }
+pub const Envelope = struct {
+    const Error = error{
+        StatusError,
+        NoResponse,
     };
-}
+
+    channel: MailboxChannel = .property_arm_to_vc,
+    messages: []Message,
+    buffer: [64]u32 align(16),
+    total_size: u32,
+
+    pub fn init(messages: []Message) Envelope {
+        var content_size: u32 = 0;
+        for (messages) |m| {
+            content_size += m.total_size;
+        }
+
+        var total_size = content_size + 3;
+
+        assert(total_size < 64);
+
+        return .{
+            .buffer = [_]u32{0} ** 64,
+            .total_size = total_size,
+            .messages = messages,
+        };
+    }
+
+    pub fn call(self: *Envelope) !u32 {
+        self.buffer[1] = RPI_FIRMWARE_STATUS_REQUEST;
+
+        var idx: usize = 2;
+
+        for (self.messages) |m| {
+            m.fill(self.buffer[idx..]);
+            idx += m.total_size;
+        }
+
+        self.buffer[idx] = @intFromEnum(rpi_firmware_property_tag.RPI_FIRMWARE_PROPERTY_END);
+
+        self.buffer[0] = @intCast(idx * @sizeOf(u32));
+
+        mailbox_write(self.channel, @as(u32, @truncate(@intFromPtr(&self.buffer))));
+        var data = mailbox_read(self.channel);
+
+        if (self.buffer[1] == RPI_FIRMWARE_STATUS_ERROR) {
+            return Error.StatusError;
+        }
+
+        if (self.buffer[1] != RPI_FIRMWARE_STATUS_SUCCESS) {
+            return Error.NoResponse;
+        }
+
+        idx = 2;
+
+        for (self.messages) |m| {
+            m.unfill(self.buffer[idx..]);
+            idx += m.total_size;
+        }
+        return data;
+    }
+};
+
+pub const Message = struct {
+    ptr: *anyopaque,
+    fillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
+    unfillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
+    tag: u32,
+    request_size: u32,
+    content_size: u32,
+    total_size: u32,
+
+    pub fn init(pointer: anytype, tag: rpi_firmware_property_tag, request_size: u32, response_size: u32, comptime fillFn: fn (ptr: @TypeOf(pointer), buf: []u32) void, comptime unfillFn: fn (ptr: @TypeOf(pointer), buf: []u32) void) Message {
+        const Ptr = @TypeOf(pointer);
+        assert(@typeInfo(Ptr) == .Pointer); // Must be a pointer
+        assert(@typeInfo(Ptr).Pointer.size == .One); // Must be a single-item pointer
+        assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct); // Must point to a struct
+        const gen = struct {
+            fn fill(ptr: *anyopaque, buf: []u32) void {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                fillFn(self, buf);
+            }
+            fn unfill(ptr: *anyopaque, buf: []u32) void {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                unfillFn(self, buf);
+            }
+        };
+
+        const content_size = @max(request_size, response_size);
+
+        return .{
+            .ptr = pointer,
+            .fillFn = gen.fill,
+            .unfillFn = gen.unfill,
+            .tag = @intFromEnum(tag),
+            .request_size = request_size,
+            .content_size = content_size,
+            .total_size = content_size + 3,
+        };
+    }
+
+    pub fn fill(self: Message, buf: []u32) void {
+        buf[0] = self.tag;
+        buf[1] = self.content_size * @sizeOf(u32);
+        buf[2] = self.request_size * @sizeOf(u32);
+        self.fillFn(self.ptr, buf[3..]);
+    }
+
+    pub fn unfill(self: Message, buf: []u32) void {
+        self.unfillFn(self.ptr, buf[3..]);
+    }
+};
+
+// ----------------------------------------------------------------------
+// Serializers for several message types
+// ----------------------------------------------------------------------
 
 pub const PowerDomain = enum(u32) {
     I2C0 = 0,
@@ -308,51 +369,83 @@ pub const PowerDomain = enum(u32) {
     ARM = 22,
 };
 
-pub const MailboxPower = MailboxMessageType(.RPI_FIRMWARE_GET_DOMAIN_STATE, 1, 2);
+const PowerMessage = struct {
+    const Self = @This();
+    domain: PowerDomain,
+    state: u32 = 0,
 
-pub const PowerStatus = packed struct {
-    domain_id: u32,
-    power_state: u32,
+    pub fn init(domain: PowerDomain) Self {
+        return Self{
+            .domain = domain,
+        };
+    }
+
+    pub fn message(self: *Self) Message {
+        return Message.init(self, .RPI_FIRMWARE_GET_DOMAIN_STATE, 1, 2, fill, unfill);
+    }
+
+    pub fn fill(self: *Self, buf: []u32) void {
+        buf[0] = @intFromEnum(self.domain);
+    }
+
+    pub fn unfill(self: *Self, buf: []u32) void {
+        self.domain = @enumFromInt(buf[0]);
+        self.rate = buf[1];
+    }
 };
 
-pub fn get_power_status(domain: PowerDomain) !struct { bool, PowerStatus } {
-    var power_message = MailboxPower{};
-    var request_body: [1]u32 = undefined;
-    request_body[0] = @intFromEnum(domain);
-    var ret = try power_message.call(.property_arm_to_vc, &request_body);
-    _ = ret;
-    // TODO: check if actual return value
-    // TODO: check if error response
-    var body = power_message.get_response_body();
-    return .{ power_message.is_successful(), PowerStatus{
-        .domain_id = body[0],
-        .power_state = body[1],
-    } };
+pub fn get_power_status(domain: PowerDomain) !struct { bool, u32 } {
+    var powermsg = PowerMessage.init(domain);
+    var messages = [_]Message{powermsg.message()};
+    var env = Envelope.init(&messages);
+    _ = try env.call();
+
+    return .{ true, powermsg.state };
 }
 
-pub const ClockType = enum(u32) {
-    emmc = 1,
-    uart = 2,
-    arm = 3,
-    core = 4,
+const ClockMessage = struct {
+    const Self = @This();
+    clock_type: ClockRate.Clock,
+    rate: u32 = 0,
+
+    pub fn init(clock_type: ClockRate.Clock) Self {
+        return Self{
+            .clock_type = clock_type,
+        };
+    }
+
+    pub fn message(self: *Self) Message {
+        return Message.init(self, .RPI_FIRMWARE_GET_CLOCK_RATE, 1, 2, fill, unfill);
+    }
+
+    pub fn fill(self: *Self, buf: []u32) void {
+        buf[0] = @intFromEnum(self.clock_type);
+    }
+
+    pub fn unfill(self: *Self, buf: []u32) void {
+        self.clock_type = @enumFromInt(buf[0]);
+        self.rate = buf[1];
+    }
 };
 
-pub const MailboxClock = MailboxMessageType(.RPI_FIRMWARE_GET_CLOCK_RATE, 1, 1);
+pub const ClockRate = packed struct {
+    pub const Clock = enum(u32) {
+        emmc = 1,
+        uart = 2,
+        arm = 3,
+        core = 4,
+    };
 
-pub const ClockRate = struct {
-    clock_type: ClockType,
+    clock_type: Clock,
     rate: u32,
 };
 
-pub fn get_clock_rate(clock_type: ClockType) !struct { bool, ClockRate } {
-    var clock_message = MailboxClock{};
-    var request_body: [1]u32 = undefined;
-    request_body[0] = @intFromEnum(clock_type);
-    var ret = try clock_message.call(.property_arm_to_vc, &request_body);
-    _ = ret;
-    var body = clock_message.get_response_body();
-    return .{ clock_message.is_successful(), ClockRate{
-        .clock_type = @enumFromInt(body[0]),
-        .rate = body[1],
-    } };
+pub fn get_clock_rate(clock_type: ClockRate.Clock) !struct { bool, u32 } {
+    var clockmsg = ClockMessage.init(clock_type);
+    var messages = [_]Message{clockmsg.message()};
+    var env = Envelope.init(&messages);
+
+    _ = try env.call();
+
+    return .{ true, clockmsg.rate };
 }
