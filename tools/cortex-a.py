@@ -221,7 +221,10 @@ class DataAbortDecode():
         fnv = (iss >> 9) & 0x1
         if not fnv:
             value = int(frame.read_register("FAR_EL1"))
-            print("        FAR      {:08x}".format(value))
+            if (value < 0):
+                print("        FAR      {:08x}".format(value + (1 << 64)))
+            else:
+                print("        FAR      {:08x}".format(value))
         dfsc = iss & 0x3f
         if dfsc in self.data_abort_dfsc:
             print("                ", self.data_abort_dfsc[dfsc])
@@ -364,3 +367,69 @@ class Armv8AException(Armv8ARegister):
             self.decoders[ec].decode_iss(frame, iss)
 
 Armv8AException()
+
+class Armv8ATableDescriptor(gdb.Command):
+    def __init__(self):
+        super (Armv8ATableDescriptor, self).__init__("ttable", gdb.COMMAND_DATA)
+
+    table_descriptor_bitfields = (
+        (0, 1, "valid"),
+        (1, 1, "type"),
+        (2, 9, "ign"),
+        (12, 36, "next"),
+        (48, 2, "res0"),
+        (51, 7, "ign"),
+        (59, 1, "PXN"),
+        (60, 1, "UXN"),
+        (61, 2, "AP"),
+        (63, 1, "NS"))
+
+    block_descriptor_bitfields = (
+        (0, 1, "valid"),
+        (1, 1, "type"),
+        (2, 2, "MAIR index"),
+        (5, 1, "NS"),
+        (6, 2, "AP"),
+        (8, 2, "SH"),
+        (10, 1, "AF"),
+        (11, 1, "NSE or nG"),
+        (12, 3, "unused"),
+        (16, 1, "nT"),
+        (17, 36, "OA"),
+        (47, 2, "res0"),
+        (50, 1, "GP"),
+        (51, 1, "DBM"),
+        (52, 1, "Contig"),
+        (53, 1, "PXN"),
+        (54, 1, "UXN or XN"),
+        (55, 3, "ignored"),
+        (59, 4, "PBHA"),
+        (63, 1, "ignored"))
+
+    def invoke(self, arg, from_tty):
+        argv = gdb.string_to_argv(arg)
+
+        addr = gdb.parse_and_eval(argv[0]).cast(gdb.lookup_type('long').pointer())
+        # if len(argv) == 2:
+        #     try:
+        #         count = int(gdb.parse_and_eval(argv[1]))
+        #     except ValueError:
+        #         raise gdb.GdbError('Descriptor count (argument 2) must be an integer value.')
+        # else:
+        #     count = 1
+
+        inferior = gdb.selected_inferior()
+
+        table_entry = inferior.read_memory(addr, 8).cast('L')
+        value = table_entry[0]
+
+        if value & 0b10:
+            print_bitfields(value, self.table_descriptor_bitfields)
+            nlt = (value >> 12) & 0xfffffffff
+            print("Next level table: {:08x}".format(nlt))
+        else:
+            print_bitfields(value, self.block_descriptor_bitfields)
+            oa = (value >> 17) & 0xfffffffff
+            print("Output address: {:08x}".format(oa))
+
+Armv8ATableDescriptor()

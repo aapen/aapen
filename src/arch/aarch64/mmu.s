@@ -1,6 +1,6 @@
 /*
  * This file was automatically generated using arm64-pgtable-tool.
- * See: https://github.com/42Bastian Schick/arm64-pgtable-tool
+ * See: https://github.com/42Bastian/arm64-pgtable-tool
  * Forked from: https://github.com/ashwio/arm64-pgtable-tool
  *
  *
@@ -52,6 +52,10 @@
  *    [   0] 0020000000-0020000fff=>0020000000-0020000fff, SWB XN XN RW RW S -
  *            ...
  *    [ 255] 00200ff000-00200fffff=>00200ff000-00200fffff, SWB XN XN RW RW S -
+ *            --- Videocore SDRAM ---
+ *   [ 480]  003c000000-003c1fffff=>003c000000-003c1fffff, SNC XN XN RW RW S -
+ *           ...
+ *   [ 503]  003ee00000-003effffff=>003ee00000-003effffff, SNC XN XN RW RW S -
  *            --- MMIO block ---
  *   [ 504]  003f000000-003f1fffff=>003f000000-003f1fffff, SDE XN XN RW RW S -
  *           ...
@@ -191,6 +195,20 @@ pt0x200000:
 	add     x11, x11, x20		// add base address
 	orr     x11, x11, #0x3		// next-level table descriptor
 	str     x11, [x21, #256*8]	// write entry[256] into table
+/* Videocore SDRAM */
+/* page:0x0 SH:0x3 AF:0x1 nG:0x1 attrindx:0x2 NS:0x0 xn:0x1 pxn:0x1 AP:0x1  */
+	MOV64    x9, 0x60000000000f49	//
+	MOV64   x10, 480		// index: 480
+	MOV64   x11, 504		// to 504 (24 entries)
+	MOV64   x12, 0x3c000000		// output address of entry[index]
+pt0x3c000000:
+	orr     x12, x12, x9		// merge output address with template
+	str     X12, [x21, x10, lsl #3]	// write entry into table
+	add     x10, x10, #1		// prepare for next entry
+	add     x12, x12, x22		// add chunk to address
+	cmp     x10, x11		// last index?
+	b.ne    pt0x3c000000		//
+
 /* MMIO block */
 /* page:0x0 SH:0x3 AF:0x1 nG:0x1 attrindx:0x0 NS:0x0 xn:0x1 pxn:0x1 AP:0x1  */
 	MOV64    x9, 0x60000000000f41	//
@@ -297,13 +315,13 @@ __page_tables_start: .space 0x5000
     * Set up memory attributes
     * This equates to:
     * 0 = b00000000 = Device-nGnRnE
-    * 1 = b11111111 = Normal, Inner/Outer WB/WA/RA
-    * 2 = b01000100 = Normal, Inner/Outer Non-Cacheable
+    * 1 = b01000100 = Normal, Inner/Outer Non-Cacheable
+    * 2 = b11111111 = Normal, Inner/Outer WB/WA/RA
     * 3 = b10111011 = Normal, Inner/Outer WT/WA/RA
     **********************************************/
 
 	msr MAIR_EL1, x1		//
-	MOV64   x1, 0xbb44ff00		// program mair on this CPU
+	MOV64   x1, 0xbbff4400		// program mair on this CPU
 	msr     mair_el1, x1		//
 	MOV64   x1, 0x200803518		// program tcr on this CPU
 	msr     tcr_el1, x1		//

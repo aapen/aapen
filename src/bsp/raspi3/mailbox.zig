@@ -4,7 +4,7 @@ const io = @import("io.zig");
 const debug_writer = io.debug_writer;
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
-const peripheral_base = @import("peripheral.zig").peripheral_base;
+const peripheral_base = @import("memory_map.zig").peripheral_base;
 
 // ----------------------------------------------------------------------
 // Peripheral Registers
@@ -90,7 +90,7 @@ const RPI_FIRMWARE_STATUS_REQUEST: u32 = 0;
 const RPI_FIRMWARE_STATUS_SUCCESS: u32 = 0x80000000;
 const RPI_FIRMWARE_STATUS_ERROR: u32 = 0x80000001;
 
-const rpi_firmware_property_tag = enum(u32) {
+pub const rpi_firmware_property_tag = enum(u32) {
     RPI_FIRMWARE_PROPERTY_END = 0x00000000,
     RPI_FIRMWARE_GET_FIRMWARE_REVISION = 0x00000001,
 

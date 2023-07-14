@@ -36,6 +36,10 @@ fn kernel_init() !void {
     try print_clock_rate(.core);
     try print_clock_rate(.arm);
 
+    var fb = bsp.video.FrameBuffer{};
+    try fb.set_resolution(1024, 768, 8);
+    fb.draw_pixel(100, 100, 0xff);
+
     while (true) {
         var ch: u8 = bsp.io.receive();
         bsp.io.send(ch);
@@ -59,7 +63,15 @@ fn print_clock_rate(clock_type: bsp.mailbox.ClockRate.Clock) !void {
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
     const registers = arch.cpu.registers;
 
-    // this is harmelss at the moment, but it lets me get the code
+    registers.SCTLR_EL1.modify(.{
+        .MMU_ENABLE = .disable,
+        .EE = .little_endian,
+        .E0E = .little_endian,
+        .I_CACHE = .disabled,
+        .D_CACHE = .disabled,
+    });
+
+    // this is harmless at the moment, but it lets me get the code
     // infrastructure in place to make the EL2 -> EL1 transition
     registers.CNTHCTL_EL2.modify(.{
         .EL1PCEN = .trap_disable,

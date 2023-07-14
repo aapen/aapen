@@ -4,7 +4,7 @@ const UniformRegister = reg.UniformRegister;
 const interrupts = @import("interrupts.zig");
 const ring = @import("../../ring.zig");
 const arch = @import("../../architecture.zig");
-const peripheral_base = @import("peripheral.zig").peripheral_base;
+const peripheral_base = @import("memory_map.zig").peripheral_base;
 
 extern fn spin_delay(cpu_cycles: u32) void;
 

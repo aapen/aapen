@@ -2,7 +2,7 @@ const io = @import("io.zig");
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
 const interrupts = @import("interrupts.zig");
-const peripheral_base = @import("peripheral.zig").peripheral_base;
+const peripheral_base = @import("memory_map.zig").peripheral_base;
 pub const system_timer_base = peripheral_base + 0x3000;
 
 const debug_write = io.pl011_uart_write_text;
