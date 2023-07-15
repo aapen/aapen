@@ -38,7 +38,18 @@ fn kernel_init() !void {
 
     var fb = bsp.video.FrameBuffer{};
     try fb.set_resolution(1024, 768, 8);
-    fb.draw_pixel(100, 100, 0xff);
+
+    for (100..200) |x| {
+        for (100..200) |y| {
+            fb.draw_pixel(x, y, 0x02); // 0x02 - index into the palette
+        }
+    }
+
+    for (120..180) |x| {
+        for (120..180) |y| {
+            fb.draw_pixel(x, y, 0x07); // 0x02 - index into the palette
+        }
+    }
 
     while (true) {
         var ch: u8 = bsp.io.receive();
