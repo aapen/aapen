@@ -67,7 +67,7 @@ SECTIONS
         .page_tables(NOLOAD) : ALIGN(16)
         {
                 __page_tables_start = .;
-                . += 0x5000;
+                . += 0x6000;
                 __page_tables_end_exclusive = .;
         } :segment_data
 

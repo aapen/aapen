@@ -14,8 +14,8 @@ var os = Freestanding{
 };
 
 fn kernel_init() !void {
+    arch.cpu.mmu2.init();
     arch.cpu.exceptions.init();
-    arch.cpu.mmu.init();
     arch.cpu.irq.init();
 
     bsp.timer.timer_init();

@@ -2,6 +2,7 @@ pub const registers = @import("aarch64/registers.zig");
 pub const time = @import("aarch64/time.zig");
 pub const exceptions = @import("aarch64/exceptions.zig");
 pub const mmu = @import("aarch64/mmu.zig");
+pub const mmu2 = @import("aarch64/mmu2.zig");
 pub const irq = @import("aarch64/irq.zig");
 
 /// Note: this performs an "exception return" on the CPU. It will
