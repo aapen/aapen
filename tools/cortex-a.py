@@ -10,20 +10,41 @@
 # Settings:
 #
 
+import math
 import gdb
 
 def print_bits(value, bitfield):
-    low_bit, bit_count, label = bitfield
+    if len(bitfield) == 4:
+        low_bit, bit_count, label, decoder = bitfield
+    else:
+        low_bit, bit_count, label = bitfield
+        decoder = None
     field = (value >> low_bit) & ((1 << bit_count) - 1)
     if bit_count > 1:
         bitfield = "[{}:{}]".format(low_bit + bit_count - 1, low_bit)
     else:
         bitfield = "[{}]".format(low_bit)
     padded_binary = "{:0{}b}".format(field, bit_count)
-    print("{:<8}{:<8} 0b{}".format(bitfield, label, padded_binary))
+    if decoder is None:
+        print("{:<8}{:<8} 0b{}".format(bitfield, label, padded_binary))
+    else:
+        print("{:<8}{:<8} 0b{}\t{}".format(bitfield, label, padded_binary, decoder.decode(field)))
 
 def print_bitfields(value, bitfields):
     [print_bits(value, x) for x in bitfields]
+
+def print_bits_short(value, bitfield):
+    if len(bitfield) == 4:
+        low_bit, bit_count, label, decoder = bitfield
+    else:
+        low_bit, bit_count, label = bitfield
+        decoder = None
+    field = (value >> low_bit) & ((1 << bit_count) - 1)
+    hex_digits = math.ceil(bit_count/4)
+    print(f'{label}: {field:#0{2+hex_digits}_x}', end=' ')
+
+def print_bitfields_short(value, bitfields, summary_fields):
+    [print_bits_short(value, x) for x in bitfields if x[2] in summary_fields]
 
 class Armv8ARegister(gdb.Command):
     def __init__(self, cmd, reg, label, bitfields):
@@ -387,21 +408,100 @@ class Armv8ATableDescriptor(gdb.Command):
     block_descriptor_bitfields = (
         (0, 1, "valid"),
         (1, 1, "type"),
-        (2, 2, "MAIR index"),
+        (2, 2, "MAIR idx"),
         (5, 1, "NS"),
         (6, 2, "AP"),
-        (8, 2, "SH"),
+        (8, 2, "SH", TableShareabilityDecoder()),
         (10, 1, "AF"),
-        (11, 1, "NSE or nG"),
+        (11, 1, "NSE/nG"),
         (12, 3, "unused"),
         (16, 1, "nT"),
-        (17, 36, "OA"),
-        (47, 2, "res0"),
+        (21, 27, "OA"),
+        (48, 2, "res0"),
         (50, 1, "GP"),
         (51, 1, "DBM"),
         (52, 1, "Contig"),
         (53, 1, "PXN"),
-        (54, 1, "UXN or XN"),
+        (54, 1, "UXN/XN"),
+        (55, 3, "ignored"),
+        (59, 4, "PBHA"),
+        (63, 1, "ignored"))
+
+    def invoke(self, arg, from_tty):
+        argv = gdb.string_to_argv(arg)
+        addr = gdb.parse_and_eval(argv[0]).cast(gdb.lookup_type('long').pointer())
+        self.decode_entry_at(addr)
+
+    def decode_entry_at(self, addr):
+        inferior = gdb.selected_inferior()
+        table_entry = inferior.read_memory(addr, 8).cast('L')
+        value = table_entry[0]
+
+        if value & 0b01:
+            if value & 0b10:
+                print("TABLE DESCRIPTOR")
+                print_bitfields(value, self.table_descriptor_bitfields)
+                nlt = (value >> 12) & 0xfffffffff
+                print("Next level tbl:  0x{:08x}".format(nlt << 12))
+            else:
+                print("BLOCK DESCRIPTOR")
+                print_bitfields(value, self.block_descriptor_bitfields)
+                oa = (value >> 30) & 0x3ffff
+                print("Output address:  0x{:08x}".format(oa))
+
+    def summarize(self, addr, value, level):
+        prefix = "L{}{}".format(level, "  "*level)
+        if value & 0b01:
+            if value & 0b10:
+                print("{}TBL: {:08x}".format(prefix, addr), end=' ')
+                print_bitfields_short(value, self.table_descriptor_bitfields, ["next", "PXN", "UXN", "AP"])
+                print()
+            else:
+                print("{}BLK: {:08x}".format(prefix, addr), end=' ')
+                print_bitfields_short(value, self.block_descriptor_bitfields, ["SH", "AF", "OA", "PXN", "UXN/XN", "MAIR idx"])
+                print()
+        else:
+            print("{}INV: {:08x}".format(prefix, addr))
+
+
+Armv8ATableDescriptor()
+
+class TableShareabilityDecoder():
+    sharing = {
+        0b00: "Non-shareable",
+        0b01: "WARN: reserved value. Behavior is 'constrained unpredictable'",
+        0b10: "Outer shareable",
+        0b11: "Inner shareable"
+    }
+
+    def decode(self, sh):
+        return self.sharing[sh]
+
+# Assumptions
+# - 48 bit OA
+# - 4K translation granule
+class Armv8APageDescriptor(gdb.Command):
+    def __init__(self):
+        super (Armv8APageDescriptor, self).__init__("tpage", gdb.COMMAND_DATA)
+
+    page_descriptor_bitfields = (
+        (0, 1, "valid"),
+        (1, 1, "type"),
+        (2, 2, "MAIR idx"),
+        (5, 1, "NS"),
+        (6, 2, "AP"),
+        (8, 2, "SH", TableShareabilityDecoder()),
+        (10, 1, "AF"),
+        (11, 1, "NSE/nG"),
+        (12, 3, "unused"),
+        (16, 1, "nT"),
+        (12, 36, "OA"),
+        (48, 2, "res0"),
+        (50, 1, "GP"),
+        (51, 1, "DBM"),
+        (52, 1, "Contig"),
+        (53, 1, "PXN"),
+        (54, 1, "UXN/XN"),
         (55, 3, "ignored"),
         (59, 4, "PBHA"),
         (63, 1, "ignored"))
@@ -410,26 +510,66 @@ class Armv8ATableDescriptor(gdb.Command):
         argv = gdb.string_to_argv(arg)
 
         addr = gdb.parse_and_eval(argv[0]).cast(gdb.lookup_type('long').pointer())
-        # if len(argv) == 2:
-        #     try:
-        #         count = int(gdb.parse_and_eval(argv[1]))
-        #     except ValueError:
-        #         raise gdb.GdbError('Descriptor count (argument 2) must be an integer value.')
-        # else:
-        #     count = 1
 
         inferior = gdb.selected_inferior()
 
         table_entry = inferior.read_memory(addr, 8).cast('L')
         value = table_entry[0]
 
-        if value & 0b10:
-            print_bitfields(value, self.table_descriptor_bitfields)
-            nlt = (value >> 12) & 0xfffffffff
-            print("Next level table: {:08x}".format(nlt))
-        else:
-            print_bitfields(value, self.block_descriptor_bitfields)
-            oa = (value >> 17) & 0xfffffffff
-            print("Output address: {:08x}".format(oa))
+        if not (value & 0b10):
+            print("Something seems wrong. Bit 1 should be set for a page descriptor.")
 
-Armv8ATableDescriptor()
+        print_bitfields(value, self.page_descriptor_bitfields)
+        oa = (value >> 12) & 0xfffffffff
+        print("Page address: 0x{:08x}".format(oa))
+
+
+Armv8APageDescriptor()
+
+class Armv8AMemoryMap(gdb.Command):
+    def __init__(self):
+        super (Armv8AMemoryMap, self).__init__("mmap", gdb.COMMAND_DATA)
+
+    def get_entry(self, addr):
+        inferior = gdb.selected_inferior()
+        table_entry = inferior.read_memory(addr, 8).cast('L')
+        return table_entry[0]
+
+    def walk(self, table, level):
+        valid = True
+        index = 0
+        while index < 512 and valid:
+            # get descriptor
+            addr = table + (8*index)
+            entry = self.get_entry(addr)
+
+            # if this is a legit descriptor
+            valid = entry & 0b1 == 1
+
+            if valid:
+                # print summary
+                Armv8ATableDescriptor().summarize(addr, entry, level)
+                # if table descriptor
+                if level < 3 and (entry & 0b10 == 2):
+                    #   recursively call walk with target table, level
+                    #   + 1
+                    next_table = ((entry >> 12) & 0xfffffffff) << 12
+                    self.walk(next_table, level + 1)
+                index = index + 1
+
+    def invoke(self, arg, from_tty):
+        argv = gdb.string_to_argv(arg)
+
+        if len(argv) == 0:
+            reg = "TTBR0_EL1"
+        else:
+            reg = argv[0]
+
+        frame = gdb.selected_frame()
+        ttbase = int(frame.read_register(reg))
+
+        print("Translation table ({}): 0x{:08x}".format(reg, ttbase))
+
+        self.walk(ttbase, 0)
+
+Armv8AMemoryMap()
