@@ -59,9 +59,25 @@ fn kernel_init() !void {
         }
     }
 
+    var xpos: u16 = 0;
+    var ypos: u16 = 0;
+
     while (true) {
         var ch: u8 = bsp.io.receive();
         bsp.io.send(ch);
+
+        fb.draw_char(xpos * 8, ypos * 8, ch - 64);
+
+        xpos += 1;
+        if (xpos >= 40) {
+            xpos = 0;
+            ypos += 1;
+
+            if (ypos >= 40) {
+                ypos = 0;
+            }
+        }
+
         if (ch == 'q') break;
     }
 
