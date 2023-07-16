@@ -1,7 +1,5 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const io = @import("io.zig");
-const debug_writer = io.debug_writer;
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
 const peripheral_base = @import("memory_map.zig").peripheral_base;

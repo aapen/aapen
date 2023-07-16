@@ -1,6 +1,10 @@
+const root = @import("root");
+const console = root.console;
+
 const mailbox = @import("mailbox.zig");
-const io = @import("io.zig");
-const debug_writer = io.debug_writer;
+
+// This file can be found in the VICE emulator.
+const character_rom = @embedFile("../../data/chargen-906143-02.bin");
 
 const SizeMessage = struct {
     const Kind = enum {

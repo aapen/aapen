@@ -492,38 +492,3 @@ pub fn uart_init() void {
     pl011_uart_init();
     enable_pl011_interrupts();
 }
-
-// ----------------------------------------------------------------------
-// Interface to Zig's std.io.Writer
-// ----------------------------------------------------------------------
-
-// Use like:
-//
-// var uart_writer = uartWriter();
-// const debug_writer = uart_writer.writer();
-
-/// Wrapper type that can supply a Writer when requested.
-pub fn UartWriter() type {
-    return struct {
-        pub const Error = error{
-            Undefined,
-        };
-        pub const Writer = std.io.Writer(*Self, Error, write);
-
-        const Self = @This();
-
-        pub fn write(self: *Self, bytes: []const u8) Error!usize {
-            _ = self;
-            send_string(bytes);
-            return bytes.len;
-        }
-
-        pub fn writer(self: *Self) Writer {
-            return .{ .context = self };
-        }
-    };
-}
-
-var uart_writer = UartWriter(){};
-
-pub const debug_writer = uart_writer.writer();

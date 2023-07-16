@@ -1,7 +1,6 @@
 const std = @import("std");
 const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
-const debug_writer = bsp.io.debug_writer;
 const qemu = @import("qemu.zig");
 const mem = @import("mem.zig");
 
@@ -12,6 +11,15 @@ const Freestanding = struct {
 var os = Freestanding{
     .page_allocator = undefined,
 };
+
+const Writer = std.io.Writer(u32, error{}, writer_send_string);
+
+pub const console = Writer{ .context = 0 };
+
+fn writer_send_string(_: u32, str: []const u8) !usize {
+    bsp.io.send_string(str);
+    return str.len;
+}
 
 fn kernel_init() !void {
     arch.cpu.mmu2.init();
@@ -28,8 +36,8 @@ fn kernel_init() !void {
     };
     os.page_allocator = heap_allocator.allocator();
 
-    try debug_writer.print("Heap start: 0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.first_available)});
-    try debug_writer.print("Heap end:   0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.last_available)});
+    try console.print("Heap start: 0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.first_available)});
+    try console.print("Heap end:   0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.last_available)});
 
     try print_clock_rate(.emmc);
     try print_clock_rate(.uart);
@@ -65,9 +73,9 @@ fn kernel_init() !void {
 
 fn print_clock_rate(clock_type: bsp.mailbox.ClockRate.Clock) !void {
     if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
-        try debug_writer.print("{s} clock: {}\r\n", .{ @tagName(clock_type), clock[1] });
+        try console.print("{s} clock: {}\r\n", .{ @tagName(clock_type), clock[1] });
     } else |err| {
-        try debug_writer.print("Error getting clock: {}\r\n", .{err});
+        try console.print("Error getting clock: {}\r\n", .{err});
     }
 }
 
