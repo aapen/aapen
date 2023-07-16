@@ -9,4 +9,3 @@ firmware/*
 zig-cache
 zig-out
 .gdb_history
-data

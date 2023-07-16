@@ -3,8 +3,7 @@ const console = root.console;
 
 const mailbox = @import("mailbox.zig");
 
-// This file can be found in the VICE emulator.
-const character_rom = @embedFile("../../data/chargen-906143-02.bin");
+const character_rom = @embedFile("../../data/character_rom.bin");
 
 const SizeMessage = struct {
     const Kind = enum {
@@ -219,10 +218,6 @@ pub const FrameBuffer = struct {
         self.xres = xres;
         self.yres = yres;
         self.bpp = depth.get_bpp();
-
-        for (0..32) |i| {
-            console.print("{}: 0x{x:0>2}\r\n", .{ i, character_rom[i] }) catch {};
-        }
     }
 
     pub fn draw_pixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {
@@ -244,15 +239,47 @@ pub const FrameBuffer = struct {
     const COLOR_FOREGROUND: u8 = 0x02;
     const COLOR_BACKGROUND: u8 = 0x00;
 
+    // Font is fixed height of 16 bits, fixed width of 8 bits
     pub fn draw_char(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {
-        var idx: usize = @as(usize, ch) * 8;
-        for (0..8) |cy| {
+        var idx: usize = @as(usize, ch - 32) * 16;
+        if (idx + 16 >= character_rom.len)
+            return;
+
+        for (0..16) |cy| {
             var charbits: u8 = character_rom[idx];
             for (0..8) |cx| {
                 self.draw_pixel(x + 8 - cx, y + cy, if ((charbits & 0b1) == 1) COLOR_FOREGROUND else COLOR_BACKGROUND);
                 charbits >>= 1;
             }
             idx += 1;
+        }
+    }
+
+    pub fn draw_string(self: *FrameBuffer, x: usize, y: usize, str: []const u8) void {
+        var xpos = x;
+        var ypos = y;
+        for (str) |ch| {
+            self.draw_char(xpos * 8, ypos * 16, ch);
+
+            switch (ch) {
+                '\n' => {
+                    xpos = 0;
+                    ypos += 1;
+                    if (ypos > 40) {
+                        ypos = 0;
+                    }
+                },
+                else => {
+                    xpos += 1;
+                    if (xpos > 40) {
+                        xpos = 0;
+                        ypos += 1;
+                        if (ypos > 40) {
+                            ypos = 0;
+                        }
+                    }
+                },
+            }
         }
     }
 };

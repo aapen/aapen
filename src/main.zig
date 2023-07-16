@@ -47,38 +47,39 @@ fn kernel_init() !void {
     var fb = bsp.video.FrameBuffer{};
     try fb.set_resolution(1024, 768, 8);
 
-    for (100..200) |x| {
-        for (100..200) |y| {
-            fb.draw_pixel(x, y, 0x02); // 0x02 - index into the palette
-        }
-    }
-
-    for (120..180) |x| {
-        for (120..180) |y| {
-            fb.draw_pixel(x, y, 0x07); // 0x02 - index into the palette
-        }
-    }
+    fb.draw_string(0, 0, "READY.");
 
     var xpos: u16 = 0;
-    var ypos: u16 = 0;
+    var ypos: u16 = 1;
 
     while (true) {
         var ch: u8 = bsp.io.receive();
         bsp.io.send(ch);
 
-        fb.draw_char(xpos * 8, ypos * 8, ch - 64);
+        switch (ch) {
+            '\r' => {
+                xpos = 0;
+                ypos += 1;
+                if (ypos >= 40) {
+                    ypos = 0;
+                }
+            },
+            // TODO: backspace? cursor movement? (requires multibyte
+            // sequences from UART)
+            else => {
+                fb.draw_char(xpos * 8, ypos * 16, ch);
 
-        xpos += 1;
-        if (xpos >= 40) {
-            xpos = 0;
-            ypos += 1;
+                xpos += 1;
+                if (xpos >= 40) {
+                    xpos = 0;
+                    ypos += 1;
 
-            if (ypos >= 40) {
-                ypos = 0;
-            }
+                    if (ypos >= 40) {
+                        ypos = 0;
+                    }
+                }
+            },
         }
-
-        if (ch == 'q') break;
     }
 
     // Does not return
@@ -143,3 +144,16 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 
     unreachable;
 }
+
+// TODO: re-enable this when
+// https://github.com/ziglang/zig/issues/16327 is fixed.
+
+// pub fn panic(msg: []const u8, stack: ?*std.builtin.StackTrace, return_addr: ?usize) noreturn {
+//     _ = stack;
+//     _ = return_addr;
+
+//     console.print(msg, .{}) catch {};
+//     while (true) {}
+
+//     unreachable;
+// }

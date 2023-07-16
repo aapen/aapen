@@ -120,6 +120,8 @@ HDMI output, videocode
 ** TODO Make panics write to the screen
 * Milestone: Set Forth
 * Other references
+** Understanding the ARM ecosystem
+https://www.youtube.com/watch?v=NNol7fRGo2E
 ** Debugging in hardware
 *** All-in-one option
 Kicad files: https://github.com/chickadee-tech/pi-developer
