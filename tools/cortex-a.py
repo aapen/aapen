@@ -389,6 +389,17 @@ class Armv8AException(Armv8ARegister):
 
 Armv8AException()
 
+class TableShareabilityDecoder():
+    sharing = {
+        0b00: "Non-shareable",
+        0b01: "WARN: reserved value. Behavior is 'constrained unpredictable'",
+        0b10: "Outer shareable",
+        0b11: "Inner shareable"
+    }
+
+    def decode(self, sh):
+        return self.sharing[sh]
+
 class Armv8ATableDescriptor(gdb.Command):
     def __init__(self):
         super (Armv8ATableDescriptor, self).__init__("ttable", gdb.COMMAND_DATA)
@@ -465,18 +476,6 @@ class Armv8ATableDescriptor(gdb.Command):
 
 
 Armv8ATableDescriptor()
-
-class TableShareabilityDecoder():
-    sharing = {
-        0b00: "Non-shareable",
-        0b01: "WARN: reserved value. Behavior is 'constrained unpredictable'",
-        0b10: "Outer shareable",
-        0b11: "Inner shareable"
-    }
-
-    def decode(self, sh):
-        return self.sharing[sh]
-
 # Assumptions
 # - 48 bit OA
 # - 4K translation granule

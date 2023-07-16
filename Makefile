@@ -13,7 +13,7 @@ QEMU_NOBUG_ARGS = -serial stdio
 GDB_EXEC        = aarch64-unknown-linux-gnu-gdb
 GDB_ARGS        = -s lib
 GDB_TARGET_HOST = --ex "target remote :1234"
-GDB_TARGET_DEV  = --ex "target remote :3333"
+GDB_TARGET_DEV  = --ex "target extended-remote :3333"
 
 KERNEL_ELF      = zig-out/kernel8.elf
 KERNEL          = zig-out/kernel8.img
