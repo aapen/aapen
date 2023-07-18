@@ -1,6 +1,5 @@
-const root = @import("root");
-const console = root.console;
-
+const std = @import("std");
+const assert = std.debug.assert;
 const mailbox = @import("mailbox.zig");
 
 const character_rom = @embedFile("../../data/character_rom.bin");
@@ -228,9 +227,7 @@ pub const FrameBuffer = struct {
 
         var idx: usize = x + (y * self.pitch);
 
-        if (idx >= self.buffer_size) {
-            console.print("attempt to draw outside frame buffer at ({}, {})\r\n", .{ x, y }) catch {};
-        }
+        assert(idx < self.buffer_size);
 
         self.base[x + (y * self.pitch)] = color;
     }
@@ -241,47 +238,23 @@ pub const FrameBuffer = struct {
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
     pub fn draw_char(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {
-        var idx: usize = @as(usize, ch - 32) * 16;
-        if (idx + 16 >= character_rom.len)
+        var romidx: usize = @as(usize, ch - 32) * 16;
+        if (romidx + 16 >= character_rom.len)
             return;
 
-        for (0..16) |cy| {
-            var charbits: u8 = character_rom[idx];
-            for (0..8) |cx| {
-                self.draw_pixel(x + 8 - cx, y + cy, if ((charbits & 0b1) == 1) COLOR_FOREGROUND else COLOR_BACKGROUND);
-                charbits >>= 1;
-            }
-            idx += 1;
-        }
-    }
+        var line_stride = self.pitch;
+        var fbidx = x + (y * line_stride);
 
-    // TODO: text positioning, line wrapping, backspace... extract to
-    // a struct that uses a framebuffer
-    pub fn draw_string(self: *FrameBuffer, x: usize, y: usize, str: []const u8) void {
-        var xpos = x;
-        var ypos = y;
-        for (str) |ch| {
-            self.draw_char(xpos * 8, ypos * 16, ch);
-
-            switch (ch) {
-                '\n' => {
-                    xpos = 0;
-                    ypos += 1;
-                    if (ypos > 40) {
-                        ypos = 0;
-                    }
-                },
-                else => {
-                    xpos += 1;
-                    if (xpos > 40) {
-                        xpos = 0;
-                        ypos += 1;
-                        if (ypos > 40) {
-                            ypos = 0;
-                        }
-                    }
-                },
+        for (0..16) |_| {
+            var charbits: u8 = character_rom[romidx];
+            for (0..8) |_| {
+                self.base[fbidx] = if ((charbits & 0x80) != 0) COLOR_FOREGROUND else COLOR_BACKGROUND;
+                fbidx += 1;
+                charbits <<= 1;
             }
+            fbidx -= 8;
+            fbidx += line_stride;
+            romidx += 1;
         }
     }
 };

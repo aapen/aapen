@@ -1,7 +1,6 @@
 // TODO: Is this really the right thing to do? Seems very odd to have
 // the directory traversal here!
 const root = @import("root");
-const console = root.console;
 
 const arch = @import("../../architecture.zig");
 const bsp = @import("../../bsp.zig");
@@ -35,7 +34,7 @@ const ExceptionContext = struct {
 };
 
 export fn show_invalid_entry_message(entry_type: u64, esr: u64, elr: u64) void {
-    console.print("Unhandled exception: {x:0>8}\nESR: {x:0>8}\nELR: {x:0>8}\n", .{ entry_type, esr, elr }) catch {};
+    root.console.print("Unhandled exception: {x:0>8}\nESR: {x:0>8}\nELR: {x:0>8}\n", .{ entry_type, esr, elr }) catch {};
 }
 
 export fn current_elx_irq(context: *const ExceptionContext) void {

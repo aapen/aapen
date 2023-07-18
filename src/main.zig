@@ -12,14 +12,89 @@ var os = Freestanding{
     .page_allocator = undefined,
 };
 
-const Writer = std.io.Writer(u32, error{}, writer_send_string);
+const Self = @This();
 
-pub const console = Writer{ .context = 0 };
+/// uart console
+const UartWriter = std.io.Writer(u32, error{}, uart_send_string);
+pub var uart_writer = UartWriter{ .context = 0 };
 
-fn writer_send_string(_: u32, str: []const u8) !usize {
+fn uart_send_string(_: u32, str: []const u8) !usize {
     bsp.io.send_string(str);
     return str.len;
 }
+
+/// display console
+const FrameBufferConsole = struct {
+    xpos: u8 = 0,
+    ypos: u8 = 0,
+    width: u16 = undefined,
+    height: u16 = undefined,
+    frame_buffer: *bsp.video.FrameBuffer = undefined,
+
+    pub fn init(frame_buffer: *bsp.video.FrameBuffer, pixel_width: u32, pixel_height: u32) FrameBufferConsole {
+        return FrameBufferConsole{
+            .frame_buffer = frame_buffer,
+            .width = @truncate(pixel_width / 8),
+            .height = @truncate(pixel_height / 16),
+        };
+    }
+
+    fn next(self: *FrameBufferConsole) void {
+        self.xpos += 1;
+        if (self.xpos >= self.width) {
+            self.next_line();
+        }
+    }
+
+    fn next_line(self: *FrameBufferConsole) void {
+        self.xpos = 0;
+        self.ypos += 1;
+        if (self.ypos >= self.height) {
+            self.next_screen();
+        }
+    }
+
+    fn next_screen(self: *FrameBufferConsole) void {
+        self.xpos = 0;
+        self.ypos = 0;
+        // TODO: clear screen?
+    }
+
+    fn isPrintable(ch: u8) bool {
+        return ch >= 32;
+    }
+
+    pub fn emit(self: *FrameBufferConsole, ch: u8) void {
+        switch (ch) {
+            '\n' => self.next_line(),
+            else => if (isPrintable(ch)) {
+                self.frame_buffer.draw_char(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16, ch);
+                self.next();
+            },
+        }
+    }
+
+    pub fn emit_string(self: *FrameBufferConsole, str: []const u8) void {
+        for (str) |ch| {
+            self.emit(ch);
+        }
+    }
+
+    pub const Writer = std.io.Writer(*FrameBufferConsole, error{}, write);
+
+    pub fn write(self: *FrameBufferConsole, bytes: []const u8) !usize {
+        for (bytes) |ch| {
+            self.emit(ch);
+        }
+        return bytes.len;
+    }
+
+    pub fn writer(self: *FrameBufferConsole) Writer {
+        return .{ .context = self };
+    }
+};
+
+pub var console: FrameBufferConsole.Writer = undefined;
 
 fn kernel_init() !void {
     arch.cpu.mmu2.init();
@@ -29,71 +104,49 @@ fn kernel_init() !void {
     bsp.timer.timer_init();
     bsp.io.uart_init();
 
-    var heap_bounds = bsp.memory.get_heap_bounds();
+    var heap = bsp.memory.create_greedy(arch.cpu.mmu2.PAGE_SIZE);
+
     var heap_allocator = mem.HeapAllocator{
-        .first_available = heap_bounds[0],
-        .last_available = heap_bounds[1],
+        .first_available = heap.start,
+        .last_available = heap.end,
     };
     os.page_allocator = heap_allocator.allocator();
-
-    try console.print("Heap start: 0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.first_available)});
-    try console.print("Heap end:   0x{x:0>8}\r\n", .{@intFromPtr(heap_allocator.last_available)});
-
-    try print_clock_rate(.emmc);
-    try print_clock_rate(.uart);
-    try print_clock_rate(.core);
-    try print_clock_rate(.arm);
 
     var fb = bsp.video.FrameBuffer{};
     try fb.set_resolution(1024, 768, 8);
 
-    fb.draw_string(0, 0, "READY.");
+    var fb_console = FrameBufferConsole.init(&fb, 1024, 768);
 
-    var xpos: u16 = 0;
-    var ypos: u16 = 1;
+    console = fb_console.writer();
+
+    try console.print("Heap start: 0x{x:0>8}\n", .{@intFromPtr(heap_allocator.first_available)});
+    try console.print("Heap end:   0x{x:0>8}\n", .{@intFromPtr(heap_allocator.last_available)});
+
+    fb_console.emit_string("READY.");
+    fb_console.next_line();
+
+    fb_console.emit(0);
 
     while (true) {
         var ch: u8 = bsp.io.receive();
+
         bsp.io.send(ch);
-
-        switch (ch) {
-            '\r' => {
-                xpos = 0;
-                ypos += 1;
-                if (ypos >= 40) {
-                    ypos = 0;
-                }
-            },
-            // TODO: backspace? cursor movement? (requires multibyte
-            // sequences from UART)
-            else => {
-                fb.draw_char(xpos * 8, ypos * 16, ch);
-
-                xpos += 1;
-                if (xpos >= 40) {
-                    xpos = 0;
-                    ypos += 1;
-
-                    if (ypos >= 40) {
-                        ypos = 0;
-                    }
-                }
-            },
+        if (ch == '\r') {
+            // my serial emulator needs a \r\n sequence
+            bsp.io.send('\n');
+            // but the video framebuffer uses ordinary \n
+            ch = '\n';
         }
+
+        // TODO: backspace? cursor movement? (requires multibyte
+        // sequences from UART)
+        fb_console.emit(ch);
     }
 
     // Does not return
     qemu.exit(0);
 
     unreachable;
-}
-
-fn print_clock_rate(clock_type: bsp.mailbox.ClockRate.Clock) !void {
-    if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
-        try console.print("{s} clock: {}\r\n", .{ @tagName(clock_type), clock[1] });
-    } else |err| {
-        try console.print("Error getting clock: {}\r\n", .{err});
-    }
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
