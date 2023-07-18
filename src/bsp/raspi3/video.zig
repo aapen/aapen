@@ -255,6 +255,8 @@ pub const FrameBuffer = struct {
         }
     }
 
+    // TODO: text positioning, line wrapping, backspace... extract to
+    // a struct that uses a framebuffer
     pub fn draw_string(self: *FrameBuffer, x: usize, y: usize, str: []const u8) void {
         var xpos = x;
         var ypos = y;
