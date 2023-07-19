@@ -98,6 +98,141 @@ The console will be waiting for an input, press `<ENTER>`. You should then see:
 
     pijFORTHos <version> sp=0x00008000
 
+## Debugging on hardware
+
+ARM systems have great support for in-circuit debugging. We can use
+GPIO pins to connect to the UART console as well as the JTAG debugging
+port. The downside is that this requires two different USB connectors
+to the host machine.
+
+If you don't have a spare monitor for the RPi, you can also use an
+HDMI capture card to display the video in a window on your host
+machine.
+
+```
+       ┌────────────┐              ┌────────────┐
+       │            │              │            │
+       │      Host  │              │ RPi        │
+       │            │              │            │
+       │       USB 1│◄────────────►│ UART pins  │
+       │            │              │            │
+       │       USB 2│◄────────────►│ JTAG pins  │
+       │            │              │            │
+       │            │  ┌────────┐  │            │
+       │            │  │HDMI    │  │            │
+       │       USB 3│◄─┤Capture │◄─┤ HDMI       │
+       │            │  │        │  │            │
+       │            │  └────────┘  │            │
+       │            │              │            │
+       └────────────┘              └────────────┘
+```
+
+### UART via USB
+
+UART is serial. USB is serial. All good, right? Well, no. The protocol
+is wrong and the voltages are wrong. RPi GPIO uses 3.3v signals. That
+will look like a floating pin to USB. Worse, USB will feed +5v to GPIO
+which could damage your device.
+
+Generic USB-to-TTL cables seem to work OK. Here is how to make the
+connections:
+
+```
+USB-to-TTL    RPi GPIO       GPIO pin
+label         header pin     (aka Broadcom pin)
+----------    ----------     ------------------
+3v3           Not connected
+TXD           10             GPIO 15 / RXD1
+RXD           8              GPIO 14 / TXD1
+GND           GND            6
++5V           Not connected
+```
+
+We need a common ground but do not want to supply power via this
+cable.
+
+### JTAG via USB
+
+Some tutorials recommend the FTDI C232HM DDHSL-0. I was unable to get
+this to work.
+
+I have used the [Olimex ARM-USB-TINY-H
+rev. C](https://www.olimex.com/Products/ARM/JTAG/ARM-USB-TINY-H/) successfully.
+
+See the ARM-USB-TINY-H's [JTAG
+pinout](https://www.olimex.com/Products/ARM/JTAG/_resources/openocd-jtag-layout.png)
+for reference.
+
+```
+Function   Olimex pin    RPi GPIO       GPIO pin
+                         header pin     (aka Broadcom pin)
+--------   ----------    ----------     ------------------
+Vref       1                            1
+GND        4                            9
+TRST       3             22             15
+TDI        5             26             37
+TMS        7             27             13
+TCK        9             25             22
+RTCK       11            23             16
+TDO        13            24             18
+```
+
+Note that we again create a common ground. In this case we also need
+to connect `Vref`.
+
+It's probably a bad idea to run the JTAG and UART USB cables to
+different host computers.
+
+### `config.txt` changes for JTAG
+
+To enable JTAG debugging, add the following line to the `config.txt`
+on the SD card you will boot the RPi from:
+
+```
+enable_jtag_gpio=1
+```
+
+Note that this will make the RPi wait for a JTAG connection at boot
+time. It will not boot normally without the debugger.
+
+### Host-end software
+
+Another rats' nest of connections, I'm afraid:
+
+- GDB for control of debugging. It connects to OpenOCD
+- OpenOCD using the USB-to-JTAG connection to talk to the chip.
+- tio as a modem emulator, using the serial device from the to the USB-to-TTL connection. (On Linux this is /dev/ttyUSB0).
+- If capturing video, a display program on the host. On Linux, guvcview or OBS both work
+
+```
+ ┌────────────────────────────────────┐              ┌────────────┐
+ │                                    │              │            │
+ │                               Host │              │ RPi        │
+ │                                    │              │            │
+ │                   tio ◄─────► USB 1│◄────────────►│ UART pins  │
+ │                                    │              │            │
+ │   GDB ◄─────► OpenOCD ◄─────► USB 2│◄────────────►│ JTAG pins  │
+ │                                    │              │            │
+ │                                    │  ┌────────┐  │            │
+ │                                    │  │HDMI    │  │            │
+ │              guvcview ◄─────► USB 3│◄─┤Capture │◄─┤ HDMI       │
+ │                                    │  │        │  │            │
+ │                                    │  └────────┘  │            │
+ │                                    │              │            │
+ └────────────────────────────────────┘              └────────────┘
+```
+
+To get this running requires three terminal windows (or tmux panes) on the host:
+
+1. Start tio: `tio /dev/ttyUSB0`
+2. Start OpenOCD: `./tools/openocd.sh`
+3. Start gdb: `make openocd_gdb`
+
+(Note to self: I should add targets to the Makefile for steps 1 and 2)
+
+If everything has worked, gdb will be able to inspect registers, step
+through code, and even intercept exceptions.
+
 ## Running under emulation
 
 You can install the QEMU ARM support package, then run:
