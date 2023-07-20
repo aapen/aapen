@@ -119,8 +119,22 @@ fn kernel_init() !void {
 
     console = fb_console.writer();
 
-    try console.print("Heap start: 0x{x:0>8}\n", .{@intFromPtr(heap_allocator.first_available)});
-    try console.print("Heap end:   0x{x:0>8}\n", .{@intFromPtr(heap_allocator.last_available)});
+    var board = bsp.mailbox.BoardInfo{};
+
+    try board.read();
+    try console.print("ARM Memory:       0x{x:0>8} .. 0x{x:0>8}\n", .{
+        board.arm_memory_base,
+        board.arm_memory_size + board.arm_memory_base,
+    });
+    try console.print("Videocore Memory: 0x{x:0>8} .. 0x{x:0>8}\n", .{
+        board.videocore_memory_base,
+        board.videocore_memory_size + board.videocore_memory_base,
+    });
+
+    try console.print("Kernel Heap:      0x{x:0>8} .. 0x{x:0>8}\n", .{
+        @intFromPtr(heap_allocator.first_available),
+        @intFromPtr(heap_allocator.last_available),
+    });
 
     try print_clock_rate(console, .uart);
 
