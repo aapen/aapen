@@ -106,10 +106,7 @@ fn kernel_init() !void {
 
     var heap = bsp.memory.create_greedy(arch.cpu.mmu2.PAGE_SIZE);
 
-    var heap_allocator = mem.HeapAllocator{
-        .first_available = heap.start,
-        .last_available = heap.end,
-    };
+    var heap_allocator = heap.allocator();
     os.page_allocator = heap_allocator.allocator();
 
     var fb = bsp.video.FrameBuffer{};
@@ -122,19 +119,10 @@ fn kernel_init() !void {
     var board = bsp.mailbox.BoardInfo{};
 
     try board.read();
-    try console.print("ARM Memory:       0x{x:0>8} .. 0x{x:0>8}\n", .{
-        board.arm_memory_base,
-        board.arm_memory_size + board.arm_memory_base,
-    });
-    try console.print("Videocore Memory: 0x{x:0>8} .. 0x{x:0>8}\n", .{
-        board.videocore_memory_base,
-        board.videocore_memory_size + board.videocore_memory_base,
-    });
 
-    try console.print("Kernel Heap:      0x{x:0>8} .. 0x{x:0>8}\n", .{
-        @intFromPtr(heap_allocator.first_available),
-        @intFromPtr(heap_allocator.last_available),
-    });
+    try board.arm_memory.print(console);
+    try board.videocore_memory.print(console);
+    try heap.memory.print(console);
 
     try print_clock_rate(console, .uart);
 
@@ -167,7 +155,7 @@ fn kernel_init() !void {
 
 fn print_clock_rate(fb_console: FrameBufferConsole.Writer, clock_type: bsp.mailbox.ClockRate.Clock) !void {
     if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
-        try fb_console.print("{s} clock: {}\r\n", .{ @tagName(clock_type), clock[1] });
+        try fb_console.print("{s:>14} clock: {} Hz\r\n", .{ @tagName(clock_type), clock[1] });
     } else |err| {
         try fb_console.print("Error getting clock: {}\r\n", .{err});
     }
