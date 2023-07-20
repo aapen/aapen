@@ -122,6 +122,8 @@ fn kernel_init() !void {
     try console.print("Heap start: 0x{x:0>8}\n", .{@intFromPtr(heap_allocator.first_available)});
     try console.print("Heap end:   0x{x:0>8}\n", .{@intFromPtr(heap_allocator.last_available)});
 
+    try print_clock_rate(console, .uart);
+
     fb_console.emit_string("READY.");
     fb_console.next_line();
 
@@ -147,6 +149,14 @@ fn kernel_init() !void {
     qemu.exit(0);
 
     unreachable;
+}
+
+fn print_clock_rate(fb_console: FrameBufferConsole.Writer, clock_type: bsp.mailbox.ClockRate.Clock) !void {
+    if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
+        try fb_console.print("{s} clock: {}\r\n", .{ @tagName(clock_type), clock[1] });
+    } else |err| {
+        try fb_console.print("Error getting clock: {}\r\n", .{err});
+    }
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
