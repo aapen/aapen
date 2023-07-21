@@ -120,11 +120,20 @@ fn kernel_init() !void {
 
     try board.read();
 
+    try console.print("Booted...\n", .{});
+    try console.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
+    try console.print("    MAC address: {?}\n", .{board.device.mac_address});
+    try console.print("  Serial number: {?}\n", .{board.device.serial_number});
+    try console.print("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
+
     try board.arm_memory.print(console);
     try board.videocore_memory.print(console);
     try heap.memory.print(console);
 
     try print_clock_rate(console, .uart);
+    try print_clock_rate(console, .emmc);
+    try print_clock_rate(console, .core);
+    try print_clock_rate(console, .arm);
 
     fb_console.emit_string("READY.");
     fb_console.next_line();
@@ -155,7 +164,8 @@ fn kernel_init() !void {
 
 fn print_clock_rate(fb_console: FrameBufferConsole.Writer, clock_type: bsp.mailbox.ClockRate.Clock) !void {
     if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
-        try fb_console.print("{s:>14} clock: {} Hz\r\n", .{ @tagName(clock_type), clock[1] });
+        var clock_mhz = clock[1] / 1_000_000;
+        try fb_console.print("{s:>14} clock: {} MHz\r\n", .{ @tagName(clock_type), clock_mhz });
     } else |err| {
         try fb_console.print("Error getting clock: {}\r\n", .{err});
     }
