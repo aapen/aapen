@@ -15,15 +15,6 @@ var os = Freestanding{
 
 const Self = @This();
 
-/// uart console
-const UartWriter = std.io.Writer(u32, error{}, uart_send_string);
-pub var uart_writer = UartWriter{ .context = 0 };
-
-fn uart_send_string(_: u32, str: []const u8) !usize {
-    bsp.io.send_string(str);
-    return str.len;
-}
-
 /// display console
 pub const FrameBufferConsole = struct {
     xpos: u8 = 0,
