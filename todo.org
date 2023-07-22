@@ -93,7 +93,7 @@ Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 Read and echo characters.
 Polling is fine.
 This will actually be the host machine's keyboard in a terminal, proxied to the PL011 UART in the emulated device.
-** TODO Make the GPIO pins available for blinkenlights, or even useful stuff. They should be super-easy to use from Forth
+** DONE Make the GPIO pins available for blinkenlights, or even useful stuff. They should be super-easy to use from Forth
 - [X] Define a ziggish API (@russ)
 - [X] Make the register dance support that API (@mike)
 - [ ] Define forthish words (@russ) for pin operations
@@ -106,17 +106,26 @@ This will actually be the host machine's keyboard in a terminal, proxied to the 
 * Milestone: Get Ziggy
 ** DONE Replace C stubs with equivalent Zig
 ** DONE Use Zig cross-compilation instead of crosstools
+* Milestone: Monitor it
+** TODO Read commands from input
+Command line looks like:
+
+~! 00000000 ffffffff~ - write a 32 bit words at the address
+~? 00000000 xx~ - display xx words of memory starting at the address
+
+All other starting characters are ignored.
+
 * Milestone: Show the World
 ** TODO Read from USB keyboard on RPi 400
-** TODO Create interface for "mailbox" from CPU to GPU
+** DONE Create interface for "mailbox" from CPU to GPU
 ** TODO Enable DMA for video blitting
-** TODO Create a "character ROM" for displaying text
+** DONE Create a "character ROM" for displaying text
 ** TODO Initialize video system on RPi 400
 HDMI output, videocode
 ** TODO Clear screen on RPi 400
-** TODO Display a text cursor
-** TODO Write characters to the screen
-** TODO Echo typed characters to the screen
+** DONE Display a text cursor
+** DONE Write characters to the screen
+** DONE Echo typed characters to the screen
 ** TODO Make panics write to the screen
 * Milestone: Set Forth
 * Other references
@@ -137,6 +146,20 @@ Many of the mailbox commands ("tags") require addresses. These must be translate
 *** References
 - [[https://github.com/hackerspace/rpi-linux/blob/lr-raspberry-pi-new-mailbox/drivers/mailbox/bcm2835-mailbox.c][bcm2835-ipc.c]] by Lubomir Rintel and Broadcom
 - [[https://github.com/raspberrypi/firmware/wiki/Mailbox-property-interface][Raspberry Pi Firmware wiki]]
+** USB interface
+Getting USB up and running is going to be a big job.
+*** TODO Define structure of xHCI registers
+*** TODO Initialize the xHCI controller itself
+*** TODO Create kernel structures to represent the devices (Hardware abstraction layer)
+*** TODO Set up doorbell interface from kernel to xHCI
+*** TODO Set up interrupt handler from xHCI to kernel
+*** TODO Enumerate USB devices
+*** TODO Initialize / setup / assign slot for one USB device
+*** TODO Define a keyboard device class interface
+*** TODO Expose keyboard input to kernel as high-level key events
+*** Reference
+https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/extensible-host-controler-interface-usb-xhci.pdf
+
 * Open Questions
 ** How should we set up a default allocator for zig?
 *** Notes and references

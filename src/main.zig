@@ -3,6 +3,7 @@ const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
 const qemu = @import("qemu.zig");
 const mem = @import("mem.zig");
+const interp = @import("interp.zig");
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -24,7 +25,7 @@ fn uart_send_string(_: u32, str: []const u8) !usize {
 }
 
 /// display console
-const FrameBufferConsole = struct {
+pub const FrameBufferConsole = struct {
     xpos: u8 = 0,
     ypos: u8 = 0,
     width: u16 = undefined,
@@ -128,6 +129,7 @@ const FrameBufferConsole = struct {
 };
 
 pub var console: FrameBufferConsole.Writer = undefined;
+pub var interpreter: interp.Interpreter = undefined;
 
 fn kernel_init() !void {
     arch.cpu.mmu2.init();
@@ -168,21 +170,15 @@ fn kernel_init() !void {
     try print_clock_rate(console, .core);
     try print_clock_rate(console, .arm);
 
-    fb_console.emit_string("READY.\n");
+    interpreter = interp.Interpreter{
+        .console = &fb_console,
+        .writer = &console,
+    };
 
     while (true) {
-        var ch: u8 = bsp.io.receive();
-
-        bsp.io.send(ch);
-        if (ch == '\r') {
-            // my serial emulator needs a \r\n sequence
-            bsp.io.send('\n');
-            // but the video framebuffer uses ordinary \n
-            ch = '\n';
-        }
-
-        // TODO: cursor movement? (requires multibyte sequences from UART)
-        fb_console.emit(ch);
+        interpreter.execute() catch |err| {
+            try console.print("{any}\n", .{err});
+        };
     }
 
     // Does not return
@@ -194,9 +190,9 @@ fn kernel_init() !void {
 fn print_clock_rate(fb_console: FrameBufferConsole.Writer, clock_type: bsp.mailbox.ClockRate.Clock) !void {
     if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
         var clock_mhz = clock[1] / 1_000_000;
-        try fb_console.print("{s:>14} clock: {} MHz\r\n", .{ @tagName(clock_type), clock_mhz });
+        try fb_console.print("{s:>14} clock: {} MHz\n", .{ @tagName(clock_type), clock_mhz });
     } else |err| {
-        try fb_console.print("Error getting clock: {}\r\n", .{err});
+        try fb_console.print("Error getting clock: {}\n", .{err});
     }
 }
 
