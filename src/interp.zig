@@ -1,13 +1,12 @@
 const std = @import("std");
 const bsp = @import("bsp.zig");
-const root = @import("root");
+const fbcons = @import("fbcons.zig");
 
 pub const Interpreter = struct {
     const Error = error{ SyntaxError, OverflowError, AlignmentError };
-    const Writer = root.FrameBufferConsole.Writer;
+    const Writer = fbcons.FrameBufferConsole.Writer;
 
-    console: *root.FrameBufferConsole,
-    writer: *Writer,
+    console: *fbcons.FrameBufferConsole,
 
     const CommandType = enum {
         comment,
@@ -92,16 +91,14 @@ pub const Interpreter = struct {
     }
 
     fn runCommand(self: *Interpreter, command: Command) !void {
-        _ = self;
         switch (command) {
             Command.peek => |addr| {
                 var v: u32 = try readAligned(u32, addr);
 
-                try root.console.print("0x{x:0>8}: 0x{x:0>8}\n", .{ addr, v });
+                try self.console.print("0x{x:0>8}: 0x{x:0>8}\n", .{ addr, v });
             },
             Command.poke => |poke| {
                 try writeAligned(u32, poke[0], poke[1]);
-                // try root.console.print("poke @ 0x{x:0>8} <- 0x{x:0>8}\n", .{ poke[0], poke[1] });
             },
             Command.comment => {},
         }

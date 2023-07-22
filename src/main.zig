@@ -4,6 +4,7 @@ const bsp = @import("bsp.zig");
 const qemu = @import("qemu.zig");
 const mem = @import("mem.zig");
 const interp = @import("interp.zig");
+const fbcons = @import("fbcons.zig");
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -15,118 +16,17 @@ var os = Freestanding{
 
 const Self = @This();
 
-/// display console
-pub const FrameBufferConsole = struct {
-    xpos: u8 = 0,
-    ypos: u8 = 0,
-    width: u16 = undefined,
-    height: u16 = undefined,
-    frame_buffer: *bsp.video.FrameBuffer = undefined,
-
-    pub fn init(frame_buffer: *bsp.video.FrameBuffer, pixel_width: u32, pixel_height: u32) FrameBufferConsole {
-        return FrameBufferConsole{
-            .frame_buffer = frame_buffer,
-            .width = @truncate(pixel_width / 8),
-            .height = @truncate(pixel_height / 16),
-        };
-    }
-
-    fn next(self: *FrameBufferConsole) void {
-        self.xpos += 1;
-        if (self.xpos >= self.width) {
-            self.next_line();
-        }
-    }
-
-    fn next_line(self: *FrameBufferConsole) void {
-        self.xpos = 0;
-        self.ypos += 1;
-        if (self.ypos >= self.height) {
-            self.next_screen();
-        }
-    }
-
-    fn next_screen(self: *FrameBufferConsole) void {
-        self.xpos = 0;
-        self.ypos = 0;
-        // TODO: clear screen?
-    }
-
-    fn underbar(self: *FrameBufferConsole, color: u8) void {
-        var x: u16 = self.xpos;
-        x *= 8;
-        var y: u16 = self.ypos + 1;
-        y *= 16;
-
-        for (0..8) |i| {
-            self.frame_buffer.draw_pixel(x + i, y, color);
-        }
-    }
-
-    fn erase_cursor(self: *FrameBufferConsole) void {
-        self.underbar(bsp.video.FrameBuffer.COLOR_BACKGROUND);
-    }
-
-    fn draw_cursor(self: *FrameBufferConsole) void {
-        self.underbar(bsp.video.FrameBuffer.COLOR_FOREGROUND);
-    }
-
-    fn backspace(self: *FrameBufferConsole) void {
-        if (self.xpos > 0) {
-            self.xpos -= 1;
-        }
-        self.frame_buffer.erase_char(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16);
-    }
-
-    fn isPrintable(ch: u8) bool {
-        return ch >= 32;
-    }
-
-    pub fn emit(self: *FrameBufferConsole, ch: u8) void {
-        self.erase_cursor();
-        defer self.draw_cursor();
-
-        switch (ch) {
-            0x7f => self.backspace(),
-            '\n' => self.next_line(),
-            else => if (isPrintable(ch)) {
-                self.frame_buffer.draw_char(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16, ch);
-                self.next();
-            },
-        }
-    }
-
-    pub fn emit_string(self: *FrameBufferConsole, str: []const u8) void {
-        self.erase_cursor();
-        defer self.draw_cursor();
-
-        for (str) |ch| {
-            self.emit(ch);
-        }
-    }
-
-    pub const Writer = std.io.Writer(*FrameBufferConsole, error{}, write);
-
-    pub fn write(self: *FrameBufferConsole, bytes: []const u8) !usize {
-        for (bytes) |ch| {
-            self.emit(ch);
-        }
-        return bytes.len;
-    }
-
-    pub fn writer(self: *FrameBufferConsole) Writer {
-        return .{ .context = self };
-    }
-};
-
-pub var console: FrameBufferConsole.Writer = undefined;
+// pub var console: fbcons.FrameBufferConsole.Writer = undefined;
+pub var frameBufferConsole: fbcons.FrameBufferConsole = undefined;
 pub var interpreter: interp.Interpreter = undefined;
 
 fn kernel_init() !void {
+    // State: one core, no interrupts, no MMU, no Allocator, no display, no serial
     arch.cpu.mmu2.init();
     arch.cpu.exceptions.init();
     arch.cpu.irq.init();
 
+    // State: one core, interrupts, MMU, no Allocator, no display, no serial
     bsp.timer.timer_init();
     bsp.io.uart_init();
 
@@ -135,40 +35,31 @@ fn kernel_init() !void {
     var heap_allocator = heap.allocator();
     os.page_allocator = heap_allocator.allocator();
 
+    // State: one core, interrupts, MMU, Allocator, no display, serial
+
     var fb = bsp.video.FrameBuffer{};
-    try fb.set_resolution(1024, 768, 8);
+    fb.set_resolution(1024, 768, 8) catch |err| {
+        bsp.io.uart_writer.print("Error initializing framebuffer: {any}\n", .{err}) catch {};
+    };
 
-    var fb_console = FrameBufferConsole.init(&fb, 1024, 768);
+    var fb_console = fbcons.FrameBufferConsole.init(&fb, 1024, 768);
 
-    console = fb_console.writer();
+    // console = fb_console.writer();
 
-    var board = bsp.mailbox.BoardInfo{};
-
-    try board.read();
-
-    try console.print("Booted...\n", .{});
-    try console.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
-    try console.print("    MAC address: {?}\n", .{board.device.mac_address});
-    try console.print("  Serial number: {?}\n", .{board.device.serial_number});
-    try console.print("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
-
-    try board.arm_memory.print(console);
-    try board.videocore_memory.print(console);
-    try heap.memory.print(console);
-
-    try print_clock_rate(console, .uart);
-    try print_clock_rate(console, .emmc);
-    try print_clock_rate(console, .core);
-    try print_clock_rate(console, .arm);
+    // State: one core, interrupts, MMU, Allocator, display, serial
+    diagnostics(&fb_console, &heap) catch |err| {
+        fb_console.print("Error printing diagnostics: {any}\n", .{err}) catch {};
+        bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
+    };
 
     interpreter = interp.Interpreter{
         .console = &fb_console,
-        .writer = &console,
+        // .writer = &console,
     };
 
     while (true) {
         interpreter.execute() catch |err| {
-            try console.print("{any}\n", .{err});
+            try fb_console.print("{any}\n", .{err});
         };
     }
 
@@ -178,13 +69,31 @@ fn kernel_init() !void {
     unreachable;
 }
 
-fn print_clock_rate(fb_console: FrameBufferConsole.Writer, clock_type: bsp.mailbox.ClockRate.Clock) !void {
-    if (bsp.mailbox.get_clock_rate(clock_type)) |clock| {
-        var clock_mhz = clock[1] / 1_000_000;
-        try fb_console.print("{s:>14} clock: {} MHz\n", .{ @tagName(clock_type), clock_mhz });
-    } else |err| {
-        try fb_console.print("Error getting clock: {}\n", .{err});
-    }
+fn diagnostics(fb_console: *fbcons.FrameBufferConsole, heap: *mem.Heap) !void {
+    var board = bsp.mailbox.BoardInfo{};
+
+    try board.read();
+
+    try fb_console.print("Booted...\n", .{});
+    try fb_console.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
+    try fb_console.print("    MAC address: {?}\n", .{board.device.mac_address});
+    try fb_console.print("  Serial number: {?}\n", .{board.device.serial_number});
+    try fb_console.print("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
+
+    try board.arm_memory.print(fb_console);
+    try board.videocore_memory.print(fb_console);
+    try heap.memory.print(fb_console);
+
+    try print_clock_rate(fb_console, .uart);
+    try print_clock_rate(fb_console, .emmc);
+    try print_clock_rate(fb_console, .core);
+    try print_clock_rate(fb_console, .arm);
+}
+
+fn print_clock_rate(fb_console: *fbcons.FrameBufferConsole, clock_type: bsp.mailbox.ClockRate.Clock) !void {
+    var clock = try bsp.mailbox.get_clock_rate(clock_type);
+    var clock_mhz = clock[1] / 1_000_000;
+    try fb_console.print("{s:>14} clock: {} MHz\n", .{ @tagName(clock_type), clock_mhz });
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {

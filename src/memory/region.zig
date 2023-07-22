@@ -28,7 +28,7 @@ pub const Region = struct {
         };
     }
 
-    pub fn print(self: *Region, writer: anytype) !void {
+    pub fn print(self: *const Region, writer: anytype) !void {
         if (self.name) |n| {
             writer.print("{?s:>20}: 0x{x:0>8} .. 0x{x:0>8}\n", .{ n, self.base, self.end }) catch {};
         } else {

@@ -492,3 +492,12 @@ pub fn uart_init() void {
     pl011_uart_init();
     enable_pl011_interrupts();
 }
+
+/// uart console
+const UartWriter = std.io.Writer(u32, error{}, uart_send_string);
+pub var uart_writer = UartWriter{ .context = 0 };
+
+fn uart_send_string(_: u32, str: []const u8) !usize {
+    send_string(str);
+    return str.len;
+}
