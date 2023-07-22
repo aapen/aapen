@@ -60,12 +60,42 @@ const FrameBufferConsole = struct {
         // TODO: clear screen?
     }
 
+    fn underbar(self: *FrameBufferConsole, color: u8) void {
+        var x: u16 = self.xpos;
+        x *= 8;
+        var y: u16 = self.ypos + 1;
+        y *= 16;
+
+        for (0..8) |i| {
+            self.frame_buffer.draw_pixel(x + i, y, color);
+        }
+    }
+
+    fn erase_cursor(self: *FrameBufferConsole) void {
+        self.underbar(bsp.video.FrameBuffer.COLOR_BACKGROUND);
+    }
+
+    fn draw_cursor(self: *FrameBufferConsole) void {
+        self.underbar(bsp.video.FrameBuffer.COLOR_FOREGROUND);
+    }
+
+    fn backspace(self: *FrameBufferConsole) void {
+        if (self.xpos > 0) {
+            self.xpos -= 1;
+        }
+        self.frame_buffer.erase_char(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16);
+    }
+
     fn isPrintable(ch: u8) bool {
         return ch >= 32;
     }
 
     pub fn emit(self: *FrameBufferConsole, ch: u8) void {
+        self.erase_cursor();
+        defer self.draw_cursor();
+
         switch (ch) {
+            0x7f => self.backspace(),
             '\n' => self.next_line(),
             else => if (isPrintable(ch)) {
                 self.frame_buffer.draw_char(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16, ch);
@@ -75,6 +105,9 @@ const FrameBufferConsole = struct {
     }
 
     pub fn emit_string(self: *FrameBufferConsole, str: []const u8) void {
+        self.erase_cursor();
+        defer self.draw_cursor();
+
         for (str) |ch| {
             self.emit(ch);
         }
@@ -135,10 +168,7 @@ fn kernel_init() !void {
     try print_clock_rate(console, .core);
     try print_clock_rate(console, .arm);
 
-    fb_console.emit_string("READY.");
-    fb_console.next_line();
-
-    fb_console.emit(0);
+    fb_console.emit_string("READY.\n");
 
     while (true) {
         var ch: u8 = bsp.io.receive();
@@ -151,8 +181,7 @@ fn kernel_init() !void {
             ch = '\n';
         }
 
-        // TODO: backspace? cursor movement? (requires multibyte
-        // sequences from UART)
+        // TODO: cursor movement? (requires multibyte sequences from UART)
         fb_console.emit(ch);
     }
 

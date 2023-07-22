@@ -233,8 +233,8 @@ pub const FrameBuffer = struct {
     }
 
     // These are palette indices
-    const COLOR_FOREGROUND: u8 = 0x02;
-    const COLOR_BACKGROUND: u8 = 0x00;
+    pub const COLOR_FOREGROUND: u8 = 0x02;
+    pub const COLOR_BACKGROUND: u8 = 0x00;
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
     pub fn draw_char(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {
@@ -255,6 +255,20 @@ pub const FrameBuffer = struct {
             fbidx -= 8;
             fbidx += line_stride;
             romidx += 1;
+        }
+    }
+
+    pub fn erase_char(self: *FrameBuffer, x: usize, y: usize) void {
+        var line_stride = self.pitch;
+        var fbidx = x + (y * line_stride);
+
+        for (0..16) |_| {
+            for (0..8) |_| {
+                self.base[fbidx] = COLOR_BACKGROUND;
+                fbidx += 1;
+            }
+            fbidx -= 8;
+            fbidx += line_stride;
         }
     }
 };
