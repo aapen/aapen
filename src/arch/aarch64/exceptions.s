@@ -46,7 +46,7 @@
         mov     x0, #\type
         mrs     x1, esr_el1
         mrs     x2, elr_el1
-        bl      show_invalid_entry_message
+        bl      invalidEntryMessageShow
         b       err_hang
         .endm
 
@@ -173,7 +173,7 @@ __exception_handler_table:
 
 irq_el1h:
         KERNEL_ENTRY
-        bl              current_elx_irq
+        bl              irqCurrentElx
         KERNEL_EXIT
 
 synchronous_invalid_el1t:

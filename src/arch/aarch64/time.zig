@@ -1,6 +1,6 @@
 const std = @import("std");
+const cpu = @import("../cortex-a.zig");
 const registers = @import("registers.zig");
-const barrier = @import("barrier.zig");
 
 // TODO: is there a way to integrate this with std.time?
 
@@ -32,7 +32,7 @@ fn frequency() u32 {
 }
 
 fn read_cntpct() u32 {
-    barrier.isb();
+    cpu.barrierInstruction();
     return registers.CNTPCT_EL0.read();
 }
 

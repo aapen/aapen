@@ -20,19 +20,19 @@ pub const FrameBufferConsole = struct {
     fn next(self: *FrameBufferConsole) void {
         self.xpos += 1;
         if (self.xpos >= self.width) {
-            self.next_line();
+            self.nextLine();
         }
     }
 
-    fn next_line(self: *FrameBufferConsole) void {
+    fn nextLine(self: *FrameBufferConsole) void {
         self.xpos = 0;
         self.ypos += 1;
         if (self.ypos >= self.height) {
-            self.next_screen();
+            self.nextScreen();
         }
     }
 
-    fn next_screen(self: *FrameBufferConsole) void {
+    fn nextScreen(self: *FrameBufferConsole) void {
         self.xpos = 0;
         self.ypos = 0;
         // TODO: clear screen?
@@ -45,15 +45,15 @@ pub const FrameBufferConsole = struct {
         y *= 16;
 
         for (0..8) |i| {
-            self.frame_buffer.draw_pixel(x + i, y, color);
+            self.frame_buffer.drawPixel(x + i, y, color);
         }
     }
 
-    fn erase_cursor(self: *FrameBufferConsole) void {
+    fn eraseCursor(self: *FrameBufferConsole) void {
         self.underbar(bsp.video.FrameBuffer.COLOR_BACKGROUND);
     }
 
-    fn draw_cursor(self: *FrameBufferConsole) void {
+    fn drawCursor(self: *FrameBufferConsole) void {
         self.underbar(bsp.video.FrameBuffer.COLOR_FOREGROUND);
     }
 
@@ -61,7 +61,7 @@ pub const FrameBufferConsole = struct {
         if (self.xpos > 0) {
             self.xpos -= 1;
         }
-        self.frame_buffer.erase_char(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16);
+        self.frame_buffer.eraseChar(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16);
     }
 
     fn isPrintable(ch: u8) bool {
@@ -69,22 +69,22 @@ pub const FrameBufferConsole = struct {
     }
 
     pub fn emit(self: *FrameBufferConsole, ch: u8) void {
-        self.erase_cursor();
-        defer self.draw_cursor();
+        self.eraseCursor();
+        defer self.drawCursor();
 
         switch (ch) {
             0x7f => self.backspace(),
-            '\n' => self.next_line(),
+            '\n' => self.nextLine(),
             else => if (isPrintable(ch)) {
-                self.frame_buffer.draw_char(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16, ch);
+                self.frame_buffer.drawChar(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16, ch);
                 self.next();
             },
         }
     }
 
-    pub fn emit_string(self: *FrameBufferConsole, str: []const u8) void {
-        self.erase_cursor();
-        defer self.draw_cursor();
+    pub fn emitString(self: *FrameBufferConsole, str: []const u8) void {
+        self.eraseCursor();
+        defer self.drawCursor();
 
         for (str) |ch| {
             self.emit(ch);

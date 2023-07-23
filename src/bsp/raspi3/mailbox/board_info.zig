@@ -101,7 +101,7 @@ pub const BoardInfo = struct {
 const GetInfo = struct {
     const Self = @This();
 
-    tag: mailbox.rpi_firmware_property_tag = undefined,
+    tag: mailbox.RpiFirmwarePropertyTag = undefined,
     value: u32 = undefined,
 
     pub fn boardRevision() Self {
@@ -133,7 +133,7 @@ const GetInfo = struct {
 const GetMemory = struct {
     const Self = @This();
 
-    tag: mailbox.rpi_firmware_property_tag = undefined,
+    tag: mailbox.RpiFirmwarePropertyTag = undefined,
     name: []const u8 = undefined,
     memory_base: u32 = undefined,
     memory_size: u32 = undefined,

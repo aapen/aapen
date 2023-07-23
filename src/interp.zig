@@ -127,7 +127,7 @@ pub const Interpreter = struct {
     }
 
     fn emitPrompt(self: *Interpreter, prompt: []const u8) void {
-        self.console.emit_string(prompt);
+        self.console.emitString(prompt);
     }
 
     fn getc(self: *Interpreter) u8 {

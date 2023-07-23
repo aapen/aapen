@@ -33,8 +33,8 @@ const SizeMessage = struct {
 
     pub fn message(self: *Self) mailbox.Message {
         var tag = switch (self.kind) {
-            .Virtual => mailbox.rpi_firmware_property_tag.RPI_FIRMWARE_FRAMEBUFFER_SET_VIRTUAL_WIDTH_HEIGHT,
-            .Physical => mailbox.rpi_firmware_property_tag.RPI_FIRMWARE_FRAMEBUFFER_SET_PHYSICAL_WIDTH_HEIGHT,
+            .Virtual => mailbox.RpiFirmwarePropertyTag.RPI_FIRMWARE_FRAMEBUFFER_SET_VIRTUAL_WIDTH_HEIGHT,
+            .Physical => mailbox.RpiFirmwarePropertyTag.RPI_FIRMWARE_FRAMEBUFFER_SET_PHYSICAL_WIDTH_HEIGHT,
         };
 
         return mailbox.Message.init(self, tag, 2, 2, fill, unfill);
@@ -193,7 +193,7 @@ pub const FrameBuffer = struct {
     bpp: u32 = undefined,
     chargen: [*]const u64 = undefined,
 
-    pub fn set_resolution(self: *FrameBuffer, xres: u32, yres: u32, bpp: u32) !void {
+    pub fn setResolution(self: *FrameBuffer, xres: u32, yres: u32, bpp: u32) !void {
         var phys = SizeMessage.physical(xres, yres);
         var virt = SizeMessage.virtual(xres, yres);
         var depth = DepthMessage.init(bpp);
@@ -219,7 +219,7 @@ pub const FrameBuffer = struct {
         self.bpp = depth.get_bpp();
     }
 
-    pub fn draw_pixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {
+    pub fn drawPixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {
         if (x < 0) return;
         if (x >= self.xres) return;
         if (y < 0) return;
@@ -237,7 +237,7 @@ pub const FrameBuffer = struct {
     pub const COLOR_BACKGROUND: u8 = 0x00;
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
-    pub fn draw_char(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {
+    pub fn drawChar(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {
         var romidx: usize = @as(usize, ch - 32) * 16;
         if (romidx + 16 >= character_rom.len)
             return;
@@ -258,7 +258,7 @@ pub const FrameBuffer = struct {
         }
     }
 
-    pub fn erase_char(self: *FrameBuffer, x: usize, y: usize) void {
+    pub fn eraseChar(self: *FrameBuffer, x: usize, y: usize) void {
         var line_stride = self.pitch;
         var fbidx = x + (y * line_stride);
 

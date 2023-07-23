@@ -2,7 +2,7 @@
 /// See https://developer.arm.com/documentation/ddi0595/2021-06/AArch64-Registers/CPACR-EL1--Architectural-Feature-Access-Control-Register?lang=en
 const types = @import("../system_register.zig");
 
-pub const layout = packed struct {
+pub const Layout = packed struct {
     _unused_reserved_0: u16 = 0,
     // ZCR_EL1 trap enable
     zen: enum(u2) {

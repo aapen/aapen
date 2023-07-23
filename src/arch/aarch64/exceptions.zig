@@ -1,16 +1,13 @@
-// TODO: Is this really the right thing to do? Seems very odd to have
-// the directory traversal here!
 const root = @import("root");
 
-const arch = @import("../../architecture.zig");
+const cpu = @import("../../architecture.zig").cpu;
 const bsp = @import("../../bsp.zig");
 const registers = @import("registers.zig");
-const irq = @import("irq.zig");
 
 const __exception_handler_table: *u64 = @extern(*u64, .{ .name = "__exception_handler_table" });
 
 pub fn init() void {
-    registers.VBAR_EL1.write(@intFromPtr(__exception_handler_table));
+    registers.vbar_el1.write(@intFromPtr(__exception_handler_table));
 }
 
 /// Context passed in to every exception handler.
@@ -33,14 +30,16 @@ const ExceptionContext = struct {
     esr: u64,
 };
 
-export fn show_invalid_entry_message(entry_type: u64, esr: u64, elr: u64) void {
+// TODO Seems odd to have a dependency from the CPU-specific module to
+// the screen object. Should this be injected? If so, how?
+export fn invalidEntryMessageShow(entry_type: u64, esr: u64, elr: u64) void {
     root.frameBufferConsole.print("Unhandled exception: {x:0>8}\nESR: {x:0>8}\nELR: {x:0>8}\n", .{ entry_type, esr, elr }) catch {};
 }
 
-export fn current_elx_irq(context: *const ExceptionContext) void {
+export fn irqCurrentElx(context: *const ExceptionContext) void {
     _ = context;
-    irq.disable();
-    defer irq.enable();
+    cpu.irqDisable();
+    defer cpu.irqEnable();
 
-    bsp.interrupts.handle_irq();
+    bsp.interrupts.irqHandle();
 }

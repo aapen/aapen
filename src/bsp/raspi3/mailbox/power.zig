@@ -53,7 +53,7 @@ const PowerMessage = struct {
     }
 };
 
-pub fn get_power_status(domain: PowerDomain) !struct { bool, u32 } {
+pub fn getPowerStatus(domain: PowerDomain) !struct { bool, u32 } {
     var powermsg = PowerMessage.init(domain);
     var messages = [_]Message{powermsg.message()};
     var env = Envelope.init(&messages);

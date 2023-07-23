@@ -1,8 +1,8 @@
-pub const cnthctl_el2 = @import("registers/cnthctl_el2.zig");
+pub const cnthctl = @import("registers/cnthctl.zig");
 pub const cntp_ctl = @import("registers/cntp_ctl.zig");
 pub const cntv_ctl = @import("registers/cntv_ctl.zig");
 pub const cpacr = @import("registers/cpacr.zig");
-pub const hcr_el2 = @import("registers/hcr_el2.zig");
+pub const hcr = @import("registers/hcr.zig");
 pub const sctlr = @import("registers/sctlr.zig");
 pub const spsr = @import("registers/spsr.zig");
 
@@ -13,65 +13,63 @@ const R = @import("system_register.zig").UniformSystemRegister;
 // ----------------------------------------------------------------------
 
 /// System Control Register (EL3)
-pub const SCTLR_EL3 = R("SCTLR_EL3", sctlr.layout_el3);
+pub const sctlr_el3 = R("SCTLR_EL3", sctlr.LayoutEl3);
 
 /// Vector Base Address Register (EL3)
 /// Pointer to the exception vector table for this EL
-pub const VBAR_EL3 = R("VBAR_EL3", u64);
+pub const vbar_el3 = R("VBAR_EL3", u64);
 
 // ----------------------------------------------------------------------
 // EL2 (Hypervisor)
 // ----------------------------------------------------------------------
 
 /// Counter-timer Hypervisor Control Register
-pub const CNTHCTL_EL2 = R("CNTHCTL_EL2", cnthctl_el2.layout);
+pub const cnthctl_el2 = R("CNTHCTL_EL2", cnthctl.Layout);
 
 /// Counter-timer Virtual Offset
-pub const CNTVOFF_EL2 = R("CNTVOFF_EL2", u64);
+pub const cntvoff_el2 = R("CNTVOFF_EL2", u64);
 
 /// Exception Link Register
-pub const ELR_EL2 = R("ELR_EL2", u64);
+pub const elr_el2 = R("ELR_EL2", u64);
 
 /// Hypervisor Control Register
-pub const HCR_EL2 = R("HCR_EL2", hcr_el2.layout);
+pub const hcr_el2 = R("HCR_EL2", hcr.Layout);
 
 /// System Control Register (EL2)
-pub const SCTLR_EL2 = R("SCTLR_EL2", sctlr.layout_el2);
+pub const sctlr_el2 = R("SCTLR_EL2", sctlr.LayoutEl2);
 
 /// Stack Pointer (EL2)
-// TODO: Should this be a pointer to some larger size to enforce stack
-// pointer alignment?
-pub const SP_EL2 = R("SP_EL2", u64);
+pub const sp_el2 = R("SP_EL2", u64);
 
 /// Saved Program Status Register (EL2)
-pub const SPSR_EL2 = R("SPSR_EL2", spsr.layout);
+pub const spsr_el2 = R("SPSR_EL2", spsr.Layout);
 
 /// Vector Base Address Register (EL2)
 /// Pointer to the exception vector table for this EL
-pub const VBAR_EL2 = R("VBAR_EL2", u64);
+pub const vbar_el2 = R("VBAR_EL2", u64);
 
 // ----------------------------------------------------------------------
 // EL1 (Kernel)
 // ----------------------------------------------------------------------
 
 /// Architectural Feature Access Control Register (EL1)
-pub const CPACR_EL1 = R("CPACR_EL1", cpacr.layout);
+pub const cpacr_el1 = R("CPACR_EL1", cpacr.Layout);
 
 /// Exception Link Register (EL1)
-pub const ELR_EL1 = R("ELR_EL1", u64);
+pub const elr_el1 = R("ELR_EL1", u64);
 
 /// System Control Register (EL1)
-pub const SCTLR_EL1 = R("SCTLR_EL1", sctlr.layout_el1);
+pub const sctlr_el1 = R("SCTLR_EL1", sctlr.LayoutEl1);
 
 /// Stack Pointer (EL1)
-pub const SP_EL1 = R("SP_EL1", u64);
+pub const sp_el1 = R("SP_EL1", u64);
 
 /// Saved Program Status Register (EL1)
-pub const SPSR_EL1 = R("SPSR_EL1", spsr.layout);
+pub const spsr_el1 = R("SPSR_EL1", spsr.layout);
 
 /// Vector Base Address Register (EL1)
 /// Pointer to the exception vector table for this EL
-pub const VBAR_EL1 = R("VBAR_EL1", u64);
+pub const vbar_el1 = R("VBAR_EL1", u64);
 
 // ----------------------------------------------------------------------
 // EL0 (Application)
@@ -80,35 +78,35 @@ pub const VBAR_EL1 = R("VBAR_EL1", u64);
 /// System clock frequency (in Hz)
 // TODO: technically this is a read only register. Should we have a
 // separate type for that?
-pub const CNTFRQ_EL0 = R("CNTFRQ_EL0", u64);
+pub const cntfrq_el0 = R("CNTFRQ_EL0", u64);
 
 /// Physical count value
-pub const CNTPCT_EL0 = R("CNTPCT_EL0", u64);
+pub const cntpct_el0 = R("CNTPCT_EL0", u64);
 
 /// Counter-timer physical control register
-pub const CNTP_CTL_EL0 = R("CNTP_CTL_EL0", cntp_ctl.layout);
+pub const cntp_ctl_el0 = R("CNTP_CTL_EL0", cntp_ctl.Layout);
 
 /// Counter-timer physical compare value register
-pub const CNTP_CVAL_EL0 = R("CNTP_CVAL_EL0", u64);
+pub const cntp_cval_el0 = R("CNTP_CVAL_EL0", u64);
 
 /// Counter-timer physical timer value register
 /// This is a 64-bit register but only the bottom 32 bits will ever
 /// have a value.
-pub const CNTP_TVAL_EL0 = R("CNTP_TVAL_EL0", u64);
+pub const cntp_tval_el0 = R("CNTP_TVAL_EL0", u64);
 
 /// Counter-timer virtual timer control register
-pub const CNTV_CTL_EL0 = R("CNTV_CTL_EL0", cntv_ctl.layout);
+pub const cntv_ctl_el0 = R("CNTV_CTL_EL0", cntv_ctl.Layout);
 
 /// Counter-timer virtual timer register
-pub const CNTV_CVAL_EL0 = R("CNTV_CVAL_EL0", u64);
+pub const cntv_cval_el0 = R("CNTV_CVAL_EL0", u64);
 
 /// Counter-timer virtual timer value register
 /// This is a 64-bit register but only the bottom 32 bits will ever
 /// have a value.
-pub const CNTV_TVAL_EL0 = R("CNTV_TVAL_EL0", u64);
+pub const cntv_tval_el0 = R("CNTV_TVAL_EL0", u64);
 
 // TODO: another read-only register
-pub const CNTVCT_EL0 = R("CNTVCT_EL0", u64);
+pub const cntvct_el0 = R("CNTVCT_EL0", u64);
 
 /// Stack Pointer (EL0)
-pub const SP_EL0 = R("SP_EL0", u64);
+pub const sp_el0 = R("SP_EL0", u64);

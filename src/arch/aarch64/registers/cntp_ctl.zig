@@ -3,7 +3,7 @@
 /// https://developer.arm.com/documentation/ddi0595/2021-12/AArch64-Registers/CNTP-CTL-EL0--Counter-timer-Physical-Timer-Control-register?lang=en
 const types = @import("../system_register.zig");
 
-pub const layout = packed struct {
+pub const Layout = packed struct {
     enable: enum(u1) {
         disable = 0b0,
         enable = 0b1,

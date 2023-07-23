@@ -4,8 +4,6 @@ const UniformRegister = reg.UniformRegister;
 const timer = @import("timer.zig");
 const peripheral_base = @import("memory_map.zig").peripheral_base;
 
-const debug_write = io.pl011_uart_write_text;
-
 // ----------------------------------------------------------------------
 // Interrupt controller
 // ----------------------------------------------------------------------
@@ -22,7 +20,7 @@ pub const disable_irqs_1 = UniformRegister(u32).init(irq_base + 0x1c);
 pub const disable_irqs_2 = UniformRegister(u32).init(irq_base + 0x20);
 pub const disable_basic_irqs = UniformRegister(u32).init(irq_base + 0x24);
 
-pub inline fn enable_irq(irqset: u64) void {
+pub inline fn irqEnable(irqset: u64) void {
     var low_irqs: u32 = @truncate(irqset);
     var high_irqs: u32 = @truncate(irqset >> 32);
 
@@ -30,7 +28,7 @@ pub inline fn enable_irq(irqset: u64) void {
     enable_irqs_2.write(high_irqs);
 }
 
-pub inline fn disable_irq(irqset: u64) void {
+pub inline fn irqDisable(irqset: u64) void {
     var low_irqs: u32 = @truncate(irqset);
     var high_irqs: u32 = @truncate(irqset >> 32);
 
@@ -42,7 +40,7 @@ inline fn raised(value: u32, bitset: u32) bool {
     return (value & bitset) != 0;
 }
 
-pub fn handle_irq() void {
+pub fn irqHandle() void {
     var basic_interrupts = irq_basic_pending.read();
     var irq_1_received = (basic_interrupts & @as(u32, (1 << 8))) != 0;
     var irq_2_received = (basic_interrupts & @as(u32, (1 << 9))) != 0;
@@ -50,15 +48,15 @@ pub fn handle_irq() void {
     // Check low 32 IRQs first
     if (irq_1_received) {
         var low_irqs = irq_pending_1.read();
-        if (raised(low_irqs, timer.TimerIRQs.SystemTimerIRQ1)) {
-            timer.handle_timer_irq(1);
+        if (raised(low_irqs, timer.TimerIrqs.SystemTimerIrq1)) {
+            timer.timerIrqHandle(1);
         }
     }
 
     if (irq_2_received) {
         var high_irqs = irq_pending_2.read();
-        if (raised(high_irqs, (io.PL011Interrupts.UARTInterrupt >> 32) & 0xffffffff)) {
-            io.handle_pl011_interrupt();
+        if (raised(high_irqs, (io.Pl011Irqs.UartIrq >> 32) & 0xffffffff)) {
+            io.pl011IrqHandle();
         }
     }
 }

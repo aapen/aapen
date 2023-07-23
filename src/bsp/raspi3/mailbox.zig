@@ -1,16 +1,17 @@
 const std = @import("std");
 const assert = std.debug.assert;
+const cpu = @import("../../architecture.zig").cpu;
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
 const peripheral_base = @import("memory_map.zig").peripheral_base;
 
 const clock = @import("mailbox/clock.zig");
 pub const ClockRate = clock.ClockRate;
-pub const get_clock_rate = clock.get_clock_rate;
+pub const getClockRate = clock.getClockRate;
 
 const power = @import("mailbox/power.zig");
 pub const PowerDomain = power.PowerDomain;
-pub const get_power_status = power.get_power_status;
+pub const getPowerStatus = power.getPowerStatus;
 
 const board_info = @import("mailbox/board_info.zig");
 pub const BoardInfo = board_info.BoardInfo;
@@ -20,21 +21,21 @@ pub const BoardInfo = board_info.BoardInfo;
 // ----------------------------------------------------------------------
 pub const mailbox_base = peripheral_base + 0xB880;
 
-const mailbox_read_layout = u32;
-const mailbox_0_read = UniformRegister(mailbox_read_layout).init(mailbox_base + 0x00);
+const MailboxReadLayout = u32;
+const mailbox_0_read = UniformRegister(MailboxReadLayout).init(mailbox_base + 0x00);
 
-const mailbox_peek_layout = u32;
-const mailbox_0_peek = UniformRegister(mailbox_peek_layout).init(mailbox_base + 0x10);
+const MailboxPeekLayout = u32;
+const mailbox_0_peek = UniformRegister(MailboxPeekLayout).init(mailbox_base + 0x10);
 
-const mailbox_sender_layout = u32;
-const mailbox_0_sender = UniformRegister(mailbox_sender_layout).init(mailbox_base + 0x14);
+const MailboxSenderLayout = u32;
+const mailbox_0_sender = UniformRegister(MailboxSenderLayout).init(mailbox_base + 0x14);
 
-const mailbox_status_layout = packed struct {
+const MailboxStatusLayout = packed struct {
     _unused_reserved: u30,
     mail_empty: u1,
     mail_full: u1,
 };
-pub const mailbox_0_status = UniformRegister(mailbox_status_layout).init(mailbox_base + 0x18);
+pub const mailbox_0_status = UniformRegister(MailboxStatusLayout).init(mailbox_base + 0x18);
 
 const IrqEnableBit = enum(u1) {
     disabled = 0b0,
@@ -46,7 +47,7 @@ const IrqPendingBit = enum(u1) {
     raised = 0b1,
 };
 
-const mailbox_configuration_layout = packed struct {
+const MailboxConfigurationLayout = packed struct {
     data_available_irq_enable: IrqEnableBit = .disabled,
     space_available_irq_enable: IrqEnableBit = .disabled,
     opp_empty_irq_enable: IrqEnableBit = .disabled,
@@ -60,20 +61,20 @@ const mailbox_configuration_layout = packed struct {
     error_underflow: u1 = 0,
     _unused_reserved_1: u21 = 0,
 };
-const mailbox_0_configuration = UniformRegister(mailbox_configuration_layout).init(mailbox_base + 0x1c);
+const mailbox_0_configuration = UniformRegister(MailboxConfigurationLayout).init(mailbox_base + 0x1c);
 
-const mailbox_write_layout = u32;
-const mailbox_0_write = UniformRegister(mailbox_write_layout).init(mailbox_base + 0x20);
+const MailboxWriteLayout = u32;
+const mailbox_0_write = UniformRegister(MailboxWriteLayout).init(mailbox_base + 0x20);
 
 // const mailbox = packed struct {
 //     read_write: mailbox_read_write_layout,
 //     _unused_reserved_0: u32,
 //     _unused_reserved_1: u32,
 //     _unused_reserved_2: u32,
-//     peek: mailbox_peek_layout,
-//     sender: mailbox_sender_layout,
-//     status: mailbox_status_layout,
-//     configuration: mailbox_configuration_layout,
+//     peek: MailboxPeekLayout,
+//     sender: MailboxSenderLayout,
+//     status: MailboxStatusLayout,
+//     configuration: MailboxConfigurationLayout,
 // };
 
 // const mailbox_0: *volatile mailbox = @ptrFromInt(mailbox_base);
@@ -95,11 +96,11 @@ const MailboxChannel = enum(u4) {
     property_vc_to_arm = 9,
 };
 
-const RPI_FIRMWARE_STATUS_REQUEST: u32 = 0;
-const RPI_FIRMWARE_STATUS_SUCCESS: u32 = 0x80000000;
-const RPI_FIRMWARE_STATUS_ERROR: u32 = 0x80000001;
+const rpi_firmware_status_request: u32 = 0;
+const rpi_firmware_status_success: u32 = 0x80000000;
+const rpi_firmware_status_error: u32 = 0x80000001;
 
-pub const rpi_firmware_property_tag = enum(u32) {
+pub const RpiFirmwarePropertyTag = enum(u32) {
     RPI_FIRMWARE_PROPERTY_END = 0x00000000,
     RPI_FIRMWARE_GET_FIRMWARE_REVISION = 0x00000001,
 
@@ -198,29 +199,29 @@ pub const rpi_firmware_property_tag = enum(u32) {
 // ----------------------------------------------------------------------
 // Send and receive messages
 // ----------------------------------------------------------------------
-fn mail_full() bool {
-    reg.memory_barrier();
+fn mailFull() bool {
+    cpu.barrierMemoryDevice();
     return mailbox_0_status.read().mail_full == 1;
 }
 
-pub fn mailbox_write(channel: MailboxChannel, data: u32) void {
-    while (mail_full()) {}
+fn mailEmpty() bool {
+    cpu.barrierMemoryDevice();
+    return mailbox_0_status.read().mail_empty == 1;
+}
+
+pub fn mailboxWrite(channel: MailboxChannel, data: u32) void {
+    while (mailFull()) {}
 
     var val = (data & 0xfffffff0) | @intFromEnum(channel);
     mailbox_0_write.write(val);
 }
 
-fn mail_empty() bool {
-    reg.memory_barrier();
-    return mailbox_0_status.read().mail_empty == 1;
-}
-
 // TODO: Use peek instead of read so we don't lose messages meant for
 // other channels.
 // TODO: Use an interrupt to read this and put it into a data structure
-pub fn mailbox_read(channel_expected: MailboxChannel) u32 {
+pub fn mailboxRead(channel_expected: MailboxChannel) u32 {
     while (true) {
-        while (mail_empty()) {}
+        while (mailEmpty()) {}
 
         var data: u32 = mailbox_0_read.read();
         var channel_read: MailboxChannel = @enumFromInt(data & 0xf);
@@ -264,7 +265,7 @@ pub const Envelope = struct {
     }
 
     pub fn call(self: *Envelope) !u32 {
-        self.buffer[1] = RPI_FIRMWARE_STATUS_REQUEST;
+        self.buffer[1] = rpi_firmware_status_request;
 
         var idx: usize = 2;
 
@@ -273,18 +274,18 @@ pub const Envelope = struct {
             idx += m.total_size;
         }
 
-        self.buffer[idx] = @intFromEnum(rpi_firmware_property_tag.RPI_FIRMWARE_PROPERTY_END);
+        self.buffer[idx] = @intFromEnum(RpiFirmwarePropertyTag.RPI_FIRMWARE_PROPERTY_END);
 
         self.buffer[0] = @intCast(idx * @sizeOf(u32));
 
-        mailbox_write(self.channel, @as(u32, @truncate(@intFromPtr(&self.buffer))));
-        var data = mailbox_read(self.channel);
+        mailboxWrite(self.channel, @as(u32, @truncate(@intFromPtr(&self.buffer))));
+        var data = mailboxRead(self.channel);
 
-        if (self.buffer[1] == RPI_FIRMWARE_STATUS_ERROR) {
+        if (self.buffer[1] == rpi_firmware_status_error) {
             return Error.StatusError;
         }
 
-        if (self.buffer[1] != RPI_FIRMWARE_STATUS_SUCCESS) {
+        if (self.buffer[1] != rpi_firmware_status_success) {
             return Error.NoResponse;
         }
 
@@ -299,15 +300,16 @@ pub const Envelope = struct {
 };
 
 pub const Message = struct {
-    ptr: *anyopaque,
     fillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
     unfillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
+
+    ptr: *anyopaque,
     tag: u32,
     request_size: u32,
     content_size: u32,
     total_size: u32,
 
-    pub fn init(pointer: anytype, tag: rpi_firmware_property_tag, request_size: u32, response_size: u32, comptime fillFn: fn (ptr: @TypeOf(pointer), buf: []u32) void, comptime unfillFn: fn (ptr: @TypeOf(pointer), buf: []u32) void) Message {
+    pub fn init(pointer: anytype, tag: RpiFirmwarePropertyTag, request_size: u32, response_size: u32, comptime fillFn: fn (ptr: @TypeOf(pointer), buf: []u32) void, comptime unfillFn: fn (ptr: @TypeOf(pointer), buf: []u32) void) Message {
         const Ptr = @TypeOf(pointer);
         assert(@typeInfo(Ptr) == .Pointer); // Must be a pointer
         assert(@typeInfo(Ptr).Pointer.size == .One); // Must be a single-item pointer

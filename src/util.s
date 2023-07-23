@@ -10,11 +10,11 @@
 // Returns: none
 // Clobbers: x0
 // ----------------------------------------------------------------------
-        .global spin_delay
-        .type spin_delay, @function
-spin_delay:
+        .global spinDelay
+        .type spinDelay, @function
+spinDelay:
     subs x0, x0, #1
-    bne spin_delay
+    bne spinDelay
     ret
 
 

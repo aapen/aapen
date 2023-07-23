@@ -1,7 +1,7 @@
 /// Counter-timer Virtual Timer Control register
 const types = @import("../system_register.zig");
 
-pub const layout = packed struct {
+pub const Layout = packed struct {
     enable: enum(u1) {
         disable = 0,
         enable = 1,
