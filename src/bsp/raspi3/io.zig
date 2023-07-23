@@ -210,20 +210,20 @@ const Pl011UartLCRHLayout = packed struct {
 const pl011_uart_lcrh = UniformRegister(Pl011UartLCRHLayout).init(pl011_uart_base + 0x2c);
 
 const Pl011UartCRLayout = packed struct {
-    uart_enable: EnableBitP = .disable,
-    _unused_siren: u1 = 0,
-    _unused_sirlp: u1 = 0,
-    _unused_reserved: u3 = 0,
-    loopback_enable: EnableBitP = .disable,
-    transmit_enable: EnableBitP = .disable,
-    receive_enable: EnableBitP = .disable,
-    _unused_dtr: u1 = 0,
-    request_to_send: u1 = 0,
-    _unused_out1: u1 = 0,
-    _unused_out2: u1 = 0,
-    request_to_send_flow_control_enable: EnableBitP = .disable,
-    clear_to_send_flow_control_enable: EnableBitP = .disable,
-    _unused_reserved_2: u17 = 0,
+    uart_enable: EnableBitP = .disable, // [0]
+    _unused_siren: u1 = 0, // [1]
+    _unused_sirlp: u1 = 0, // [2]
+    _unused_reserved: u3 = 0, // [5:3]
+    loopback_enable: EnableBitP = .disable, // [6]
+    transmit_enable: EnableBitP = .disable, // [7]
+    receive_enable: EnableBitP = .disable, // [8]
+    _unused_dtr: u1 = 0, // [9]
+    request_to_send: u1 = 0, // [10]
+    _unused_out1: u1 = 0, // [11]
+    _unused_out2: u1 = 0, // [12]
+    request_to_send_flow_control_enable: EnableBitP = .disable, // [13]
+    clear_to_send_flow_control_enable: EnableBitP = .disable, // [14]
+    _unused_reserved_2: u17 = 0, // [15:31]
 };
 const pl011_uart_cr = UniformRegister(Pl011UartCRLayout).init(pl011_uart_base + 0x30);
 

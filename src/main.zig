@@ -5,6 +5,7 @@ const qemu = @import("qemu.zig");
 const mem = @import("mem.zig");
 const interp = @import("interp.zig");
 const fbcons = @import("fbcons.zig");
+const bcd = @import("bcd.zig");
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -88,6 +89,9 @@ fn diagnostics(fb_console: *fbcons.FrameBufferConsole, heap: *mem.Heap) !void {
     try printClockRate(fb_console, .emmc);
     try printClockRate(fb_console, .core);
     try printClockRate(fb_console, .arm);
+
+    try fb_console.print("\nxHCI capability length: {}\n", .{bsp.usb.xhci_capability_register_base.read().length});
+    try fb_console.print("xHCI version: {any}\n", .{bcd.decode(u16, bsp.usb.xhci_capability_register_base.read().hci_version)});
 }
 
 fn printClockRate(fb_console: *fbcons.FrameBufferConsole, clock_type: bsp.mailbox.ClockRate.Clock) !void {

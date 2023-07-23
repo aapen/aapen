@@ -6,3 +6,4 @@ pub const timer = @import("bsp/raspi3/timer.zig");
 pub const memory = @import("bsp/raspi3/memory.zig");
 pub const mailbox = @import("bsp/raspi3/mailbox.zig");
 pub const video = @import("bsp/raspi3/video.zig");
+pub const usb = @import("bsp/raspi3/usb.zig");
