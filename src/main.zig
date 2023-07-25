@@ -48,7 +48,7 @@ fn kernelInit() !void {
     // console = fb_console.writer();
 
     // State: one core, interrupts, MMU, Allocator, display, serial
-    diagnostics(&fb_console, &heap) catch |err| {
+    diagnostics(&fb_console, &fb, &heap) catch |err| {
         fb_console.print("Error printing diagnostics: {any}\n", .{err}) catch {};
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
@@ -70,10 +70,10 @@ fn kernelInit() !void {
     unreachable;
 }
 
-fn diagnostics(fb_console: *fbcons.FrameBufferConsole, heap: *mem.Heap) !void {
+fn diagnostics(fb_console: *fbcons.FrameBufferConsole, fb: *bsp.video.FrameBuffer, heap: *mem.Heap) !void {
     var board = bsp.mailbox.BoardInfo{};
 
-    try board.read();
+    board.read() catch {};
 
     try fb_console.print("Booted...\n", .{});
     try fb_console.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
@@ -84,6 +84,7 @@ fn diagnostics(fb_console: *fbcons.FrameBufferConsole, heap: *mem.Heap) !void {
     try board.arm_memory.print(fb_console);
     try board.videocore_memory.print(fb_console);
     try heap.memory.print(fb_console);
+    try fb.memory.print(fb_console);
 
     try printClockRate(fb_console, .uart);
     try printClockRate(fb_console, .emmc);
@@ -95,9 +96,9 @@ fn diagnostics(fb_console: *fbcons.FrameBufferConsole, heap: *mem.Heap) !void {
 }
 
 fn printClockRate(fb_console: *fbcons.FrameBufferConsole, clock_type: bsp.mailbox.ClockRate.Clock) !void {
-    var clock = try bsp.mailbox.getClockRate(clock_type);
-    var clock_mhz = clock[1] / 1_000_000;
-    try fb_console.print("{s:>14} clock: {} MHz\n", .{ @tagName(clock_type), clock_mhz });
+    var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
+    var clock_mhz = rate / 1_000_000;
+    try fb_console.print("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {

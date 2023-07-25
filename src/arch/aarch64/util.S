@@ -1,3 +1,5 @@
+#include <asm/macro.h>
+
         .section .text.util
         
 // ----------------------------------------------------------------------
@@ -10,13 +12,12 @@
 // Returns: none
 // Clobbers: x0
 // ----------------------------------------------------------------------
-        .global spinDelay
-        .type spinDelay, @function
-spinDelay:
-    subs x0, x0, #1
-    bne spinDelay
-    ret
 
+        ENTRY(spinDelay)
+        subs x0, x0, #1
+        bne  spinDelay
+        ret
+        END(spinDelay)
 
 // ----------------------------------------------------------------------
 // fn memzero()
@@ -29,9 +30,8 @@ spinDelay:
 // Returns: none
 // Clobbers: x0
 // ----------------------------------------------------------------------
-        .global memzero
-        .type memzero, @function
-memzero:
+
+        ENTRY(memzero)
         cmp x0, x1                      // Has x0 reached x1?
         b.eq 1f                         // If so, we're done
         stp xzr, xzr, [x0], #16         // Otherwise, store 16 bits of zeros and
@@ -39,3 +39,4 @@ memzero:
         b memzero                       // Repeat until done
 1:
         ret
+        END(memzero)

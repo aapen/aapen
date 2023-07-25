@@ -49,7 +49,7 @@ const PowerMessage = struct {
 
     pub fn unfill(self: *Self, buf: []u32) void {
         self.domain = @enumFromInt(buf[0]);
-        self.rate = buf[1];
+        self.state = buf[1];
     }
 };
 

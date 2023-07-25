@@ -2,5 +2,15 @@ arm_64bit=1
 
 core_freq_min=500
 init_uart_clock=48000000
-enable_jtag_gpio=1
+
+# Display debug info over UART at boot
 uart_2ndstage=1
+
+# Configure GPIO 22-27 as alt4 for JTAG debugging
+enable_jtag_gpio=1
+
+# Pause long enough to start tools on the debugging host
+boot_delay=5
+
+# Disable bluetooth as it conflicts with the UART
+dtoverlay=disable-bt

@@ -169,12 +169,12 @@ Function   Olimex pin    RPi GPIO       GPIO pin
 --------   ----------    ----------     ------------------
 Vref       1                            1
 GND        4                            9
-TRST       3             22             15
-TDI        5             26             37
-TMS        7             27             13
-TCK        9             25             22
-RTCK       11            23             16
-TDO        13            24             18
+TRST       3  (blu)      22             15
+TDI        5  (grn)      26             37
+TMS        7  (yel)      27             13
+TCK        9  (ora)      25             22
+RTCK       11 (red)      23             16
+TDO        13 (brn)      24             18
 ```
 
 Note that we again create a common ground. In this case we also need

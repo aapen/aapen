@@ -265,8 +265,6 @@ pub const Envelope = struct {
     }
 
     pub fn call(self: *Envelope) !u32 {
-        self.buffer[1] = rpi_firmware_status_request;
-
         var idx: usize = 2;
 
         for (self.messages) |m| {
@@ -277,9 +275,17 @@ pub const Envelope = struct {
         self.buffer[idx] = @intFromEnum(RpiFirmwarePropertyTag.RPI_FIRMWARE_PROPERTY_END);
 
         self.buffer[0] = @intCast(idx * @sizeOf(u32));
+        self.buffer[1] = rpi_firmware_status_request;
 
         mailboxWrite(self.channel, @as(u32, @truncate(@intFromPtr(&self.buffer))));
         var data = mailboxRead(self.channel);
+
+        idx = 2;
+
+        for (self.messages) |m| {
+            m.unfill(self.buffer[idx..]);
+            idx += m.total_size;
+        }
 
         if (self.buffer[1] == rpi_firmware_status_error) {
             return Error.StatusError;
@@ -289,17 +295,15 @@ pub const Envelope = struct {
             return Error.NoResponse;
         }
 
-        idx = 2;
-
-        for (self.messages) |m| {
-            m.unfill(self.buffer[idx..]);
-            idx += m.total_size;
-        }
         return data;
     }
 };
 
 pub const Message = struct {
+    // Should be set in the message response to indicate the word now
+    // holds the length of the response body
+    const message_value_length_response = @as(u32, 1) << 31;
+
     fillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
     unfillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
 
@@ -346,6 +350,8 @@ pub const Message = struct {
     }
 
     pub fn unfill(self: Message, buf: []u32) void {
+        // TODO warn if the response length bit is not set
+        buf[1] &= ~message_value_length_response;
         self.unfillFn(self.ptr, buf[3..]);
     }
 };

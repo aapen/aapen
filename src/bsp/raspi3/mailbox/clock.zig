@@ -39,12 +39,12 @@ pub const ClockRate = packed struct {
     rate: u32,
 };
 
-pub fn getClockRate(clock_type: ClockRate.Clock) !struct { bool, u32 } {
+pub fn getClockRate(clock_type: ClockRate.Clock) !u32 {
     var clockmsg = ClockMessage.init(clock_type);
     var messages = [_]Message{clockmsg.message()};
     var env = Envelope.init(&messages);
 
-    _ = try env.call();
+    _ = env.call() catch 0;
 
-    return .{ true, clockmsg.rate };
+    return clockmsg.rate;
 }

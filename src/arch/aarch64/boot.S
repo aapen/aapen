@@ -4,6 +4,8 @@
 //
 // This applies to Raspberry Pi 3B, 3B+, 4B, 400, CM4
 
+#include <asm/macro.h>
+
 // ----------------------------------------------------------------------
 // Constants
 // ----------------------------------------------------------------------
@@ -11,22 +13,6 @@
 // ----------------------------------------------------------------------
 // Macros
 // ----------------------------------------------------------------------
-
-// Load the PC-relative address of a symbol in a register.
-//
-// The symbol can be at most +/- 4 GiB of the PC
-.macro LDR_REL register, symbol
-        adrp \register, \symbol
-        add  \register, \register, #:lo12:\symbol
-.endm
-
-// Load the absolute address of a symbol in a register.
-.macro LDR_ABS register, symbol
-        movz \register, #:abs_g3:\symbol
-        movk \register, #:abs_g2_nc:\symbol
-        movk \register, #:abs_g1_nc:\symbol
-        movk \register, #:abs_g0_nc:\symbol
-.endm
 
 // ----------------------------------------------------------------------
 // fn _start()
@@ -38,9 +24,7 @@
 
         .section .text._start
 
-        .global _start
-        .type   _start, @function
-_start:
+        ENTRY(_start)
         // At boot time, the core should be executing in EL2 (high
         // privilege). If it is not, we are in a strange state and
         // should not proceed
@@ -66,15 +50,15 @@ _start:
         // BSS is never loaded from the program image// only the addresses
         // are specified. We're required to zero out that range of memory.
 
-        LDR_REL x0, __bss_start               // Put the starting address in x0
-        LDR_REL x1, __bss_end_exclusive       // Put the last address + 1 in x1
+        LDR_REL(x0, __bss_start)               // Put the starting address in x0
+        LDR_REL(x1, __bss_end_exclusive)       // Put the last address + 1 in x1
         bl memzero
 
         // Set up the stack.
         //
         // __boot_core_stack_end_exclusive is provided by the linker
         // script which puts it right below _start itself
-        LDR_REL x0, __boot_core_stack_end_exclusive
+        LDR_REL(x0, __boot_core_stack_end_exclusive)
         mov sp, x0
 
         // Jump to Zig code, with x0, x1, and x2 as function arguments
@@ -89,4 +73,4 @@ pe_hang:
         wfe                                   // wait for an event
         b pe_hang                             // if one arrives, loop and wait some more
 
-        .size _start, . - _start              // Tell the assembler how big this symbol is
+        END(_start)

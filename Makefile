@@ -50,6 +50,16 @@ gdb: $(KERNEL)
 openocd_gdb: $(KERNEL)
 	$(GDB_EXEC) $(GDB_ARGS) $(GDB_TARGET_DEV) $(KERNEL_ELF)
 
+sdcard: $(KERNEL) firmware/COPYING.linux
+ifndef SDCARD_PATH
+	$(error "SDCARD_PATH must be defined as an environment variable.")
+else
+	mkdir -p $(SDCARD_PATH)
+	cp -r firmware/* $(SDCARD_PATH)
+	cp $(KERNEL) $(SDCARD_PATH)
+	cp sdfiles/config.txt $(SDCARD_PATH)
+endif
+
 clean:
 	rm -rf zig-cache
 	rm -rf $(KERNEL_ELF) $(KERNEL)

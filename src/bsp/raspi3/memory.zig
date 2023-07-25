@@ -20,7 +20,7 @@ pub fn createGreedy(page_size: u64) Heap {
 
     var end = alignDown(memory_map.device_start - 1, page_size);
     var m = Region.fromStartToEnd(@intFromPtr(linker_heap_start), end);
-    m.name = "Kernel heap";
+    m.name = "Kernel Heap";
 
     return Heap{
         .page_size = page_size,

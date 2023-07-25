@@ -2,6 +2,7 @@ pub const cnthctl = @import("registers/cnthctl.zig");
 pub const cntp_ctl = @import("registers/cntp_ctl.zig");
 pub const cntv_ctl = @import("registers/cntv_ctl.zig");
 pub const cpacr = @import("registers/cpacr.zig");
+pub const ctr = @import("registers/ctr.zig");
 pub const hcr = @import("registers/hcr.zig");
 pub const sctlr = @import("registers/sctlr.zig");
 pub const spsr = @import("registers/spsr.zig");
@@ -107,6 +108,9 @@ pub const cntv_tval_el0 = R("CNTV_TVAL_EL0", u64);
 
 // TODO: another read-only register
 pub const cntvct_el0 = R("CNTVCT_EL0", u64);
+
+/// Cache type register
+pub const ctr_el0 = R("CTR_EL0", ctr.Layout);
 
 /// Stack Pointer (EL0)
 pub const sp_el0 = R("SP_EL0", u64);

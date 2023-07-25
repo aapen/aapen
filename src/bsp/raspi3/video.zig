@@ -1,6 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const mailbox = @import("mailbox.zig");
+const Region = @import("../../mem.zig").Region;
 
 const character_rom = @embedFile("../../data/character_rom.bin");
 
@@ -96,12 +97,12 @@ const AllocateFrameBufferMessage = struct {
     }
 
     pub fn unfill(self: *Self, buf: []u32) void {
-        self.base = buf[0];
+        self.base = buf[0] & ~(@as(u32, 0xc0000000));
         self.buffer_size = buf[1];
     }
 
-    pub fn get_base_address(self: *Self) [*]u8 {
-        return @ptrFromInt(self.base);
+    pub fn get_base_address(self: *Self) usize {
+        return @intCast(self.base);
     }
 
     pub fn get_buffer_size(self: *Self) usize {
@@ -192,6 +193,7 @@ pub const FrameBuffer = struct {
     yres: usize = undefined,
     bpp: u32 = undefined,
     chargen: [*]const u64 = undefined,
+    memory: Region = undefined,
 
     pub fn setResolution(self: *FrameBuffer, xres: u32, yres: u32, bpp: u32) !void {
         var phys = SizeMessage.physical(xres, yres);
@@ -209,14 +211,17 @@ pub const FrameBuffer = struct {
             palette.message(),
         };
         var env = mailbox.Envelope.init(&messages);
-        _ = try env.call();
+        _ = env.call() catch 0;
 
-        self.base = @ptrFromInt(@intFromPtr(fb.get_base_address()) & 0x3fffffff);
+        var base_in_arm_address_space = fb.get_base_address() & 0x3fffffff;
+        self.base = @ptrFromInt(base_in_arm_address_space);
         self.buffer_size = fb.get_buffer_size();
         self.pitch = pitch.get_pitch();
         self.xres = xres;
         self.yres = yres;
         self.bpp = depth.get_bpp();
+        self.memory = Region.fromSize(base_in_arm_address_space, fb.get_buffer_size());
+        self.memory.name = "Frame Buffer";
     }
 
     pub fn drawPixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {

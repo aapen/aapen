@@ -20,11 +20,13 @@ pub fn build(b: *std.Build) void {
         .link_libc = false,
     });
 
-    kernel.addAssemblyFile("src/arch/aarch64/exceptions.s");
-    kernel.addAssemblyFile("src/arch/aarch64/mmu.s");
-    kernel.addAssemblyFile("src/boot.s");
-    kernel.addAssemblyFile("src/util.s");
-    kernel.setLinkerScriptPath(.{ .path = "kernel.ld" });
+    kernel.addIncludePath("include");
+    kernel.addAssemblyFile("src/arch/aarch64/exceptions.S");
+    kernel.addAssemblyFile("src/arch/aarch64/mmu.S");
+    kernel.addAssemblyFile("src/arch/aarch64/cache.S");
+    kernel.addAssemblyFile("src/arch/aarch64/boot.S");
+    kernel.addAssemblyFile("src/arch/aarch64/util.S");
+    kernel.setLinkerScriptPath(.{ .path = "src/arch/aarch64/kernel.ld" });
 
     b.installArtifact(kernel);
 
