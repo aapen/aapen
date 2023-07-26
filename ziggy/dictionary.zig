@@ -7,19 +7,19 @@ const ForthError = errors.ForthError;
 const reader = @import("reader.zig");
 const string = @import("string.zig");
 
-pub fn Entry(comptime DType: type, comptime FType: type) type {
+pub fn Entry(comptime DType: type) type {
     return struct {
         name: [20:0]u8,
         value: DType,
-        flags: FType,
+        immediate: bool,
 
         const Self = @This();
 
-        pub fn init(name: []const u8, value: DType, flags: FType) Self {
+        pub fn init(name: []const u8, value: DType, immediate: bool) Self {
             var result = Self{
                 .name = undefined,
                 .value = value,
-                .flags = flags,
+                .immediate = immediate,
             };
             string.copyTo(&result.name, name);
             return result;
@@ -27,8 +27,8 @@ pub fn Entry(comptime DType: type, comptime FType: type) type {
     };
 }
 
-pub fn Dictionary(comptime DType: type, comptime FType: type, comptime len: i32) type {
-    const EntryDataType = Entry(DType, FType);
+pub fn Dictionary(comptime DType: type, comptime len: i32) type {
+    const EntryDataType = Entry(DType);
 
     return struct {
         contents: [len]EntryDataType,
@@ -43,12 +43,12 @@ pub fn Dictionary(comptime DType: type, comptime FType: type, comptime len: i32)
             };
         }
 
-        pub fn put(self: *Self, name: []const u8, value: DType, flags: FType) !void {
+        pub fn put(self: *Self, name: []const u8, value: DType, immediate: bool) !void {
             if (self.next_entry >= self.contents.len) {
                 print("too many entries: {}\n", .{self.next_entry});
                 return ForthError.TooManyEntries;
             }
-            self.contents[@intCast(self.next_entry)] = EntryDataType.init(name, value, flags);
+            self.contents[@intCast(self.next_entry)] = EntryDataType.init(name, value, immediate);
             self.next_entry += 1;
         }
 
@@ -78,7 +78,7 @@ pub fn Dictionary(comptime DType: type, comptime FType: type, comptime len: i32)
             while (i >= 0) {
                 var j: usize = @intCast(i);
                 var entry = self.contents[j];
-                printf("{s} ({}) => ", .{ entry.name, entry.flags });
+                printf("{s} ({}) => ", .{ entry.name, entry.immediate });
                 entry.value.pr(printf);
                 printf("\n", .{});
                 i -= 1;
@@ -87,32 +87,27 @@ pub fn Dictionary(comptime DType: type, comptime FType: type, comptime len: i32)
     };
 }
 
-//pub fn main() !void {
-//    const D1 = Dictionary(i32, 100);
-//
-//    var d = D1.init();
-//
-//    try d.put("foo", 1234);
-//    try d.put("bar", 7717);
-//    var v = try d.get("foo");
-//    std.debug.print("rop: {}\n", .{v});
-//
-//    v = try d.get("bar");
-//    print("bar: {}\n", .{v});
-//
-//    _ = try d.put("aaa", 111);
-//    _ = try d.put("bbb", 222);
-//    _ = try d.put("bbb", 212);
-//
-//    v = try d.get("bbb");
-//    print("bbb: {}\n", .{v});
-//
-//    v = d.get("zzzz") catch 999999;
-//    print("zzz: {}\n", .{v});
-//
-//    v = d.get("zzzz") catch |err| {
-//        print("error {}\n", .{err});
-//        return err;
-//    };
-//    print("zzzz: {}\n", .{v});
-//}
+test "Basic dictionary operation" {
+    const D1 = Dictionary(i32, 100);
+
+    var d = D1.init();
+
+    try d.put("foo", 1234, false);
+    try d.put("bar", 7717, false);
+    var v = try d.get("foo");
+    std.debug.print("rop: {}\n", .{v});
+
+    v = try d.get("bar");
+    print("bar: {}\n", .{v});
+
+    _ = try d.put("aaa", 111, false);
+    _ = try d.put("bbb", 222, false);
+    _ = try d.put("bbb", 212, false);
+
+    v = try d.get("bbb");
+    print("bbb: {}\n", .{v});
+
+    v = d.get("zzzz") catch 999999;
+    print("zzz: {}\n", .{v});
+
+}

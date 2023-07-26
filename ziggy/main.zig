@@ -15,7 +15,7 @@ const ValueType = value.ValueType;
 const DataStack = stack.Stack(Value, 20);
 const ReturnStack = stack.Stack(i32, 100);
 
-const ValueDictionary = dict.Dictionary(Value, bool, 500);
+const ValueDictionary = dict.Dictionary(Value, 500);
 
 const WordFunction = *const fn (forth: *Forth) ForthError!void;
 
@@ -82,7 +82,7 @@ const Forth = struct {
             .w => |name| {
                 const entry = try forth.dictionary.getEntry(name);
                 //print("word: {s} entry: {any}\n", .{name, entry});
-                if (entry.flags) {
+                if (entry.immediate) {
                     try _evalValue(forth, entry.value);
                 } else if (forth.composing) {
                     forth.addToDefinition(entry.value);
@@ -113,6 +113,28 @@ const Forth = struct {
                 }
             },
         }
+    }
+
+    pub fn wordColon(self: *Forth) ForthError!void {
+        print("colon:\n", .{});
+        @memset(&self.newWordName, 0);
+        _ = try self.reader.getWord(&self.newWordName);
+        self.composing = true;
+        self.newWordDef = self.nextFree;
+    }
+
+    pub fn wordSemi(self: *Forth) ForthError!void {
+        print("***semi:\n", .{});
+        self.memory[@intCast(self.nextFree)] = Value{
+            //.fp = @ptrToInt(&wordReturn),
+            .fp = @intFromPtr(&wordReturn),
+        };
+        self.nextFree += 1;
+        print("semi: {s} {any}\n", .{ self.newWordName, self.newWordDef });
+        try self.defineSecondary(&self.newWordName, self.newWordDef);
+        self.composing = false;
+        @memset(&self.newWordName, 0);
+        self.newWordDef = -888;
     }
 
     fn definePrimitive(this: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
@@ -205,29 +227,6 @@ pub fn wordInfo(forth: *Forth) ForthError!void {
     print("new word: {s}\n", .{forth.newWordName});
     print("new word def: {}\n", .{forth.newWordDef});
 }
-
-pub fn wordColon(forth: *Forth) ForthError!void {
-    print("colon:\n", .{});
-    @memset(&forth.newWordName, 0);
-    _ = try forth.reader.getWord(&forth.newWordName);
-    forth.composing = true;
-    forth.newWordDef = forth.nextFree;
-}
-
-pub fn wordSemi(forth: *Forth) ForthError!void {
-    print("***semi:\n", .{});
-    forth.memory[@intCast(forth.nextFree)] = Value{
-        //.fp = @ptrToInt(&wordReturn),
-        .fp = @intFromPtr(&wordReturn),
-    };
-    forth.nextFree += 1;
-    print("semi: {s} {any}\n", .{ forth.newWordName, forth.newWordDef });
-    try forth.defineSecondary(&forth.newWordName, forth.newWordDef);
-    forth.composing = false;
-    @memset(&forth.newWordName, 0);
-    forth.newWordDef = -888;
-}
-
 pub fn wordNext(forth: *Forth) ForthError!void {
     var nexti_address: usize = @intFromPtr(&forth.nexti);
     var v = Value{ .addr = nexti_address };
@@ -284,8 +283,8 @@ pub fn inner(forth: *Forth, address: i32) ForthError!void {
 pub fn define_core(forth: *Forth) !void {
     // Secondary definition words.
 
-    try forth.definePrimitive(":", &wordColon, false);
-    try forth.definePrimitive(";", &wordSemi, true);
+    try forth.definePrimitive(":", &Forth.wordColon, false);
+    try forth.definePrimitive(";", &Forth.wordSemi, true);
 
     // Debug and inspection words.
 
