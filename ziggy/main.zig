@@ -24,7 +24,7 @@ const Forth = struct {
     rstack: ReturnStack,
     dictionary: ValueDictionary,
     reader: *reader.ForthReader,
-    memory: [500]Value,
+    memory: [2000]Value,
     nextFree: i32,
     nexti: i32,
     composing: bool,
@@ -115,18 +115,17 @@ const Forth = struct {
         }
     }
 
+    fn definePrimitive(this: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
+        //print("define word {s} -> {*}\n", .{ name, fp });
+        try this.dictionary.put(name, Value{ .fp = @intFromPtr(fp) }, immediate);
+    }
 
-        fn definePrimitive(this: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
-            print("define word {s} -> {*}\n", .{name, fp});
-            try this.dictionary.put(name, Value{ .fp = @intFromPtr(fp) }, immediate);
-        }
+    fn defineSecondary(this: *Forth, name: []const u8, address: i32) !void {
+        print("define secondary {s} {}\n", .{ name, address });
+        try this.dictionary.put(name, Value{ .call = address }, false);
+    }
 
-        fn defineSecondary(this: *Forth, name: []const u8, address: i32) !void {
-            print("define secondary {s} {}\n", .{ name, address });
-            try this.dictionary.put(name, Value{ .call = address }, false);
-        }
-
-        pub fn repl(this: *Forth) !void {
+    pub fn repl(this: *Forth) !void {
         // This is the outter loop.
 
         var buf: [reader.max_line_len:0]u8 = undefined;
@@ -141,20 +140,19 @@ const Forth = struct {
                 return err;
             };
             var v = Value.fromString(word) catch |err| {
-                print("Parse error({s}): {}\n", .{word, err});
+                print("Parse error({s}): {}\n", .{ word, err });
                 continue;
             };
             this.evalValue(v) catch |err| {
                 print("error: {any}\n", .{err});
             };
         }
-      }
+    }
 };
 
 pub fn wordHello(_: *Forth) ForthError!void {
     print("hello world\n", .{});
 }
-
 
 pub fn wordDot(forth: *Forth) ForthError!void {
     var v: Value = try forth.stack.pop();
@@ -197,7 +195,7 @@ pub fn wordReturn(forth: *Forth) ForthError!void {
     forth.nexti = -999;
 }
 
-pub fn wordQQ(forth: *Forth) ForthError!void {
+pub fn wordDictionary(forth: *Forth) ForthError!void {
     try forth.dictionary.pr(print);
 }
 
@@ -231,43 +229,40 @@ pub fn wordSemi(forth: *Forth) ForthError!void {
 }
 
 pub fn wordNext(forth: *Forth) ForthError!void {
-     //var nexti_address: usize = @ptrToInt(&forth.nexti);
-     var nexti_address: usize = @intFromPtr(&forth.nexti);
-     var v = Value{.addr = nexti_address};
-     try forth.stack.push(v);
+    var nexti_address: usize = @intFromPtr(&forth.nexti);
+    var v = Value{ .addr = nexti_address };
+    try forth.stack.push(v);
 }
 
 pub fn wordLoadI32(forth: *Forth) ForthError!void {
-     const addressValue = try forth.stack.pop();
-     if (addressValue != ValueType.addr)  {
-         return ForthError.BadOperation;
-     }
-     //const p = @intToPtr(*i32, addressValue.addr);
-     const p: *i32 = @ptrFromInt(addressValue.addr);
-     const v = Value{.i=p.*};
-     try forth.stack.push(v);
+    const addressValue = try forth.stack.pop();
+    if (addressValue != ValueType.addr) {
+        return ForthError.BadOperation;
+    }
+    const p: *i32 = @ptrFromInt(addressValue.addr);
+    const v = Value{ .i = p.* };
+    try forth.stack.push(v);
 }
 
 pub fn wordStoreI32(forth: *Forth) ForthError!void {
-     const addressValue = try forth.stack.pop();
-     const v = try forth.stack.pop();
+    const addressValue = try forth.stack.pop();
+    const v = try forth.stack.pop();
 
-     if (addressValue != ValueType.addr)  {
-         return ForthError.BadOperation;
-     }
+    if (addressValue != ValueType.addr) {
+        return ForthError.BadOperation;
+    }
 
-     if (v != ValueType.i)  {
-         return ForthError.BadOperation;
-     }
-     //const p = @intToPtr(*i32, addressValue.addr);
-     const p: *i32 = @ptrFromInt(addressValue.addr);
-     p.* = v.i; 
+    if (v != ValueType.i) {
+        return ForthError.BadOperation;
+    }
+    const p: *i32 = @ptrFromInt(addressValue.addr);
+    p.* = v.i;
 }
 
 pub fn wordValueSize(forth: *Forth) ForthError!void {
-     const l: usize = @sizeOf(Value);
-     print("size of value: {d}\n", .{l});
-     try forth.stack.push(Value{.sz=l});
+    const l: usize = @sizeOf(Value);
+    print("size of value: {d}\n", .{l});
+    try forth.stack.push(Value{ .sz = l });
 }
 
 pub fn inner(forth: *Forth, address: i32) ForthError!void {
@@ -287,23 +282,30 @@ pub fn inner(forth: *Forth, address: i32) ForthError!void {
 }
 
 pub fn define_core(forth: *Forth) !void {
+    // Secondary definition words.
+
     try forth.definePrimitive(":", &wordColon, false);
     try forth.definePrimitive(";", &wordSemi, true);
 
-    try forth.definePrimitive("hello", &wordHello, false);
-    try forth.definePrimitive(".", &wordDot, false);
+    // Debug and inspection words.
+
     try forth.definePrimitive("stack", &wordStack, false);
     try forth.definePrimitive("?", &wordStack, false);
+    try forth.definePrimitive("??", &wordDictionary, false);
     try forth.definePrimitive("rstack", &wordRStack, false);
+    try forth.definePrimitive("info", &wordInfo, true);
+    try forth.definePrimitive("ip", &wordNext, false);
+    try forth.definePrimitive("value-size", &wordValueSize, false);
+
+    // Basic Forth words.
+
+    try forth.definePrimitive("hello", &wordHello, false);
+    try forth.definePrimitive(".", &wordDot, false);
     try forth.definePrimitive("cr", &wordCr, false);
     try forth.definePrimitive("swap", &wordSwap, false);
     try forth.definePrimitive("+", &wordAdd, false);
-    try forth.definePrimitive("info", &wordInfo, true);
-    try forth.definePrimitive("??", &wordQQ, false);
-    try forth.definePrimitive("ip", &wordNext, false);
     try forth.definePrimitive("!i", &wordStoreI32, false);
     try forth.definePrimitive("@i", &wordLoadI32, false);
-    try forth.definePrimitive("value-size", &wordValueSize, false);
 }
 
 pub fn main() !void {
@@ -318,4 +320,3 @@ pub fn main() !void {
 
     try forth.repl();
 }
-

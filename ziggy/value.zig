@@ -32,13 +32,12 @@ pub const Value = union(ValueType) {
     pub fn fromString(token: []const u8) ForthError!Value {
         if (token[0] == '"') {
             return Value{ .s = token[1..(token.len - 1)] };
-        }
-        else if (token[0] == '#') {
-            var sNumber = token[1..(token.len-1)];
+        } else if (token[0] == '#') {
+            var sNumber = token[1..(token.len - 1)];
             const address: usize = std.fmt.parseInt(usize, sNumber, 16) catch {
                 return ForthError.ParseError;
             };
-            return Value{ .addr = address};
+            return Value{ .addr = address };
         }
 
         var iValue = std.fmt.parseInt(i32, token, 10) catch {
