@@ -18,49 +18,51 @@ var os = Freestanding{
 const Self = @This();
 
 // pub var console: fbcons.FrameBufferConsole.Writer = undefined;
-pub var frameBufferConsole: fbcons.FrameBufferConsole = undefined;
-pub var interpreter: interp.Interpreter = undefined;
+pub const page_size = arch.cpu.mmu2.page_size;
+
+pub var heap = mem{};
+pub var frameBuffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
+pub var frameBufferConsole: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frameBuffer };
+pub var interpreter: interp.Interpreter = interp.Interpreter{ .console = &frameBufferConsole };
+pub var board = bsp.mailbox.BoardInfo{};
 
 fn kernelInit() !void {
-    // State: one core, no interrupts, no MMU, no Allocator, no display, no serial
+    // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
     arch.cpu.exceptionInit();
     arch.cpu.irqInit();
 
-    // State: one core, interrupts, MMU, no Allocator, no display, no serial
-    bsp.timer.timerInit();
+    // State: one core, interrupts, MMU, no heap Allocator, no display, no serial
+    // bsp.timer.timerInit();
     bsp.io.uartInit();
 
-    var heap = bsp.memory.createGreedy(arch.cpu.mmu2.page_size);
+    heap.init(page_size);
 
-    var heap_allocator = heap.allocator();
-    os.page_allocator = heap_allocator.allocator();
+    os.page_allocator = heap.allocator();
 
-    // State: one core, interrupts, MMU, Allocator, no display, serial
+    board.read() catch {};
 
-    var fb = bsp.video.FrameBuffer{};
-    fb.setResolution(1024, 768, 8) catch |err| {
+    // State: one core, interrupts, MMU, heap Allocator, no display, serial
+
+    frameBuffer.setResolution(1024, 768, 8) catch |err| {
         bsp.io.uart_writer.print("Error initializing framebuffer: {any}\n", .{err}) catch {};
     };
 
-    var fb_console = fbcons.FrameBufferConsole.init(&fb, 1024, 768);
+    frameBufferConsole.init();
 
-    // console = fb_console.writer();
-
-    // State: one core, interrupts, MMU, Allocator, display, serial
-    diagnostics(&fb_console, &fb, &heap) catch |err| {
-        fb_console.print("Error printing diagnostics: {any}\n", .{err}) catch {};
+    // State: one core, interrupts, MMU, heap Allocator, display, serial
+    diagnostics() catch |err| {
+        frameBufferConsole.print("Error printing diagnostics: {any}\n", .{err}) catch {};
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
     interpreter = interp.Interpreter{
-        .console = &fb_console,
-        // .writer = &console,
+        .console = &frameBufferConsole,
     };
 
     while (true) {
         interpreter.execute() catch |err| {
-            try fb_console.print("{any}\n", .{err});
+            try frameBufferConsole.print("{any}\n", .{err});
         };
     }
 
@@ -70,46 +72,53 @@ fn kernelInit() !void {
     unreachable;
 }
 
-fn diagnostics(fb_console: *fbcons.FrameBufferConsole, fb: *bsp.video.FrameBuffer, heap: *mem.Heap) !void {
-    var board = bsp.mailbox.BoardInfo{};
+fn diagnostics() !void {
+    try frameBufferConsole.print("Booted...\n", .{});
+    try frameBufferConsole.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
+    try frameBufferConsole.print("    MAC address: {?}\n", .{board.device.mac_address});
+    try frameBufferConsole.print("  Serial number: {?}\n", .{board.device.serial_number});
+    try frameBufferConsole.print("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
 
-    board.read() catch {};
+    try board.arm_memory.print(&frameBufferConsole);
+    try board.videocore_memory.print(&frameBufferConsole);
+    try heap.memory.print(&frameBufferConsole);
+    try frameBuffer.memory.print(&frameBufferConsole);
 
-    try fb_console.print("Booted...\n", .{});
-    try fb_console.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
-    try fb_console.print("    MAC address: {?}\n", .{board.device.mac_address});
-    try fb_console.print("  Serial number: {?}\n", .{board.device.serial_number});
-    try fb_console.print("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
+    try printClockRate(.uart);
+    try printClockRate(.emmc);
+    try printClockRate(.core);
+    try printClockRate(.arm);
 
-    try board.arm_memory.print(fb_console);
-    try board.videocore_memory.print(fb_console);
-    try heap.memory.print(fb_console);
-    try fb.memory.print(fb_console);
-
-    try printClockRate(fb_console, .uart);
-    try printClockRate(fb_console, .emmc);
-    try printClockRate(fb_console, .core);
-    try printClockRate(fb_console, .arm);
-
-    try fb_console.print("\nxHCI capability length: {}\n", .{bsp.usb.xhci_capability_register_base.read().length});
-    try fb_console.print("xHCI version: {any}\n", .{bcd.decode(u16, bsp.usb.xhci_capability_register_base.read().hci_version)});
+    try frameBufferConsole.print("\nxHCI capability length: {}\n", .{bsp.usb.xhci_capability_register_base.read().length});
+    try frameBufferConsole.print("xHCI version: {any}\n", .{bcd.decode(u16, bsp.usb.xhci_capability_register_base.read().hci_version)});
 }
 
-fn printClockRate(fb_console: *fbcons.FrameBufferConsole, clock_type: bsp.mailbox.ClockRate.Clock) !void {
+fn printClockRate(clock_type: bsp.mailbox.ClockRate.Clock) !void {
     var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
     var clock_mhz = rate / 1_000_000;
-    try fb_console.print("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
+    try frameBufferConsole.print("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
+}
+
+export fn _soft_reset() noreturn {
+    kernelInit() catch {};
+
+    unreachable;
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
     const registers = arch.cpu.registers;
 
-    registers.sctlr_el1.modify(.{
+    registers.sctlr_el1.write(.{
         .mmu_enable = .disable,
+        .a = .disable,
+        .sa = 0,
+        .sa0 = 0,
+        .naa = .trap_disable,
         .ee = .little_endian,
         .e0e = .little_endian,
         .i_cache = .disabled,
         .d_cache = .disabled,
+        .wxn = 0,
     });
 
     // this is harmless at the moment, but it lets me get the code
@@ -119,6 +128,8 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
         .el1pcten = .trap_disable,
     });
 
+    // Zig and LLVM like to use vector registers. Must not trap on the
+    // SIMD/FPE instructions for that to work.
     registers.cpacr_el1.write(.{
         .zen = .trap_none,
         .fpen = .trap_none,

@@ -1,29 +1,30 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const memory_map = @import("memory_map.zig");
+pub const map = @import("memory_map.zig");
 const mem = @import("../../mem.zig");
 const Heap = mem.Heap;
 const Region = mem.Region;
 
+const Self = @This();
+
 pub const linker_heap_start: *u64 = @extern(*u64, .{ .name = "__heap_start" });
 
-fn isPowerOfTwo(v: u64) bool {
-    return (v & (v - 1) == 0);
+pub fn heapStart() u64 {
+    return @intFromPtr(linker_heap_start);
 }
 
-fn alignDown(v: u64, alignment: u64) u64 {
-    return v & ~(alignment - 1);
+pub fn heapEnd() u64 {
+    return map.device_start - 1;
 }
 
-pub fn createGreedy(page_size: u64) Heap {
-    assert(isPowerOfTwo(page_size));
+pub fn physicalToBus(physicalAddress: u64) u64 {
+    var pa: u64 = physicalAddress;
+    var ba: u64 = pa | 0x4000_0000;
+    return ba;
+}
 
-    var end = alignDown(memory_map.device_start - 1, page_size);
-    var m = Region.fromStartToEnd(@intFromPtr(linker_heap_start), end);
-    m.name = "Kernel Heap";
-
-    return Heap{
-        .page_size = page_size,
-        .memory = m,
-    };
+pub fn busToPhysical(busAddress: u64) u64 {
+    var ba: u64 = busAddress;
+    var pa: u64 = ba & ~0xc000_0000;
+    return pa;
 }

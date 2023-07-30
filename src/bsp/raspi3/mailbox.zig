@@ -4,6 +4,7 @@ const cpu = @import("../../architecture.zig").cpu;
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
 const peripheral_base = @import("memory_map.zig").peripheral_base;
+const memory = @import("memory.zig");
 
 const clock = @import("mailbox/clock.zig");
 pub const ClockRate = clock.ClockRate;
@@ -277,8 +278,12 @@ pub const Envelope = struct {
         self.buffer[0] = @intCast(idx * @sizeOf(u32));
         self.buffer[1] = rpi_firmware_status_request;
 
-        mailboxWrite(self.channel, @as(u32, @truncate(@intFromPtr(&self.buffer))));
+        cpu.memory.flushDCache(u32, &self.buffer);
+        var bus_address = memory.physicalToBus(@intFromPtr(&self.buffer));
+        mailboxWrite(self.channel, @truncate(bus_address));
         var data = mailboxRead(self.channel);
+
+        cpu.memory.invalidateDCache(u32, &self.buffer);
 
         idx = 2;
 

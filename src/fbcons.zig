@@ -9,12 +9,11 @@ pub const FrameBufferConsole = struct {
     height: u16 = undefined,
     frame_buffer: *bsp.video.FrameBuffer = undefined,
 
-    pub fn init(frame_buffer: *bsp.video.FrameBuffer, pixel_width: u32, pixel_height: u32) FrameBufferConsole {
-        return FrameBufferConsole{
-            .frame_buffer = frame_buffer,
-            .width = @truncate(pixel_width / 8),
-            .height = @truncate(pixel_height / 16),
-        };
+    pub fn init(self: *FrameBufferConsole) void {
+        self.xpos = 0;
+        self.ypos = 0;
+        self.width = @truncate(self.frame_buffer.xres / 8);
+        self.height = @truncate(self.frame_buffer.yres / 16);
     }
 
     fn next(self: *FrameBufferConsole) void {

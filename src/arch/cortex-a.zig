@@ -2,6 +2,9 @@ pub const registers = @import("aarch64/registers.zig");
 pub const time = @import("aarch64/time.zig");
 pub const exceptions = @import("aarch64/exceptions.zig");
 pub const mmu2 = @import("aarch64/mmu2.zig");
+pub const memory = @import("aarch64/memory.zig");
+
+pub const cache_line_size = memory.cache_line_size;
 
 /// Note: this performs an "exception return" on the CPU. It will
 /// change the stack point and exception level, meaning that this does
@@ -40,6 +43,10 @@ pub fn dsb(comptime ty: BarrierType) void {
 
 pub fn isb() void {
     asm volatile ("isb sy");
+}
+
+pub inline fn barrierMemory() void {
+    dmb(BarrierType.SY);
 }
 
 // Memory barrier for device read

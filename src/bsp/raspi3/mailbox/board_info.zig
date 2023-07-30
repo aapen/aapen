@@ -21,8 +21,8 @@ pub const BoardInfo = struct {
     model: Model = Model{},
     device: Device = Device{},
     memory_size: u32 = 0,
-    arm_memory: Region = undefined,
-    videocore_memory: Region = undefined,
+    arm_memory: Region = Region{ .name = "ARM Memory" },
+    videocore_memory: Region = Region{ .name = "Videocore Memory" },
 
     pub fn read(self: *BoardInfo) !void {
         var arm_memory = GetMemory.arm();
@@ -39,8 +39,10 @@ pub const BoardInfo = struct {
         };
         var env = mailbox.Envelope.init(&messages);
         _ = try env.call();
-        self.arm_memory = arm_memory.region();
-        self.videocore_memory = vc_memory.region();
+
+        arm_memory.copy(&self.arm_memory);
+        vc_memory.copy(&self.videocore_memory);
+
         self.device.mac_address = mac_address.value;
         self.device.serial_number = serial.value;
         self.decode_revision(revision.value);
@@ -134,16 +136,15 @@ const GetMemory = struct {
     const Self = @This();
 
     tag: mailbox.RpiFirmwarePropertyTag = undefined,
-    name: []const u8 = undefined,
     memory_base: u32 = undefined,
     memory_size: u32 = undefined,
 
     pub fn arm() Self {
-        return Self{ .name = "ARM Memory", .tag = .RPI_FIRMWARE_GET_ARM_MEMORY };
+        return Self{ .tag = .RPI_FIRMWARE_GET_ARM_MEMORY };
     }
 
     pub fn videocore() Self {
-        return Self{ .name = "Videocore Memory", .tag = .RPI_FIRMWARE_GET_VC_MEMORY };
+        return Self{ .tag = .RPI_FIRMWARE_GET_VC_MEMORY };
     }
 
     pub fn message(self: *Self) mailbox.Message {
@@ -160,9 +161,7 @@ const GetMemory = struct {
         self.memory_size = buf[1];
     }
 
-    pub fn region(self: *Self) Region {
-        var r = Region.fromSize(self.memory_base, self.memory_size);
-        r.name = self.name;
-        return r;
+    pub fn copy(self: *Self, target: *Region) void {
+        target.fromSize(self.memory_base, self.memory_size);
     }
 };

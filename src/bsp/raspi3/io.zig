@@ -161,6 +161,15 @@ const Pl011UartDRLayout = packed struct {
 };
 const pl011_uart_dr = UniformRegister(Pl011UartDRLayout).init(pl011_uart_base + 0x00);
 
+const Pl011UartRSRECRLayout= packed struct {
+    framing_error: u1 = 0,
+    parity_error: u1 = 0,
+    break_error: u1 = 0,
+    overrun_error: u1 = 0,
+    _unused_reserved: u28 = 0,
+};
+const pl011_uart_rsrecr = UniformRegister(Pl011UartRSRECRLayout).init(pl011_uart_base + 0x04);
+
 const Pl011UartFRLayout = packed struct {
     clear_to_send: u1 = 0,
     _unused_dsr: u1 = 0,
@@ -213,17 +222,17 @@ const Pl011UartCRLayout = packed struct {
     uart_enable: EnableBitP = .disable, // [0]
     _unused_siren: u1 = 0, // [1]
     _unused_sirlp: u1 = 0, // [2]
-    _unused_reserved: u3 = 0, // [5:3]
-    loopback_enable: EnableBitP = .disable, // [6]
-    transmit_enable: EnableBitP = .disable, // [7]
-    receive_enable: EnableBitP = .disable, // [8]
-    _unused_dtr: u1 = 0, // [9]
-    request_to_send: u1 = 0, // [10]
-    _unused_out1: u1 = 0, // [11]
-    _unused_out2: u1 = 0, // [12]
-    request_to_send_flow_control_enable: EnableBitP = .disable, // [13]
-    clear_to_send_flow_control_enable: EnableBitP = .disable, // [14]
-    _unused_reserved_2: u17 = 0, // [15:31]
+    _unused_reserved: u4 = 0, // [6:3]
+    loopback_enable: EnableBitP = .disable, // [7]
+    transmit_enable: EnableBitP = .disable, // [8]
+    receive_enable: EnableBitP = .disable, // [9]
+    _unused_dtr: u1 = 0, // [10]
+    request_to_send: u1 = 0, // [11]
+    _unused_out1: u1 = 0, // [12]
+    _unused_out2: u1 = 0, // [13]
+    request_to_send_flow_control_enable: EnableBitP = .disable, // [14]
+    clear_to_send_flow_control_enable: EnableBitP = .disable, // [15]
+    _unused_reserved_2: u16 = 0, // [16:31]
 };
 const pl011_uart_cr = UniformRegister(Pl011UartCRLayout).init(pl011_uart_base + 0x30);
 
@@ -315,7 +324,12 @@ const pl011_uart_icr = UniformRegister(Pl011UartICRLayout).init(pl011_uart_base 
 // PL011 Interrupts
 //
 pub const Pl011Irqs = struct {
-    pub const UartIrq: u64 = 1 << 57; // See BCM2837 ARM Peripherals, section 7.5
+    // See BCM2837 ARM Peripherals, section 7.5
+    // The UART irq is a "basic" irq which appears in the base register
+    pub const UartBaseRegisterIrqBit: u64 = 1 << 19;
+
+    // But for enabling/disabling we have to use the proper IRQ #
+    pub const UartIrq: u64 = 1 << 57;
 };
 
 pub fn pl011IrqEnable() void {
@@ -466,8 +480,12 @@ pub fn pl011Init() void {
     // contents of IBRD or FBRD, a LCR_H write must always be performed at the end.
     //
     // Set the baud rate, 8N1 and FIFO disabled.
-    pl011_uart_ibrd.write(.{ .integer_baud_rate_divisor = 0x03 });
-    pl011_uart_fbrd.write(.{ .fractional_baud_rate_divisor = 0x10 });
+    //
+    // Formula is 48,000,000 hz / (16 * 115200 baud) = 26.0417
+    // IBRD = 26 = 0x1a
+    // FBRD = ((0.417 * 64) + 0.5) = 27 = 0x1b
+    pl011_uart_ibrd.write(.{ .integer_baud_rate_divisor = 0x1a });
+    pl011_uart_fbrd.write(.{ .fractional_baud_rate_divisor = 0x1b });
     pl011_uart_lcrh.write(.{
         .word_length = .eight_bits,
         .fifo_enable = .disable,

@@ -42,18 +42,19 @@ inline fn raised(value: u32, bitset: u32) bool {
 
 pub fn irqHandle() void {
     var basic_interrupts = irq_basic_pending.read();
-    var irq_1_received = (basic_interrupts & @as(u32, (1 << 8))) != 0;
-    var irq_2_received = (basic_interrupts & @as(u32, (1 << 9))) != 0;
+    var pending_1_received = (basic_interrupts & @as(u32, (1 << 8))) != 0;
+    var pending_2_received = (basic_interrupts & @as(u32, (1 << 9))) != 0;
 
-    // Check low 32 IRQs first
-    if (irq_1_received) {
+    // process basic interrupts before anything else
+    if (raised(basic_interrupts, io.Pl011Irqs.UartBaseRegisterIrqBit)) {
+        io.pl011IrqHandle();
+    } else if (pending_1_received) {
+        // Check low 32 pending IRQs first
         var low_irqs = irq_pending_1.read();
         if (raised(low_irqs, timer.TimerIrqs.SystemTimerIrq1)) {
             timer.timerIrqHandle(1);
         }
-    }
-
-    if (irq_2_received) {
+    } else if (pending_2_received) {
         var high_irqs = irq_pending_2.read();
         if (raised(high_irqs, (io.Pl011Irqs.UartIrq >> 32) & 0xffffffff)) {
             io.pl011IrqHandle();
