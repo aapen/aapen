@@ -193,7 +193,7 @@ pub const FrameBuffer = struct {
     yres: usize = undefined,
     bpp: u32 = undefined,
     chargen: [*]const u64 = undefined,
-    memory: Region = Region{},
+    memory: Region = Region{ .name = "Frame Buffer" },
 
     pub fn setResolution(self: *FrameBuffer, xres: u32, yres: u32, bpp: u32) !void {
         var phys = SizeMessage.physical(xres, yres);

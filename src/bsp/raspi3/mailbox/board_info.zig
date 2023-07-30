@@ -38,7 +38,7 @@ pub const BoardInfo = struct {
             serial.message(),
         };
         var env = mailbox.Envelope.init(&messages);
-        _ = try env.call();
+        _ = env.call() catch 0;
 
         arm_memory.copy(&self.arm_memory);
         vc_memory.copy(&self.videocore_memory);
