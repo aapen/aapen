@@ -3,9 +3,10 @@ const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
 const qemu = @import("qemu.zig");
 const mem = @import("mem.zig");
-const interp = @import("interp.zig");
+// const interp = @import("interp.zig");
 const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
+const Forth = @import("ziggy/forth.zig").Forth;
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -20,11 +21,12 @@ const Self = @This();
 // pub var console: fbcons.FrameBufferConsole.Writer = undefined;
 pub const page_size = arch.cpu.mmu2.page_size;
 
+pub var board = bsp.mailbox.BoardInfo{};
 pub var heap = mem{};
 pub var frameBuffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frameBufferConsole: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frameBuffer };
-pub var interpreter: interp.Interpreter = interp.Interpreter{ .console = &frameBufferConsole };
-pub var board = bsp.mailbox.BoardInfo{};
+// pub var interpreter: interp.Interpreter = interp.Interpreter{ .console = &frameBufferConsole };
+pub var interpreter: Forth = Forth{ .console = &frameBufferConsole };
 
 fn kernelInit() !void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
@@ -56,15 +58,27 @@ fn kernelInit() !void {
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    interpreter = interp.Interpreter{
-        .console = &frameBufferConsole,
+    // interpreter = interp.Interpreter{
+    //     .console = &frameBufferConsole,
+    // };
+
+    interpreter.init(os.page_allocator) catch |err| {
+        try frameBufferConsole.print("Forth init: {any}\n", .{err});
     };
 
-    while (true) {
-        interpreter.execute() catch |err| {
-            try frameBufferConsole.print("{any}\n", .{err});
-        };
-    }
+    interpreter.define_core() catch |err| {
+        try frameBufferConsole.print("Forth define core: {any}\n", .{err});
+    };
+
+    interpreter.repl() catch |err| {
+        try frameBufferConsole.print("REPL error: {any}\n\nABORT.\n", .{err});
+    };
+
+    // while (true) {
+    //     interpreter.execute() catch |err| {
+    //         try frameBufferConsole.print("{any}\n", .{err});
+    //     };
+    // }
 
     // Does not return
     qemu.exit(0);

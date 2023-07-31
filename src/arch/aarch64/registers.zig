@@ -3,6 +3,7 @@ pub const cntp_ctl = @import("registers/cntp_ctl.zig");
 pub const cntv_ctl = @import("registers/cntv_ctl.zig");
 pub const cpacr = @import("registers/cpacr.zig");
 pub const ctr = @import("registers/ctr.zig");
+pub const esr = @import("registers/esr.zig");
 pub const hcr = @import("registers/hcr.zig");
 pub const sctlr = @import("registers/sctlr.zig");
 pub const spsr = @import("registers/spsr.zig");
@@ -12,6 +13,9 @@ const R = @import("system_register.zig").UniformSystemRegister;
 // ----------------------------------------------------------------------
 // EL3 (Secure monitor)
 // ----------------------------------------------------------------------
+
+/// Exception Syndrome Register (EL3)
+pub const esr_el3 = R("ESR_EL3", esr.Layout);
 
 /// System Control Register (EL3)
 pub const sctlr_el3 = R("SCTLR_EL3", sctlr.LayoutEl3);
@@ -32,6 +36,9 @@ pub const cntvoff_el2 = R("CNTVOFF_EL2", u64);
 
 /// Exception Link Register
 pub const elr_el2 = R("ELR_EL2", u64);
+
+/// Exception Syndrome Register (EL2)
+pub const esr_el2 = R("ESR_EL2", esr.Layout);
 
 /// Hypervisor Control Register
 pub const hcr_el2 = R("HCR_EL2", hcr.Layout);
@@ -58,6 +65,9 @@ pub const cpacr_el1 = R("CPACR_EL1", cpacr.Layout);
 
 /// Exception Link Register (EL1)
 pub const elr_el1 = R("ELR_EL1", u64);
+
+/// Exception Syndrome Register (EL1)
+pub const esr_el1 = R("ESR_EL1", esr.Layout);
 
 /// System Control Register (EL1)
 pub const sctlr_el1 = R("SCTLR_EL1", sctlr.LayoutEl1);

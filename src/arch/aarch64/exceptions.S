@@ -41,25 +41,30 @@
         // the exception
         .macro HANDLE_INVALID_ENTRY type
         KERNEL_ENTRY
-        stp     x29, x30, [sp, -16]!    // save FP (x29) and LR (x30)
-        mov     x29, sp                 // update frame pointer
-        mov     x0, #\type
-        mrs     x1, esr_el1
-        mrs     x2, elr_el1
+        mov     x1, #\type
         bl      invalidEntryMessageShow
         b       err_hang
         .endm
 
+        // TODO KERNEL_ENTRY and KERNEL_EXIT do two stack changes, one
+        // for ordinary frame linkage and one for the exception
+        // context structure. Consider consolidating for performance.
+
         // Save registers on the stack before entering kernel space
         .macro KERNEL_ENTRY
-        stp     x29, x30, [sp, -16]!    // save FP (x29) and LR (x30)
-        mov     x29, sp                 // update frame pointer
-        sub     sp, sp, #KERNEL_ENTRY_FRAME_SIZE  // build a struct
-        stp	x0, x1, [sp, #16 * 0]             // save GP registers
-	stp	x2, x3, [sp, #16 * 1]
-	stp	x4, x5, [sp, #16 * 2]
-	stp	x6, x7, [sp, #16 * 3]
-	stp	x8, x9, [sp, #16 * 4]
+        // build invocation frame on stack
+        // save frame pointer (x29) and link register (x30), then
+        // update the frame pointer
+        stp     x29, x30, [sp, -16]!
+        mov     x29, sp // not needed?
+
+        // store all general purpose registers on the stack
+        sub     sp,  sp,  #KERNEL_ENTRY_FRAME_SIZE
+        stp	x0,  x1,  [sp, #16 * 0]
+	stp	x2,  x3,  [sp, #16 * 1]
+	stp	x4,  x5,  [sp, #16 * 2]
+	stp	x6,  x7,  [sp, #16 * 3]
+	stp	x8,  x9,  [sp, #16 * 4]
 	stp	x10, x11, [sp, #16 * 5]
 	stp	x12, x13, [sp, #16 * 6]
 	stp	x14, x15, [sp, #16 * 7]
@@ -70,30 +75,34 @@
 	stp	x24, x25, [sp, #16 * 12]
 	stp	x26, x27, [sp, #16 * 13]
 	stp	x28, x29, [sp, #16 * 14]
-        mrs     x0, elr_el1             // save ELR
-	stp	x30, x0,  [sp, #16 * 15]
-        mrs     x1, spsr_el1            // save SPSR
-        mrs     x2, esr_el1             // save ESR
-        stp     x1, x2,   [sp, #16 * 16]
-        mov     x0, sp
+
+        // Also get the exception info: link register, saved program
+        // status, and exception syndrome
+        mrs     x1, elr_el1
+        mrs     x2, spsr_el1
+        mrs     x3, esr_el1
+
+	stp	lr,  x1,  [sp, #16 * 15]
+        stp     x2,  x3,  [sp, #16 * 16]
+
+        // x0 will be the first parameter to the handler function
+        mov     x0,  sp
         .endm
 
         // Restore registers on exit from kernel space
         .macro KERNEL_EXIT
 
-        // this is a little bit out of order so we can restore ELR_EL1
-        // and SPSR_EL1, which requires using x0 before we restore
-        // x0's original value. x1 also gets clobbered then restored.
-        ldp     x0, x1, [sp, #16 * 16]
-        msr     spsr_el1, x0
-        ldp     x30, x0, [sp, #16 * 15]
-        msr     elr_el1, x0
+        ldp     x19, xzr, [sp, #16 * 16]
+        ldp     lr,  x20, [sp, #16 * 15]
 
-        ldp	x0, x1, [sp, #16 * 0]
-	ldp	x2, x3, [sp, #16 * 1]
-	ldp	x4, x5, [sp, #16 * 2]
-	ldp	x6, x7, [sp, #16 * 3]
-	ldp	x8, x9, [sp, #16 * 4]
+        msr     spsr_el1, x19
+        msr     elr_el1,  x20
+
+        ldp	x0,  x1,  [sp, #16 * 0]
+	ldp	x2,  x3,  [sp, #16 * 1]
+	ldp	x4,  x5,  [sp, #16 * 2]
+	ldp	x6,  x7,  [sp, #16 * 3]
+	ldp	x8,  x9,  [sp, #16 * 4]
 	ldp	x10, x11, [sp, #16 * 5]
 	ldp	x12, x13, [sp, #16 * 6]
 	ldp	x14, x15, [sp, #16 * 7]
@@ -104,9 +113,10 @@
 	ldp	x24, x25, [sp, #16 * 12]
 	ldp	x26, x27, [sp, #16 * 13]
 	ldp	x28, x29, [sp, #16 * 14]
+	add	sp,  sp,  #KERNEL_ENTRY_FRAME_SIZE
 
-	add	sp, sp, #KERNEL_ENTRY_FRAME_SIZE
-        ldp     x29, x30, [sp], 16
+        ldp     x29, x30, [sp, #16]
+        add     sp,  sp,  #16
 	eret
         .endm
 

@@ -49,19 +49,19 @@ pub const Value = union(ValueType) {
         return Value{ .i = iValue };
     }
 
-    pub fn pr(this: *const Value, comptime printf: anytype) void {
-        switch (this.*) {
-            .f => |v| printf("{}", .{v}),
-            .i => |v| printf("{}", .{v}),
-            .u => |v| printf("{}", .{v}),
-            .l => |v| printf("{}", .{v}),
-            .s => |v| printf("{s}", .{v}),
-            .w => |v| printf("word: {s}", .{v}),
-            .fp => |v| printf("fp: {x}", .{v}),
-            .sz => |v| printf("sz: {}", .{v}),
-            .addr => |v| printf("addr: {x}", .{v}),
-            .call => |v| printf("call: {}", .{v}),
-        }
+    pub fn pr(this: *const Value, writer: anytype) !void {
+        try switch (this.*) {
+            .f => |v| writer.print("{}", .{v}),
+            .i => |v| writer.print("{}", .{v}),
+            .u => |v| writer.print("{}", .{v}),
+            .l => |v| writer.print("{}", .{v}),
+            .s => |v| writer.print("{s}", .{v}),
+            .w => |v| writer.print("word: {s}", .{v}),
+            .fp => |v| writer.print("fp: {x}", .{v}),
+            .sz => |v| writer.print("sz: {}", .{v}),
+            .addr => |v| writer.print("addr: {x}", .{v}),
+            .call => |v| writer.print("call: {}", .{v}),
+        };
     }
 
     pub fn add(this: *const Value, other: *const Value) !Value {
