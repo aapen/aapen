@@ -1,5 +1,5 @@
 const root = @import("root");
-
+const debug = @import("../../debug.zig");
 const cpu = @import("../../architecture.zig").cpu;
 const bsp = @import("../../bsp.zig");
 const registers = @import("registers.zig");
@@ -41,13 +41,14 @@ export fn invalidEntryMessageShow(context: *const ExceptionContext, entry_type: 
 
         // Zig uses 0xf000 to indicate a panic
         if (breakpoint_number == 0xf000) {
-            // Could we get the panic string and arguments from the stack?
-            root.frameBufferConsole.print("Panic!\nELR: 0x{x:0>8}\n", .{context.elr}) catch {};
+            // Could we get the panic string and arguments from the
+            // stack?
+            debug.panicDisplay(context.elr);
         } else {
-            root.frameBufferConsole.print("Breakpoint\nComment: 0x{x:0>8}\n ELR: 0x{x:0>8}\n", .{ breakpoint_number, context.elr }) catch {};
+            debug.unknownBreakpointDisplay(context.elr, breakpoint_number);
         }
     } else {
-        root.frameBufferConsole.print("Unhandled exception!\nType: 0x{x:0>8}\n ESR: 0x{x:0>8}\n ELR: 0x{x:0>8}\n  EC: 0b{b:0>6}\n", .{ entry_type, @as(u64, @bitCast(context.esr)), context.elr, @intFromEnum(context.esr.ec) }) catch {};
+        debug.unhandledExceptionDisplay(context.elr, entry_type, @as(u64, @bitCast(context.esr)), context.esr.ec);
     }
 }
 

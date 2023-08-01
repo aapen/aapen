@@ -8,6 +8,8 @@ pub const hcr = @import("registers/hcr.zig");
 pub const sctlr = @import("registers/sctlr.zig");
 pub const spsr = @import("registers/spsr.zig");
 
+pub const EC = esr.ErrorCode;
+
 const R = @import("system_register.zig").UniformSystemRegister;
 
 // ----------------------------------------------------------------------
