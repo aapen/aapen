@@ -182,8 +182,10 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 //     _ = stack;
 //     _ = return_addr;
 
-//     console.print(msg, .{}) catch {};
-//     while (true) {}
+//     frameBufferConsole.print(msg, .{}) catch {};
+//     while (true) {
+//         arch.cpu.wfe();
+//     }
 
 //     unreachable;
 // }
