@@ -3,6 +3,7 @@ const bsp = @import("bsp.zig");
 
 /// display console
 pub const FrameBufferConsole = struct {
+    tab_width: u8 = 8,
     xpos: u8 = 0,
     ypos: u8 = 0,
     width: u16 = undefined,
@@ -18,6 +19,14 @@ pub const FrameBufferConsole = struct {
 
     fn next(self: *FrameBufferConsole) void {
         self.xpos += 1;
+        if (self.xpos >= self.width) {
+            self.nextLine();
+        }
+    }
+
+    fn nextTab(self: *FrameBufferConsole) void {
+        var positions = self.tab_width - (self.xpos % self.tab_width);
+        self.xpos += positions;
         if (self.xpos >= self.width) {
             self.nextLine();
         }
@@ -73,6 +82,7 @@ pub const FrameBufferConsole = struct {
 
         switch (ch) {
             0x7f => self.backspace(),
+            '\t' => self.nextTab(),
             '\n' => self.nextLine(),
             else => if (isPrintable(ch)) {
                 self.frame_buffer.drawChar(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16, ch);
