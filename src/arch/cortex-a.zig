@@ -1,7 +1,7 @@
 pub const registers = @import("aarch64/registers.zig");
 pub const time = @import("aarch64/time.zig");
 pub const exceptions = @import("aarch64/exceptions.zig");
-pub const mmu2 = @import("aarch64/mmu2.zig");
+pub const mmu = @import("aarch64/mmu.zig");
 pub const memory = @import("aarch64/memory.zig");
 
 pub const cache_line_size = memory.cache_line_size;
@@ -71,7 +71,7 @@ pub fn irqEnable() void {
 }
 
 pub fn mmuInit() void {
-    mmu2.init();
+    mmu.init();
 }
 
 pub fn exceptionInit() void {

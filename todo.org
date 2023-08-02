@@ -254,7 +254,6 @@ Mailbox response:
 
 
 
-
 * Closed Questions
 ** DONE Should we use device tree? If so, how?
    Answer: Not yet. We need to keep things as simple as possible while we get up and running. Rather than doing a bunch of things dynamically at boot based on hardware discovery, we want to get a single model working first. That means we accept that some things (such as MMIO address) will be built in at compile time.

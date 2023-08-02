@@ -19,7 +19,7 @@
         // 2 = b11111111 = Normal, Inner/Outer WB/WA/RA
         // 3 = b10111011 = Normal, Inner/Outer WT/WA/RA
         //
-        // This must match the definitions in arch/aarch64/mmu2.zig
+        // This must match the definitions in arch/aarch64/mmu.zig
 
 	LDR_IMM64 x1, 0xbbff4400        // program mair on this CPU
 	msr     mair_el1, x1		//

@@ -17,7 +17,7 @@ var os = Freestanding{
 
 const Self = @This();
 
-pub const page_size = arch.cpu.mmu2.page_size;
+pub const page_size = arch.cpu.mmu.page_size;
 
 pub var board = bsp.mailbox.BoardInfo{};
 pub var heap = mem{};
