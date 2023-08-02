@@ -89,7 +89,7 @@ Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 - [X] Mark kernel text pages as RX, kernel data (GOT, stack, BSS) as RW/NX
 ** TODO Perform "Hello world" on RPi4 hardware
 * Milestone: Interact
-** DONE Read from serial input on RPi3 under QEMU
+** DONE Read from UART on RPi3 under QEMU
 Read and echo characters.
 Polling is fine.
 This will actually be the host machine's keyboard in a terminal, proxied to the PL011 UART in the emulated device.
@@ -97,17 +97,20 @@ This will actually be the host machine's keyboard in a terminal, proxied to the 
 - [X] Define a ziggish API (@russ)
 - [X] Make the register dance support that API (@mike)
 - [ ] Define forthish words (@russ) for pin operations
-** DONE Read from serial input on RPi3
+** TODO Finish declarations of other GPIO pins (besides 14 & 15 which are needed for the UART)
+** DONE Read from UART on RPi3
 - [X] Read and echo characters.
 - [X] Use UART interrupts, don't spinloop
-** TODO Read from serial input on RPi4
-** TODO Read from USB keyboard input on RPi3 & RPi4 hardware
+** TODO Read from UART on RPi4
+** TODO Read from USB keyboard input under QEMU
+** TODO Read from USB on RPi3 hardware
+** TODO Read from USB on RPi4 hardware
 ** DONE Switch to using interrupts instead of polling
 * Milestone: Get Ziggy
 ** DONE Replace C stubs with equivalent Zig
 ** DONE Use Zig cross-compilation instead of crosstools
 * Milestone: Monitor it
-** TODO Read commands from input
+** DONE Read commands from input
 Command line looks like:
 
 ~! 00000000 ffffffff~ - write a 32 bit words at the address
@@ -121,13 +124,40 @@ All other starting characters are ignored.
 ** TODO Enable DMA for video blitting
 ** DONE Create a "character ROM" for displaying text
 ** TODO Initialize video system on RPi 400
-HDMI output, videocode
 ** TODO Clear screen on RPi 400
 ** DONE Display a text cursor
 ** DONE Write characters to the screen
 ** DONE Echo typed characters to the screen
-** TODO Make panics write to the screen
+** DONE Make panics write to the screen
 * Milestone: Set Forth
+** NEXT Read basic words
+Stack ops:
+- [X] swap
+- [X] dup
+- [ ] drop
+- [ ] rot
+Arithmetic:
+- [X] +
+- [ ] -
+- [ ] *
+- [ ] /
+- [ ] %
+Output:
+- [X] hello
+- [X] cr
+- [ ] emit
+- [X] cls
+System info:
+- [X] ?
+- [X] ??
+- [X] stack
+- [X] ip
+- [X] info
+- [X] value-size
+Memory:
+- [ ] !
+- [ ] @
+
 * Other references
 ** Understanding the ARM ecosystem
 https://www.youtube.com/watch?v=NNol7fRGo2E
