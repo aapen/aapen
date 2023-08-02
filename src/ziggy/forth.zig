@@ -177,8 +177,14 @@ pub const Forth = struct {
         while (i < (buffer.len - 1) and !newline(ch)) {
             ch = self.getc();
             self.putc(ch);
-            buffer[i] = ch;
-            i += 1;
+
+            switch (ch) {
+                0x7f => i -= 1,
+                else => {
+                    buffer[i] = ch;
+                    i += 1;
+                },
+            }
             buffer[i] = 0;
         }
         return i;

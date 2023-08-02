@@ -3,7 +3,6 @@ const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
 const qemu = @import("qemu.zig");
 const mem = @import("mem.zig");
-// const interp = @import("interp.zig");
 const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
 const Forth = @import("ziggy/forth.zig").Forth;
@@ -18,14 +17,12 @@ var os = Freestanding{
 
 const Self = @This();
 
-// pub var console: fbcons.FrameBufferConsole.Writer = undefined;
 pub const page_size = arch.cpu.mmu2.page_size;
 
 pub var board = bsp.mailbox.BoardInfo{};
 pub var heap = mem{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
-// pub var interpreter: interp.Interpreter = interp.Interpreter{ .console = &frame_buffer_console };
 pub var interpreter: Forth = Forth{ .console = &frame_buffer_console };
 
 fn kernelInit() !void {
@@ -59,18 +56,14 @@ fn kernelInit() !void {
     try frame_buffer_console.print("Manufactured by: {?s}\n", .{board.device.manufacturer});
 
     // Attempt to power up the USB
-    // var usb_power_result = bsp.mailbox.powerOn(.usb_hcd) catch bsp.mailbox.power.Result.failed;
-    // try frame_buffer_console.print("   Power on USB: {s}\n\n", .{@tagName(usb_power_result)});
+    var usb_power_result = bsp.mailbox.powerOn(.usb_hcd) catch bsp.mailbox.power.Result.failed;
+    try frame_buffer_console.print("   Power on USB: {s}\n\n", .{@tagName(usb_power_result)});
 
     // State: one core, interrupts, MMU, heap Allocator, display, serial
     diagnostics() catch |err| {
         frame_buffer_console.print("Error printing diagnostics: {any}\n", .{err}) catch {};
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
-
-    // interpreter = interp.Interpreter{
-    //     .console = &frame_buffer_console,
-    // };
 
     interpreter.init(os.page_allocator) catch |err| {
         try frame_buffer_console.print("Forth init: {any}\n", .{err});
@@ -83,12 +76,6 @@ fn kernelInit() !void {
     interpreter.repl() catch |err| {
         try frame_buffer_console.print("REPL error: {any}\n\nABORT.\n", .{err});
     };
-
-    // while (true) {
-    //     interpreter.execute() catch |err| {
-    //         try frame_buffer_console.print("{any}\n", .{err});
-    //     };
-    // }
 
     // Does not return
     qemu.exit(0);
@@ -107,7 +94,7 @@ fn diagnostics() !void {
     try printClockRate(.core);
     try printClockRate(.arm);
 
-    // try printPowerState(.usb_hcd);
+    try printPowerState(.usb_hcd);
 
     try frame_buffer_console.print("\nxHCI capability length: {}\n", .{bsp.usb.xhci_capability_register_base.read().length});
     try frame_buffer_console.print("xHCI version: {any}\n", .{bcd.decode(u16, bsp.usb.xhci_capability_register_base.read().hci_version)});
@@ -119,10 +106,10 @@ fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
     try frame_buffer_console.print("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
 }
 
-// fn printPowerState(device: bsp.mailbox.PowerDevice) !void {
-//     var state = bsp.mailbox.isPowered(device) catch .failed;
-//     try frame_buffer_console.print("{s:>14} power: {s}\n", .{ @tagName(device), @tagName(state) });
-// }
+fn printPowerState(device: bsp.mailbox.PowerDevice) !void {
+    var state = bsp.mailbox.isPowered(device) catch .failed;
+    try frame_buffer_console.print("{s:>14} power: {s}\n", .{ @tagName(device), @tagName(state) });
+}
 
 export fn _soft_reset() noreturn {
     kernelInit() catch {};
