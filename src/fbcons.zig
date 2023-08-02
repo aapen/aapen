@@ -17,6 +17,12 @@ pub const FrameBufferConsole = struct {
         self.height = @truncate(self.frame_buffer.yres / 16);
     }
 
+    pub fn clear(self: *FrameBufferConsole) void {
+        self.frame_buffer.clear();
+        self.xpos = 0;
+        self.ypos = 0;
+    }
+
     fn next(self: *FrameBufferConsole) void {
         self.xpos += 1;
         if (self.xpos >= self.width) {
@@ -81,6 +87,7 @@ pub const FrameBufferConsole = struct {
         defer self.drawCursor();
 
         switch (ch) {
+            0x0c => self.clear(),
             0x7f => self.backspace(),
             '\t' => self.nextTab(),
             '\n' => self.nextLine(),

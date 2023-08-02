@@ -174,6 +174,37 @@ const SetPaletteMessage = struct {
     }
 };
 
+const SetOverscanMessage = struct {
+    const Self = @This();
+
+    left: u32 = 0,
+    right: u32 = 0,
+    top: u32 = 0,
+    bottom: u32 = 0,
+
+    pub fn init() Self {
+        return Self{};
+    }
+
+    pub fn message(self: *Self) mailbox.Message {
+        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_SET_OVERSCAN, 4, 4, fill, unfill);
+    }
+
+    pub fn fill(self: *Self, buf: []u32) void {
+        buf[0] = self.top;
+        buf[1] = self.bottom;
+        buf[2] = self.left;
+        buf[3] = self.right;
+    }
+
+    pub fn unfill(self: *Self, buf: []u32) void {
+        self.top = buf[0];
+        self.bottom = buf[1];
+        self.left = buf[2];
+        self.right = buf[3];
+    }
+};
+
 const default_palette = [_]u32{
     0x00000000,
     0xFFBB5500,
@@ -201,10 +232,12 @@ pub const FrameBuffer = struct {
         var fb = AllocateFrameBufferMessage.init();
         var pitch = GetPitchMessage.init();
         var palette = SetPaletteMessage.init(&default_palette);
+        var overscan = SetOverscanMessage.init();
         var messages = [_]mailbox.Message{
             phys.message(),
             virt.message(),
             depth.message(),
+            overscan.message(),
             fb.message(),
             pitch.message(),
             palette.message(),
@@ -238,6 +271,12 @@ pub const FrameBuffer = struct {
     // These are palette indices
     pub const COLOR_FOREGROUND: u8 = 0x02;
     pub const COLOR_BACKGROUND: u8 = 0x00;
+
+    pub fn clear(self: *FrameBuffer) void {
+        for (0..self.buffer_size) |i| {
+            self.base[i] = 0;
+        }
+    }
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
     pub fn drawChar(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {

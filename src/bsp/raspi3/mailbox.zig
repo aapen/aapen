@@ -230,9 +230,11 @@ pub const Envelope = struct {
         NoResponse,
     };
 
+    const max_buffer_length = 128;
+
     channel: MailboxChannel = .property_arm_to_vc,
     messages: []Message,
-    buffer: [64]u32 align(16),
+    buffer: [max_buffer_length]u32 align(16),
     total_size: u32,
 
     pub fn init(messages: []Message) Envelope {
@@ -243,10 +245,10 @@ pub const Envelope = struct {
 
         var total_size = content_size + 3;
 
-        assert(total_size < 64);
+        assert(total_size < max_buffer_length);
 
         return .{
-            .buffer = [_]u32{0} ** 64,
+            .buffer = [_]u32{0} ** max_buffer_length,
             .total_size = total_size,
             .messages = messages,
         };

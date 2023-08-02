@@ -8,49 +8,50 @@ const ForthError = errors.ForthError;
 pub fn Stack(comptime T: type) type {
     return struct {
         contents: ArrayList(T),
-        sp: usize,
+        // sp: usize,
 
         const Self = @This();
 
         pub fn init(allocator: Allocator) Self {
             return Self{
                 .contents = ArrayList(T).init(allocator),
-                .sp = 0,
+                // .sp = 0,
             };
         }
 
         pub fn deinit(self: *Self) void {
             self.contents.deinit();
-            self.sp = 0;
+            // self.sp = 0;
         }
 
         pub fn push(self: *Self, value: T) !void {
             try self.contents.append(value);
-            self.sp += 1;
+            // self.sp += 1;
         }
 
         pub fn pop(self: *Self) !T {
             if (self.isEmpty()) {
                 return ForthError.UnderFlow;
             }
-            var result = self.contents.items[self.sp - 1];
-            self.sp -= 1;
-            return result;
+            return self.contents.pop();
+            // var result = self.contents.items[self.sp - 1];
+            // self.sp -= 1;
+            // return result;
         }
 
         pub fn isEmpty(self: *Self) bool {
-            return self.sp == 0;
+            return self.contents.items.len == 0;
         }
 
         pub fn items(self: *Self) []T {
-            return self.contents.items[0..self.sp];
+            return self.contents.items;
         }
 
         pub fn peek(self: *Self) !T {
             if (self.isEmpty()) {
                 return ForthError.UnderFlow;
             }
-            return self.contents.items[self.sp - 1];
+            return self.contents.getLast();
         }
     };
 }

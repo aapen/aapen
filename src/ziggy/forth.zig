@@ -1,11 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-// const print = std.debug.print;
 
 const bsp = @import("../bsp.zig");
 const fbcons = @import("../fbcons.zig");
 const stack = @import("stack.zig");
-const reader = @import("reader.zig");
 const dict = @import("dictionary.zig");
 const value = @import("value.zig");
 
@@ -20,22 +18,26 @@ const ReturnStack = stack.Stack(i32);
 
 const ValueDictionary = dict.Dictionary(Value);
 
-const WordFunction = *const fn (forth: *Forth) ForthError!void;
+const WordFunction = *const fn (self: *Forth) ForthError!void;
 
 pub const Forth = struct {
+    const max_line_len = 256;
+
     allocator: Allocator = undefined,
     console: *fbcons.FrameBufferConsole,
 
     stack: DataStack = undefined,
     rstack: ReturnStack = undefined,
     dictionary: ValueDictionary = undefined,
-    reader: reader.ForthReader = undefined,
+    // reader: reader.ForthReader = undefined,
     memory: [2000]Value = undefined,
     nextFree: i32 = 0,
     nexti: i32 = -999,
     composing: bool = false,
-    newWordName: [reader.max_line_len:0]u8 = undefined,
-    newWordDef: i32 = -888,
+    line_buffer: [max_line_len:0]u8 = undefined,
+    words: std.mem.TokenIterator(u8, std.mem.DelimiterType.any) = undefined,
+    new_word_name: []const u8 = undefined,
+    new_word_def: i32 = -888,
 
     pub fn init(self: *Forth, allocator: Allocator) !void {
         self.stack = DataStack.init(allocator);
@@ -47,95 +49,96 @@ pub const Forth = struct {
         try self.console.print(fmt, args);
     }
 
-    pub fn evalFP(forth: *Forth, v: Value) dict.ForthError!void {
-        const fp: *fn (forth: *Forth) void = v.fp;
-        try fp(forth);
+    pub fn evalFP(self: *Forth, v: Value) dict.ForthError!void {
+        const fp: *fn (self: *Forth) void = v.fp;
+        try fp(self);
     }
 
-    pub fn addToDefinition(forth: *Forth, v: Value) void {
-        forth.memory[@intCast(forth.nextFree)] = v;
-        forth.nextFree += 1;
+    pub fn addToDefinition(self: *Forth, v: Value) void {
+        self.memory[@intCast(self.nextFree)] = v;
+        self.nextFree += 1;
     }
 
-    pub fn _evalValue(forth: *Forth, v: Value) !void {
+    pub fn _evalValue(self: *Forth, v: Value) !void {
         switch (v) {
             .w => |name| {
-                const assoc_value = try forth.dictionary.get(name);
-                try evalValue(forth, assoc_value);
+                const assoc_value = try self.dictionary.get(name);
+                try evalValue(self, assoc_value);
             },
             .fp => |p| {
                 //var wordf = @intToPtr(WordFunction, p);
                 var wordf: WordFunction = @ptrFromInt(p);
-                try wordf(forth);
+                try wordf(self);
             },
             .call => |address| {
-                try inner(forth, address);
+                try inner(self, address);
             },
             else => |_| {
-                try forth.stack.push(v);
+                try self.stack.push(v);
             },
         }
     }
 
-    pub fn evalValue(forth: *Forth, v: Value) ForthError!void {
-        // try forth.print("eval value {any}\n", .{v});
+    pub fn evalValue(self: *Forth, v: Value) ForthError!void {
+        // try self.print("eval value {any}\n", .{v});
         switch (v) {
             .w => |name| {
-                const entry = try forth.dictionary.getEntry(name);
-                // try forth.print("word: {s} entry: {any}\n", .{ name, entry });
+                const entry = try self.dictionary.getEntry(name);
+                // try self.print("word: {s} entry: {any}\n", .{ name, entry });
                 if (entry.immediate) {
-                    try _evalValue(forth, entry.value);
-                } else if (forth.composing) {
-                    forth.addToDefinition(entry.value);
+                    try _evalValue(self, entry.value);
+                } else if (self.composing) {
+                    self.addToDefinition(entry.value);
                 } else {
-                    try _evalValue(forth, entry.value);
+                    try _evalValue(self, entry.value);
                 }
             },
             .fp => |p| {
-                if (forth.composing) {
-                    forth.addToDefinition(v);
+                if (self.composing) {
+                    self.addToDefinition(v);
                 } else {
                     var wordf: WordFunction = @ptrFromInt(p);
-                    try wordf(forth);
+                    try wordf(self);
                 }
             },
             .call => |address| {
-                if (forth.composing) {
-                    forth.addToDefinition(v);
+                if (self.composing) {
+                    self.addToDefinition(v);
                 } else {
-                    try inner(forth, address);
+                    try inner(self, address);
                 }
             },
             else => |_| {
-                if (forth.composing) {
-                    forth.addToDefinition(v);
+                if (self.composing) {
+                    self.addToDefinition(v);
                 } else {
-                    try forth.stack.push(v);
+                    try self.stack.push(v);
                 }
             },
         }
     }
 
     pub fn wordColon(self: *Forth) !void {
-        try self.print("colon:\n", .{});
-        @memset(&self.newWordName, 0);
-        _ = try self.reader.getWord(&self.newWordName);
+        // try self.print("colon:\n", .{});
+        self.new_word_name = self.words.next() orelse return ForthError.WordReadError;
+        // @memset(&self.newWordName, 0);
+        // _ = try self.reader.getWord(&self.newWordName);
         self.composing = true;
-        self.newWordDef = self.nextFree;
+        self.new_word_def = self.nextFree;
     }
 
     pub fn wordSemi(self: *Forth) !void {
-        try self.print("***semi:\n", .{});
+        // try self.print("***semi:\n", .{});
         self.memory[@intCast(self.nextFree)] = Value{
             //.fp = @ptrToInt(&wordReturn),
             .fp = @intFromPtr(&wordReturn),
         };
         self.nextFree += 1;
-        try self.print("semi: {s} {any}\n", .{ self.newWordName, self.newWordDef });
-        try self.defineSecondary(&self.newWordName, self.newWordDef);
+        // try self.print("semi: {s} {any}\n", .{ self.new_word_name, self.new_word_def });
+        try self.defineSecondary(self.new_word_name, self.new_word_def);
         self.composing = false;
-        @memset(&self.newWordName, 0);
-        self.newWordDef = -888;
+        // @memset(&self.new_word_name, 0);
+        self.new_word_def = -888;
     }
 
     // a -- ()
@@ -145,18 +148,22 @@ pub const Forth = struct {
         self.console.emit(@intCast(a.u));
     }
 
+    pub fn wordCr(self: *Forth) ForthError!void {
+        self.putc(0x0a);
+    }
+
     pub fn wordClearScreen(self: *Forth) !void {
-        _ = self;
+        self.putc(0x0c);
     }
 
-    fn definePrimitive(this: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
-        // try this.print("define word {s} -> {*}\n", .{ name, fp });
-        try this.dictionary.put(name, Value{ .fp = @intFromPtr(fp) }, immediate);
+    fn definePrimitive(self: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
+        // try self.print("define word {s} -> {*}\n", .{ name, fp });
+        try self.dictionary.put(name, Value{ .fp = @intFromPtr(fp) }, immediate);
     }
 
-    fn defineSecondary(this: *Forth, name: []const u8, address: i32) !void {
-        // try this.print("define secondary {s} {}\n", .{ name, address });
-        try this.dictionary.put(name, Value{ .call = address }, false);
+    fn defineSecondary(self: *Forth, name: []const u8, address: i32) !void {
+        // try self.print("define secondary {s} {}\n", .{ name, address });
+        try self.dictionary.put(name, Value{ .call = address }, false);
     }
 
     fn emitPrompt(self: *Forth, prompt: []const u8) void {
@@ -188,137 +195,137 @@ pub const Forth = struct {
         self.console.emit(ch);
     }
 
-    pub fn repl(this: *Forth) !void {
-        var buf: [reader.max_line_len:0]u8 = undefined;
-
+    pub fn repl(self: *Forth) !void {
         // outer loop, one line at a time.
         while (true) {
-            this.emitPrompt("READY.\n");
-            var line_len: usize = this.readline(&buf) catch 0;
+            self.emitPrompt("READY.\n");
+            var line_len: usize = self.readline(&self.line_buffer) catch 0;
 
-            var words = std.mem.tokenizeAny(u8, buf[0..line_len], " \t\n\r");
+            self.words = std.mem.tokenizeAny(u8, self.line_buffer[0..line_len], " \t\n\r");
 
             // inner loop, one word at a time.
-            var word = words.next();
-            while (word != null) : (word = words.next()) {
+            var word = self.words.next();
+            while (word != null) : (word = self.words.next()) {
                 if (word) |w| {
                     var v = Value.fromString(w) catch |err| {
-                        try this.print("Parse error({s}): {}\n", .{ w, err });
+                        try self.print("Parse error({s}): {}\n", .{ w, err });
                         continue;
                     };
-                    this.evalValue(v) catch |err| {
-                        try this.print("error: {any}\n", .{err});
+                    self.evalValue(v) catch |err| {
+                        try self.print("error: {any}\n", .{err});
                     };
                 }
             }
         }
     }
 
-    pub fn define_core(forth: *Forth) !void {
+    pub fn define_core(self: *Forth) !void {
         // Screen control
-        try forth.definePrimitive("emit", &Forth.wordEmit, false);
-        try forth.definePrimitive("cls", &Forth.wordClearScreen, false);
+        try self.definePrimitive("emit", &Forth.wordEmit, false);
+        try self.definePrimitive("cls", &Forth.wordClearScreen, false);
 
         // Secondary definition words.
-        try forth.definePrimitive(":", &Forth.wordColon, false);
-        try forth.definePrimitive(";", &Forth.wordSemi, true);
+        try self.definePrimitive(":", &Forth.wordColon, false);
+        try self.definePrimitive(";", &Forth.wordSemi, true);
 
         // Debug and inspection words.
-
-        try forth.definePrimitive("stack", &wordStack, false);
-        try forth.definePrimitive("?", &wordStack, false);
-        try forth.definePrimitive("??", &wordDictionary, false);
-        try forth.definePrimitive("rstack", &wordRStack, false);
-        try forth.definePrimitive("info", &wordInfo, true);
-        try forth.definePrimitive("ip", &wordNext, false);
-        try forth.definePrimitive("value-size", &wordValueSize, false);
+        try self.definePrimitive("stack", &wordStack, false);
+        try self.definePrimitive("?", &wordStack, false);
+        try self.definePrimitive("??", &wordDictionary, false);
+        try self.definePrimitive("rstack", &wordRStack, false);
+        try self.definePrimitive("info", &wordInfo, true);
+        try self.definePrimitive("ip", &wordNext, false);
+        try self.definePrimitive("value-size", &wordValueSize, false);
 
         // Basic Forth words.
-
-        try forth.definePrimitive("hello", &wordHello, false);
-        try forth.definePrimitive(".", &wordDot, false);
-        try forth.definePrimitive("cr", &wordCr, false);
-        try forth.definePrimitive("swap", &wordSwap, false);
-        try forth.definePrimitive("+", &wordAdd, false);
-        try forth.definePrimitive("!i", &wordStoreI32, false);
-        try forth.definePrimitive("@i", &wordLoadI32, false);
+        try self.definePrimitive("dup", &wordDup, false);
+        try self.definePrimitive("hello", &wordHello, false);
+        try self.definePrimitive(".", &wordDot, false);
+        try self.definePrimitive("cr", &Forth.wordCr, false);
+        try self.definePrimitive("swap", &wordSwap, false);
+        try self.definePrimitive("+", &wordAdd, false);
+        try self.definePrimitive("!i", &wordStoreI32, false);
+        try self.definePrimitive("@i", &wordLoadI32, false);
     }
 };
 
-pub fn wordHello(forth: *Forth) !void {
-    try forth.print("hello world\n", .{});
+pub fn wordHello(self: *Forth) !void {
+    try self.print("hello world\n", .{});
 }
 
-pub fn wordDot(forth: *Forth) !void {
-    var v: Value = try forth.stack.pop();
-    try v.pr(forth);
+pub fn wordDot(self: *Forth) !void {
+    var v: Value = try self.stack.pop();
+    try v.pr(self);
 }
 
-pub fn wordStack(forth: *Forth) !void {
-    for (forth.stack.items()) |item| {
-        try item.pr(forth);
-        try forth.print("\n", .{});
+pub fn wordStack(self: *Forth) !void {
+    for (self.stack.items()) |item| {
+        try item.pr(self);
+        try self.print("\n", .{});
     }
 }
 
-pub fn wordRStack(forth: *Forth) !void {
-    for (forth.rstack.items()) |item| {
-        try forth.print("{}\n", .{item});
+pub fn wordRStack(self: *Forth) !void {
+    for (self.rstack.items()) |item| {
+        try self.print("{}\n", .{item});
     }
 }
 
-pub fn wordSwap(forth: *Forth) !void {
-    var s = &forth.stack;
+pub fn wordDup(self: *Forth) !void {
+    var s = &self.stack;
+    const a = try s.pop();
+    try s.push(a);
+    try s.push(a);
+}
+
+pub fn wordSwap(self: *Forth) !void {
+    var s = &self.stack;
     const a = try s.pop();
     const b = try s.pop();
     try s.push(a);
     try s.push(b);
 }
 
-pub fn wordAdd(forth: *Forth) !void {
-    var s = &forth.stack;
+pub fn wordAdd(self: *Forth) !void {
+    var s = &self.stack;
     const a = try s.pop();
     const b = try s.pop();
     try s.push(try a.add(&b));
 }
 
-pub fn wordCr(forth: *Forth) ForthError!void {
-    try forth.print("\n", .{});
+pub fn wordReturn(self: *Forth) ForthError!void {
+    self.nexti = -999;
 }
 
-pub fn wordReturn(forth: *Forth) ForthError!void {
-    forth.nexti = -999;
+pub fn wordDictionary(self: *Forth) ForthError!void {
+    try self.dictionary.pr(self);
 }
 
-pub fn wordDictionary(forth: *Forth) ForthError!void {
-    try forth.dictionary.pr(forth);
+pub fn wordInfo(self: *Forth) ForthError!void {
+    try self.print("nexti: {}\n", .{self.nexti});
+    try self.print("composing: {}\n", .{self.composing});
+    try self.print("new word: {s}\n", .{self.new_word_name});
+    try self.print("new word def: {}\n", .{self.new_word_def});
 }
-
-pub fn wordInfo(forth: *Forth) ForthError!void {
-    try forth.print("nexti: {}\n", .{forth.nexti});
-    try forth.print("composing: {}\n", .{forth.composing});
-    try forth.print("new word: {s}\n", .{forth.newWordName});
-    try forth.print("new word def: {}\n", .{forth.newWordDef});
-}
-pub fn wordNext(forth: *Forth) ForthError!void {
-    var nexti_address: usize = @intFromPtr(&forth.nexti);
+pub fn wordNext(self: *Forth) ForthError!void {
+    var nexti_address: usize = @intFromPtr(&self.nexti);
     var v = Value{ .addr = nexti_address };
-    try forth.stack.push(v);
+    try self.stack.push(v);
 }
 
-pub fn wordLoadI32(forth: *Forth) !void {
-    const addressValue = try forth.stack.pop();
+pub fn wordLoadI32(self: *Forth) !void {
+    const addressValue = try self.stack.pop();
     if (addressValue != ValueType.addr) {
         return ForthError.BadOperation;
     }
     const p: *i32 = @ptrFromInt(addressValue.addr);
     const v = Value{ .i = p.* };
-    try forth.stack.push(v);
+    try self.stack.push(v);
 }
 
-pub fn wordStoreI32(forth: *Forth) !void {
-    const addressValue = try forth.stack.pop();
-    const v = try forth.stack.pop();
+pub fn wordStoreI32(self: *Forth) !void {
+    const addressValue = try self.stack.pop();
+    const v = try self.stack.pop();
 
     if (addressValue != ValueType.addr) {
         return ForthError.BadOperation;
@@ -331,26 +338,26 @@ pub fn wordStoreI32(forth: *Forth) !void {
     p.* = v.i;
 }
 
-pub fn wordValueSize(forth: *Forth) ForthError!void {
+pub fn wordValueSize(self: *Forth) ForthError!void {
     const l: usize = @sizeOf(Value);
-    try forth.print("size of value: {d}\n", .{l});
-    try forth.stack.push(Value{ .sz = l });
+    try self.print("size of value: {d}\n", .{l});
+    try self.stack.push(Value{ .sz = l });
 }
 
-pub fn inner(forth: *Forth, address: i32) ForthError!void {
-    try forth.rstack.push(forth.nexti);
-    forth.nexti = address;
-    try forth.print("start loop: {}\n", .{forth.nexti});
-    while (forth.nexti >= 0) {
-        try forth.print("inner loop: {}\n", .{forth.nexti});
-        var v = forth.memory[@intCast(forth.nexti)];
-        forth.nexti += 1;
-        forth._evalValue(v) catch |err| {
-            try forth.print("Error: {any}\n", .{err});
+pub fn inner(self: *Forth, address: i32) ForthError!void {
+    try self.rstack.push(self.nexti);
+    self.nexti = address;
+    // try forth.print("start loop: {}\n", .{forth.nexti});
+    while (self.nexti >= 0) {
+        // try forth.print("inner loop: {}\n", .{forth.nexti});
+        var v = self.memory[@intCast(self.nexti)];
+        self.nexti += 1;
+        self._evalValue(v) catch |err| {
+            try self.print("Error: {any}\n", .{err});
             break;
         };
     }
-    forth.nexti = try forth.rstack.pop();
+    self.nexti = try self.rstack.pop();
 }
 
 fn newline(ch: u8) bool {
