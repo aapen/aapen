@@ -23,10 +23,10 @@ pub const page_size = arch.cpu.mmu2.page_size;
 
 pub var board = bsp.mailbox.BoardInfo{};
 pub var heap = mem{};
-pub var frameBuffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
-pub var frameBufferConsole: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frameBuffer };
-// pub var interpreter: interp.Interpreter = interp.Interpreter{ .console = &frameBufferConsole };
-pub var interpreter: Forth = Forth{ .console = &frameBufferConsole };
+pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
+pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
+// pub var interpreter: interp.Interpreter = interp.Interpreter{ .console = &frame_buffer_console };
+pub var interpreter: Forth = Forth{ .console = &frame_buffer_console };
 
 fn kernelInit() !void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
@@ -46,37 +46,47 @@ fn kernelInit() !void {
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
 
-    frameBuffer.setResolution(1024, 768, 8) catch |err| {
+    frame_buffer.setResolution(1024, 768, 8) catch |err| {
         bsp.io.uart_writer.print("Error initializing framebuffer: {any}\n", .{err}) catch {};
     };
 
-    frameBufferConsole.init();
+    frame_buffer_console.init();
+
+    try frame_buffer_console.print("Booted...\n", .{});
+    try frame_buffer_console.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
+    try frame_buffer_console.print("    MAC address: {?}\n", .{board.device.mac_address});
+    try frame_buffer_console.print("  Serial number: {?}\n", .{board.device.serial_number});
+    try frame_buffer_console.print("Manufactured by: {?s}\n", .{board.device.manufacturer});
+
+    // Attempt to power up the USB
+    // var usb_power_result = bsp.mailbox.powerOn(.usb_hcd) catch bsp.mailbox.power.Result.failed;
+    // try frame_buffer_console.print("   Power on USB: {s}\n\n", .{@tagName(usb_power_result)});
 
     // State: one core, interrupts, MMU, heap Allocator, display, serial
     diagnostics() catch |err| {
-        frameBufferConsole.print("Error printing diagnostics: {any}\n", .{err}) catch {};
+        frame_buffer_console.print("Error printing diagnostics: {any}\n", .{err}) catch {};
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
     // interpreter = interp.Interpreter{
-    //     .console = &frameBufferConsole,
+    //     .console = &frame_buffer_console,
     // };
 
     interpreter.init(os.page_allocator) catch |err| {
-        try frameBufferConsole.print("Forth init: {any}\n", .{err});
+        try frame_buffer_console.print("Forth init: {any}\n", .{err});
     };
 
     interpreter.define_core() catch |err| {
-        try frameBufferConsole.print("Forth define core: {any}\n", .{err});
+        try frame_buffer_console.print("Forth define core: {any}\n", .{err});
     };
 
     interpreter.repl() catch |err| {
-        try frameBufferConsole.print("REPL error: {any}\n\nABORT.\n", .{err});
+        try frame_buffer_console.print("REPL error: {any}\n\nABORT.\n", .{err});
     };
 
     // while (true) {
     //     interpreter.execute() catch |err| {
-    //         try frameBufferConsole.print("{any}\n", .{err});
+    //         try frame_buffer_console.print("{any}\n", .{err});
     //     };
     // }
 
@@ -87,31 +97,32 @@ fn kernelInit() !void {
 }
 
 fn diagnostics() !void {
-    try frameBufferConsole.print("Booted...\n", .{});
-    try frameBufferConsole.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
-    try frameBufferConsole.print("    MAC address: {?}\n", .{board.device.mac_address});
-    try frameBufferConsole.print("  Serial number: {?}\n", .{board.device.serial_number});
-    try frameBufferConsole.print("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
-
-    try board.arm_memory.print(&frameBufferConsole);
-    try board.videocore_memory.print(&frameBufferConsole);
-    try heap.memory.print(&frameBufferConsole);
-    try frameBuffer.memory.print(&frameBufferConsole);
+    try board.arm_memory.print(&frame_buffer_console);
+    try board.videocore_memory.print(&frame_buffer_console);
+    try heap.memory.print(&frame_buffer_console);
+    try frame_buffer.memory.print(&frame_buffer_console);
 
     try printClockRate(.uart);
     try printClockRate(.emmc);
     try printClockRate(.core);
     try printClockRate(.arm);
 
-    try frameBufferConsole.print("\nxHCI capability length: {}\n", .{bsp.usb.xhci_capability_register_base.read().length});
-    try frameBufferConsole.print("xHCI version: {any}\n", .{bcd.decode(u16, bsp.usb.xhci_capability_register_base.read().hci_version)});
+    // try printPowerState(.usb_hcd);
+
+    try frame_buffer_console.print("\nxHCI capability length: {}\n", .{bsp.usb.xhci_capability_register_base.read().length});
+    try frame_buffer_console.print("xHCI version: {any}\n", .{bcd.decode(u16, bsp.usb.xhci_capability_register_base.read().hci_version)});
 }
 
-fn printClockRate(clock_type: bsp.mailbox.ClockRate.Clock) !void {
+fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
     var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
     var clock_mhz = rate / 1_000_000;
-    try frameBufferConsole.print("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
+    try frame_buffer_console.print("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
 }
+
+// fn printPowerState(device: bsp.mailbox.PowerDevice) !void {
+//     var state = bsp.mailbox.isPowered(device) catch .failed;
+//     try frame_buffer_console.print("{s:>14} power: {s}\n", .{ @tagName(device), @tagName(state) });
+// }
 
 export fn _soft_reset() noreturn {
     kernelInit() catch {};
@@ -182,7 +193,7 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 //     _ = stack;
 //     _ = return_addr;
 
-//     frameBufferConsole.print(msg, .{}) catch {};
+//     frame_buffer_console.print(msg, .{}) catch {};
 //     while (true) {
 //         arch.cpu.wfe();
 //     }

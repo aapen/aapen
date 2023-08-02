@@ -46,17 +46,17 @@ pub fn irqHandle() void {
     var pending_2_received = (basic_interrupts & @as(u32, (1 << 9))) != 0;
 
     // process basic interrupts before anything else
-    if (raised(basic_interrupts, io.Pl011Irqs.UartBaseRegisterIrqBit)) {
+    if (raised(basic_interrupts, io.Pl011Irqs.uart_base_register_irq_bit)) {
         io.pl011IrqHandle();
     } else if (pending_1_received) {
         // Check low 32 pending IRQs first
         var low_irqs = irq_pending_1.read();
-        if (raised(low_irqs, timer.TimerIrqs.SystemTimerIrq1)) {
+        if (raised(low_irqs, timer.TimerIrqs.system_timer_irq_1)) {
             timer.timerIrqHandle(1);
         }
     } else if (pending_2_received) {
         var high_irqs = irq_pending_2.read();
-        if (raised(high_irqs, (io.Pl011Irqs.UartIrq >> 32) & 0xffffffff)) {
+        if (raised(high_irqs, (io.Pl011Irqs.uart_irq >> 32) & 0xffffffff)) {
             io.pl011IrqHandle();
         }
     }

@@ -28,12 +28,12 @@ pub const Duration = struct {
 };
 
 fn frequency() u32 {
-    return @truncate(registers.CNTFRQ_EL0.read());
+    return @truncate(registers.cntfrq_el0.read());
 }
 
 fn read_cntpct() u32 {
     cpu.barrierInstruction();
-    return registers.CNTPCT_EL0.read();
+    return registers.cntpct_el0.read();
 }
 
 pub fn uptime() Duration {
@@ -56,14 +56,14 @@ pub fn spin(duration: Duration) !void {
         return TimeError.DurationTooLong;
 
     // Set the countdown register
-    registers.CNTP_TVAL_EL0.write(@as(u64, target_ticks));
+    registers.cntp_tval_el0.write(@as(u64, target_ticks));
 
     // Start the ticks
-    registers.CNTP_CTL_EL0.modify(.{ .enable = .enable, .istatus = .not_met });
+    registers.cntp_ctl_el0.modify(.{ .enable = .enable, .istatus = .not_met });
 
     // Check status. It will be 1 when the timer is done.
-    while (registers.CNTP_CTL_EL0.read().istatus == .not_met) {}
+    while (registers.cntp_ctl_el0.read().istatus == .not_met) {}
 
     // Turn the timer back off
-    registers.CNTP_CTL_EL0.modify(.{ .enable = .disable });
+    registers.cntp_ctl_el0.modify(.{ .enable = .disable });
 }

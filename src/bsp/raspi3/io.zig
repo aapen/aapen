@@ -161,7 +161,7 @@ const Pl011UartDRLayout = packed struct {
 };
 const pl011_uart_dr = UniformRegister(Pl011UartDRLayout).init(pl011_uart_base + 0x00);
 
-const Pl011UartRSRECRLayout= packed struct {
+const Pl011UartRSRECRLayout = packed struct {
     framing_error: u1 = 0,
     parity_error: u1 = 0,
     break_error: u1 = 0,
@@ -326,18 +326,18 @@ const pl011_uart_icr = UniformRegister(Pl011UartICRLayout).init(pl011_uart_base 
 pub const Pl011Irqs = struct {
     // See BCM2837 ARM Peripherals, section 7.5
     // The UART irq is a "basic" irq which appears in the base register
-    pub const UartBaseRegisterIrqBit: u64 = 1 << 19;
+    pub const uart_base_register_irq_bit: u64 = 1 << 19;
 
     // But for enabling/disabling we have to use the proper IRQ #
-    pub const UartIrq: u64 = 1 << 57;
+    pub const uart_irq: u64 = 1 << 57;
 };
 
 pub fn pl011IrqEnable() void {
-    interrupts.irqEnable(Pl011Irqs.UartIrq);
+    interrupts.irqEnable(Pl011Irqs.uart_irq);
 }
 
 pub fn pl011IrqDisable() void {
-    interrupts.irqDisable(Pl011Irqs.UartIrq);
+    interrupts.irqDisable(Pl011Irqs.uart_irq);
 }
 
 pub fn pl011IrqHandle() void {

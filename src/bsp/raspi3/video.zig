@@ -7,8 +7,8 @@ const character_rom = @embedFile("../../data/character_rom.bin");
 
 const SizeMessage = struct {
     const Kind = enum {
-        Virtual,
-        Physical,
+        virtual,
+        physical,
     };
 
     const Self = @This();
@@ -18,7 +18,7 @@ const SizeMessage = struct {
 
     pub fn physical(xres: u32, yres: u32) Self {
         return Self{
-            .kind = .Physical,
+            .kind = .physical,
             .xres = xres,
             .yres = yres,
         };
@@ -26,7 +26,7 @@ const SizeMessage = struct {
 
     pub fn virtual(xres: u32, yres: u32) Self {
         return Self{
-            .kind = .Virtual,
+            .kind = .virtual,
             .xres = xres,
             .yres = yres,
         };
@@ -34,8 +34,8 @@ const SizeMessage = struct {
 
     pub fn message(self: *Self) mailbox.Message {
         var tag = switch (self.kind) {
-            .Virtual => mailbox.RpiFirmwarePropertyTag.RPI_FIRMWARE_FRAMEBUFFER_SET_VIRTUAL_WIDTH_HEIGHT,
-            .Physical => mailbox.RpiFirmwarePropertyTag.RPI_FIRMWARE_FRAMEBUFFER_SET_PHYSICAL_WIDTH_HEIGHT,
+            .virtual => mailbox.RpiFirmwarePropertyTag.RPI_FIRMWARE_FRAMEBUFFER_SET_VIRTUAL_WIDTH_HEIGHT,
+            .physical => mailbox.RpiFirmwarePropertyTag.RPI_FIRMWARE_FRAMEBUFFER_SET_PHYSICAL_WIDTH_HEIGHT,
         };
 
         return mailbox.Message.init(self, tag, 2, 2, fill, unfill);
@@ -192,7 +192,6 @@ pub const FrameBuffer = struct {
     xres: usize = undefined,
     yres: usize = undefined,
     bpp: u32 = undefined,
-    chargen: [*]const u64 = undefined,
     memory: Region = Region{ .name = "Frame Buffer" },
 
     pub fn setResolution(self: *FrameBuffer, xres: u32, yres: u32, bpp: u32) !void {

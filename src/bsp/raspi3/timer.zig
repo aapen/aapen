@@ -37,10 +37,10 @@ const timer_compare_3 = UniformRegister(TimerCompareLayout).init(system_timer_ba
 // Timer interrupts
 // ----------------------------------------------------------------------
 pub const TimerIrqs = struct {
-    pub const SystemTimerIrq0: u32 = 0b0001;
-    pub const SystemTimerIrq1: u32 = 0b0010;
-    pub const SystemTimerIrq2: u32 = 0b0100;
-    pub const SystemTimerIrq3: u32 = 0b1000;
+    pub const system_timer_irq_0: u32 = 0b0001;
+    pub const system_timer_irq_1: u32 = 0b0010;
+    pub const system_timer_irq_2: u32 = 0b0100;
+    pub const system_timer_irq_3: u32 = 0b1000;
 };
 
 pub fn timerIrqEnable(which: u32) void {
@@ -58,7 +58,7 @@ const timer_quantum = 200000;
 var next_tick: u32 = undefined;
 
 pub fn timerInit() void {
-    timerIrqEnable(TimerIrqs.SystemTimerIrq1);
+    timerIrqEnable(TimerIrqs.system_timer_irq_1);
 
     next_tick = timer_count_low.read();
     next_tick += timer_quantum;
