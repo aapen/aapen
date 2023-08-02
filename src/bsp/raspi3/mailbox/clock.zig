@@ -4,10 +4,10 @@ const Envelope = mailbox.Envelope;
 
 const ClockMessage = struct {
     const Self = @This();
-    clock_type: ClockRate.Clock,
+    clock_type: Clock,
     rate: u32 = 0,
 
-    pub fn init(clock_type: ClockRate.Clock) Self {
+    pub fn init(clock_type: Clock) Self {
         return Self{
             .clock_type = clock_type,
         };
@@ -27,19 +27,14 @@ const ClockMessage = struct {
     }
 };
 
-pub const ClockRate = packed struct {
-    pub const Clock = enum(u32) {
-        emmc = 1,
-        uart = 2,
-        arm = 3,
-        core = 4,
-    };
-
-    clock_type: Clock,
-    rate: u32,
+pub const Clock = enum(u32) {
+    emmc = 1,
+    uart = 2,
+    arm = 3,
+    core = 4,
 };
 
-pub fn getClockRate(clock_type: ClockRate.Clock) !u32 {
+pub fn getClockRate(clock_type: Clock) !u32 {
     var clockmsg = ClockMessage.init(clock_type);
     var messages = [_]Message{clockmsg.message()};
     var env = Envelope.init(&messages);

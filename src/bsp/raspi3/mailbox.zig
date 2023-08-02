@@ -7,12 +7,13 @@ const peripheral_base = @import("memory_map.zig").peripheral_base;
 const memory = @import("memory.zig");
 
 const clock = @import("mailbox/clock.zig");
-pub const ClockRate = clock.ClockRate;
+pub const Clock = clock.Clock;
 pub const getClockRate = clock.getClockRate;
 
 const power = @import("mailbox/power.zig");
-pub const PowerDomain = power.PowerDomain;
-pub const getPowerStatus = power.getPowerStatus;
+pub const PowerDevice = power.PowerDevice;
+pub const isPowered = power.isPowered;
+pub const powerOn = power.powerOn;
 
 const board_info = @import("mailbox/board_info.zig");
 pub const BoardInfo = board_info.BoardInfo;
@@ -66,20 +67,6 @@ const mailbox_0_configuration = UniformRegister(MailboxConfigurationLayout).init
 
 const MailboxWriteLayout = u32;
 const mailbox_0_write = UniformRegister(MailboxWriteLayout).init(mailbox_base + 0x20);
-
-// const mailbox = packed struct {
-//     read_write: mailbox_read_write_layout,
-//     _unused_reserved_0: u32,
-//     _unused_reserved_1: u32,
-//     _unused_reserved_2: u32,
-//     peek: MailboxPeekLayout,
-//     sender: MailboxSenderLayout,
-//     status: MailboxStatusLayout,
-//     configuration: MailboxConfigurationLayout,
-// };
-
-// const mailbox_0: *volatile mailbox = @ptrFromInt(mailbox_base);
-// const mailbox_1: *volatile mailbox = @ptrFromInt(mailbox_base + 0x20);
 
 // ----------------------------------------------------------------------
 // ARM <-> Videocore protocol
