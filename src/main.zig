@@ -95,9 +95,6 @@ fn diagnostics() !void {
     try printClockRate(.arm);
 
     try printPowerState(.usb_hcd);
-
-    try frame_buffer_console.print("\nxHCI capability length: {}\n", .{bsp.usb.xhci_capability_register_base.read().length});
-    try frame_buffer_console.print("xHCI version: {any}\n", .{bcd.decode(u16, bsp.usb.xhci_capability_register_base.read().hci_version)});
 }
 
 fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
