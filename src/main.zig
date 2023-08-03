@@ -59,6 +59,8 @@ fn kernelInit() !void {
     var usb_power_result = bsp.mailbox.powerOn(.usb_hcd) catch bsp.mailbox.power.Result.failed;
     try frame_buffer_console.print("   Power on USB: {s}\n\n", .{@tagName(usb_power_result)});
 
+    bsp.usb.init();
+
     // State: one core, interrupts, MMU, heap Allocator, display, serial
     diagnostics() catch |err| {
         frame_buffer_console.print("Error printing diagnostics: {any}\n", .{err}) catch {};
