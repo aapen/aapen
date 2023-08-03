@@ -83,6 +83,15 @@ pub const Value = union(ValueType) {
             else => return ForthError.BadOperation,
         }
     }
+
+    pub fn asChar(this: *const Value) !u8 {
+        return switch (this.*) {
+            .i => |v| @truncate(@as(u32, @bitCast(v))),
+            .l => |v| @truncate(v),
+            .u => |v| @truncate(v),
+            else => ForthError.BadOperation,
+        };
+    }
 };
 
 fn expectEqualString(a: []const u8, b: []const u8) !void {

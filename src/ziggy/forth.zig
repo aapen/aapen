@@ -149,7 +149,8 @@ pub const Forth = struct {
     pub fn wordEmit(self: *Forth) !void {
         var s = &self.stack;
         const a = try s.pop();
-        self.console.emit(@intCast(a.u));
+        var ch = try a.asChar();
+        self.console.emit(ch);
     }
 
     pub fn wordCr(self: *Forth) ForthError!void {
