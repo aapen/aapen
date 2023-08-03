@@ -84,16 +84,28 @@ pub const Value = union(ValueType) {
     }
 };
 
-//pub fn main() !void {
-//    const stdout = std.io.getStdOut().writer();
-//
-//    //var i = splitAny(u8, "hello out there", " ");
-//    var i = tokenizer("here is \"string abc\" zzz empty \"\"");
-//
-//    while (i.next()) |token| {
-//        _ = try stdout.print("token: [{s}]\n", .{token});
-//        var v = toValue(token);
-//        _ = try stdout.print("value: [{any}]\n", .{v});
-//
-//    }
-//}
+fn expectEqualString(a: []const u8, b: []const u8) !void {
+    try std.testing.expect(std.mem.eql(u8, a, b));
+}
+
+test "parsing" {
+    const expectEqual = std.testing.expectEqual;
+
+    var i = try Value.fromString("12345");
+    try expectEqual(i.i, 12345);
+
+    var f = try Value.fromString("12.345");
+    try expectEqual(f.f, 12.345);
+
+    var s = try Value.fromString("\"cake\"");
+    try expectEqualString(s.s, "cake");
+
+    var addr = try Value.fromString("#cafebabe#");
+    try expectEqual(addr.addr, 0xcafebabe);
+
+    var word = try Value.fromString("an-atom");
+    try expectEqualString(word.w, "an-atom");
+
+    var badA = Value.fromString("#123FGHIJKL99#");
+    try std.testing.expectError(ForthError.ParseError, badA);
+}
