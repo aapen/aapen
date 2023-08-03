@@ -185,7 +185,9 @@ pub const Forth = struct {
             self.putc(ch);
 
             switch (ch) {
-                0x7f => i -= 1,
+                0x7f => if (i > 0) {
+                    i -= 1;
+                },
                 else => {
                     buffer[i] = ch;
                     i += 1;

@@ -10,14 +10,14 @@ const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 // ----------------------------------------------------------------------
 
 const HostChannelRegisters = extern struct {
-    char: u32 = 0,
-    splt: u32 = 0,
-    int: u32 = 0,
-    intmsk: u32 = 0,
-    tsiz: u32 = 0,
-    dma: u32 = 0,
+    hcchar: u32 = 0,
+    hcsplt: u32 = 0,
+    hcint: u32 = 0,
+    hcintmsk: u32 = 0,
+    hctsiz: u32 = 0,
+    hcdma: u32 = 0,
     _reserved: u32 = 0,
-    dmab: u32 = 0,
+    hcdmab: u32 = 0,
 };
 
 const HostRegisters = extern struct {
@@ -73,6 +73,6 @@ const core_registers: *volatile CoreRegisters = @ptrFromInt(usb_dwc_base);
 // TODO initialize the clock
 // TODO initialize the phy interface
 pub fn init() void {
-    root.frame_buffer_console.print("core_registers: 0x{x:0>8}\n", .{@intFromPtr(core_registers)}) catch {};
-    root.frame_buffer_console.print("gotgctl: 0x{x:0>8}\n", .{core_registers.*.gotgctl}) catch {};
+    root.frame_buffer_console.print("{s:>20}: 0x{x:0>8}\n", .{ "usb_dwc_base", @intFromPtr(core_registers) }) catch {};
+    root.frame_buffer_console.print("{s:>20}: 0x{x:0>8}\n", .{ "gotgctl", core_registers.*.gotgctl }) catch {};
 }
