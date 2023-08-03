@@ -5,7 +5,8 @@ const qemu = @import("qemu.zig");
 const mem = @import("mem.zig");
 const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
-const Forth = @import("ziggy/forth.zig").Forth;
+const forth = @import("ziggy/forth.zig");
+const Forth = forth.Forth;
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -49,8 +50,11 @@ fn kernelInit() !void {
 
     frame_buffer_console.init();
 
-    try frame_buffer_console.print("Booted...\n", .{});
-    try frame_buffer_console.print("Running on {s} (a {s}) with {?}MB\n\n", .{ board.model.name, board.model.processor, board.model.memory });
+    try frame_buffer_console.print("Running on {s} (a {s}) with {?}MB\n\n", .{
+        board.model.name,
+        board.model.processor,
+        board.model.memory,
+    });
     try frame_buffer_console.print("    MAC address: {?}\n", .{board.device.mac_address});
     try frame_buffer_console.print("  Serial number: {?}\n", .{board.device.serial_number});
     try frame_buffer_console.print("Manufactured by: {?s}\n", .{board.device.manufacturer});
@@ -73,6 +77,11 @@ fn kernelInit() !void {
 
     interpreter.define_core() catch |err| {
         try frame_buffer_console.print("Forth define core: {any}\n", .{err});
+    };
+
+    // interpret embedded startup file
+    interpreter.evalBuffer(forth.init_f) catch |err| {
+        try frame_buffer_console.print("Forth eval buffer: {any}\n", .{err});
     };
 
     interpreter.repl() catch |err| {

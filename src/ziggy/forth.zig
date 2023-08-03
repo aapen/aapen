@@ -10,6 +10,8 @@ const value = @import("value.zig");
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
+pub const init_f = @embedFile("init.f");
+
 const Value = value.Value;
 const ValueType = value.ValueType;
 
@@ -29,7 +31,6 @@ pub const Forth = struct {
     stack: DataStack = undefined,
     rstack: ReturnStack = undefined,
     dictionary: ValueDictionary = undefined,
-    // reader: reader.ForthReader = undefined,
     memory: [2000]Value = undefined,
     nextFree: i32 = 0,
     nexti: i32 = -999,
@@ -230,6 +231,28 @@ pub const Forth = struct {
         }
     }
 
+    /// Evaluate a (potentially large) buffer of code. Mainly used for
+    /// loading init.f
+    pub fn evalBuffer(self: *Forth, buffer: []const u8) !void {
+        self.words = std.mem.tokenizeAny(u8, buffer, " \t\n\r");
+
+        // inner loop, one word at a time.
+        var word = self.words.next();
+        while (word != null) : (word = self.words.next()) {
+            if (word) |w| {
+                var v = Value.fromString(w) catch |err| {
+                    try self.print("Parse error({s}): {}\n", .{ w, err });
+                    continue;
+                };
+                self.evalValue(v) catch |err| {
+                    try self.print("error: {any}\n", .{err});
+                };
+            }
+        }
+
+        self.words = undefined;
+    }
+
     pub fn define_core(self: *Forth) !void {
         // Screen control
         try self.definePrimitive("emit", &Forth.wordEmit, false);
@@ -330,6 +353,7 @@ pub fn wordInfo(self: *Forth) ForthError!void {
     try self.print("new word: {s}\n", .{self.new_word_name});
     try self.print("new word def: {}\n", .{self.new_word_def});
 }
+
 pub fn wordNext(self: *Forth) ForthError!void {
     var nexti_address: usize = @intFromPtr(&self.nexti);
     var v = Value{ .addr = nexti_address };

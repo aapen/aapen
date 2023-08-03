@@ -2,16 +2,6 @@
 
 A simple Forth written in Zig.
 
-To run, just do the obvious:
-
-    $ zig run main.zig
-
-You will be greeted by a `>>` prompt and you can start typing Forth words:
-
-    >> 10 11 + . cr
-    21
-    >>
-
 Currently the following words are defined:
 
  *  : Define a new secondary word. 
