@@ -49,12 +49,13 @@ pub const Value = union(ValueType) {
         return Value{ .i = iValue };
     }
 
-    pub fn pr(this: *const Value, writer: anytype) !void {
+    pub fn pr(this: *const Value, writer: anytype, hex: bool) !void {
+        var base: u8 = if (hex) 16 else 10;
         try switch (this.*) {
             .f => |v| writer.print("{}", .{v}),
-            .i => |v| writer.print("{}", .{v}),
-            .u => |v| writer.print("{}", .{v}),
-            .l => |v| writer.print("{}", .{v}),
+            .i => |v| std.fmt.formatInt(v, base, .lower, .{}, writer.writer()),
+            .u => |v| std.fmt.formatInt(v, base, .lower, .{}, writer.writer()),
+            .l => |v| std.fmt.formatInt(v, base, .lower, .{}, writer.writer()),
             .s => |v| writer.print("{s}", .{v}),
             .w => |v| writer.print("word: {s}", .{v}),
             .fp => |v| writer.print("fp: {x}", .{v}),

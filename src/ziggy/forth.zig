@@ -49,6 +49,10 @@ pub const Forth = struct {
         try self.console.print(fmt, args);
     }
 
+    pub fn writer(self: *Forth) fbcons.FrameBufferConsole.Writer {
+        return self.console.writer();
+    }
+
     pub fn evalFP(self: *Forth, v: Value) dict.ForthError!void {
         const fp: *fn (self: *Forth) void = v.fp;
         try fp(self);
@@ -249,6 +253,7 @@ pub const Forth = struct {
         try self.definePrimitive("drop", &wordDrop, false);
         try self.definePrimitive("hello", &wordHello, false);
         try self.definePrimitive(".", &wordDot, false);
+        try self.definePrimitive("h.", &wordHexDot, false);
         try self.definePrimitive("cr", &Forth.wordCr, false);
         try self.definePrimitive("+", &wordAdd, false);
         try self.definePrimitive("!i", &wordStoreI32, false);
@@ -262,12 +267,17 @@ pub fn wordHello(self: *Forth) !void {
 
 pub fn wordDot(self: *Forth) !void {
     var v: Value = try self.stack.pop();
-    try v.pr(self);
+    try v.pr(self, false);
+}
+
+pub fn wordHexDot(self: *Forth) !void {
+    var v: Value = try self.stack.pop();
+    try v.pr(self, true);
 }
 
 pub fn wordStack(self: *Forth) !void {
     for (self.stack.items()) |item| {
-        try item.pr(self);
+        try item.pr(self, false);
         try self.print("\n", .{});
     }
 }
