@@ -245,10 +245,11 @@ pub const Forth = struct {
 
         // Basic Forth words.
         try self.definePrimitive("dup", &wordDup, false);
+        try self.definePrimitive("swap", &wordSwap, false);
+        try self.definePrimitive("drop", &wordDrop, false);
         try self.definePrimitive("hello", &wordHello, false);
         try self.definePrimitive(".", &wordDot, false);
         try self.definePrimitive("cr", &Forth.wordCr, false);
-        try self.definePrimitive("swap", &wordSwap, false);
         try self.definePrimitive("+", &wordAdd, false);
         try self.definePrimitive("!i", &wordStoreI32, false);
         try self.definePrimitive("@i", &wordLoadI32, false);
@@ -290,6 +291,11 @@ pub fn wordSwap(self: *Forth) !void {
     const b = try s.pop();
     try s.push(a);
     try s.push(b);
+}
+
+pub fn wordDrop(self: *Forth) !void {
+    var s = &self.stack;
+    _ = try s.pop();
 }
 
 pub fn wordAdd(self: *Forth) !void {
