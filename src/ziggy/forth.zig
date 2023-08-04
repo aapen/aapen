@@ -274,9 +274,11 @@ pub const Forth = struct {
         try self.definePrimitive("value-size", &wordValueSize, false);
 
         // Basic Forth words.
-        try self.definePrimitive("dup", &wordDup, false);
         try self.definePrimitive("swap", &wordSwap, false);
+        try self.definePrimitive("dup", &wordDup, false);
         try self.definePrimitive("drop", &wordDrop, false);
+        try self.definePrimitive("rot", &wordRot, false);
+        try self.definePrimitive("over", &wordOver, false);
         try self.definePrimitive("hello", &wordHello, false);
         try self.definePrimitive(".", &wordDot, false);
         try self.definePrimitive("h.", &wordHexDot, false);
@@ -314,13 +316,6 @@ pub fn wordRStack(self: *Forth) !void {
     }
 }
 
-pub fn wordDup(self: *Forth) !void {
-    var s = &self.stack;
-    const a = try s.pop();
-    try s.push(a);
-    try s.push(a);
-}
-
 pub fn wordSwap(self: *Forth) !void {
     var s = &self.stack;
     const a = try s.pop();
@@ -329,9 +324,35 @@ pub fn wordSwap(self: *Forth) !void {
     try s.push(b);
 }
 
+pub fn wordDup(self: *Forth) !void {
+    var s = &self.stack;
+    const a = try s.pop();
+    try s.push(a);
+    try s.push(a);
+}
+
 pub fn wordDrop(self: *Forth) !void {
     var s = &self.stack;
     _ = try s.pop();
+}
+
+pub fn wordRot(self: *Forth) !void {
+    var s = &self.stack;
+    const w3 = try s.pop();
+    const w2 = try s.pop();
+    const w1 = try s.pop();
+    try s.push(w2);
+    try s.push(w3);
+    try s.push(w1);
+}
+
+pub fn wordOver(self: *Forth) !void {
+    var s = &self.stack;
+    const a = try s.pop();
+    const b = try s.pop();
+    try s.push(b);
+    try s.push(a);
+    try s.push(b);
 }
 
 pub fn wordAdd(self: *Forth) !void {

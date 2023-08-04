@@ -97,7 +97,7 @@ This will actually be the host machine's keyboard in a terminal, proxied to the 
 - [X] Define a ziggish API (@russ)
 - [X] Make the register dance support that API (@mike)
 - [ ] Define forthish words (@russ) for pin operations
-** TODO Finish declarations of other GPIO pins (besides 14 & 15 which are needed for the UART)
+** DONE Finish declarations of other GPIO pins (besides 14 & 15 which are needed for the UART)
 ** DONE Read from UART on RPi3
 - [X] Read and echo characters.
 - [X] Use UART interrupts, don't spinloop
@@ -134,8 +134,14 @@ All other starting characters are ignored.
 Stack ops:
 - [X] swap
 - [X] dup
-- [ ] drop
-- [ ] rot
+- [X] drop
+- [X] rot
+- [X] over
+- [ ] 2swap
+- [ ] 2dup
+- [ ] 2drop
+- [ ] 2rot
+- [ ] 2over
 Arithmetic:
 - [X] +
 - [ ] -
@@ -145,7 +151,7 @@ Arithmetic:
 Output:
 - [X] hello
 - [X] cr
-- [ ] emit
+- [X] emit
 - [X] cls
 System info:
 - [X] ?
@@ -155,8 +161,8 @@ System info:
 - [X] info
 - [X] value-size
 Memory:
-- [ ] !
-- [ ] @
+- [X] !i
+- [X] @i
 
 * Other references
 ** Understanding the ARM ecosystem
