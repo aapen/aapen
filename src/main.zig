@@ -7,6 +7,7 @@ const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
 const forth = @import("ziggy/forth.zig");
 const Forth = forth.Forth;
+const Value = @import("ziggy/value.zig").Value;
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -84,17 +85,8 @@ fn kernelInit() !void {
         try frame_buffer_console.print("Forth eval buffer: {any}\n", .{err});
     };
 
-    const word_fb = try std.fmt.allocPrint(os.page_allocator, ": fb #{x:0>8}# ;", .{@intFromPtr(frame_buffer.base)});
-    defer os.page_allocator.free(word_fb);
-    interpreter.evalBuffer(word_fb) catch |err| {
-        try frame_buffer_console.print("Failed to define frame buffer word: {any}\n", .{err});
-    };
-
-    const word_fb_size = try std.fmt.allocPrint(os.page_allocator, ": fbsize {d} ;", .{frame_buffer.buffer_size});
-    defer os.page_allocator.free(word_fb_size);
-    interpreter.evalBuffer(word_fb_size) catch |err| {
-        try frame_buffer_console.print("Failed to define frame buffer size word: {any}\n", .{err});
-    };
+    supplyAddress("fb", @intFromPtr(frame_buffer.base));
+    supplyUsize("fbsize", frame_buffer.buffer_size);
 
     interpreter.repl() catch |err| {
         try frame_buffer_console.print("REPL error: {any}\n\nABORT.\n", .{err});
@@ -104,6 +96,18 @@ fn kernelInit() !void {
     qemu.exit(0);
 
     unreachable;
+}
+
+fn supplyAddress(name: []const u8, addr: usize) void {
+    interpreter.defineVariable(name, Value{ .addr = addr }) catch |err| {
+        try frame_buffer_console.print("Failed to define {s}: {any}\n", .{ name, err });
+    };
+}
+
+fn supplyUsize(name: []const u8, sz: usize) void {
+    interpreter.defineVariable(name, Value{ .sz = sz }) catch |err| {
+        try frame_buffer_console.print("Failed to define {s}: {any}\n", .{ name, err });
+    };
 }
 
 fn diagnostics() !void {

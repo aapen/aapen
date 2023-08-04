@@ -162,14 +162,22 @@ pub const Forth = struct {
         self.putc(0x0c);
     }
 
+    fn define(self: *Forth, name: []const u8, v: Value, immediate: bool) !void {
+        try self.dictionary.put(name, v, immediate);
+    }
+
     fn definePrimitive(self: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
         // try self.print("define word {s} -> {*}\n", .{ name, fp });
-        try self.dictionary.put(name, Value{ .fp = @intFromPtr(fp) }, immediate);
+        try self.define(name, Value{ .fp = @intFromPtr(fp) }, immediate);
     }
 
     fn defineSecondary(self: *Forth, name: []const u8, address: i32) !void {
         // try self.print("define secondary {s} {}\n", .{ name, address });
-        try self.dictionary.put(name, Value{ .call = address }, false);
+        try self.define(name, Value{ .call = address }, false);
+    }
+
+    pub fn defineVariable(self: *Forth, name: []const u8, v: Value) !void {
+        try self.define(name, v, false);
     }
 
     fn emitPrompt(self: *Forth, prompt: []const u8) void {
