@@ -137,11 +137,11 @@ Stack ops:
 - [X] drop
 - [X] rot
 - [X] over
-- [ ] 2swap
-- [ ] 2dup
-- [ ] 2drop
-- [ ] 2rot
-- [ ] 2over
+- [X] 2swap
+- [X] 2dup
+- [X] 2drop
+- [X] 2rot
+- [X] 2over
 Arithmetic:
 - [X] +
 - [ ] -

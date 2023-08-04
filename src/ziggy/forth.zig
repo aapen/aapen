@@ -275,10 +275,16 @@ pub const Forth = struct {
 
         // Basic Forth words.
         try self.definePrimitive("swap", &wordSwap, false);
+        try self.definePrimitive("2swap", &word2Swap, false);
         try self.definePrimitive("dup", &wordDup, false);
+        try self.definePrimitive("2dup", &word2Dup, false);
         try self.definePrimitive("drop", &wordDrop, false);
+        try self.definePrimitive("2drop", &word2Drop, false);
         try self.definePrimitive("rot", &wordRot, false);
+        try self.definePrimitive("2rot", &word2Rot, false);
         try self.definePrimitive("over", &wordOver, false);
+        try self.definePrimitive("2over", &word2Over, false);
+
         try self.definePrimitive("hello", &wordHello, false);
         try self.definePrimitive(".", &wordDot, false);
         try self.definePrimitive("h.", &wordHexDot, false);
@@ -316,6 +322,7 @@ pub fn wordRStack(self: *Forth) !void {
     }
 }
 
+/// w1 w2 -- w2 w1
 pub fn wordSwap(self: *Forth) !void {
     var s = &self.stack;
     const a = try s.pop();
@@ -324,6 +331,20 @@ pub fn wordSwap(self: *Forth) !void {
     try s.push(b);
 }
 
+/// w1 w2 w3 w4 -- w3 w4 w1 w2
+pub fn word2Swap(self: *Forth) !void {
+    var s = &self.stack;
+    var w4 = try s.pop();
+    var w3 = try s.pop();
+    var w2 = try s.pop();
+    var w1 = try s.pop();
+    try s.push(w3);
+    try s.push(w4);
+    try s.push(w1);
+    try s.push(w2);
+}
+
+/// w -- w w
 pub fn wordDup(self: *Forth) !void {
     var s = &self.stack;
     const a = try s.pop();
@@ -331,11 +352,31 @@ pub fn wordDup(self: *Forth) !void {
     try s.push(a);
 }
 
+/// w1 w2 -- w1 w2 w1 w2
+pub fn word2Dup(self: *Forth) !void {
+    var s = &self.stack;
+    const w2 = try s.pop();
+    const w1 = try s.pop();
+    try s.push(w1);
+    try s.push(w2);
+    try s.push(w1);
+    try s.push(w2);
+}
+
+/// w1 --
 pub fn wordDrop(self: *Forth) !void {
     var s = &self.stack;
     _ = try s.pop();
 }
 
+/// w1 w2 --
+pub fn word2Drop(self: *Forth) !void {
+    var s = &self.stack;
+    _ = try s.pop();
+    _ = try s.pop();
+}
+
+/// w1 w2 w3 -- w2 w3 w1
 pub fn wordRot(self: *Forth) !void {
     var s = &self.stack;
     const w3 = try s.pop();
@@ -346,6 +387,24 @@ pub fn wordRot(self: *Forth) !void {
     try s.push(w1);
 }
 
+/// w1 w2 w3 w4 w5 w6 -- w3 w4 w5 w6 w1 w2
+pub fn word2Rot(self: *Forth) !void {
+    var s = &self.stack;
+    const w6 = try s.pop();
+    const w5 = try s.pop();
+    const w4 = try s.pop();
+    const w3 = try s.pop();
+    const w2 = try s.pop();
+    const w1 = try s.pop();
+    try s.push(w3);
+    try s.push(w4);
+    try s.push(w5);
+    try s.push(w6);
+    try s.push(w1);
+    try s.push(w2);
+}
+
+/// w1 w2 -- w1 w2 w1
 pub fn wordOver(self: *Forth) !void {
     var s = &self.stack;
     const a = try s.pop();
@@ -355,6 +414,22 @@ pub fn wordOver(self: *Forth) !void {
     try s.push(b);
 }
 
+/// w1 w2 w3 w4 -- w1 w2 w3 w4 w1 w2
+pub fn word2Over(self: *Forth) !void {
+    var s = &self.stack;
+    const w4 = try s.pop();
+    const w3 = try s.pop();
+    const w2 = try s.pop();
+    const w1 = try s.pop();
+    try s.push(w1);
+    try s.push(w2);
+    try s.push(w3);
+    try s.push(w4);
+    try s.push(w1);
+    try s.push(w2);
+}
+
+/// n n -- n
 pub fn wordAdd(self: *Forth) !void {
     var s = &self.stack;
     const a = try s.pop();
