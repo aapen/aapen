@@ -84,6 +84,20 @@ fn kernelInit() !void {
         try frame_buffer_console.print("Forth eval buffer: {any}\n", .{err});
     };
 
+    const word_fb = try std.fmt.allocPrint(os.page_allocator, ": fb #{x:0>8}# ;", .{@intFromPtr(frame_buffer.base)});
+    defer os.page_allocator.free(word_fb);
+    interpreter.evalBuffer(word_fb) catch |err| {
+        try frame_buffer_console.print("Failed to define frame buffer word: {any}\n", .{err});
+    };
+
+    frame_buffer_console.print("{d}\n", .{frame_buffer.buffer_size}) catch {};
+
+    const word_fb_size = try std.fmt.allocPrint(os.page_allocator, ": fbsize {d} ;", .{frame_buffer.buffer_size});
+    defer os.page_allocator.free(word_fb_size);
+    interpreter.evalBuffer(word_fb_size) catch |err| {
+        try frame_buffer_console.print("Failed to define frame buffer size word: {any}\n", .{err});
+    };
+
     interpreter.repl() catch |err| {
         try frame_buffer_console.print("REPL error: {any}\n\nABORT.\n", .{err});
     };

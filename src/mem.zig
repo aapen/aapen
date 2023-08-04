@@ -62,7 +62,7 @@ fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
 
     const aligned_start = std.mem.alignForward(usize, @intFromPtr(self.first_available), @as(usize, 1) << @as(Allocator.Log2Align, @intCast(ptr_align)));
     const end = aligned_start + len;
-    const aligned_end = std.mem.alignForward(usize, end, 4);
+    const aligned_end = std.mem.alignForward(usize, end, 8);
 
     self.first_available = @ptrFromInt(aligned_end);
 

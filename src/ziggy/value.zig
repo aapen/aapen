@@ -80,6 +80,12 @@ pub const Value = union(ValueType) {
             .i => |v| return Value{
                 .i = (v + other.*.i),
             },
+            .u => |v| return Value{
+                .u = (v + other.*.u),
+            },
+            .addr => |v| return Value{
+                .addr = (v + other.*.addr),
+            },
             else => return ForthError.BadOperation,
         }
     }
