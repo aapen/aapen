@@ -142,8 +142,32 @@ const GPIOPin = struct {
 };
 
 pub const pins = struct {
+    const Pin2 = GPIOPin.define(3, 2);
+    const Pin3 = GPIOPin.define(5, 3);
+    const Pin4 = GPIOPin.define(7, 4);
+    const Pin5 = GPIOPin.define(29, 5);
+    const Pin6 = GPIOPin.define(31, 6);
+    const Pin7 = GPIOPin.define(26, 7);
+    const Pin8 = GPIOPin.define(24, 8);
+    const Pin9 = GPIOPin.define(21, 9);
+    const Pin10 = GPIOPin.define(19, 10);
+    const Pin11 = GPIOPin.define(23, 11);
+    const Pin12 = GPIOPin.define(32, 12);
+    const Pin13 = GPIOPin.define(33, 13);
     const Pin14 = GPIOPin.define(8, 14);
     const Pin15 = GPIOPin.define(10, 15);
+    const Pin16 = GPIOPin.define(36, 16);
+    const Pin17 = GPIOPin.define(11, 17);
+    const Pin18 = GPIOPin.define(12, 18);
+    const Pin19 = GPIOPin.define(35, 19);
+    const Pin20 = GPIOPin.define(38, 20);
+    const Pin21 = GPIOPin.define(40, 21);
+    const Pin22 = GPIOPin.define(15, 22);
+    const Pin23 = GPIOPin.define(16, 23);
+    const Pin24 = GPIOPin.define(18, 24);
+    const Pin25 = GPIOPin.define(22, 25);
+    const Pin26 = GPIOPin.define(37, 26);
+    const Pin27 = GPIOPin.define(13, 27);
 };
 
 //

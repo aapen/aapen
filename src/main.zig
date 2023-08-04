@@ -90,8 +90,6 @@ fn kernelInit() !void {
         try frame_buffer_console.print("Failed to define frame buffer word: {any}\n", .{err});
     };
 
-    frame_buffer_console.print("{d}\n", .{frame_buffer.buffer_size}) catch {};
-
     const word_fb_size = try std.fmt.allocPrint(os.page_allocator, ": fbsize {d} ;", .{frame_buffer.buffer_size});
     defer os.page_allocator.free(word_fb_size);
     interpreter.evalBuffer(word_fb_size) catch |err| {
