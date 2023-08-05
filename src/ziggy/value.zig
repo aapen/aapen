@@ -9,6 +9,7 @@ pub const ValueType = enum {
     i,
     u,
     l,
+    ch,
     s,
     w,
     fp,
@@ -22,6 +23,7 @@ pub const Value = union(ValueType) {
     i: i32,
     u: u32,
     l: u64,
+    ch: u8,
     s: []const u8,
     w: []const u8,
     fp: usize,
@@ -32,12 +34,14 @@ pub const Value = union(ValueType) {
     pub fn fromString(token: []const u8) ForthError!Value {
         if (token[0] == '"') {
             return Value{ .s = token[1..(token.len - 1)] };
-        } else if (token[0] == '#') {
-            var sNumber = token[1..(token.len - 1)];
-            const address: usize = std.fmt.parseInt(usize, sNumber, 16) catch {
+        } else if (token[0] == '\\') {
+            return Value{ .ch = token[1] };
+        } else if (token[0] == '0' and token[1] == 'x') {
+            var sNumber = token[2..];
+            const iValue = std.fmt.parseInt(i32, sNumber, 16) catch {
                 return ForthError.ParseError;
             };
-            return Value{ .addr = address };
+            return Value{ .i = iValue };
         }
 
         var iValue = std.fmt.parseInt(i32, token, 10) catch {
@@ -56,6 +60,7 @@ pub const Value = union(ValueType) {
             .i => |v| std.fmt.formatInt(v, base, .lower, .{}, writer.writer()),
             .u => |v| std.fmt.formatInt(v, base, .lower, .{}, writer.writer()),
             .l => |v| std.fmt.formatInt(v, base, .lower, .{}, writer.writer()),
+            .ch => |v| writer.print("\\{c}", .{v}),
             .s => |v| writer.print("{s}", .{v}),
             .w => |v| writer.print("word: {s}", .{v}),
             .fp => |v| writer.print("fp: {x}", .{v}),
@@ -92,9 +97,10 @@ pub const Value = union(ValueType) {
 
     pub fn asChar(this: *const Value) !u8 {
         return switch (this.*) {
-            .i => |v| @truncate(@as(u32, @bitCast(v))),
-            .l => |v| @truncate(v),
-            .u => |v| @truncate(v),
+            .i  => |v| @truncate(@as(u32, @bitCast(v))),
+            .l  => |v| @truncate(v),
+            .u  => |v| @truncate(v),
+            .ch => |v| v,
             else => ForthError.BadOperation,
         };
     }
