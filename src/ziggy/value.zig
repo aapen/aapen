@@ -95,6 +95,31 @@ pub const Value = union(ValueType) {
         }
     }
 
+    pub fn sub(this: *const Value, other: *const Value) !Value {
+        var vt: ValueType = this.*;
+        var ot: ValueType = other.*;
+
+        if (vt != ot) {
+            return ForthError.BadOperation;
+        }
+
+        switch (this.*) {
+            .f => |v| return Value{
+                .f = (v - other.*.f),
+            },
+            .i => |v| return Value{
+                .i = (v - other.*.i),
+            },
+            .u => |v| return Value{
+                .u = (v - other.*.u),
+            },
+            .addr => |v| return Value{
+                .addr = (v - other.*.addr),
+            },
+            else => return ForthError.BadOperation,
+        }
+    }
+
     pub fn asChar(this: *const Value) !u8 {
         return switch (this.*) {
             .i  => |v| @truncate(@as(u32, @bitCast(v))),

@@ -25,7 +25,7 @@ pub var board = bsp.mailbox.BoardInfo{};
 pub var heap = mem{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
-pub var interpreter: Forth = Forth{ .console = &frame_buffer_console };
+pub var interpreter: Forth = Forth{};
 
 fn kernelInit() !void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
@@ -72,17 +72,8 @@ fn kernelInit() !void {
 
     bsp.usb.init();
 
-    interpreter.init(os.page_allocator) catch |err| {
+    interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         try frame_buffer_console.print("Forth init: {any}\n", .{err});
-    };
-
-    interpreter.define_core() catch |err| {
-        try frame_buffer_console.print("Forth define core: {any}\n", .{err});
-    };
-
-    // interpret embedded startup file
-    interpreter.evalBuffer(forth.init_f) catch |err| {
-        try frame_buffer_console.print("Forth eval buffer: {any}\n", .{err});
     };
 
     supplyAddress("fb", @intFromPtr(frame_buffer.base));

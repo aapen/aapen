@@ -6,6 +6,7 @@ const fbcons = @import("../fbcons.zig");
 const stack = @import("stack.zig");
 const dict = @import("dictionary.zig");
 const value = @import("value.zig");
+const core = @import("core.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -26,7 +27,7 @@ pub const Forth = struct {
     const max_line_len = 256;
 
     allocator: Allocator = undefined,
-    console: *fbcons.FrameBufferConsole,
+    console: *fbcons.FrameBufferConsole = undefined,
 
     stack: DataStack = undefined,
     rstack: ReturnStack = undefined,
@@ -37,13 +38,16 @@ pub const Forth = struct {
     composing: bool = false,
     line_buffer: [max_line_len:0]u8 = undefined,
     words: std.mem.TokenIterator(u8, std.mem.DelimiterType.any) = undefined,
-    new_word_name: []const u8 = undefined,
+    new_word_name: [max_line_len:0]u8 = undefined,
     new_word_def: i32 = -888,
 
-    pub fn init(self: *Forth, allocator: Allocator) !void {
+    pub fn init(self: *Forth, allocator: Allocator, console: *fbcons.FrameBufferConsole) !void {
+        self.console = console;
         self.stack = DataStack.init(allocator);
         self.rstack = ReturnStack.init(allocator);
         self.dictionary = ValueDictionary.init(allocator);
+        try core.defineCore(self);
+        try self.evalBuffer(init_f);
     }
 
     pub fn print(self: *Forth, comptime fmt: []const u8, args: anytype) !void {
@@ -122,56 +126,16 @@ pub const Forth = struct {
             },
         }
     }
-
-    pub fn wordColon(self: *Forth) !void {
-        // try self.print("colon:\n", .{});
-        self.new_word_name = self.words.next() orelse return ForthError.WordReadError;
-        // @memset(&self.newWordName, 0);
-        // _ = try self.reader.getWord(&self.newWordName);
-        self.composing = true;
-        self.new_word_def = self.nextFree;
-    }
-
-    pub fn wordSemi(self: *Forth) !void {
-        // try self.print("***semi:\n", .{});
-        self.memory[@intCast(self.nextFree)] = Value{
-            //.fp = @ptrToInt(&wordReturn),
-            .fp = @intFromPtr(&wordReturn),
-        };
-        self.nextFree += 1;
-        // try self.print("semi: {s} {any}\n", .{ self.new_word_name, self.new_word_def });
-        try self.defineSecondary(self.new_word_name, self.new_word_def);
-        self.composing = false;
-        // @memset(&self.new_word_name, 0);
-        self.new_word_def = -888;
-    }
-
-    // a -- ()
-    pub fn wordEmit(self: *Forth) !void {
-        var s = &self.stack;
-        const a = try s.pop();
-        var ch = try a.asChar();
-        self.console.emit(ch);
-    }
-
-    pub fn wordCr(self: *Forth) ForthError!void {
-        self.putc(0x0a);
-    }
-
-    pub fn wordClearScreen(self: *Forth) !void {
-        self.putc(0x0c);
-    }
-
     fn define(self: *Forth, name: []const u8, v: Value, immediate: bool) !void {
         try self.dictionary.put(name, v, immediate);
     }
 
-    fn definePrimitive(self: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
+    pub fn definePrimitive(self: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
         // try self.print("define word {s} -> {*}\n", .{ name, fp });
         try self.define(name, Value{ .fp = @intFromPtr(fp) }, immediate);
     }
 
-    fn defineSecondary(self: *Forth, name: []const u8, address: i32) !void {
+    pub fn defineSecondary(self: *Forth, name: []const u8, address: i32) !void {
         // try self.print("define secondary {s} {}\n", .{ name, address });
         try self.define(name, Value{ .call = address }, false);
     }
@@ -206,13 +170,13 @@ pub const Forth = struct {
         return i;
     }
 
-    fn getc(self: *Forth) u8 {
+    pub fn getc(self: *Forth) u8 {
         _ = self;
         var ch = bsp.io.receive();
         return if (ch == '\r') '\n' else ch;
     }
 
-    fn putc(self: *Forth, ch: u8) void {
+    pub fn putc(self: *Forth, ch: u8) void {
         bsp.io.send(ch);
         self.console.emit(ch);
     }
@@ -220,7 +184,7 @@ pub const Forth = struct {
     pub fn repl(self: *Forth) !void {
         // outer loop, one line at a time.
         while (true) {
-            self.emitPrompt("READY.\n");
+            self.emitPrompt("OK>> ");
             var line_len: usize = self.readline(&self.line_buffer) catch 0;
 
             self.words = std.mem.tokenizeAny(u8, self.line_buffer[0..line_len], " \t\n\r");
@@ -262,240 +226,7 @@ pub const Forth = struct {
 
         self.words = undefined;
     }
-
-    pub fn define_core(self: *Forth) !void {
-        // Screen control
-        try self.definePrimitive("emit", &Forth.wordEmit, false);
-        try self.definePrimitive("cls", &Forth.wordClearScreen, false);
-
-        // Secondary definition words.
-        try self.definePrimitive(":", &Forth.wordColon, false);
-        try self.definePrimitive(";", &Forth.wordSemi, true);
-
-        // Debug and inspection words.
-        try self.definePrimitive("stack", &wordStack, false);
-        try self.definePrimitive("?", &wordStack, false);
-        try self.definePrimitive("??", &wordDictionary, false);
-        try self.definePrimitive("rstack", &wordRStack, false);
-        try self.definePrimitive("info", &wordInfo, true);
-        try self.definePrimitive("ip", &wordNext, false);
-        try self.definePrimitive("value-size", &wordValueSize, false);
-
-        // Basic Forth words.
-        try self.definePrimitive("swap", &wordSwap, false);
-        try self.definePrimitive("2swap", &word2Swap, false);
-        try self.definePrimitive("dup", &wordDup, false);
-        try self.definePrimitive("2dup", &word2Dup, false);
-        try self.definePrimitive("drop", &wordDrop, false);
-        try self.definePrimitive("2drop", &word2Drop, false);
-        try self.definePrimitive("rot", &wordRot, false);
-        try self.definePrimitive("2rot", &word2Rot, false);
-        try self.definePrimitive("over", &wordOver, false);
-        try self.definePrimitive("2over", &word2Over, false);
-
-        try self.definePrimitive("hello", &wordHello, false);
-        try self.definePrimitive(".", &wordDot, false);
-        try self.definePrimitive("h.", &wordHexDot, false);
-        try self.definePrimitive("cr", &Forth.wordCr, false);
-        try self.definePrimitive("+", &wordAdd, false);
-        try self.definePrimitive("!i", &wordStoreI32, false);
-        try self.definePrimitive("@i", &wordLoadI32, false);
-    }
 };
-
-pub fn wordHello(self: *Forth) !void {
-    try self.print("hello world\n", .{});
-}
-
-pub fn wordDot(self: *Forth) !void {
-    var v: Value = try self.stack.pop();
-    try v.pr(self, false);
-}
-
-pub fn wordHexDot(self: *Forth) !void {
-    var v: Value = try self.stack.pop();
-    try v.pr(self, true);
-}
-
-pub fn wordStack(self: *Forth) !void {
-    for (self.stack.items()) |item| {
-        try item.pr(self, false);
-        try self.print("\n", .{});
-    }
-}
-
-pub fn wordRStack(self: *Forth) !void {
-    for (self.rstack.items()) |item| {
-        try self.print("{}\n", .{item});
-    }
-}
-
-/// w1 w2 -- w2 w1
-pub fn wordSwap(self: *Forth) !void {
-    var s = &self.stack;
-    const a = try s.pop();
-    const b = try s.pop();
-    try s.push(a);
-    try s.push(b);
-}
-
-/// w1 w2 w3 w4 -- w3 w4 w1 w2
-pub fn word2Swap(self: *Forth) !void {
-    var s = &self.stack;
-    var w4 = try s.pop();
-    var w3 = try s.pop();
-    var w2 = try s.pop();
-    var w1 = try s.pop();
-    try s.push(w3);
-    try s.push(w4);
-    try s.push(w1);
-    try s.push(w2);
-}
-
-/// w -- w w
-pub fn wordDup(self: *Forth) !void {
-    var s = &self.stack;
-    const a = try s.pop();
-    try s.push(a);
-    try s.push(a);
-}
-
-/// w1 w2 -- w1 w2 w1 w2
-pub fn word2Dup(self: *Forth) !void {
-    var s = &self.stack;
-    const w2 = try s.pop();
-    const w1 = try s.pop();
-    try s.push(w1);
-    try s.push(w2);
-    try s.push(w1);
-    try s.push(w2);
-}
-
-/// w1 --
-pub fn wordDrop(self: *Forth) !void {
-    var s = &self.stack;
-    _ = try s.pop();
-}
-
-/// w1 w2 --
-pub fn word2Drop(self: *Forth) !void {
-    var s = &self.stack;
-    _ = try s.pop();
-    _ = try s.pop();
-}
-
-/// w1 w2 w3 -- w2 w3 w1
-pub fn wordRot(self: *Forth) !void {
-    var s = &self.stack;
-    const w3 = try s.pop();
-    const w2 = try s.pop();
-    const w1 = try s.pop();
-    try s.push(w2);
-    try s.push(w3);
-    try s.push(w1);
-}
-
-/// w1 w2 w3 w4 w5 w6 -- w3 w4 w5 w6 w1 w2
-pub fn word2Rot(self: *Forth) !void {
-    var s = &self.stack;
-    const w6 = try s.pop();
-    const w5 = try s.pop();
-    const w4 = try s.pop();
-    const w3 = try s.pop();
-    const w2 = try s.pop();
-    const w1 = try s.pop();
-    try s.push(w3);
-    try s.push(w4);
-    try s.push(w5);
-    try s.push(w6);
-    try s.push(w1);
-    try s.push(w2);
-}
-
-/// w1 w2 -- w1 w2 w1
-pub fn wordOver(self: *Forth) !void {
-    var s = &self.stack;
-    const a = try s.pop();
-    const b = try s.pop();
-    try s.push(b);
-    try s.push(a);
-    try s.push(b);
-}
-
-/// w1 w2 w3 w4 -- w1 w2 w3 w4 w1 w2
-pub fn word2Over(self: *Forth) !void {
-    var s = &self.stack;
-    const w4 = try s.pop();
-    const w3 = try s.pop();
-    const w2 = try s.pop();
-    const w1 = try s.pop();
-    try s.push(w1);
-    try s.push(w2);
-    try s.push(w3);
-    try s.push(w4);
-    try s.push(w1);
-    try s.push(w2);
-}
-
-/// n n -- n
-pub fn wordAdd(self: *Forth) !void {
-    var s = &self.stack;
-    const a = try s.pop();
-    const b = try s.pop();
-    try s.push(try a.add(&b));
-}
-
-pub fn wordReturn(self: *Forth) ForthError!void {
-    self.nexti = -999;
-}
-
-pub fn wordDictionary(self: *Forth) ForthError!void {
-    try self.dictionary.pr(self);
-}
-
-pub fn wordInfo(self: *Forth) ForthError!void {
-    try self.print("nexti: {}\n", .{self.nexti});
-    try self.print("composing: {}\n", .{self.composing});
-    try self.print("new word: {s}\n", .{self.new_word_name});
-    try self.print("new word def: {}\n", .{self.new_word_def});
-}
-
-pub fn wordNext(self: *Forth) ForthError!void {
-    var nexti_address: usize = @intFromPtr(&self.nexti);
-    var v = Value{ .addr = nexti_address };
-    try self.stack.push(v);
-}
-
-pub fn wordLoadI32(self: *Forth) !void {
-    const addressValue = try self.stack.pop();
-    if (addressValue != ValueType.addr) {
-        return ForthError.BadOperation;
-    }
-    const p: *i32 = @ptrFromInt(addressValue.addr);
-    const v = Value{ .i = p.* };
-    try self.stack.push(v);
-}
-
-pub fn wordStoreI32(self: *Forth) !void {
-    const addressValue = try self.stack.pop();
-    const v = try self.stack.pop();
-
-    if (addressValue != ValueType.addr) {
-        return ForthError.BadOperation;
-    }
-
-    if (v != ValueType.i) {
-        return ForthError.BadOperation;
-    }
-    const p: *i32 = @ptrFromInt(addressValue.addr);
-    p.* = v.i;
-}
-
-pub fn wordValueSize(self: *Forth) ForthError!void {
-    const l: usize = @sizeOf(Value);
-    try self.print("size of value: {d}\n", .{l});
-    try self.stack.push(Value{ .sz = l });
-}
 
 pub fn inner(self: *Forth, address: i32) ForthError!void {
     try self.rstack.push(self.nexti);
