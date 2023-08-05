@@ -23,6 +23,8 @@ const ValueDictionary = dict.Dictionary(Value);
 
 const WordFunction = *const fn (self: *Forth) ForthError!void;
 
+const ForthTokenIterator = @import("parser.zig").ForthTokenIterator;
+
 pub const Forth = struct {
     const max_line_len = 256;
 
@@ -37,7 +39,7 @@ pub const Forth = struct {
     nexti: i32 = -999,
     composing: bool = false,
     line_buffer: [max_line_len:0]u8 = undefined,
-    words: std.mem.TokenIterator(u8, std.mem.DelimiterType.any) = undefined,
+    words: ForthTokenIterator = undefined,
     new_word_name: [max_line_len:0]u8 = undefined,
     new_word_def: i32 = -888,
 
@@ -187,7 +189,7 @@ pub const Forth = struct {
             self.emitPrompt("OK>> ");
             var line_len: usize = self.readline(&self.line_buffer) catch 0;
 
-            self.words = std.mem.tokenizeAny(u8, self.line_buffer[0..line_len], " \t\n\r");
+            self.words = ForthTokenIterator.init(self.line_buffer[0..line_len]);
 
             // inner loop, one word at a time.
             var word = self.words.next();
@@ -208,7 +210,7 @@ pub const Forth = struct {
     /// Evaluate a (potentially large) buffer of code. Mainly used for
     /// loading init.f
     pub fn evalBuffer(self: *Forth, buffer: []const u8) !void {
-        self.words = std.mem.tokenizeAny(u8, buffer, " \t\n\r");
+        self.words = ForthTokenIterator.init(buffer);
 
         // inner loop, one word at a time.
         var word = self.words.next();
