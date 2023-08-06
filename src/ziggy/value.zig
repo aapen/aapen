@@ -38,10 +38,10 @@ pub const Value = union(ValueType) {
             return Value{ .ch = token[1] };
         } else if (token[0] == '0' and token[1] == 'x') {
             var sNumber = token[2..];
-            const iValue = std.fmt.parseInt(i32, sNumber, 16) catch {
+            const uValue = std.fmt.parseInt(u32, sNumber, 16) catch {
                 return ForthError.ParseError;
             };
-            return Value{ .i = iValue };
+            return Value{ .u = uValue };
         }
 
         var iValue = std.fmt.parseInt(i32, token, 10) catch {
@@ -122,9 +122,9 @@ pub const Value = union(ValueType) {
 
     pub fn asChar(this: *const Value) !u8 {
         return switch (this.*) {
-            .i  => |v| @truncate(@as(u32, @bitCast(v))),
-            .l  => |v| @truncate(v),
-            .u  => |v| @truncate(v),
+            .i => |v| @truncate(@as(u32, @bitCast(v))),
+            .l => |v| @truncate(v),
+            .u => |v| @truncate(v),
             .ch => |v| v,
             else => ForthError.BadOperation,
         };
@@ -144,15 +144,17 @@ test "parsing" {
     var f = try Value.fromString("12.345");
     try expectEqual(f.f, 12.345);
 
-    var s = try Value.fromString("\"cake\"");
-    try expectEqualString(s.s, "cake");
+    var s1 = try Value.fromString("\"cake\"");
+    try expectEqualString(s1.s, "cake");
 
-    var addr = try Value.fromString("#cafebabe#");
-    try expectEqual(addr.addr, 0xcafebabe);
+    var s2 = try Value.fromString("\"bagel with cream cheese!\"");
+    try expectEqualString(s2.s, "bagel with cream cheese!");
+
+    var h = try Value.fromString("0xdeadbeef");
+    try expectEqual(h.u, 0xdeadbeef);
 
     var word = try Value.fromString("an-atom");
     try expectEqualString(word.w, "an-atom");
 
-    var badA = Value.fromString("#123FGHIJKL99#");
-    try std.testing.expectError(ForthError.ParseError, badA);
+    try std.testing.expectError(ForthError.ParseError, Value.fromString("0x123FGHIJKL99"));
 }
