@@ -3,19 +3,23 @@ const Allocator = std.mem.Allocator;
 
 const bsp = @import("../bsp.zig");
 const fbcons = @import("../fbcons.zig");
+const Readline = @import("../readline.zig");
 const stack = @import("stack.zig");
 const dict = @import("dictionary.zig");
 const value = @import("value.zig");
 const core = @import("core.zig");
+const buffer = @import("buffer.zig");
+
+const init_f = @embedFile("init.f");
+var initBuffer = buffer.BufferSource{};
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
-pub const init_f = @embedFile("init.f");
-
 const Value = value.Value;
 const ValueType = value.ValueType;
 
+const InputStack = stack.Stack(*Readline);
 const DataStack = stack.Stack(Value);
 const ReturnStack = stack.Stack(i32);
 
@@ -33,6 +37,7 @@ pub const Forth = struct {
 
     stack: DataStack = undefined,
     rstack: ReturnStack = undefined,
+    input: InputStack = undefined,
     dictionary: ValueDictionary = undefined,
     memory: [2000]Value = undefined,
     nextFree: i32 = 0,
@@ -49,7 +54,14 @@ pub const Forth = struct {
         self.rstack = ReturnStack.init(allocator);
         self.dictionary = ValueDictionary.init(allocator);
         try core.defineCore(self);
-        try self.evalBuffer(init_f);
+
+        initBuffer.init(init_f);
+        var initBufferReader = try buffer.createReader(allocator, &initBuffer);
+        var consoleReader = try fbcons.createReader(allocator, console);
+
+        self.input = InputStack.init(allocator);
+        try self.pushSource(consoleReader);
+        try self.pushSource(initBufferReader);
     }
 
     pub fn print(self: *Forth, comptime fmt: []const u8, args: anytype) !void {
@@ -146,53 +158,31 @@ pub const Forth = struct {
         try self.define(name, v, false);
     }
 
-    fn emitPrompt(self: *Forth, prompt: []const u8) void {
-        self.console.emitString(prompt);
+    fn readline(self: *Forth) !usize {
+        var source = try self.input.peek();
+        return source.read("OK>> ", &self.line_buffer);
     }
 
-    fn readline(self: *Forth, buffer: []u8) !usize {
-        var i: usize = 0;
-        var ch: u8 = 0;
-
-        while (i < (buffer.len - 1) and !newline(ch)) {
-            ch = self.getc();
-            self.putc(ch);
-
-            switch (ch) {
-                0x7f => if (i > 0) {
-                    i -= 1;
-                },
-                else => {
-                    buffer[i] = ch;
-                    i += 1;
-                },
-            }
-            buffer[i] = 0;
+    fn popSource(self: *Forth) !void {
+        if (self.input.items().len > 1) {
+            _ = try self.input.pop();
         }
-        return i;
     }
 
-    pub fn getc(self: *Forth) u8 {
-        _ = self;
-        var ch = bsp.io.receive();
-        return if (ch == '\r') '\n' else ch;
-    }
-
-    pub fn char_available(self: *Forth) bool {
-        _ = self;
-        return bsp.io.byte_available();
-    }
-
-    pub fn putc(self: *Forth, ch: u8) void {
-        bsp.io.send(ch);
-        self.console.emit(ch);
+    fn pushSource(self: *Forth, rl: *Readline) !void {
+        try self.input.push(rl);
     }
 
     pub fn repl(self: *Forth) !void {
         // outer loop, one line at a time.
         while (true) {
-            self.emitPrompt("OK>> ");
-            var line_len: usize = self.readline(&self.line_buffer) catch 0;
+            var line_len = try self.readline();
+
+            if (line_len == 0) {
+                // source exhausted
+                try self.popSource();
+                continue;
+            }
 
             self.words = ForthTokenIterator.init(self.line_buffer[0..line_len]);
 
@@ -211,28 +201,6 @@ pub const Forth = struct {
             }
         }
     }
-
-    /// Evaluate a (potentially large) buffer of code. Mainly used for
-    /// loading init.f
-    pub fn evalBuffer(self: *Forth, buffer: []const u8) !void {
-        self.words = ForthTokenIterator.init(buffer);
-
-        // inner loop, one word at a time.
-        var word = self.words.next();
-        while (word != null) : (word = self.words.next()) {
-            if (word) |w| {
-                var v = Value.fromString(w) catch |err| {
-                    try self.print("Parse error({s}): {}\n", .{ w, err });
-                    continue;
-                };
-                self.evalValue(v) catch |err| {
-                    try self.print("error: {any}\n", .{err});
-                };
-            }
-        }
-
-        self.words = undefined;
-    }
 };
 
 pub fn inner(self: *Forth, address: i32) ForthError!void {
@@ -249,8 +217,4 @@ pub fn inner(self: *Forth, address: i32) ForthError!void {
         };
     }
     self.nexti = try self.rstack.pop();
-}
-
-fn newline(ch: u8) bool {
-    return ch == '\r' or ch == '\n';
 }

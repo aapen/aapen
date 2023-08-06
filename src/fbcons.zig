@@ -1,5 +1,7 @@
 const std = @import("std");
 const bsp = @import("bsp.zig");
+const Allocator = std.mem.Allocator;
+const Readline = @import("readline.zig");
 
 /// display console
 pub const FrameBufferConsole = struct {
@@ -123,4 +125,63 @@ pub const FrameBufferConsole = struct {
     pub fn print(self: *FrameBufferConsole, comptime fmt: []const u8, args: anytype) !void {
         try self.writer().print(fmt, args);
     }
+
+    pub fn readLine(self: *FrameBufferConsole, prompt: []const u8, buffer: []u8) usize {
+        var i: usize = 0;
+        var ch: u8 = 0;
+        var echo: bool = true;
+
+        self.emitString(prompt);
+
+        while (i < (buffer.len - 1) and !newline(ch)) {
+            echo = true;
+            ch = self.getc();
+
+            switch (ch) {
+                0x7f => if (i > 0) {
+                    i -= 1;
+                } else {
+                    echo = false;
+                },
+                else => {
+                    buffer[i] = ch;
+                    i += 1;
+                },
+            }
+            if (echo) {
+                self.putc(ch);
+            }
+            buffer[i] = 0;
+        }
+        return i;
+    }
+
+    pub fn getc(self: *FrameBufferConsole) u8 {
+        _ = self;
+        var ch = bsp.io.receive();
+        return if (ch == '\r') '\n' else ch;
+    }
+
+    pub fn putc(self: *FrameBufferConsole, ch: u8) void {
+        bsp.io.send(ch);
+        self.emit(ch);
+    }
+
+    pub fn char_available(self: *FrameBufferConsole) bool {
+        _ = self;
+        return bsp.io.byte_available();
+    }
 };
+
+fn newline(ch: u8) bool {
+    return ch == '\r' or ch == '\n';
+}
+
+fn readLineThunk(ctx: *anyopaque, prompt: []const u8, buffer: []u8) usize {
+    var console: *FrameBufferConsole = @ptrCast(@alignCast(ctx));
+    return console.readLine(prompt, buffer);
+}
+
+pub fn createReader(allocator: Allocator, console: *FrameBufferConsole) !*Readline {
+    return Readline.init(allocator, console, readLineThunk);
+}

@@ -53,25 +53,25 @@ pub fn wordEmit(forth: *Forth) !void {
 // -- ch
 pub fn wordKey(forth: *Forth) !void {
     var s = &forth.stack;
-    var ch = forth.getc();
+    var ch = forth.console.getc();
     try s.push(Value{ .ch = ch });
 }
 
 // -- bool
 pub fn wordKeyMaybe(forth: *Forth) !void {
     var s = &forth.stack;
-    var byte_available = forth.char_available();
+    var byte_available = forth.console.char_available();
     try s.push(Value{ .i = if (byte_available) 1 else 0 });
 }
 
 /// --
 pub fn wordCr(forth: *Forth) ForthError!void {
-    forth.putc(0x0a);
+    forth.console.putc(0x0a);
 }
 
 /// --
 pub fn wordClearScreen(forth: *Forth) !void {
-    forth.putc(0x0c);
+    forth.console.putc(0x0c);
 }
 
 /// --
