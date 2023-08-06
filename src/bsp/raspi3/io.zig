@@ -440,12 +440,16 @@ pub fn send(ch: u8) void {
 }
 
 pub fn receive() u8 {
-    while (read_buffer.empty()) {
+    while (!byte_available()) {
         // block
         cpu.wfi();
     }
 
     return read_buffer.dequeue();
+}
+
+pub fn byte_available() bool {
+    return !read_buffer.empty();
 }
 
 // ----------------------------------------------------------------------

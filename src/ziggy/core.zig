@@ -57,6 +57,13 @@ pub fn wordKey(forth: *Forth) !void {
     try s.push(Value{ .ch = ch });
 }
 
+// -- bool
+pub fn wordKeyMaybe(forth: *Forth) !void {
+    var s = &forth.stack;
+    var byte_available = forth.char_available();
+    try s.push(Value{ .i = if (byte_available) 1 else 0 });
+}
+
 /// --
 pub fn wordCr(forth: *Forth) ForthError!void {
     forth.putc(0x0a);
@@ -296,6 +303,7 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.definePrimitive("emit", &wordEmit, false);
     try forth.definePrimitive("cls", &wordClearScreen, false);
     try forth.definePrimitive("key", &wordKey, false);
+    try forth.definePrimitive("key?", &wordKeyMaybe, false);
 
     // Secondary definition words.
     try forth.definePrimitive(":", &wordColon, false);

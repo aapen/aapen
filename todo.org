@@ -144,15 +144,17 @@ Stack ops:
 - [X] 2over
 Arithmetic:
 - [X] +
-- [ ] -
+- [X] -
 - [ ] *
 - [ ] /
 - [ ] %
-Output:
+Input/Output:
 - [X] hello
 - [X] cr
 - [X] emit
 - [X] cls
+- [X] key
+- [X] key?
 System info:
 - [X] ?
 - [X] ??
