@@ -1,6 +1,8 @@
         // Exception vector code for Cortex-A53 and Cortex-A72
         //
 
+        #include <asm/macro.h>
+
         // ----------------------------------------------------------------------
         // Constants
         // ----------------------------------------------------------------------
@@ -124,6 +126,16 @@
         .endm
 
         // ----------------------------------------------------------------------
+        // Stack unwinding
+        // ----------------------------------------------------------------------
+        ENTRY(markUnwindPoint)
+        mov     x10, sp
+        str     x10, [x0]
+        stp     x29, x30, [x0, #16]
+        ret
+        END(markUnwindPoint)
+
+        // ----------------------------------------------------------------------
         // Vector table
         // ----------------------------------------------------------------------
 
@@ -202,7 +214,9 @@ error_invalid_el1t:
         HANDLE_INVALID_ENTRY    ERROR_INVALID_EL1T
 
 synchronous_invalid_el1h:
-        HANDLE_INVALID_ENTRY    SYNCHRONOUS_INVALID_EL1H
+        KERNEL_ENTRY
+        bl              invalidEntryMessageShow
+        KERNEL_EXIT
 
 fiq_invalid_el1h:
         HANDLE_INVALID_ENTRY    FIQ_INVALID_EL1H
@@ -234,6 +248,6 @@ fiq_invalid_el0_32:
 error_invalid_el0_32:
         HANDLE_INVALID_ENTRY    ERROR_INVALID_EL0_32
 
-        .global err_hang
-err_hang:
+        ENTRY(err_hang)
         b err_hang
+        END(err_hang)

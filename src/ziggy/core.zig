@@ -296,6 +296,11 @@ pub fn wordValueSize(forth: *Forth) ForthError!void {
     try forth.stack.push(Value{ .sz = l });
 }
 
+/// --
+pub fn wordPanic(_: *Forth) ForthError!void {
+    @breakpoint();
+}
+
 pub fn defineCore(forth: *Forth) !void {
     // IO
     try forth.definePrimitive("hello", &wordHello, false);
@@ -317,6 +322,7 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.definePrimitive("info", &wordInfo, true);
     try forth.definePrimitive("ip", &wordNext, false);
     try forth.definePrimitive("value-size", &wordValueSize, false);
+    try forth.definePrimitive("panic", &wordPanic, false);
 
     // Basic Forth words.
     try forth.definePrimitive("swap", &wordSwap, false);

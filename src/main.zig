@@ -79,14 +79,23 @@ fn kernelInit() !void {
     supplyAddress("fb", @intFromPtr(frame_buffer.base));
     supplyUsize("fbsize", frame_buffer.buffer_size);
 
-    interpreter.repl() catch |err| {
-        try frame_buffer_console.print("REPL error: {any}\n\nABORT.\n", .{err});
-    };
+    arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
+    arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
+
+    repl();
 
     // Does not return
     qemu.exit(0);
 
     unreachable;
+}
+
+fn repl() callconv(.C) noreturn {
+    while (true) {
+        interpreter.repl() catch |err| {
+            frame_buffer_console.print("REPL error: {any}\n\nABORT.\n", .{err}) catch {};
+        };
+    }
 }
 
 fn supplyAddress(name: []const u8, addr: usize) void {

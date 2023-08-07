@@ -32,7 +32,7 @@ fn stackTraceDisplay(from_addr: u64) void {
     var it = std.debug.StackIterator.init(null, null);
     defer it.deinit();
 
-    root.frame_buffer_console.print("\nStack unwind\n", .{}) catch {};
+    root.frame_buffer_console.print("\nStack trace\n", .{}) catch {};
     root.frame_buffer_console.print("Frame\tPC\n", .{}) catch {};
     for (0..40) |i| {
         var addr = it.next() orelse {
