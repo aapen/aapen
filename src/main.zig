@@ -8,6 +8,8 @@ const bcd = @import("bcd.zig");
 const forth = @import("ziggy/forth.zig");
 const Forth = forth.Forth;
 const Value = @import("ziggy/value.zig").Value;
+const debug = @import("debug.zig");
+pub const klog = debug.klog;
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -51,29 +53,27 @@ fn kernelInit() !void {
 
     frame_buffer_console.init();
 
-    try frame_buffer_console.print("Running on {s} (a {s}) with {?}MB\n\n", .{
+    // State: one core, interrupts, MMU, heap Allocator, display,
+    // serial, klog available
+
+    klog("Running on {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,
         board.model.processor,
         board.model.memory,
     });
-    try frame_buffer_console.print("    MAC address: {?}\n", .{board.device.mac_address});
-    try frame_buffer_console.print("  Serial number: {?}\n", .{board.device.serial_number});
-    try frame_buffer_console.print("Manufactured by: {?s}\n", .{board.device.manufacturer});
+    klog("    MAC address: {?}\n", .{board.device.mac_address});
+    klog("  Serial number: {?}\n", .{board.device.serial_number});
+    klog("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
 
-    // Attempt to power up the USB
-    var usb_power_result = bsp.mailbox.powerOn(.usb_hcd) catch bsp.mailbox.power.Result.failed;
-    try frame_buffer_console.print("   Power on USB: {s}\n\n", .{@tagName(usb_power_result)});
-
-    // State: one core, interrupts, MMU, heap Allocator, display, serial
     diagnostics() catch |err| {
-        frame_buffer_console.print("Error printing diagnostics: {any}\n", .{err}) catch {};
+        klog("Error printing diagnostics: {any}\n", .{err});
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
     bsp.usb.init();
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
-        try frame_buffer_console.print("Forth init: {any}\n", .{err});
+        klog("Forth init: {any}\n", .{err});
     };
 
     supplyAddress("fb", @intFromPtr(frame_buffer.base));
@@ -82,6 +82,8 @@ fn kernelInit() !void {
     arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
     arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
 
+    // State: one core, interrupts, MMU, heap Allocator, display,
+    // serial, klog available, exception recovery available
     repl();
 
     // Does not return
@@ -93,20 +95,20 @@ fn kernelInit() !void {
 fn repl() callconv(.C) noreturn {
     while (true) {
         interpreter.repl() catch |err| {
-            frame_buffer_console.print("REPL error: {any}\n\nABORT.\n", .{err}) catch {};
+            klog("REPL error: {any}\n\nABORT.\n", .{err});
         };
     }
 }
 
 fn supplyAddress(name: []const u8, addr: usize) void {
     interpreter.defineVariable(name, Value{ .addr = addr }) catch |err| {
-        try frame_buffer_console.print("Failed to define {s}: {any}\n", .{ name, err });
+        klog("Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
 fn supplyUsize(name: []const u8, sz: usize) void {
     interpreter.defineVariable(name, Value{ .sz = sz }) catch |err| {
-        try frame_buffer_console.print("Failed to define {s}: {any}\n", .{ name, err });
+        klog("Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
@@ -120,19 +122,12 @@ fn diagnostics() !void {
     try printClockRate(.emmc);
     try printClockRate(.core);
     try printClockRate(.arm);
-
-    try printPowerState(.usb_hcd);
 }
 
 fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
     var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
     var clock_mhz = rate / 1_000_000;
-    try frame_buffer_console.print("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
-}
-
-fn printPowerState(device: bsp.mailbox.PowerDevice) !void {
-    var state = bsp.mailbox.isPowered(device) catch .failed;
-    try frame_buffer_console.print("{s:>14} power: {s}\n", .{ @tagName(device), @tagName(state) });
+    klog("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
 }
 
 export fn _soft_reset() noreturn {
@@ -204,7 +199,7 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 //     _ = stack;
 //     _ = return_addr;
 
-//     frame_buffer_console.print(msg, .{}) catch {};
+//     klog(msg, .{});
 //     while (true) {
 //         arch.cpu.wfe();
 //     }

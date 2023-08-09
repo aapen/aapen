@@ -1,5 +1,6 @@
 const std = @import("std");
 const root = @import("root");
+const mailbox = @import("mailbox.zig");
 const memory_map = @import("memory_map.zig");
 const UniformRegister = @import("../mmio_register.zig").UniformRegister;
 
@@ -73,6 +74,27 @@ const core_registers: *volatile CoreRegisters = @ptrFromInt(usb_dwc_base);
 // TODO initialize the clock
 // TODO initialize the phy interface
 pub fn init() void {
-    root.frame_buffer_console.print("{s:>20}: 0x{x:0>8}\n", .{ "usb_dwc_base", @intFromPtr(core_registers) }) catch {};
-    root.frame_buffer_console.print("{s:>20}: 0x{x:0>8}\n", .{ "gotgctl", core_registers.*.gotgctl }) catch {};
+    // Attempt to power up the USB
+    if (mailbox.powerOn(.usb_hcd)) |usb_power_result| {
+        root.klog("\n{s:>20}: {s}\n", .{"Power on USB", @tagName(usb_power_result)});
+    } else |err| {
+        root.klog("\n{s:>20}: {any}\n", .{"USB power error", err});
+    }
+
+    var id = core_registers.gsnpsid;
+    root.klog("{s:>20}: {x}.{x:0>3}\n", .{"USB Core release", (id >> 12 & 0xf), id & 0xfff});
+
+    var state = mailbox.isPowered(.usb_hcd) catch .failed;
+    root.klog("{s:>14} power: {s}\n", .{ @tagName(.usb_hcd), @tagName(state) });
 }
+
+
+	// snpsid = readl(&regs->gsnpsid);
+	// dev_info(dev, "Core Release: %x.%03x\n",
+	// 	 snpsid >> 12 & 0xf, snpsid & 0xfff);
+
+	// if ((snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_2xx &&
+	//     (snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_3xx) {
+	// 	dev_info(dev, "SNPSID invalid (not DWC2 OTG device): %08x\n",
+	// 		 snpsid);
+

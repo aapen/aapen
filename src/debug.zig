@@ -2,28 +2,34 @@ const std = @import("std");
 const root = @import("root");
 const arch = @import("architecture.zig");
 
+pub fn klog(comptime fmt: []const u8, args: anytype) void {
+    root.frame_buffer_console.print(fmt, args) catch {
+        // not much we can do here
+    };
+}
+
 pub fn panicDisplay(from_addr: ?u64) void {
     if (from_addr) |addr| {
-        root.frame_buffer_console.print("Panic!\nELR: 0x{x:0>8}\n", .{addr}) catch {};
+        klog("Panic!\nELR: 0x{x:0>8}\n", .{addr});
         stackTraceDisplay(addr);
     } else {
-        root.frame_buffer_console.print("Panic!\nSource unknown.\n", .{}) catch {};
+        klog("Panic!\nSource unknown.\n", .{});
     }
 }
 
 pub fn unknownBreakpointDisplay(from_addr: ?u64, bkpt_number: u16) void {
     if (from_addr) |addr| {
-        root.frame_buffer_console.print("Breakpoint\nComment: 0x{x:0>8}\n ELR: 0x{x:0>8}\n", .{ bkpt_number, addr }) catch {};
+        klog("Breakpoint\nComment: 0x{x:0>8}\n ELR: 0x{x:0>8}\n", .{ bkpt_number, addr });
     } else {
-        root.frame_buffer_console.print("Breakpoint\nComment: 0x{x:0>8}\n ELR: unknown\n", .{bkpt_number}) catch {};
+        klog("Breakpoint\nComment: 0x{x:0>8}\n ELR: unknown\n", .{bkpt_number});
     }
 }
 
 pub fn unhandledExceptionDisplay(from_addr: ?u64, entry_type: u64, esr: u64, ec: arch.cpu.registers.EC) void {
     if (from_addr) |addr| {
-        root.frame_buffer_console.print("Unhandled exception!\nType: 0x{x:0>8}\n ESR: 0x{x:0>8}\n ELR: 0x{x:0>8}\n  EC: {s}\n", .{ entry_type, @as(u64, @bitCast(esr)), addr, @tagName(ec) }) catch {};
+        klog("Unhandled exception!\nType: 0x{x:0>8}\n ESR: 0x{x:0>8}\n ELR: 0x{x:0>8}\n  EC: {s}\n", .{ entry_type, @as(u64, @bitCast(esr)), addr, @tagName(ec) });
     } else {
-        root.frame_buffer_console.print("Unhandled exception!\nType: 0x{x:0>8}\n ESR: 0x{x:0>8}\n ELR: unknown\n  EC: 0b{b:0>6}\n", .{ entry_type, esr, @tagName(ec) }) catch {};
+        klog("Unhandled exception!\nType: 0x{x:0>8}\n ESR: 0x{x:0>8}\n ELR: unknown\n  EC: 0b{b:0>6}\n", .{ entry_type, esr, @tagName(ec) });
     }
 }
 
@@ -32,18 +38,18 @@ fn stackTraceDisplay(from_addr: u64) void {
     var it = std.debug.StackIterator.init(null, null);
     defer it.deinit();
 
-    root.frame_buffer_console.print("\nStack trace\n", .{}) catch {};
-    root.frame_buffer_console.print("Frame\tPC\n", .{}) catch {};
+    klog("\nStack trace\n", .{});
+    klog("Frame\tPC\n", .{});
     for (0..40) |i| {
         var addr = it.next() orelse {
-            root.frame_buffer_console.print(".\n", .{}) catch {};
+            klog(".\n", .{});
             return;
         };
         stackFrameDisplay(i, addr);
     }
-    root.frame_buffer_console.print("--stack trace truncated--\n", .{}) catch {};
+    klog("--stack trace truncated--\n", .{});
 }
 
 fn stackFrameDisplay(frame_number: usize, frame_pointer: usize) void {
-    root.frame_buffer_console.print("{d}\t0x{x:0>8}\n", .{ frame_number, frame_pointer }) catch {};
+    klog("{d}\t0x{x:0>8}\n", .{ frame_number, frame_pointer });
 }
