@@ -36,12 +36,19 @@ pub const Value = union(ValueType) {
             return Value{ .s = token[1..(token.len - 1)] };
         } else if (token[0] == '\\') {
             return Value{ .ch = token[1] };
-        } else if (token[0] == '0' and token[1] == 'x') {
+        } else if (token[0] == '0' and token[1] == 'X') {
             var sNumber = token[2..];
             const uValue = std.fmt.parseInt(u32, sNumber, 16) catch {
                 return ForthError.ParseError;
             };
             return Value{ .u = uValue };
+
+        } else if (token[0] == '0' and token[1] == 'x') {
+            var sNumber = token[2..];
+            const aValue = std.fmt.parseInt(usize, sNumber, 16) catch {
+                return ForthError.ParseError;
+            };
+            return Value{ .addr = aValue };
         }
 
         var iValue = std.fmt.parseInt(i32, token, 10) catch {
