@@ -76,25 +76,23 @@ const core_registers: *volatile CoreRegisters = @ptrFromInt(usb_dwc_base);
 pub fn init() void {
     // Attempt to power up the USB
     if (mailbox.powerOn(.usb_hcd)) |usb_power_result| {
-        root.klog("\n{s:>20}: {s}\n", .{"Power on USB", @tagName(usb_power_result)});
+        root.kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     } else |err| {
-        root.klog("\n{s:>20}: {any}\n", .{"USB power error", err});
+        root.kprint("\n{s:>20}: {any}\n", .{ "USB power error", err });
     }
 
     var id = core_registers.gsnpsid;
-    root.klog("{s:>20}: {x}.{x:0>3}\n", .{"USB Core release", (id >> 12 & 0xf), id & 0xfff});
+    root.kprint("{s:>20}: {x}.{x:0>3}\n", .{ "USB Core release", (id >> 12 & 0xf), id & 0xfff });
 
     var state = mailbox.isPowered(.usb_hcd) catch .failed;
-    root.klog("{s:>14} power: {s}\n", .{ @tagName(.usb_hcd), @tagName(state) });
+    root.kprint("{s:>14} power: {s}\n", .{ @tagName(.usb_hcd), @tagName(state) });
 }
 
+// snpsid = readl(&regs->gsnpsid);
+// dev_info(dev, "Core Release: %x.%03x\n",
+// 	 snpsid >> 12 & 0xf, snpsid & 0xfff);
 
-	// snpsid = readl(&regs->gsnpsid);
-	// dev_info(dev, "Core Release: %x.%03x\n",
-	// 	 snpsid >> 12 & 0xf, snpsid & 0xfff);
-
-	// if ((snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_2xx &&
-	//     (snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_3xx) {
-	// 	dev_info(dev, "SNPSID invalid (not DWC2 OTG device): %08x\n",
-	// 		 snpsid);
-
+// if ((snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_2xx &&
+//     (snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_3xx) {
+// 	dev_info(dev, "SNPSID invalid (not DWC2 OTG device): %08x\n",
+// 		 snpsid);

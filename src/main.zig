@@ -9,7 +9,11 @@ const forth = @import("ziggy/forth.zig");
 const Forth = forth.Forth;
 const Value = @import("ziggy/value.zig").Value;
 const debug = @import("debug.zig");
-pub const klog = debug.klog;
+
+pub const kinfo = debug.kinfo;
+pub const kwarn = debug.kwarn;
+pub const kerror = debug.kerror;
+pub const kprint = debug.kprint;
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -54,26 +58,26 @@ fn kernelInit() !void {
     frame_buffer_console.init();
 
     // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial, klog available
+    // serial, logging available
 
-    klog("Running on {s} (a {s}) with {?}MB\n\n", .{
+    kprint("Running on {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,
         board.model.processor,
         board.model.memory,
     });
-    klog("    MAC address: {?}\n", .{board.device.mac_address});
-    klog("  Serial number: {?}\n", .{board.device.serial_number});
-    klog("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
+    kprint("    MAC address: {?}\n", .{board.device.mac_address});
+    kprint("  Serial number: {?}\n", .{board.device.serial_number});
+    kprint("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
 
     diagnostics() catch |err| {
-        klog("Error printing diagnostics: {any}\n", .{err});
+        kerror(@src(), "Error printing diagnostics: {any}\n", .{err});
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
     bsp.usb.init();
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
-        klog("Forth init: {any}\n", .{err});
+        kerror(@src(), "Forth init: {any}\n", .{err});
     };
 
     supplyAddress("fb", @intFromPtr(frame_buffer.base));
@@ -83,7 +87,7 @@ fn kernelInit() !void {
     arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
 
     // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial, klog available, exception recovery available
+    // serial, logging available, exception recovery available
     repl();
 
     // Does not return
@@ -95,28 +99,28 @@ fn kernelInit() !void {
 fn repl() callconv(.C) noreturn {
     while (true) {
         interpreter.repl() catch |err| {
-            klog("REPL error: {any}\n\nABORT.\n", .{err});
+            kerror(@src(), "REPL error: {any}\n\nABORT.\n", .{err});
         };
     }
 }
 
 fn supplyAddress(name: []const u8, addr: usize) void {
     interpreter.defineVariable(name, Value{ .addr = addr }) catch |err| {
-        klog("Failed to define {s}: {any}\n", .{ name, err });
+        kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
 fn supplyUsize(name: []const u8, sz: usize) void {
     interpreter.defineVariable(name, Value{ .sz = sz }) catch |err| {
-        klog("Failed to define {s}: {any}\n", .{ name, err });
+        kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
 fn diagnostics() !void {
-    try board.arm_memory.print(&frame_buffer_console);
-    try board.videocore_memory.print(&frame_buffer_console);
-    try heap.memory.print(&frame_buffer_console);
-    try frame_buffer.memory.print(&frame_buffer_console);
+    try board.arm_memory.print();
+    try board.videocore_memory.print();
+    try heap.memory.print();
+    try frame_buffer.memory.print();
 
     try printClockRate(.uart);
     try printClockRate(.emmc);
@@ -127,7 +131,7 @@ fn diagnostics() !void {
 fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
     var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
     var clock_mhz = rate / 1_000_000;
-    klog("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
+    kprint("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
 }
 
 export fn _soft_reset() noreturn {
@@ -199,7 +203,7 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 //     _ = stack;
 //     _ = return_addr;
 
-//     klog(msg, .{});
+//     kerror(@src(), msg, .{});
 //     while (true) {
 //         arch.cpu.wfe();
 //     }

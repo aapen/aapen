@@ -1,3 +1,4 @@
+const root = @import("root");
 const std = @import("std");
 const assert = std.debug.assert;
 const cpu = @import("../../architecture.zig").cpu;
@@ -318,12 +319,12 @@ pub const Message = struct {
         const closure = struct {
             fn fill(ptr: *anyopaque, buf: []u32) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                return @call(.always_inline, ptr_info.Pointer.child.fill, .{self, buf});
+                return @call(.always_inline, ptr_info.Pointer.child.fill, .{ self, buf });
             }
 
             fn unfill(ptr: *anyopaque, buf: []u32) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                return @call(.always_inline, ptr_info.Pointer.child.unfill, .{self, buf});
+                return @call(.always_inline, ptr_info.Pointer.child.unfill, .{ self, buf });
             }
         };
 
@@ -348,8 +349,11 @@ pub const Message = struct {
     }
 
     pub fn unfill(self: Message, buf: []u32) void {
-        // TODO warn if the response length bit is not set
-        buf[1] &= ~message_value_length_response;
+        if (buf[1] & message_value_length_response == 0) {
+            root.kinfo(@src(), "expected bit 31 to be set, but it wasn't\n", .{});
+        } else {
+            buf[1] &= ~message_value_length_response;
+        }
         self.unfillFn(self.ptr, buf[3..]);
     }
 };

@@ -1,6 +1,6 @@
+const root = @import("root");
 const std = @import("std");
 const assert = std.debug.assert;
-const expect = std.testing.expect;
 
 pub const Region = struct {
     name: ?[]const u8 = null,
@@ -24,12 +24,11 @@ pub const Region = struct {
         self.end = end;
     }
 
-    pub fn print(self: *const Region, writer: anytype) !void {
-        var w = writer;
+    pub fn print(self: *const Region) !void {
         if (self.name) |n| {
-            w.print("{?s:>20}: 0x{x:0>8} .. 0x{x:0>8}\n", .{ n, self.base, self.end }) catch {};
+            root.kprint("{?s:>20}: 0x{x:0>8} .. 0x{x:0>8}\n", .{ n, self.base, self.end });
         } else {
-            w.print("{?s:>20}: 0x{x:0>8} .. 0x{x:0>8}\n", .{ "unnamed region", self.base, self.end }) catch {};
+            root.kprint("{?s:>20}: 0x{x:0>8} .. 0x{x:0>8}\n", .{ "unnamed region", self.base, self.end });
         }
     }
 };
