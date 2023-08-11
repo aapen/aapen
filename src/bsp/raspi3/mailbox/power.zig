@@ -35,7 +35,7 @@ const PowerQuery = struct {
     }
 
     pub fn message(self: *Self) Message {
-        return Message.init(self, .RPI_FIRMWARE_GET_POWER_STATE, 1, 2, fill, unfill);
+        return Message.init(self, .RPI_FIRMWARE_GET_POWER_STATE, 1, 2);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {
@@ -72,7 +72,7 @@ const PowerControl = struct {
         };
     }
     pub fn message(self: *Self) Message {
-        return Message.init(self, .RPI_FIRMWARE_SET_POWER_STATE, 2, 2, fill, unfill);
+        return Message.init(self, .RPI_FIRMWARE_SET_POWER_STATE, 2, 2);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {

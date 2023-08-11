@@ -14,7 +14,7 @@ const ClockMessage = struct {
     }
 
     pub fn message(self: *Self) Message {
-        return Message.init(self, .RPI_FIRMWARE_GET_CLOCK_RATE, 1, 2, fill, unfill);
+        return Message.init(self, .RPI_FIRMWARE_GET_CLOCK_RATE, 1, 2);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {

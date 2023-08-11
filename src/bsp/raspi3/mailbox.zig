@@ -307,19 +307,23 @@ pub const Message = struct {
     content_size: u32,
     total_size: u32,
 
-    pub fn init(pointer: anytype, tag: RpiFirmwarePropertyTag, request_size: u32, response_size: u32, comptime fillFn: fn (ptr: @TypeOf(pointer), buf: []u32) void, comptime unfillFn: fn (ptr: @TypeOf(pointer), buf: []u32) void) Message {
+    pub fn init(pointer: anytype, tag: RpiFirmwarePropertyTag, request_size: u32, response_size: u32) Message {
         const Ptr = @TypeOf(pointer);
-        assert(@typeInfo(Ptr) == .Pointer); // Must be a pointer
-        assert(@typeInfo(Ptr).Pointer.size == .One); // Must be a single-item pointer
-        assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct); // Must point to a struct
-        const gen = struct {
+        const ptr_info = @typeInfo(Ptr);
+
+        if (ptr_info != .Pointer) @compileError("argument `pointer` must be an actual pointer");
+        if (ptr_info.Pointer.size != .One) @compileError("argument `pointer` must be a single-item pointer");
+        if (@typeInfo(ptr_info.Pointer.child) != .Struct) @compileError("argument `pointer` must be a pointer to a struct");
+
+        const closure = struct {
             fn fill(ptr: *anyopaque, buf: []u32) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                fillFn(self, buf);
+                return @call(.always_inline, ptr_info.Pointer.child.fill, .{self, buf});
             }
+
             fn unfill(ptr: *anyopaque, buf: []u32) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                unfillFn(self, buf);
+                return @call(.always_inline, ptr_info.Pointer.child.unfill, .{self, buf});
             }
         };
 
@@ -327,8 +331,8 @@ pub const Message = struct {
 
         return .{
             .ptr = pointer,
-            .fillFn = gen.fill,
-            .unfillFn = gen.unfill,
+            .fillFn = closure.fill,
+            .unfillFn = closure.unfill,
             .tag = @intFromEnum(tag),
             .request_size = request_size,
             .content_size = content_size,

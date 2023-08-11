@@ -119,15 +119,15 @@ const GetInfo = struct {
     }
 
     pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, self.tag, 0, 1, fill, unfill);
+        return mailbox.Message.init(self, self.tag, 0, 1);
     }
 
-    fn fill(self: *Self, buf: []u32) void {
+    pub fn fill(self: *Self, buf: []u32) void {
         _ = self;
         _ = buf;
     }
 
-    fn unfill(self: *Self, buf: []u32) void {
+    pub fn unfill(self: *Self, buf: []u32) void {
         self.value = buf[0];
     }
 };
@@ -148,7 +148,7 @@ const GetMemory = struct {
     }
 
     pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, self.tag, 0, 2, fill, unfill);
+        return mailbox.Message.init(self, self.tag, 0, 2);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {

@@ -38,7 +38,7 @@ const SizeMessage = struct {
             .physical => mailbox.RpiFirmwarePropertyTag.RPI_FIRMWARE_FRAMEBUFFER_SET_PHYSICAL_WIDTH_HEIGHT,
         };
 
-        return mailbox.Message.init(self, tag, 2, 2, fill, unfill);
+        return mailbox.Message.init(self, tag, 2, 2);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {
@@ -63,7 +63,7 @@ const DepthMessage = struct {
     }
 
     pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_SET_DEPTH, 1, 1, fill, unfill);
+        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_SET_DEPTH, 1, 1);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {
@@ -89,7 +89,7 @@ const AllocateFrameBufferMessage = struct {
     }
 
     pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_ALLOCATE, 1, 2, fill, unfill);
+        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_ALLOCATE, 1, 2);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {
@@ -119,7 +119,7 @@ const GetPitchMessage = struct {
     }
 
     pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_GET_PITCH, 1, 1, fill, unfill);
+        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_GET_PITCH, 1, 1);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {
@@ -158,7 +158,7 @@ const SetPaletteMessage = struct {
     }
 
     pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_SET_PALETTE, 34, 1, fill, unfill);
+        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_SET_PALETTE, 34, 1);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {
@@ -187,7 +187,7 @@ const SetOverscanMessage = struct {
     }
 
     pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_SET_OVERSCAN, 4, 4, fill, unfill);
+        return mailbox.Message.init(self, .RPI_FIRMWARE_FRAMEBUFFER_SET_OVERSCAN, 4, 4);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {
