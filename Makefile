@@ -21,7 +21,7 @@ KERNEL          = zig-out/kernel8.img
 rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
 # How to recursively find all files that match a pattern
-SRCS           := $(call rwildcard,src/,*.zig)
+SRCS           := $(call rwildcard,src/,*.zig) $(call rwildcard,src/,*.f) $(call rwildcard,src/,*.S)
 
 all: init emulate
 
