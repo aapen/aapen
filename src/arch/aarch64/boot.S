@@ -25,6 +25,14 @@
         .section .text._start
 
         ENTRY(_start)
+
+        // Save the flattened device tree for later use
+        LDR_REL(x8, __fdt_address)            // Address of the pointer
+        str     x0, [x8]                      // Store the
+                                              // firmware-supplied
+                                              // location of the FDT
+                                              // into that pointer.
+
         // At boot time, the core should be executing in EL2 (high
         // privilege). If it is not, we are in a strange state and
         // should not proceed
@@ -74,3 +82,10 @@ pe_hang:
         b pe_hang                             // if one arrives, loop and wait some more
 
         END(_start)
+
+        .section .data.boot
+
+        .align 8
+        .global __fdt_address
+__fdt_address:
+        .quad   0

@@ -70,7 +70,6 @@ const CoreRegisters = extern struct {
 
 const core_registers: *volatile CoreRegisters = @ptrFromInt(usb_dwc_base);
 
-// TODO power on USB here
 // TODO initialize the clock
 // TODO initialize the phy interface
 pub fn init() void {

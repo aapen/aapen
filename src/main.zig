@@ -27,6 +27,8 @@ const Self = @This();
 
 pub const page_size = arch.cpu.mmu.page_size;
 
+extern var __fdt_address: usize;
+
 pub var board = bsp.mailbox.BoardInfo{};
 pub var heap = mem{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
@@ -82,6 +84,7 @@ fn kernelInit() !void {
 
     supplyAddress("fb", @intFromPtr(frame_buffer.base));
     supplyUsize("fbsize", frame_buffer.buffer_size);
+    supplyAddress("fdt", __fdt_address);
 
     arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
     arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -117,6 +120,8 @@ fn supplyUsize(name: []const u8, sz: usize) void {
 }
 
 fn diagnostics() !void {
+    try printFdtLocation();
+
     try board.arm_memory.print();
     try board.videocore_memory.print();
     try heap.memory.print();
@@ -126,6 +131,10 @@ fn diagnostics() !void {
     try printClockRate(.emmc);
     try printClockRate(.core);
     try printClockRate(.arm);
+}
+
+fn printFdtLocation() !void {
+    kprint("{s:>20}: 0x{x:0>8}\n", .{ "FDT Address", __fdt_address });
 }
 
 fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
