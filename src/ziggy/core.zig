@@ -29,7 +29,7 @@ pub fn wordColon(forth: *Forth) !void {
     string.copyTo(&forth.new_word_name, name);
     forth.composing = true;
     forth.new_word_def = forth.nextFree;
-    try forth.print("defining new word {s}\n", .{forth.new_word_name});
+    try forth.print("defining new word {s}\n", .{forth.new_word_name[0..name.len]});
 }
 
 pub fn wordSemi(forth: *Forth) !void {
