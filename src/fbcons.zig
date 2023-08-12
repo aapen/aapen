@@ -177,7 +177,7 @@ fn newline(ch: u8) bool {
     return ch == '\r' or ch == '\n';
 }
 
-fn readLineThunk(ctx: *anyopaque, prompt: []const u8, buffer: []u8) usize {
+fn readLineThunk(ctx: *anyopaque, prompt: []const u8, buffer: []u8) Readline.Error!usize {
     var console: *FrameBufferConsole = @ptrCast(@alignCast(ctx));
     return console.readLine(prompt, buffer);
 }

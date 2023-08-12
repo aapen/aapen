@@ -12,7 +12,7 @@ pub const BufferSource = struct {
         self.lines.* = std.mem.splitAny(u8, source, "\n");
     }
 
-    pub fn readLine(self: *BufferSource, prompt: []const u8, buffer: []u8) usize {
+    pub fn readLine(self: *BufferSource, prompt: []const u8, buffer: []u8) Readline.Error!usize {
         _ = prompt;
 
         if (self.lines.next()) |next| {
@@ -30,12 +30,12 @@ pub const BufferSource = struct {
         } else {
             // null return from iterator means no more lines. that's
             // EOF to you and me.
-            return 0;
+            return Readline.Error.EOF;
         }
     }
 };
 
-fn readLineThunk(ctx: *anyopaque, prompt: []const u8, buffer: []u8) usize {
+fn readLineThunk(ctx: *anyopaque, prompt: []const u8, buffer: []u8) Readline.Error!usize {
     var source: *BufferSource = @ptrCast(@alignCast(ctx));
     return source.readLine(prompt, buffer);
 }

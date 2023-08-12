@@ -176,27 +176,26 @@ pub const Forth = struct {
     pub fn repl(self: *Forth) !void {
         // outer loop, one line at a time.
         while (true) {
-            var line_len = try self.readline();
+            if (self.readline()) |line_len| {
+                self.words = ForthTokenIterator.init(self.line_buffer[0..line_len]);
 
-            if (line_len == 0) {
-                // source exhausted
-                try self.popSource();
-                continue;
-            }
-
-            self.words = ForthTokenIterator.init(self.line_buffer[0..line_len]);
-
-            // inner loop, one word at a time.
-            var word = self.words.next();
-            while (word != null) : (word = self.words.next()) {
-                if (word) |w| {
-                    var v = Value.fromString(w) catch |err| {
-                        try self.print("Parse error({s}): {}\n", .{ w, err });
-                        continue;
-                    };
-                    self.evalValue(v) catch |err| {
-                        try self.print("error: {any}\n", .{err});
-                    };
+                // inner loop, one word at a time.
+                var word = self.words.next();
+                while (word != null) : (word = self.words.next()) {
+                    if (word) |w| {
+                        var v = Value.fromString(w) catch |err| {
+                            try self.print("Parse error({s}): {}\n", .{ w, err });
+                            continue;
+                        };
+                        self.evalValue(v) catch |err| {
+                            try self.print("error: {any}\n", .{err});
+                        };
+                    }
+                }
+            } else |err| {
+                switch (err) {
+                    Readline.Error.EOF => try self.popSource(),
+                    else => return err,
                 }
             }
         }
