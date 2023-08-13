@@ -344,23 +344,72 @@ pub fn wordDictionary(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u
     return 0;
 }
 
-/// addr -- u64
-pub fn wordLoadU64(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    const a = try forth.stack.pop();
+/// addr -- u8
+pub fn wordLoadU8(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordLoad(u8, forth, body, offset, header);
+}
 
-    const p: *u64 = @ptrFromInt(a);
+/// u8 addr --
+pub fn wordStoreU8(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordStore(u8, forth, body, offset, header);
+}
+
+/// addr -- u32
+pub fn wordLoadU32(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordLoad(u32, forth, body, offset, header);
+}
+
+/// u32 addr --
+pub fn wordStoreU32(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordStore(u32, forth, body, offset, header);
+}
+
+/// u32 -- u32
+pub fn wordByteExchangeU32(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordByteExchange(u32, forth, body, offset, header);
+}
+
+/// addr -- u64
+pub fn wordLoadU64(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordLoad(u64, forth, body, offset, header);
+}
+
+/// u64 addr --
+pub fn wordStoreU64(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordStore(u64, forth, body, offset, header);
+}
+
+/// u64 -- u64
+pub fn wordByteExchangeU64(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordByteExchange(u64, forth, body, offset, header);
+}
+
+/// addr -- T
+pub fn wordLoad(comptime T: type, forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    const a = try forth.stack.pop();
+    const p: *T = @ptrFromInt(a);
     const v = p.*;
     try forth.stack.push(v);
     return 0;
 }
 
-/// u64 addr --
-pub fn wordStoreU64(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+/// T addr --
+pub fn wordStore(comptime T: type, forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     const a = try forth.stack.pop();
     const v = try forth.stack.pop();
 
-    const p: *u64 = @ptrFromInt(a);
-    p.* = v;
+    const p: *T = @ptrFromInt(a);
+    var nv: T = @truncate(v);
+    p.* = nv;
+    return 0;
+}
+
+/// T -- T
+fn wordByteExchange(comptime T: type, forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    const a = try forth.stack.pop();
+    var v: T = @truncate(a);
+    v = @byteSwap(v);
+    try forth.stack.push(v);
     return 0;
 }
 
@@ -413,4 +462,10 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitive("%", &wordMod, false);
     _ = try forth.definePrimitive("!", &wordStoreU64, false);
     _ = try forth.definePrimitive("@", &wordLoadU64, false);
+    _ = try forth.definePrimitive("be", &wordByteExchangeU64, false);
+    _ = try forth.definePrimitive("!b", &wordStoreU8, false);
+    _ = try forth.definePrimitive("@b", &wordLoadU8, false);
+    _ = try forth.definePrimitive("!w", &wordStoreU32, false);
+    _ = try forth.definePrimitive("@w", &wordLoadU32, false);
+    _ = try forth.definePrimitive("wbe", &wordByteExchangeU32, false);
 }
