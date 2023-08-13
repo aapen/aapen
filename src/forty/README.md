@@ -1,4 +1,4 @@
-# Ziggy
+# Forty
 
 A simple Forth written in Zig.
 

@@ -5,9 +5,8 @@ const qemu = @import("qemu.zig");
 const mem = @import("mem.zig");
 const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
-const forth = @import("ziggy/forth.zig");
-const Forth = forth.Forth;
-const Value = @import("ziggy/value.zig").Value;
+const forty = @import("forty/forth.zig");
+const Forth = forty.Forth;
 const debug = @import("debug.zig");
 
 pub const kinfo = debug.kinfo;
