@@ -89,10 +89,6 @@ pub const FrameBufferConsole = struct {
         defer self.drawCursor();
 
         switch (ch) {
-            0x00 => {
-                self.emit('\\');
-                self.emit('0');
-            },
             0x0c => self.clear(),
             0x7f => self.backspace(),
             '\t' => self.nextTab(),
