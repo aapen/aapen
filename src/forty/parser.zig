@@ -9,7 +9,7 @@ pub fn parseNumber(token: []const u8, base: u64) !u64 {
         return token[1];
     }
 
-    if (token[0] == '0' and token[1] == 'x') {
+    if (token[0] == '0' and token.len > 1 and token[1] == 'x') {
         var sNumber = token[2..];
         const uValue = std.fmt.parseInt(u64, sNumber, 16) catch {
             return ForthError.ParseError;
@@ -17,7 +17,7 @@ pub fn parseNumber(token: []const u8, base: u64) !u64 {
         return uValue;
     }
 
-    if (token[0] == '0' and token[1] == '#') {
+    if (token[0] == '0' and token.len > 1 and token[1] == '#') {
         var sNumber = token[2..];
         const iValue = std.fmt.parseInt(i64, sNumber, 10) catch {
             return ForthError.ParseError;
