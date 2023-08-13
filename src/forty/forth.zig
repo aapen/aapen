@@ -45,6 +45,8 @@ pub const Forth = struct {
     rstack: ReturnStack = undefined,
     input: InputStack = undefined,
     buffer: [20000]u8 = undefined,
+    ibase: u64 = 10,
+    obase: u64 = 10,
     memory: Memory = undefined,
     lastWord: ?*Header = null,
     newWord: ?*Header = null,
@@ -106,14 +108,21 @@ pub const Forth = struct {
         return header;
     }
 
-    // Define a variable with a single u64 value. What we really end up with
+    // Define a constant with a single u64 value. What we really end up with
     // is a secondary word that pushes the value onto the stack.
-    pub fn defineVariable(this: *Forth, name: []const u8, v: u64) !void {
+    pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
         _ = try this.startWord(name, &core.inner, false);
         this.addOpCode(OpCode.push_u64);
         this.addNumber(v);
         this.addOpCode(OpCode.stop);
         try this.completeWord();
+    }
+
+    // Define a variable with a single u64 value. What we really end up with
+    // is a secondary word that pushes the *address* of the u64 onto the stack.
+    // Really just sugar around defineConstant.
+    pub fn defineInternalVariable(this: *Forth, name: []const u8, p: *u64) !void {
+        return this.defineConstant(name, @intFromPtr(p));
     }
 
     // Start a new word in the interpreter. Dictionary searches will not find
@@ -150,7 +159,7 @@ pub const Forth = struct {
         } else if (token[0] == '"') {
             try this.evalString(token);
         } else {
-            var v: u64 = try parser.parseNumber(token);
+            var v: u64 = try parser.parseNumber(token, this.ibase);
             try this.evalNumber(v);
         }
     }

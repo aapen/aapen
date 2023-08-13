@@ -65,7 +65,7 @@ pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     return 0;
 }
 
-//
+// Comment word ( your comment here )  Spaces required around the parens.
 pub fn wordComment(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     while (true) {
         var word = forth.words.next() orelse return ForthError.WordReadError;
@@ -134,7 +134,7 @@ pub fn wordHello(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 /// n --
 pub fn wordDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     var v: u64 = try forth.stack.pop();
-    try forth.print("{} ", .{v});
+    try std.fmt.formatInt(v, @intCast(forth.obase), .lower, .{}, forth.writer());
     return 0;
 }
 
@@ -150,6 +150,13 @@ pub fn wordSDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 pub fn wordHexDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     var v: u64 = try forth.stack.pop();
     try forth.print("{x} ", .{v});
+    return 0;
+}
+
+/// n --
+pub fn wordDecimalDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    var v: u64 = try forth.stack.pop();
+    try std.fmt.formatInt(v, 10, .lower, .{}, forth.writer());
     return 0;
 }
 
@@ -358,6 +365,11 @@ pub fn wordStoreU64(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64
 }
 
 pub fn defineCore(forth: *Forth) !void {
+    // Expose internal values to forty.
+
+    try forth.defineInternalVariable("ibase", &forth.ibase);
+    try forth.defineInternalVariable("obase", &forth.obase);
+
     // IO
     _ = try forth.definePrimitive("hello", &wordHello, false);
     _ = try forth.definePrimitive("cr", &wordCr, false);
@@ -391,13 +403,14 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitive("2over", &word2Over, false);
 
     _ = try forth.definePrimitive(".", &wordDot, false);
-    _ = try forth.definePrimitive("s.", &wordSDot, false);
+    _ = try forth.definePrimitive("#.", &wordDecimalDot, false);
     _ = try forth.definePrimitive("h.", &wordHexDot, false);
+    _ = try forth.definePrimitive("s.", &wordSDot, false);
     _ = try forth.definePrimitive("+", &wordAdd, false);
     _ = try forth.definePrimitive("-", &wordSub, false);
     _ = try forth.definePrimitive("*", &wordMul, false);
     _ = try forth.definePrimitive("/", &wordDiv, false);
     _ = try forth.definePrimitive("%", &wordMod, false);
-    _ = try forth.definePrimitive("!i", &wordStoreU64, false);
-    _ = try forth.definePrimitive("@i", &wordLoadU64, false);
+    _ = try forth.definePrimitive("!", &wordStoreU64, false);
+    _ = try forth.definePrimitive("@", &wordLoadU64, false);
 }

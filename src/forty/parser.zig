@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
-pub fn parseNumber(token: []const u8) !u64 {
+pub fn parseNumber(token: []const u8, base: u64) !u64 {
     if (token[0] == '\\') {
         return token[1];
     }
@@ -17,17 +17,16 @@ pub fn parseNumber(token: []const u8) !u64 {
         return uValue;
     }
 
-    if (token[0] == '0' and token[1] == 'X') {
+    if (token[0] == '0' and token[1] == '#') {
         var sNumber = token[2..];
-        const iValue = std.fmt.parseInt(i64, sNumber, 16) catch {
+        const iValue = std.fmt.parseInt(i64, sNumber, 10) catch {
             return ForthError.ParseError;
         };
         return @bitCast(iValue);
     }
 
-    var iValue = std.fmt.parseInt(i64, token, 10) catch {
+    var iValue = std.fmt.parseInt(i64, token, @intCast(base)) catch {
         var fValue = std.fmt.parseFloat(f64, token) catch {
-            //std.debug.print("error: {s}, {any}\n", .{token, err});
             return ForthError.ParseError;
         };
         return @bitCast(fValue);

@@ -7,3 +7,9 @@
 : p . cr ;
 
 F
+
+( Input and output base words )
+
+: base ( n -- ) dup obase ! ibase ! ;
+: hex ( -- ) 16 base ;
+: decimal ( -- ) 10 base ;

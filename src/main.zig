@@ -106,14 +106,16 @@ fn repl() callconv(.C) noreturn {
     }
 }
 
+// TODO do we need both of these now?
+
 fn supplyAddress(name: []const u8, addr: usize) void {
-    interpreter.defineVariable(name, addr) catch |err| {
+    interpreter.defineConstant(name, addr) catch |err| {
         kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
 fn supplyUsize(name: []const u8, sz: usize) void {
-    interpreter.defineVariable(name, sz) catch |err| {
+    interpreter.defineConstant(name, sz) catch |err| {
         kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
     };
 }
