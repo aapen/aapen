@@ -1,12 +1,46 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const errors = @import("errors.zig");
+const ForthError = errors.ForthError;
+
+pub fn parseNumber(token: []const u8) !u64 {
+    if (token[0] == '\\') {
+        return token[1];
+    }
+
+    if (token[0] == '0' and token[1] == 'x') {
+        var sNumber = token[2..];
+        const uValue = std.fmt.parseInt(u64, sNumber, 16) catch {
+            return ForthError.ParseError;
+        };
+        return uValue;
+    }
+
+    if (token[0] == '0' and token[1] == 'X') {
+        var sNumber = token[2..];
+        const iValue = std.fmt.parseInt(i64, sNumber, 16) catch {
+            return ForthError.ParseError;
+        };
+        return @bitCast(iValue);
+    }
+
+    var iValue = std.fmt.parseInt(i64, token, 10) catch {
+        var fValue = std.fmt.parseFloat(f64, token) catch {
+            //std.debug.print("error: {s}, {any}\n", .{token, err});
+            return ForthError.ParseError;
+        };
+        return @bitCast(fValue);
+    };
+    return @bitCast(iValue);
+}
+
 pub const ForthTokenIterator = struct {
     buffer: []const u8 = undefined,
     index: usize = 0,
 
     pub fn init(buffer: []const u8) ForthTokenIterator {
-        return .{.buffer = buffer, .index = 0};
+        return .{ .buffer = buffer, .index = 0 };
     }
     pub fn create(allocator: *Allocator, buffer: []const u8) *ForthTokenIterator {
         var result = allocator.create(ForthTokenIterator);
@@ -49,7 +83,7 @@ pub const ForthTokenIterator = struct {
             end += 1;
             //print("dealing with quoted string, index: {}\n", .{self.index});
             while (end < self.buffer.len and self.buffer[end] != '"') : (end += 1) {}
-            if (end < self.buffer.len ) {
+            if (end < self.buffer.len) {
                 end += 1;
             }
         } else {
@@ -72,13 +106,27 @@ pub const ForthTokenIterator = struct {
     }
 };
 
-//const print = std.debug.print;
-//
 //pub fn main() !void {
-//    var s = "hello out there a string \"foo bar baz\" and an empty string \"\" the end";
-//    var words = ForthTokenIterator{};
-//    try ForthTokenIterator.init(&words, s);
+//    const assert = std.debug.assert;
 //
+//    var i = try parseNumber("123");
+//    assert(i == 123);
+//
+//    i = try parseNumber("0xff");
+//    assert(i == 255);
+//
+//    i = try parseNumber("1.00");
+//    var f: f64 = @bitCast(i);
+//    assert(std.math.approxEqAbs(f64, f, 1.00, 0.0001));
+//
+//    i = try parseNumber("\\X");
+//    assert(i == 'X');
+//}
+//
+//pub fn main2() !void {
+//    const print = std.debug.print;
+//    var s = "hello out there a string \"foo bar baz\" and an empty string \"\" the end";
+//    var words = ForthTokenIterator.init(s);
 //    var word = words.next();
 //    while (word != null) : (word = words.next()) {
 //        print("in loop\n", .{});
@@ -87,3 +135,48 @@ pub const ForthTokenIterator = struct {
 //        }
 //    }
 //}
+//
+//pub fn main3() !void {
+//    const print = std.debug.print;
+//    const string = @import("string.zig");
+//
+//    var line: [500]u8 = undefined;
+//    var s = "line buffer hello out there a string \"foo bar baz\" and an empty string \"\" the end   ";
+//
+//    var i: usize = 0;
+//    for(s) |ch| {
+//      line[i] = ch;
+//      i += 1;
+//    }
+//    line[i] = 0;
+//
+//
+//    print("string: {s}\n", .{line});
+//    var l: usize = try string.chIndex(0, &line);
+//
+//    var words = ForthTokenIterator.init(line[0..l]);
+//
+//   var word = words.next();
+//    while (word != null) : (word = words.next()) {
+//        print("in loop\n", .{});
+//        if (word) |w| {
+//            print("WORD: [{s}]\n", .{w});
+//        }
+//    }
+//}
+//
+////const print = std.debug.print;
+////
+////pub fn main() !void {
+////    var s = "hello out there a string \"foo bar baz\" and an empty string \"\" the end";
+////    var words = ForthTokenIterator{};
+////    try ForthTokenIterator.init(&words, s);
+////
+////    var word = words.next();
+////    while (word != null) : (word = words.next()) {
+////        print("in loop\n", .{});
+////        if (word) |w| {
+////            print("WORD: [{s}]\n", .{w});
+////        }
+////    }
+////}

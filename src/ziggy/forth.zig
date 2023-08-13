@@ -4,216 +4,281 @@ const Allocator = std.mem.Allocator;
 const bsp = @import("../bsp.zig");
 const fbcons = @import("../fbcons.zig");
 const Readline = @import("../readline.zig");
-const stack = @import("stack.zig");
-const dict = @import("dictionary.zig");
-const value = @import("value.zig");
-const core = @import("core.zig");
 const buffer = @import("buffer.zig");
 
-const init_f = @embedFile("init.f");
-var initBuffer = buffer.BufferSource{};
+const stack = @import("stack.zig");
+const string = @import("string.zig");
+const core = @import("core.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
-const Value = value.Value;
-const ValueType = value.ValueType;
+const memory_module = @import("memory.zig");
+const Header = memory_module.Header;
+const Memory = memory_module.Memory;
+const intAlignBy = memory_module.intAlignBy;
+
+pub const init_f = @embedFile("init.f");
+var initBuffer = buffer.BufferSource{};
 
 const InputStack = stack.Stack(*Readline);
-const DataStack = stack.Stack(Value);
-const ReturnStack = stack.Stack(i32);
+const DataStack = stack.Stack(u64);
+const ReturnStack = stack.Stack(u64);
 
-const ValueDictionary = dict.Dictionary(Value);
+pub const WordFunction = *const fn (forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64;
 
-const WordFunction = *const fn (self: *Forth) ForthError!void;
+const parser = @import("parser.zig");
+const ForthTokenIterator = parser.ForthTokenIterator;
 
-const ForthTokenIterator = @import("parser.zig").ForthTokenIterator;
+// These are the special op codes that we may see when interpreting a
+// secondary.
+pub const OpCode = enum(u64) {
+    stop = 0,
+    push_u64 = 1,
+    push_string = 3,
+};
 
 pub const Forth = struct {
-    const max_line_len = 256;
-
     allocator: Allocator = undefined,
     console: *fbcons.FrameBufferConsole = undefined,
-
     stack: DataStack = undefined,
     rstack: ReturnStack = undefined,
     input: InputStack = undefined,
-    dictionary: ValueDictionary = undefined,
-    memory: [2000]Value = undefined,
-    nextFree: i32 = 0,
-    nexti: i32 = -999,
-    composing: bool = false,
-    line_buffer: [max_line_len:0]u8 = undefined,
+    buffer: [20000]u8 = undefined,
+    memory: Memory = undefined,
+    lastWord: ?*Header = null,
+    newWord: ?*Header = null,
+    compiling: bool = false,
+    string_buffer: string.LineBuffer = undefined,
+    line_buffer: string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
-    new_word_name: [max_line_len:0]u8 = undefined,
-    new_word_def: i32 = -888,
 
-    pub fn init(self: *Forth, allocator: Allocator, console: *fbcons.FrameBufferConsole) !void {
-        self.console = console;
-        self.stack = DataStack.init(allocator);
-        self.rstack = ReturnStack.init(allocator);
-        self.dictionary = ValueDictionary.init(allocator);
-        try core.defineCore(self);
+    pub fn init(this: *Forth, a: Allocator, c: *fbcons.FrameBufferConsole) !void {
+        this.allocator = a;
+        this.console = c;
+        this.stack = DataStack.init(&a);
+        this.rstack = ReturnStack.init(&a);
+        this.buffer = undefined;
+        this.memory = Memory.init(&this.buffer, this.buffer.len);
+        try core.defineCore(this);
 
         initBuffer.init(init_f);
-        var initBufferReader = try buffer.createReader(allocator, &initBuffer);
-        var consoleReader = try fbcons.createReader(allocator, console);
+        var initBufferReader = try buffer.createReader(a, &initBuffer);
+        var consoleReader = try fbcons.createReader(a, c);
 
-        self.input = InputStack.init(allocator);
-        try self.pushSource(consoleReader);
-        try self.pushSource(initBufferReader);
+        this.input = InputStack.init(&a);
+        try this.pushSource(consoleReader);
+        try this.pushSource(initBufferReader);
     }
 
-    pub fn print(self: *Forth, comptime fmt: []const u8, args: anytype) !void {
-        try self.console.print(fmt, args);
+    pub fn deinit(this: *Forth) !void {
+        this.stack.deinit();
+        this.rstack.deinit();
     }
 
-    pub fn writer(self: *Forth) fbcons.FrameBufferConsole.Writer {
-        return self.console.writer();
+    // Reset the state of the interpreter, probably due to an error.
+    // Clears the stacks and aborts a new word definition.
+    pub fn reset(this: *Forth) !void {
+        try this.stack.reset();
+        try this.rstack.reset();
+        this.newWord = null;
+        this.compiling = false;
     }
 
-    pub fn evalFP(self: *Forth, v: Value) dict.ForthError!void {
-        const fp: *fn (self: *Forth) void = v.fp;
-        try fp(self);
+    // Find a word in the dictionary, ignores words that are under construction.
+    pub fn findWord(this: *Forth, name: []const u8) ?*Header {
+        //print("Finding word: {s}\n", .{name});
+        var e = this.lastWord;
+        while (e) |entry| {
+            //print("Name: {s}\n", .{entry.name});
+            if (string.same(&entry.name, name)) {
+                return entry;
+            }
+            e = entry.previous;
+        }
+        return null;
     }
 
-    pub fn addToDefinition(self: *Forth, v: Value) void {
-        self.memory[@intCast(self.nextFree)] = v;
-        self.nextFree += 1;
+    // Define a primitive (i.e. a word backed up by a zig function).
+    pub fn definePrimitive(this: *Forth, name: []const u8, f: WordFunction, immed: bool) !*Header {
+        const header = try this.startWord(name, f, immed);
+        try this.completeWord();
+        return header;
     }
 
-    pub fn _evalValue(self: *Forth, v: Value) !void {
-        switch (v) {
-            .w => |name| {
-                const assoc_value = try self.dictionary.get(name);
-                try evalValue(self, assoc_value);
-            },
-            .fp => |p| {
-                //var wordf = @intToPtr(WordFunction, p);
-                var wordf: WordFunction = @ptrFromInt(p);
-                try wordf(self);
-            },
-            .call => |address| {
-                try inner(self, address);
-            },
-            else => |_| {
-                try self.stack.push(v);
-            },
+    // Define a variable with a single u64 value. What we really end up with
+    // is a secondary word that pushes the value onto the stack.
+    pub fn defineVariable(this: *Forth, name: []const u8, v: u64) !void {
+        _ = try this.startWord(name, &core.inner, false);
+        this.addOpCode(OpCode.push_u64);
+        this.addNumber(v);
+        this.addOpCode(OpCode.stop);
+        try this.completeWord();
+    }
+
+    // Start a new word in the interpreter. Dictionary searches will not find
+    // the new word until completeWord is called.
+    pub fn startWord(this: *Forth, name: []const u8, f: WordFunction, immediate: bool) !*Header {
+        if (this.compiling) {
+            return ForthError.AlreadyCompiling;
+        }
+        try this.print("New word: {s}\n", .{name});
+        const entry: Header = Header.init(name, f, immediate, this.lastWord);
+        this.newWord = this.addScalar(Header, entry);
+        this.compiling = true;
+        return this.newWord.?;
+    }
+
+    // Finish out a new word and add it to the dictionary.
+    pub fn completeWord(this: *Forth) !void {
+        if (!this.compiling) {
+            return ForthError.NotCompiling;
+        }
+        this.lastWord = this.newWord;
+        this.newWord = null;
+        this.compiling = false;
+    }
+
+    // Convert the token into a value, either a string, a number
+    // or a reference to a word and either compile it or execute
+    // directly.
+    pub fn evalToken(this: *Forth, token: []const u8) !void {
+        var header = this.findWord(token);
+
+        if (header) |h| {
+            try this.evalHeader(h);
+        } else if (token[0] == '"') {
+            try this.evalString(token);
+        } else {
+            var v: u64 = try parser.parseNumber(token);
+            try this.evalNumber(v);
         }
     }
 
-    pub fn evalValue(self: *Forth, v: Value) ForthError!void {
-        // try self.print("eval value {any}\n", .{v});
-        switch (v) {
-            .w => |name| {
-                const entry = try self.dictionary.getEntry(name);
-                // try self.print("word: {s} entry: {any}\n", .{ name, entry });
-                if (entry.immediate) {
-                    try _evalValue(self, entry.value);
-                } else if (self.composing) {
-                    self.addToDefinition(entry.value);
-                } else {
-                    try _evalValue(self, entry.value);
-                }
-            },
-            .fp => |p| {
-                if (self.composing) {
-                    self.addToDefinition(v);
-                } else {
-                    var wordf: WordFunction = @ptrFromInt(p);
-                    try wordf(self);
-                }
-            },
-            .call => |address| {
-                if (self.composing) {
-                    self.addToDefinition(v);
-                } else {
-                    try inner(self, address);
-                }
-            },
-            else => |_| {
-                if (self.composing) {
-                    self.addToDefinition(v);
-                } else {
-                    try self.stack.push(v);
-                }
-            },
-        }
-    }
-    fn define(self: *Forth, name: []const u8, v: Value, immediate: bool) !void {
-        try self.dictionary.put(name, v, immediate);
-    }
-
-    pub fn definePrimitive(self: *Forth, name: []const u8, fp: WordFunction, immediate: bool) !void {
-        // try self.print("define word {s} -> {*}\n", .{ name, fp });
-        try self.define(name, Value{ .fp = @intFromPtr(fp) }, immediate);
-    }
-
-    pub fn defineSecondary(self: *Forth, name: []const u8, address: i32) !void {
-        // try self.print("define secondary {s} {}\n", .{ name, address });
-        try self.define(name, Value{ .call = address }, false);
-    }
-
-    pub fn defineVariable(self: *Forth, name: []const u8, v: Value) !void {
-        try self.define(name, v, false);
-    }
-
-    fn readline(self: *Forth) !usize {
-        var source = try self.input.peek();
-        return source.read("OK>> ", &self.line_buffer);
-    }
-
-    fn popSource(self: *Forth) !void {
-        if (self.input.items().len > 1) {
-            _ = try self.input.pop();
+    // If we are compiling, compile the code to push the number onto the stack.
+    // If we are not compiling, just push the numnber onto the stack.
+    fn evalNumber(this: *Forth, i: u64) !void {
+        if (this.compiling) {
+            this.addOpCode(OpCode.push_u64);
+            this.addNumber(i);
+        } else {
+            try this.stack.push(i);
         }
     }
 
-    fn pushSource(self: *Forth, rl: *Readline) !void {
-        try self.input.push(rl);
+    // If we are compiling, compile the code to push the string onto the stack.
+    // If we are not compiling, copy the string to the temp space in the interpreter
+    // and push a reference to the string onto the stack.
+    fn evalString(this: *Forth, token: []const u8) !void {
+        try this.print("eval string: {s}\n", .{token});
+        const l = token.len - 1;
+        const s = token[1..l];
+        if (this.compiling) {
+            this.addOpCode(OpCode.push_string);
+            this.addString(s);
+        } else {
+            string.copyTo(&this.string_buffer, s);
+            try this.stack.push(@intFromPtr(&this.string_buffer));
+        }
     }
 
-    pub fn repl(self: *Forth) !void {
+    // If the header is marked immediate, execute it.
+    // Otherwise, if we are compiling, compile a call to the header.
+    // Otherwise just execute it.
+    fn evalHeader(this: *Forth, header: *Header) !void {
+        if ((!this.compiling) or (header.immediate)) {
+            var fake_body: [1]u64 = .{0};
+            _ = try header.func(this, &fake_body, 0, header);
+        } else {
+            this.addCall(header);
+        }
+    }
+
+    // Copy a u64 number into memory.
+    pub inline fn addNumber(this: *Forth, v: u64) void {
+        _ = this.memory.addBytes(@constCast(@ptrCast(&v)), @alignOf(u64), @sizeOf(u64));
+    }
+
+    // Copy an opcode into memory.
+    pub inline fn addOpCode(this: *Forth, oc: OpCode) void {
+        this.addNumber(@intFromEnum(oc));
+    }
+
+    // Copy a call to a word into memory.
+    pub inline fn addCall(this: *Forth, header: *Header) void {
+        this.addNumber(@intFromPtr(header));
+    }
+
+    // Copy the value s of type T into memory, aligning it correctly.
+    // Returns a pointer to the beginning of the newly copied value.
+    pub fn addScalar(this: *Forth, comptime T: type, s: T) *T {
+        const p = this.memory.addBytes(@alignCast(@constCast(@ptrCast(&s))), @alignOf(T), @sizeOf(T));
+        return @alignCast(@ptrCast(p));
+    }
+
+    // Copy n bytes with the given alignment into memory.
+    pub fn addBytes(this: *Forth, src: [*]const u8, alignment: usize, n: usize) void {
+        _ = this.memory.addBytes(@constCast(src), alignment, n);
+    }
+
+    // Add a string to memory, move the current pointer.
+    // Note that a string is stored as u64 count of the number of words
+    // (including the count) followed by the zero terminated string.
+    pub fn addString(this: *Forth, s: []const u8) void {
+        const len_words = intAlignBy(s.len, @alignOf(u64)) / @sizeOf(u64) + 1;
+        this.addNumber(len_words);
+        this.addBytes(s.ptr, @alignOf(u8), s.len);
+        _ = this.addScalar(u8, 0);
+    }
+
+    pub fn print(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
+        try this.console.print(fmt, args);
+    }
+
+    pub fn writer(this: *Forth) fbcons.FrameBufferConsole.Writer {
+        return this.console.writer();
+    }
+
+    fn readline(this: *Forth) !usize {
+        var source = try this.input.peek();
+        return source.read("OK>> ", &this.line_buffer);
+    }
+
+    fn popSource(this: *Forth) !void {
+        if (this.input.items().len > 1) {
+            _ = try this.input.pop();
+        }
+    }
+
+    fn pushSource(this: *Forth, rl: *Readline) !void {
+        try this.input.push(rl);
+    }
+
+    pub fn repl(this: *Forth) !void {
         // outer loop, one line at a time.
         while (true) {
-            if (self.readline()) |line_len| {
-                self.words = ForthTokenIterator.init(self.line_buffer[0..line_len]);
+            if (this.readline()) |line_len| {
+                this.words = ForthTokenIterator.init(this.line_buffer[0..line_len]);
 
                 // inner loop, one word at a time.
-                var word = self.words.next();
-                while (word != null) : (word = self.words.next()) {
+                var word = this.words.next();
+                while (word != null) : (word = this.words.next()) {
                     if (word) |w| {
-                        var v = Value.fromString(w) catch |err| {
-                            try self.print("Parse error({s}): {}\n", .{ w, err });
-                            continue;
-                        };
-                        self.evalValue(v) catch |err| {
-                            try self.print("error: {any}\n", .{err});
+                        this.evalToken(w) catch |err| {
+                            try this.print("error: {s} {any}\n", .{ w, err });
+                            this.reset() catch {
+                                try this.print("Not looking good, can't reset Forth!\n", .{});
+                            };
+                            break;
                         };
                     }
                 }
             } else |err| {
                 switch (err) {
-                    Readline.Error.EOF => try self.popSource(),
+                    Readline.Error.EOF => try this.popSource(),
                     else => return err,
                 }
             }
         }
     }
 };
-
-pub fn inner(self: *Forth, address: i32) ForthError!void {
-    try self.rstack.push(self.nexti);
-    self.nexti = address;
-    // try forth.print("start loop: {}\n", .{forth.nexti});
-    while (self.nexti >= 0) {
-        // try forth.print("inner loop: {}\n", .{forth.nexti});
-        var v = self.memory[@intCast(self.nexti)];
-        self.nexti += 1;
-        self._evalValue(v) catch |err| {
-            try self.print("Error: {any}\n", .{err});
-            break;
-        };
-    }
-    self.nexti = try self.rstack.pop();
-}

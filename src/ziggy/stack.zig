@@ -12,21 +12,24 @@ pub fn Stack(comptime T: type) type {
 
         const Self = @This();
 
-        pub fn init(allocator: Allocator) Self {
+        pub fn init(allocator: *const Allocator) Self {
             return Self{
-                .contents = ArrayList(T).init(allocator),
-                // .sp = 0,
+                .contents = ArrayList(T).init(allocator.*),
             };
         }
 
         pub fn deinit(self: *Self) void {
             self.contents.deinit();
-            // self.sp = 0;
+        }
+
+        pub fn reset(self: *Self) !void {
+            while (!self.isEmpty()) {
+                _ = try self.pop();
+            }
         }
 
         pub fn push(self: *Self, value: T) !void {
             try self.contents.append(value);
-            // self.sp += 1;
         }
 
         pub fn pop(self: *Self) !T {
@@ -34,9 +37,6 @@ pub fn Stack(comptime T: type) type {
                 return ForthError.UnderFlow;
             }
             return self.contents.pop();
-            // var result = self.contents.items[self.sp - 1];
-            // self.sp -= 1;
-            // return result;
         }
 
         pub fn isEmpty(self: *Self) bool {

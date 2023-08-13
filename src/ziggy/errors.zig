@@ -7,5 +7,7 @@ pub const ForthError = error{
     WordReadError,
     ParseError,
     OutOfMemory,
+    AlreadyCompiling,
+    NotCompiling,
     EOF,
 };

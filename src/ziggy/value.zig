@@ -42,7 +42,6 @@ pub const Value = union(ValueType) {
                 return ForthError.ParseError;
             };
             return Value{ .u = uValue };
-
         } else if (token[0] == '0' and token[1] == 'x') {
             var sNumber = token[2..];
             const aValue = std.fmt.parseInt(usize, sNumber, 16) catch {

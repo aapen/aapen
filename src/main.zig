@@ -108,13 +108,13 @@ fn repl() callconv(.C) noreturn {
 }
 
 fn supplyAddress(name: []const u8, addr: usize) void {
-    interpreter.defineVariable(name, Value{ .addr = addr }) catch |err| {
+    interpreter.defineVariable(name, addr) catch |err| {
         kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
 fn supplyUsize(name: []const u8, sz: usize) void {
-    interpreter.defineVariable(name, Value{ .sz = sz }) catch |err| {
+    interpreter.defineVariable(name, sz) catch |err| {
         kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
     };
 }
