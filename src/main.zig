@@ -34,7 +34,7 @@ pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
 pub var interpreter: Forth = Forth{};
 
-fn kernelInit() !void {
+fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
     arch.cpu.exceptionInit();
@@ -145,7 +145,7 @@ fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
 }
 
 export fn _soft_reset() noreturn {
-    kernelInit() catch {};
+    kernelInit();
 
     unreachable;
 }
