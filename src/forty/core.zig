@@ -65,6 +65,17 @@ pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     return 0;
 }
 
+//
+pub fn wordComment(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    while (true) {
+        var word = forth.words.next() orelse return ForthError.WordReadError;
+        if (string.same(")", word)) {
+            break;
+        }
+    }
+    return 0;
+}
+
 /// sAddr flag -- ()
 pub fn wordImmediate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     const i = try forth.stack.pop();
@@ -358,6 +369,7 @@ pub fn defineCore(forth: *Forth) !void {
     // Secondary definition words.
     _ = try forth.definePrimitive(":", &wordColon, false);
     _ = try forth.definePrimitive(";", &wordSemi, true);
+    _ = try forth.definePrimitive("(", &wordComment, true);
     _ = try forth.definePrimitive("immediate", &wordImmediate, false);
 
     // Debug and inspection words.

@@ -81,7 +81,6 @@ pub const ForthTokenIterator = struct {
 
         if (self.buffer[start] == '"') {
             end += 1;
-            //print("dealing with quoted string, index: {}\n", .{self.index});
             while (end < self.buffer.len and self.buffer[end] != '"') : (end += 1) {}
             if (end < self.buffer.len) {
                 end += 1;
