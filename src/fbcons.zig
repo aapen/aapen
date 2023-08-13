@@ -6,10 +6,10 @@ const Readline = @import("readline.zig");
 /// display console
 pub const FrameBufferConsole = struct {
     tab_width: u8 = 8,
-    xpos: u8 = 0,
-    ypos: u8 = 0,
-    width: u16 = undefined,
-    height: u16 = undefined,
+    xpos: u64 = 0,
+    ypos: u64 = 0,
+    width: u64 = undefined,
+    height: u64 = undefined,
     frame_buffer: *bsp.video.FrameBuffer = undefined,
 
     pub fn init(self: *FrameBufferConsole) void {
@@ -55,9 +55,9 @@ pub const FrameBufferConsole = struct {
     }
 
     fn underbar(self: *FrameBufferConsole, color: u8) void {
-        var x: u16 = self.xpos;
+        var x: u64 = self.xpos;
         x *= 8;
-        var y: u16 = self.ypos + 1;
+        var y: u64 = self.ypos + 1;
         y *= 16;
 
         for (0..8) |i| {
@@ -77,7 +77,7 @@ pub const FrameBufferConsole = struct {
         if (self.xpos > 0) {
             self.xpos -= 1;
         }
-        self.frame_buffer.eraseChar(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16);
+        self.frame_buffer.eraseChar(self.xpos * 8, self.ypos * 16);
     }
 
     fn isPrintable(ch: u8) bool {
@@ -94,7 +94,7 @@ pub const FrameBufferConsole = struct {
             '\t' => self.nextTab(),
             '\n' => self.nextLine(),
             else => if (isPrintable(ch)) {
-                self.frame_buffer.drawChar(@as(u16, self.xpos) * 8, @as(u16, self.ypos) * 16, ch);
+                self.frame_buffer.drawChar(self.xpos * 8, self.ypos * 16, ch);
                 self.next();
             },
         }

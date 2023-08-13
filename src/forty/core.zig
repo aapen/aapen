@@ -419,6 +419,11 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineInternalVariable("ibase", &forth.ibase);
     try forth.defineInternalVariable("obase", &forth.obase);
 
+    try forth.defineInternalVariable("screenw", &forth.console.width);
+    try forth.defineInternalVariable("screenh", &forth.console.height);
+    try forth.defineInternalVariable("cursorx", &forth.console.xpos);
+    try forth.defineInternalVariable("cursory", &forth.console.ypos);
+
     // IO
     _ = try forth.definePrimitive("hello", &wordHello, false);
     _ = try forth.definePrimitive("cr", &wordCr, false);
