@@ -93,7 +93,7 @@ pub const Forth = struct {
         var e = this.lastWord;
         while (e) |entry| {
             //print("Name: {s}\n", .{entry.name});
-            if (string.same(&entry.name, name)) {
+            if (string.same(entry.name, name)) {
                 return entry;
             }
             e = entry.previous;
@@ -131,8 +131,9 @@ pub const Forth = struct {
         if (this.compiling) {
             return ForthError.AlreadyCompiling;
         }
-        try this.print("New word: {s}\n", .{name});
-        const entry: Header = Header.init(name, f, immediate, this.lastWord);
+        var owned_name = try std.mem.Allocator.dupeZ(this.allocator, u8, name);
+        try this.print("New word: {s}\n", .{owned_name});
+        const entry: Header = Header.init(owned_name, f, immediate, this.lastWord);
         this.newWord = this.addScalar(Header, entry);
         this.compiling = true;
         return this.newWord.?;

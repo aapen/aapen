@@ -7,19 +7,18 @@ const ForthError = errors.ForthError;
 const WordFunction = @import("forth.zig").WordFunction;
 
 pub const Header = struct {
-    name: [20:0]u8 = undefined,
+    name: []const u8 = undefined,
     func: WordFunction = undefined,
     immediate: bool = false,
     previous: ?*Header = null,
 
     pub fn init(name: []const u8, func: WordFunction, immediate: bool, previous: ?*Header) Header {
         var this = Header{
-            .name = undefined,
+            .name = name,
             .func = func,
             .immediate = immediate,
             .previous = previous,
         };
-        string.copyTo(&this.name, name);
         return this;
     }
 

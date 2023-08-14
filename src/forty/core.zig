@@ -336,10 +336,17 @@ pub fn wordMod(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 /// --
 pub fn wordDictionary(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     var e = forth.lastWord;
+    var i: usize = 0;
     while (e) |entry| {
         const immed = if (entry.immediate) "*" else " ";
-        try forth.print("{s} {s}\n", .{ immed, entry.name });
+        i += 1;
+        var sep: u8 = if ((i % 5) == 0) '\n' else '\t';
+        try forth.print("{s} {s: <20}{c}", .{ immed, entry.name, sep });
+
         e = entry.previous;
+    }
+    if ((i % 5) != 0) {
+        try forth.print("\n", .{});
     }
     return 0;
 }
