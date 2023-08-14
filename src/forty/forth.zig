@@ -132,7 +132,7 @@ pub const Forth = struct {
             return ForthError.AlreadyCompiling;
         }
         var owned_name = try std.mem.Allocator.dupeZ(this.allocator, u8, name);
-        try this.print("New word: {s}\n", .{owned_name});
+        // try this.print("New word: {s}\n", .{owned_name});
         const entry: Header = Header.init(owned_name, f, immediate, this.lastWord);
         this.newWord = this.addScalar(Header, entry);
         this.compiling = true;

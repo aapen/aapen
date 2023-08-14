@@ -8,6 +8,7 @@ const bcd = @import("bcd.zig");
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 const debug = @import("debug.zig");
+pub const devicetree = @import("devicetree.zig");
 
 pub const kinfo = debug.kinfo;
 pub const kwarn = debug.kwarn;
@@ -18,6 +19,16 @@ const Freestanding = struct {
     page_allocator: std.mem.Allocator,
 };
 
+// TODO Add .system to the os, so root.os.system is valid
+// TODO Define an fd_t in system
+// TODO Define root.os.io.system.getStdErrHandle to return an instance
+// of fd_t
+// TODO Define root.os.io.system.getStdOutHandle to return an instance
+// of fd_t
+// TODO Define root.os.write() to take an instance of fd_t and write
+// to console
+// TODO Finally allow std.debug.print to go to console
+// TODO Finally allow std.debug.dumpStackTrace to go to console
 var os = Freestanding{
     .page_allocator = undefined,
 };
@@ -26,13 +37,12 @@ const Self = @This();
 
 pub const page_size = arch.cpu.mmu.page_size;
 
-extern var __fdt_address: usize;
-
 pub var board = bsp.mailbox.BoardInfo{};
 pub var heap = mem{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
 pub var interpreter: Forth = Forth{};
+pub var fdt: devicetree.Fdt = devicetree.Fdt{};
 
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
@@ -61,6 +71,10 @@ fn kernelInit() void {
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
 
+    fdt.init() catch |err| {
+        kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
+    };
+
     kprint("Running on {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,
         board.model.processor,
@@ -77,13 +91,15 @@ fn kernelInit() void {
 
     bsp.usb.init();
 
+    sampleDeviceTree();
+
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});
     };
 
     supplyAddress("fb", @intFromPtr(frame_buffer.base));
     supplyUsize("fbsize", frame_buffer.buffer_size);
-    supplyAddress("fdt", __fdt_address);
+    supplyAddress("fdt", devicetree.__fdt_address);
 
     arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
     arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -120,9 +136,28 @@ fn supplyUsize(name: []const u8, sz: usize) void {
     };
 }
 
-fn diagnostics() !void {
-    try printFdtLocation();
+fn sampleDeviceTree() void {
+    _ = reportDeviceTreeNode("/reserved-memory");
+    _ = reportDeviceTreeNode("/thermal-zones/cpu-thermal");
+    _ = reportDeviceTreeNode("/soc/usb@7e980000/usb1@1/ethernet@1");
+}
 
+pub fn reportDeviceTreeNode(path: [:0]const u8) ?usize {
+    const offset = fdt.nodeLookupByPath(path) catch |err| blk: {
+        kprint("Error looking up {s}: {any}\n", .{ path, err });
+        break :blk null;
+    };
+
+    if (offset) |o| {
+        kprint("{s} at {d}\n", .{ path, o });
+    } else {
+        kprint("{s} not found.\n", .{path});
+    }
+
+    return offset;
+}
+
+fn diagnostics() !void {
     try board.arm_memory.print();
     try board.videocore_memory.print();
     try heap.memory.print();
@@ -134,8 +169,8 @@ fn diagnostics() !void {
     try printClockRate(.arm);
 }
 
-fn printFdtLocation() !void {
-    kprint("{s:>20}: 0x{x:0>8}\n", .{ "FDT Address", __fdt_address });
+fn printFdtLocation() void {
+    kprint("{s:>20}: 0x{x:0>8}\n", .{ "FDT Address", devicetree.fdtHeader() });
 }
 
 fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
