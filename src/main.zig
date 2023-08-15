@@ -19,16 +19,6 @@ const Freestanding = struct {
     page_allocator: std.mem.Allocator,
 };
 
-// TODO Add .system to the os, so root.os.system is valid
-// TODO Define an fd_t in system
-// TODO Define root.os.io.system.getStdErrHandle to return an instance
-// of fd_t
-// TODO Define root.os.io.system.getStdOutHandle to return an instance
-// of fd_t
-// TODO Define root.os.write() to take an instance of fd_t and write
-// to console
-// TODO Finally allow std.debug.print to go to console
-// TODO Finally allow std.debug.dumpStackTrace to go to console
 var os = Freestanding{
     .page_allocator = undefined,
 };
