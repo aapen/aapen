@@ -155,7 +155,7 @@ pub const Forth = struct {
         if (this.compiling) {
             return ForthError.AlreadyCompiling;
         }
-   }
+    }
 
     // Start a new word in the interpreter. Dictionary searches will not find
     // the new word until completeWord is called.

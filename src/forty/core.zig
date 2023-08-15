@@ -98,6 +98,14 @@ pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     var name = forth.words.next() orelse return ForthError.WordReadError;
     var header = forth.findWord(name) orelse return ForthError.NotFound;
+
+    if (header.func != &inner) {
+        const h: u64 = @intFromPtr(header);
+        const p: u64 = @intFromPtr(header.func);
+        try forth.print("Word name: {s} header: {x} func: {x}\n", .{ header.name, h, p });
+        return 0;
+    }
+
     var body = header.bodyOfType([*]u64);
     var len = header.bodyLen();
     try forth.print("Word name: {s} len: {} immed: {}\n", .{ header.name, len, header.immediate });
