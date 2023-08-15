@@ -5,11 +5,15 @@ const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
 pub fn parseNumber(token: []const u8, base: u64) !u64 {
+    if (token.len <= 0) {
+        return ForthError.ParseError;
+    }
+
     if (token[0] == '\\') {
         return token[1];
     }
 
-    if (token[0] == '0' and token[1] == 'x') {
+    if (token.len >= 3 and token[0] == '0' and token[1] == 'x') {
         var sNumber = token[2..];
         const uValue = std.fmt.parseInt(u64, sNumber, 16) catch {
             return ForthError.ParseError;
@@ -17,7 +21,7 @@ pub fn parseNumber(token: []const u8, base: u64) !u64 {
         return uValue;
     }
 
-    if (token[0] == '0' and token[1] == '#') {
+    if (token.len >= 3 and token[0] == '0' and token[1] == '#') {
         var sNumber = token[2..];
         const iValue = std.fmt.parseInt(i64, sNumber, 10) catch {
             return ForthError.ParseError;
