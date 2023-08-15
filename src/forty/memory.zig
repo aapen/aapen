@@ -6,11 +6,14 @@ const ForthError = errors.ForthError;
 
 const WordFunction = @import("forth.zig").WordFunction;
 
+pub const WordNameLen = 20;
+
 pub const Header = struct {
     name: []const u8 = undefined,
     func: WordFunction = undefined,
     immediate: bool = false,
     previous: ?*Header = null,
+    len: u64 = 0,
 
     pub fn init(name: []const u8, func: WordFunction, immediate: bool, previous: ?*Header) Header {
         var this = Header{
@@ -18,6 +21,7 @@ pub const Header = struct {
             .func = func,
             .immediate = immediate,
             .previous = previous,
+            .len = 0,
         };
         return this;
     }
@@ -30,6 +34,10 @@ pub const Header = struct {
     pub fn bodyPointer(this: *Header) [*]u8 {
         const i: usize = @intFromPtr(this) + @sizeOf(Header);
         return @ptrFromInt(i);
+    }
+
+    pub fn bodyLen(this: *Header) u64 {
+        return this.len - @sizeOf(Header);
     }
 };
 
@@ -51,7 +59,7 @@ pub const Memory = struct {
     p: [*]u8, // The data
     length: usize, // Length of the data.
     current: [*]u8, // Next Free memory space.
-    alignment: usize = @alignOf(*void),
+    //alignment: usize = @alignOf(*void),
 
     pub fn init(p: [*]u8, length: usize) Memory {
         return Memory{
