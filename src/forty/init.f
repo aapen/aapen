@@ -25,3 +25,9 @@ F
 : fdt-boot-cpuid fdt 0x1c field@ ;
 : fdt-strings-sz fdt 0x20 field@ ;
 : fdt-struct-sz  fdt 0x24 field@ ;
+
+
+( Debugging )
+
+: tron 1 debug ! ;
+: troff 0 debug ! ;
