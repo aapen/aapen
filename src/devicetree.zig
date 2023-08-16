@@ -1,4 +1,7 @@
 const std = @import("std");
+const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
+
 const root = @import("root");
 
 // This symbol is defined in boot.S.
@@ -9,24 +12,37 @@ pub extern var __fdt_address: usize;
 pub const Fdt = struct {
     const Self = @This();
 
+    const NodeList = ArrayList(*Node);
+    const PropertyList = ArrayList(*Property);
+
     // These constants come from the device tree specification.
     // See https://github.com/devicetree-org/devicetree-specification
     const compatible_version = 16;
     const magic_value = 0xd00dfeed;
+    pub const tag_size: usize = @sizeOf(u32);
 
     // Member variables will be in native byte order
     struct_base: usize = undefined,
+    struct_size: usize = undefined,
     strings_base: usize = undefined,
+    strings_size: usize = undefined,
+
+    root_node: *Node = undefined,
 
     pub const Error = error{
+        OutOfMemory,
         NotFound,
         BadVersion,
         BadTagAlignment,
+        IncorrectTag,
         NoTagAtOffset,
+        BadContents,
     };
 
-    /// Note: when reading from __fdt_address, these will all be
+    /// Note: when reading from the fdt blob, these will all be
     /// big-endian
+    ///
+    /// Struct definition comes from the device tree specification
     const Header = extern struct {
         magic: u32,
         total_size: u32,
@@ -40,8 +56,12 @@ pub const Fdt = struct {
         size_dt_struct: u32,
     };
 
-    pub fn init(self: *Self) !void {
-        var h: *Header = @ptrFromInt(__fdt_address);
+    pub fn init(self: *Fdt, allocator: Allocator) !void {
+        try self.initFromPointer(allocator, __fdt_address);
+    }
+
+    pub fn initFromPointer(self: *Fdt, allocator: Allocator, fdt_address: u64) !void {
+        var h: *Header = @ptrFromInt(fdt_address);
 
         if (nativeByteOrder(h.magic) != magic_value) {
             return Error.NotFound;
@@ -54,33 +74,103 @@ pub const Fdt = struct {
         // if those passed, we have a good blob.
         // from here, self.struct_base and self.strings_base will be
         // pre-added and in native byte order
-        self.struct_base = __fdt_address + nativeByteOrder(h.off_dt_struct);
-        self.strings_base = __fdt_address + nativeByteOrder(h.off_dt_strings);
+        self.struct_base = fdt_address + nativeByteOrder(h.off_dt_struct);
+        self.struct_size = nativeByteOrder(h.size_dt_struct);
+        self.strings_base = fdt_address + nativeByteOrder(h.off_dt_strings);
+        self.strings_size = nativeByteOrder(h.size_dt_strings);
+
+        self.root_node = try parse(self, allocator);
     }
 
-    /// Find a node that matches the given path. On success, return
-    /// its offset (in bytes). If not found, returns null.
-    pub fn nodeLookupByPath(self: *Self, path: [:0]const u8) !?usize {
-        // TODO: handle aliases
+    pub fn deinit(self: *Fdt) void {
+        self.root_node.deinit();
+    }
 
-        // byte offset from start of dt_struct
-        var current_node_offset: ?usize = 0;
-        // pointer to start of current path segment
-        var p: usize = 0;
-        // pointer to end of current path segment
-        var q: usize = 0;
-        var end: usize = path.len;
+    pub fn nodeLookupByPath(self: *Fdt, path: [:0]const u8) !?*Node {
+        return self.root_node.lookupChildByPath(path, 0, path.len);
+    }
 
-        // Walk the path, one segment at a time. For each segment,
-        // look for a subnode of the current node.
-        while (p < end and (current_node_offset != null)) {
+    pub const TokenType = enum(u32) {
+        beginNode = 0x00000001,
+        endNode = 0x00000002,
+        property = 0x00000003,
+        nop = 0x00000004,
+        end = 0x00000009,
+    };
+
+    pub const Node = struct {
+        allocator: Allocator,
+
+        fdt: *Fdt = undefined,
+        offset: u64 = undefined,
+        name: []const u8 = undefined,
+        parent: *Node = undefined,
+        children: NodeList,
+        properties: PropertyList,
+
+        pub fn create(allocator: Allocator, fdt: *Fdt, offset: u64, name: []const u8) Error!*Node {
+            var current_tag_type = try fdt.tagTypeAt(offset);
+
+            if (current_tag_type != .beginNode) {
+                return Fdt.Error.IncorrectTag;
+            }
+
+            var node: *Node = try allocator.create(Node);
+            node.* = Node{
+                .allocator = allocator,
+                .fdt = fdt,
+                .offset = offset,
+                .name = name,
+                .children = NodeList.init(allocator),
+                .properties = PropertyList.init(allocator),
+            };
+            return node;
+        }
+
+        pub fn deinit(self: *Node) void {
+            for (self.properties.items) |p| {
+                p.deinit();
+            }
+            self.properties.deinit();
+
+            for (self.children.items) |n| {
+                n.deinit();
+            }
+            self.children.deinit();
+            self.allocator.destroy(self);
+        }
+
+        pub fn getChildByName(self: *Node, name: []const u8) ?*Node {
+            for (self.children.items) |c| {
+                if (std.mem.eql(u8, c.name, name)) {
+                    return c;
+                }
+            }
+            return null;
+        }
+
+        pub fn lookupChildByPath(self: *Node, path: [:0]const u8, start: usize, end: usize) ?*Node {
+            // TODO: handle aliases
+
+            if (start == end) {
+                return self;
+            }
+
+            // pointer to start of current path segment
+            var p: usize = start;
+            // pointer to end of current path segment
+            var q: usize = start;
+
+            // Walk the path, one segment at a time. For each segment,
+            // look for a subnode of the current node.
+
             // Skip the path separator
             while (path[p] == '/') {
                 p += 1;
                 // If the path ended with '/', we're at the intended
                 // node
                 if (p == end) {
-                    return current_node_offset;
+                    return self;
                 }
             }
 
@@ -90,55 +180,140 @@ pub const Fdt = struct {
 
             // starting from the current offset, locate a subnode with
             // the desired name
-            if (try self.subnodeOffsetLookupByName(current_node_offset.?, path, p, q)) |next_node_offset| {
-                current_node_offset = next_node_offset;
+            if (self.getChildByName(path[p..q])) |child| {
+                return child.lookupChildByPath(path, q, end);
             } else {
                 return null;
             }
-
-            // Advance pointer to next segment
-            p = q;
         }
-        return current_node_offset;
-    }
+    };
 
-    fn subnodeOffsetLookupByName(self: *Self, starting_node_offset: usize, path: [:0]const u8, start: usize, end: usize) !?usize {
-        var current_node_offset = starting_node_offset;
+    pub const Property = struct {
+        allocator: Allocator,
+        offset: u64 = undefined,
+        value_offset: u64 = undefined,
+        value_len: usize = undefined,
+        name: [*:0]u8 = undefined,
+        owner: *Node = undefined,
 
-        // Advance through nested pairs of .beginNode and .endNode
-        // tokens looking for a .beginNode with matching name.
-        while (!(try self.nodeNameEql(current_node_offset, path, start, end))) {
-            // Advance to the next .beginNode token
-            if (try self.nextNode(current_node_offset)) |next_node_offset| {
-                current_node_offset = next_node_offset;
-            } else {
-                // there wasn't another sibling node, the desired name
-                // was not found
-                return null;
+        pub fn create(allocator: Allocator, owner: *Node, offset: u64, name: [*:0]u8, value_offset: u64, value_len: usize) Error!*Property {
+            var prop = try allocator.create(Property);
+            prop.* = Property{
+                .allocator = allocator,
+                .offset = offset,
+                .owner = owner,
+                .name = name,
+                .value_offset = value_offset,
+                .value_len = value_len,
+            };
+            return prop;
+        }
+
+        pub fn deinit(self: *Property) void {
+            self.allocator.destroy(self);
+        }
+    };
+
+    pub fn parse(self: *Fdt, allocator: Allocator) !*Node {
+        var parents = NodeList.init(allocator);
+        defer parents.deinit();
+
+        var current_tag_offset: usize = 0;
+
+        var current_tag_type = try self.tagTypeAt(current_tag_offset);
+        if (current_tag_type != .beginNode) {
+            return Fdt.Error.IncorrectTag;
+        }
+
+        // walk the tags.
+        while (current_tag_offset < self.struct_size) {
+            // std.debug.print("{x:0>5} {s}\n", .{ current_tag_offset, @tagName(current_tag_type) });
+
+            switch (current_tag_type) {
+                .beginNode => {
+                    const node_offset = current_tag_offset;
+
+                    // locate the name
+                    current_tag_offset += tag_size;
+                    var p: [*]u8 = @ptrCast(self.ptrFromOffset(u8, current_tag_offset));
+                    current_tag_offset += 1;
+                    var i: usize = 0;
+                    while (p[i] != 0) : (i += 1) {}
+                    current_tag_offset += i;
+                    const node_name = p[0..i];
+
+                    //   create new Node object with that as offset
+                    const node = try Node.create(allocator, self, node_offset, node_name);
+
+                    //   add it as a child to the Node on top of `parents`
+                    if (parents.getLastOrNull()) |current_parent| {
+                        try current_parent.children.append(node);
+                    }
+
+                    // std.debug.print(">>\n", .{});
+
+                    //   push the new Node onto parents
+                    try parents.append(node);
+                },
+                .endNode => {
+                    // advance offset past the tag. the tag has no body.
+                    current_tag_offset += tag_size;
+
+                    // std.debug.print("<<\n", .{});
+
+                    //   pop the top of `parents`
+                    if (parents.popOrNull()) |current_node| {
+                        if (parents.items.len == 0) {
+                            // if the stack is now empty, we've reached
+                            // the final .endNode, return the root node
+                            return current_node;
+                        }
+                    } else {
+                        // we've seen more .endNode tags than .beginNode
+                        return Fdt.Error.BadContents;
+                    }
+                },
+                .end => {
+                    return Fdt.Error.BadContents;
+                },
+                .property => {
+                    const prop_offset = current_tag_offset;
+
+                    current_tag_offset += tag_size;
+                    const value_len = self.valueAtOffset(u32, current_tag_offset);
+
+                    current_tag_offset += tag_size;
+                    const prop_name_idx = self.valueAtOffset(u32, current_tag_offset);
+
+                    current_tag_offset += tag_size;
+                    const value_offset = current_tag_offset;
+
+                    current_tag_offset += value_len;
+
+                    const current_parent = parents.getLastOrNull();
+
+                    if (current_parent == null) {
+                        return Error.BadContents;
+                    }
+
+                    const prop_name = self.stringAt(prop_name_idx);
+                    const prop = try Property.create(allocator, current_parent.?, prop_offset, prop_name, value_offset, value_len);
+
+                    try current_parent.?.properties.append(prop);
+                },
+                inline else => current_tag_offset += tag_size,
             }
+
+            current_tag_offset = std.mem.alignForward(usize, current_tag_offset, tag_size);
+            current_tag_type = try self.tagTypeAt(current_tag_offset);
         }
 
-        return current_node_offset;
+        // We've walked past the end of the struct but didn't see matching
+        // .endNode tag
+        return Error.BadContents;
     }
 
-    pub fn nodeNameEql(self: *Self, current_node_offset: usize, path: [*:0]const u8, start: usize, end: usize) !bool {
-        var tag_type = try self.tagTypeAt(current_node_offset);
-
-        if (tag_type != .beginNode) {
-            return Error.BadTagAlignment;
-        }
-
-        var node_name: [*]u8 = @ptrFromInt(self.struct_base + current_node_offset + tag_size);
-
-        for (0..end - start) |i| {
-            if (path[start + i] != node_name[i]) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    inline fn tagTypeAt(self: *Self, tag_offset: usize) !TokenType {
+    pub fn tagTypeAt(self: *Fdt, tag_offset: usize) !TokenType {
         if (0 != (tag_offset % tag_size)) {
             return Error.BadTagAlignment;
         }
@@ -151,134 +326,61 @@ pub const Fdt = struct {
             0x00000003 => return .property,
             0x00000004 => return .nop,
             0x00000009 => return .end,
-            else => return Error.NoTagAtOffset,
+            else => {
+                // std.debug.print("At offset {x}, found {x} instead of a device tree tag\n", .{ tag_offset, tag });
+                return Error.NoTagAtOffset;
+            },
         }
     }
 
-    inline fn stringAt(self: *Self, string_offset: usize) [*]u8 {
+    inline fn stringAt(self: *Fdt, string_offset: usize) [*:0]u8 {
         var string_addr = self.strings_base + string_offset;
         return @ptrFromInt(string_addr);
     }
 
-    /// Advance the offset to the next node at the current nesting level
-    fn nextNode(self: *Self, starting_offset: usize) !?usize {
-        var current_tag_offset: usize = starting_offset;
-        var current_tag_type = try self.tagTypeAt(current_tag_offset);
-
-        // starting from a .beginNode tag
-        if (current_tag_type != .beginNode) {
-            return Error.BadTagAlignment;
-        }
-
-        var next_tag_offset: usize = current_tag_offset;
-        var tag: TokenType = undefined;
-
-        // advance past the .beginNode tag
-        tag = try self.nextTag(current_tag_offset, &next_tag_offset);
-
-        // start with nesting level 1 because we need to find the end
-        // of the current node, so we expect one more .endNode than we
-        // see .beginNode tags
-        var nesting_level: usize = 1;
-
-        // find the next .beginNode tags _after_ the .endNode for the
-        // node we started in (i.e. nesting_level must be zero).
-        // note that there may be .nop tags between the .endNode and
-        // the next .beginNode
-        while (nesting_level > 0 and tag != .beginNode) {
-            switch (tag) {
-                .property, .nop => {
-                    // simply skip these
-                },
-                .beginNode => {
-                    // descend into a nested node
-                    nesting_level += 1;
-                },
-                .endNode => {
-                    // if we're already at level 0, then we've reached
-                    // the end of the _parent_ node and have not found
-                    // a sibling
-                    if (nesting_level == 0) {
-                        return null;
-                    }
-                    // ascend from a level of nesting
-                    nesting_level -= 1;
-                },
-                .end => {
-                    // We've reached the end of the entire device tree
-                    return null;
-                },
-            }
-
-            // advance to the next tag
-            current_tag_offset = next_tag_offset;
-            tag = try self.nextTag(current_tag_offset, &next_tag_offset);
-        }
-        return next_tag_offset;
-    }
-
-    const tag_size: usize = @sizeOf(u32);
-
-    inline fn ptrFromOffset(self: *Self, comptime T: type, offset: usize) *T {
+    inline fn ptrFromOffset(self: *Fdt, comptime T: type, offset: usize) *T {
         // var base: usize = self.struct_base + offset;
         return @ptrFromInt(self.struct_base + offset);
     }
 
-    // Caution: side effects
-    // this function updates *next_tag_offset to point the the next
-    // tag _after_ the one that starting_tag_offset points at.
-    // It return the type of the _next_ tag
-    fn nextTag(self: *Self, starting_tag_offset: usize, next_tag_offset: *usize) !TokenType {
-        var current_tag_offset = starting_tag_offset;
-
-        var tag_type = try self.tagTypeAt(current_tag_offset);
-        current_tag_offset += tag_size;
-
-        switch (tag_type) {
-            .beginNode => {
-                // skip name
-                var p: [*]u8 = @ptrCast(self.ptrFromOffset(u8, current_tag_offset));
-                current_tag_offset += 1;
-                var i: usize = 0;
-                while (p[i] != 0) : (i += 1) {}
-                current_tag_offset += i;
-            },
-            .property => {
-                var lenp: *u32 = self.ptrFromOffset(u32, current_tag_offset);
-                var len: u32 = nativeByteOrder(lenp.*);
-                // skip the name index (u32), prop len (u32), and
-                // value (however many bytes the prop len said)
-                current_tag_offset += (tag_size * 2) + len;
-            },
-            .end, .endNode, .nop => {},
-        }
-        next_tag_offset.* = std.mem.alignForward(usize, current_tag_offset, tag_size);
-        return self.tagTypeAt(next_tag_offset.*);
-    }
-
-    fn charIndex(ch: u8, s: [:0]const u8, from: usize) ?usize {
-        for (from..s.len) |i| {
-            if (s[i] == ch) {
-                return i;
-            }
-        }
-        return null;
+    inline fn valueAtOffset(self: *Fdt, comptime T: type, offset: usize) T {
+        const p: *T = self.ptrFromOffset(T, offset);
+        return nativeByteOrder(p.*);
     }
 };
-
-pub const TokenType = enum(u32) {
-    beginNode = 0x00000001,
-    endNode = 0x00000002,
-    property = 0x00000003,
-    nop = 0x00000004,
-    end = 0x00000009,
-};
-
-inline fn read(comptime Int: type, addr: usize) Int {
-    var ptr: *Int = @ptrFromInt(addr);
-    return nativeByteOrder(ptr.*);
-}
 
 inline fn nativeByteOrder(v: u32) u32 {
     return std.mem.bigToNative(u32, v);
+}
+
+fn charIndex(ch: u8, s: [:0]const u8, from: usize) ?usize {
+    for (from..s.len) |i| {
+        if (s[i] == ch) {
+            return i;
+        }
+    }
+    return null;
+}
+
+test "locate node by path" {
+    const fdt_path = "test/resources/fdt.bin";
+    const stat = try std.fs.cwd().statFile(fdt_path);
+    var buffer = try std.fs.cwd().readFileAlloc(std.testing.allocator, fdt_path, stat.size);
+    defer std.testing.allocator.free(buffer);
+
+    var fdt = Fdt{};
+    try fdt.initFromPointer(std.testing.allocator, @intFromPtr(buffer.ptr));
+    defer fdt.deinit();
+
+    const print = std.debug.print;
+    const expectEqualStrings = std.testing.expectEqualStrings;
+
+    print("\n", .{});
+
+    var devtree_root = fdt.root_node;
+
+    try expectEqualStrings("", devtree_root.name);
+
+    var found = try fdt.nodeLookupByPath("thermal-zones/cpu-thermal/cooling-maps");
+    print("{s} @ {d}\n", .{ found.?.name, found.?.offset });
 }

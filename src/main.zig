@@ -61,7 +61,7 @@ fn kernelInit() void {
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
 
-    fdt.init() catch |err| {
+    fdt.init(os.page_allocator) catch |err| {
         kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
     };
 
@@ -81,7 +81,7 @@ fn kernelInit() void {
 
     bsp.usb.init();
 
-    sampleDeviceTree();
+    // sampleDeviceTree();
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});
@@ -127,24 +127,24 @@ fn supplyUsize(name: []const u8, sz: usize) void {
 }
 
 fn sampleDeviceTree() void {
-    _ = reportDeviceTreeNode("/reserved-memory");
-    _ = reportDeviceTreeNode("/thermal-zones/cpu-thermal");
-    _ = reportDeviceTreeNode("/soc/usb@7e980000/usb1@1/ethernet@1");
+    kprint("\nDevice tree diagnostics\n", .{});
+    reportDeviceTreeNode("soc");
+    reportDeviceTreeNode("reserved-memory");
+    reportDeviceTreeNode("thermal-zones/cpu-thermal");
+    reportDeviceTreeNode("soc/usb@7e980000/usb1@1/ethernet@1");
 }
 
-pub fn reportDeviceTreeNode(path: [:0]const u8) ?usize {
-    const offset = fdt.nodeLookupByPath(path) catch |err| blk: {
+pub fn reportDeviceTreeNode(path: [:0]const u8) void {
+    const node = fdt.nodeLookupByPath(path) catch |err| blk: {
         kprint("Error looking up {s}: {any}\n", .{ path, err });
         break :blk null;
     };
 
-    if (offset) |o| {
-        kprint("{s} at {d}\n", .{ path, o });
+    if (node) |n| {
+        kprint("{s:>40}: offset: {d}\tchildren: {d}\tproperties: {d}\n", .{ path, n.offset, n.children.items.len, n.properties.items.len });
     } else {
-        kprint("{s} not found.\n", .{path});
+        kprint("{s:>40}: not found.\n", .{path});
     }
-
-    return offset;
 }
 
 fn diagnostics() !void {
@@ -157,10 +157,6 @@ fn diagnostics() !void {
     try printClockRate(.emmc);
     try printClockRate(.core);
     try printClockRate(.arm);
-}
-
-fn printFdtLocation() void {
-    kprint("{s:>20}: 0x{x:0>8}\n", .{ "FDT Address", devicetree.fdtHeader() });
 }
 
 fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
