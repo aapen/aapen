@@ -5,7 +5,7 @@ const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
 pub fn parseString(token: []const u8) ![]const u8 {
-    if(token[0] != '"') {
+    if (token[0] != '"') {
         return ForthError.ParseError;
     }
     const l = token.len - 1;
@@ -17,7 +17,7 @@ pub fn isComment(token: []const u8) bool {
 }
 
 pub fn parseComment(token: []const u8) ![]const u8 {
-    if(!isComment(token)){
+    if (!isComment(token)) {
         return ForthError.ParseError;
     }
     const l = token.len - 1;

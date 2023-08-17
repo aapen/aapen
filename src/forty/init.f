@@ -1,10 +1,10 @@
 ( Some definitions to get us started. )
 
-: star ( Emit a star ) 42 emit ;
-: bar star star star star cr ;
-: dot star cr ;
-: F bar dot bar dot dot ;
-: p . cr ;
+: star ( -- : Emit a star ) 42 emit ;
+: bar ( -- : Emit a bar) star star star star cr ;
+: dot ( -- : Emit a dot) star cr ;
+: F ( -- : Draw an ascii art F) bar dot bar dot dot ;
+: p ( n -- : Print the stop of the stack followed by a newline) . cr ;
 
 F
 
