@@ -11,14 +11,16 @@ pub const WordNameLen = 20;
 pub const Header = struct {
     name: []const u8 = undefined,
     func: WordFunction = undefined,
+    desc: []const u8 = undefined,
     immediate: bool = false,
     previous: ?*Header = null,
     len: u64 = 0,
 
-    pub fn init(name: []const u8, func: WordFunction, immediate: bool, previous: ?*Header) Header {
+    pub fn init(name: []const u8, desc: []const u8, func: WordFunction, immediate: bool, previous: ?*Header) Header {
         var this = Header{
             .name = name,
             .func = func,
+            .desc = desc,
             .immediate = immediate,
             .previous = previous,
             .len = 0,

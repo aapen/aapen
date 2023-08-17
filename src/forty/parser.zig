@@ -4,6 +4,26 @@ const Allocator = std.mem.Allocator;
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
+pub fn parseString(token: []const u8) ![]const u8 {
+    if(token[0] != '"') {
+        return ForthError.ParseError;
+    }
+    const l = token.len - 1;
+    return token[1..l];
+}
+
+pub fn isComment(token: []const u8) bool {
+    return token[0] == '(';
+}
+
+pub fn parseComment(token: []const u8) ![]const u8 {
+    if(!isComment(token)){
+        return ForthError.ParseError;
+    }
+    const l = token.len - 1;
+    return token[1..l];
+}
+
 pub fn parseNumber(token: []const u8, base: u64) !u64 {
     if (token.len <= 0) {
         return ForthError.ParseError;
@@ -85,6 +105,12 @@ pub const ForthTokenIterator = struct {
         if (self.buffer[start] == '"') {
             end += 1;
             while (end < self.buffer.len and self.buffer[end] != '"') : (end += 1) {}
+            if (end < self.buffer.len) {
+                end += 1;
+            }
+        } else if (self.buffer[start] == '(') {
+            end += 1;
+            while (end < self.buffer.len and self.buffer[end] != ')') : (end += 1) {}
             if (end < self.buffer.len) {
                 end += 1;
             }

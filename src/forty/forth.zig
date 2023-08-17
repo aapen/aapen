@@ -105,8 +105,15 @@ pub const Forth = struct {
     }
 
     // Define a primitive (i.e. a word backed up by a zig function).
+    pub fn definePrimitiveDesc(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immed: bool) !*Header {
+        const header = try this.startWord(name, desc, f, immed);
+        try this.completeWord();
+        return header;
+    }
+
+    // Define a primitive w/o a description.
     pub fn definePrimitive(this: *Forth, name: []const u8, f: WordFunction, immed: bool) !*Header {
-        const header = try this.startWord(name, f, immed);
+        const header = try this.startWord(name, "A prim", f, immed);
         try this.completeWord();
         return header;
     }
@@ -114,7 +121,7 @@ pub const Forth = struct {
     // Define a constant with a single u64 value. What we really end up with
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
-        _ = try this.startWord(name, &core.inner, false);
+        _ = try this.startWord(name, "A constant", &core.inner, false);
         this.addOpCode(OpCode.push_u64);
         this.addNumber(v);
         this.addOpCode(OpCode.stop);
@@ -159,10 +166,11 @@ pub const Forth = struct {
 
     // Start a new word in the interpreter. Dictionary searches will not find
     // the new word until completeWord is called.
-    pub fn startWord(this: *Forth, name: []const u8, f: WordFunction, immediate: bool) !*Header {
+    pub fn startWord(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
         try this.assertNotCompiling();
         var owned_name = try std.mem.Allocator.dupeZ(this.allocator, u8, name);
-        const entry: Header = Header.init(owned_name, f, immediate, this.lastWord);
+        var owned_desc = try std.mem.Allocator.dupeZ(this.allocator, u8, desc);
+        const entry: Header = Header.init(owned_name, owned_desc, f, immediate, this.lastWord);
         this.newWord = this.addScalar(Header, entry);
         this.compiling = true;
         return this.newWord.?;
@@ -179,7 +187,7 @@ pub const Forth = struct {
 
     // Convert the token into a value, either a string, a number
     // or a reference to a word and either compile it or execute
-    // directly.
+    // directly. Note that this is the place where we ignore comments.
     pub fn evalToken(this: *Forth, token: []const u8) !void {
         var header = this.findWord(token);
 
@@ -187,7 +195,7 @@ pub const Forth = struct {
             try this.evalHeader(h);
         } else if (token[0] == '"') {
             try this.evalString(token);
-        } else {
+        } else if (token[0] != '(') {
             var v: u64 = try parser.parseNumber(token, this.ibase);
             try this.evalNumber(v);
         }
@@ -209,8 +217,7 @@ pub const Forth = struct {
     // and push a reference to the string onto the stack.
     fn evalString(this: *Forth, token: []const u8) !void {
         try this.print("eval string: {s}\n", .{token});
-        const l = token.len - 1;
-        const s = token[1..l];
+        const s = try parser.parseString(token);
         if (this.compiling) {
             this.addOpCode(OpCode.push_string);
             this.addString(s);
