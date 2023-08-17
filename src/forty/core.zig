@@ -639,7 +639,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc(".", "n -- :print tos as u64 in current obase", &wordDot, false);
     _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, false);
     _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, false);
-    _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordDot, false);
+    _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, false);
     _ = try forth.definePrimitiveDesc("+", "n n -- n :u64 addition", &wordAdd, false);
     _ = try forth.definePrimitiveDesc("-", "n n -- n :u64 subtraction", &wordSub, false);
     _ = try forth.definePrimitiveDesc("*", "n n -- n :u64 multiplication", &wordMul, false);
