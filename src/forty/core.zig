@@ -558,6 +558,31 @@ pub fn wordByteExchangeU64(forth: *Forth, body: [*]u64, offset: u64, header: *He
     return wordByteExchange(u64, forth, body, offset, header);
 }
 
+/// u64 u64 -- u64
+pub fn wordEqualU64(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordArithmeticComparison(u64, .eq, forth, body, offset, header);
+}
+
+/// u64 u64 -- u64
+pub fn wordLessThanU64(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordArithmeticComparison(u64, .lt, forth, body, offset, header);
+}
+
+/// u64 u64 -- u64
+pub fn wordLessThanEqualU64(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordArithmeticComparison(u64, .lteq, forth, body, offset, header);
+}
+
+/// u64 u64 -- u64
+pub fn wordGreaterThanU64(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordArithmeticComparison(u64, .gt, forth, body, offset, header);
+}
+
+/// u64 u64 -- u64
+pub fn wordGreaterThanEqualU64(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return wordArithmeticComparison(u64, .gteq, forth, body, offset, header);
+}
+
 /// addr -- T
 pub fn wordLoad(comptime T: type, forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     const a = try forth.stack.pop();
@@ -584,6 +609,25 @@ fn wordByteExchange(comptime T: type, forth: *Forth, _: [*]u64, _: u64, _: *Head
     var v: T = @truncate(a);
     v = @byteSwap(v);
     try forth.stack.push(v);
+    return 0;
+}
+
+const Comparison = enum { eq, lt, lteq, gt, gteq };
+
+/// T -- T
+fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    const a = try forth.stack.pop();
+    const b = try forth.stack.pop();
+    var lhs: T = @truncate(b);
+    var rhs: T = @truncate(a);
+    var result = switch (comparison) {
+        .eq => lhs == rhs,
+        .lt => lhs < rhs,
+        .lteq => lhs <= rhs,
+        .gt => lhs > rhs,
+        .gteq => lhs >= rhs,
+    };
+    try forth.stack.push(@intFromBool(result));
     return 0;
 }
 
@@ -645,6 +689,11 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("*", "n n -- n :u64 multiplication", &wordMul, false);
     _ = try forth.definePrimitiveDesc("/", "n n -- n :u64 division", &wordDiv, false);
     _ = try forth.definePrimitiveDesc("%", "n n -- n :u64 modulo", &wordMod, false);
+    _ = try forth.definePrimitiveDesc("=", "n n -- n :u64 equality test", &wordEqualU64, false);
+    _ = try forth.definePrimitiveDesc("<", "n n -- n :u64 less-than test", &wordLessThanU64, false);
+    _ = try forth.definePrimitiveDesc("<=", "n n -- n :u64 less-than or equal test", &wordLessThanEqualU64, false);
+    _ = try forth.definePrimitiveDesc(">", "n n -- n :u64 greater-than test", &wordGreaterThanU64, false);
+    _ = try forth.definePrimitiveDesc(">=", "n n -- n :u64 greater-than or equal test", &wordGreaterThanEqualU64, false);
 
     _ = try forth.definePrimitiveDesc("!", "w addr -- : Store a 64 bit unsigned word.", &wordStoreU64, false);
     _ = try forth.definePrimitiveDesc("@", "addr - w : Load a 64 bit unsigned word.", &wordLoadU64, false);
