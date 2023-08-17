@@ -83,7 +83,14 @@ pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
 pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     try forth.assertNotCompiling();
     var name = forth.words.next() orelse return ForthError.WordReadError;
-    _ = try forth.startWord(name, &inner, false);
+    var token = forth.words.peek() orelse return ForthError.WordReadError;
+    var desc: []const u8 = "";
+    if (parser.isComment(token)) {
+        _ = forth.words.next() orelse return ForthError.WordReadError;
+        desc = try parser.parseComment(token);
+        try forth.print("Description: {s}\n", .{desc});
+    }
+    _ = try forth.startWord(name, desc, &inner, false);
     return 0;
 }
 
@@ -95,6 +102,13 @@ pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     return 0;
 }
 
+pub fn wordDesc(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    var name = forth.words.next() orelse return ForthError.WordReadError;
+    var header = forth.findWord(name) orelse return ForthError.NotFound;
+    try forth.print("{s}: {s}\n", .{header.name, header.desc});
+    return 0;
+}
+
 pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     var name = forth.words.next() orelse return ForthError.WordReadError;
     var header = forth.findWord(name) orelse return ForthError.NotFound;
@@ -103,12 +117,14 @@ pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64
         const h: u64 = @intFromPtr(header);
         const p: u64 = @intFromPtr(header.func);
         try forth.print("Word name: {s} header: {x} func: {x}\n", .{ header.name, h, p });
+        try forth.print("Description: {s}\n", .{ header.desc});
         return 0;
     }
 
     var body = header.bodyOfType([*]u64);
     var len = header.bodyLen();
     try forth.print("Word name: {s} len: {} immed: {}\n", .{ header.name, len, header.immediate });
+    try forth.print("Description: {s}\n", .{ header.desc});
 
     try forth.print("Bytes:", .{});
 
@@ -224,17 +240,6 @@ pub fn wordEndif(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     const delta = ((@intFromPtr(current_p) - if_jump_p) / @sizeOf(u64)) - 1;
     const if_jump_p_u64: [*]u64 = @ptrFromInt(if_jump_p);
     if_jump_p_u64[0] = delta;
-    return 0;
-}
-
-// Comment word ( your comment here )  Spaces required around the parens.
-pub fn wordComment(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    while (true) {
-        var word = forth.words.next() orelse return ForthError.WordReadError;
-        if (string.same(")", word)) {
-            break;
-        }
-    }
     return 0;
 }
 
@@ -606,7 +611,7 @@ pub fn defineCore(forth: *Forth) !void {
     // Secondary definition words.
     _ = try forth.definePrimitive(":", &wordColon, false);
     _ = try forth.definePrimitive(";", &wordSemi, true);
-    _ = try forth.definePrimitive("(", &wordComment, true);
+    _ = try forth.definePrimitive("?", &wordDesc, true);
     _ = try forth.definePrimitive("if", &wordIf, true);
     _ = try forth.definePrimitive("else", &wordElse, true);
     _ = try forth.definePrimitive("endif", &wordEndif, true);
@@ -614,11 +619,10 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitive("immediate", &wordImmediate, false);
 
     // Debug and inspection words.
-    _ = try forth.definePrimitive("stack", &wordStack, false);
-    _ = try forth.definePrimitive("?", &wordStack, false);
-    _ = try forth.definePrimitive("??", &wordDictionary, false);
-    _ = try forth.definePrimitive("rstack", &wordRStack, false);
-    _ = try forth.definePrimitive("?word", &wordDumpWord, false);
+    _ = try forth.definePrimitiveDesc("?stack", "Print the stack.", &wordStack, false);
+    _ = try forth.definePrimitiveDesc("??", "Print the dictionary.", &wordDictionary, false);
+    _ = try forth.definePrimitiveDesc("rstack", "Print the return stack.", &wordRStack, false);
+    _ = try forth.definePrimitiveDesc("?word", "Print details of word.", &wordDumpWord, false);
 
     // Basic Forth words.
     _ = try forth.definePrimitive("swap", &wordSwap, false);

@@ -10,9 +10,9 @@ F
 
 ( Input and output base words )
 
-: base ( n -- ) dup obase ! ibase ! ;
-: hex ( -- ) 16 base ;
-: decimal ( -- ) 10 base ;
+: base ( n -- : Set the input and output bases.)        dup obase ! ibase ! ;
+: hex ( -- : Set the input and output bases to 16.)     16 base ;
+: decimal ( -- : Set the input and output bases to 10.) 10 base ;
 
 : field@ + @w wbe ;
 : fdt-magic      fdt 0x00 field@ ;
@@ -29,5 +29,5 @@ F
 
 ( Debugging )
 
-: tron 1 debug ! ;
-: troff 0 debug ! ;
+: tron  ( -- : Turn debugging on.) 1 debug ! ;
+: troff ( -- : Turn debugging off.)  0 debug ! ;
