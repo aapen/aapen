@@ -140,6 +140,15 @@ pub const Fdt = struct {
             self.allocator.destroy(self);
         }
 
+        pub fn property(self: *Node, name: []const u8) ?*Property {
+            for (self.properties.items) |p| {
+                if (std.mem.eql(u8, p.name, name)) {
+                    return p;
+                }
+            }
+            return null;
+        }
+
         pub fn getChildByName(self: *Node, name: []const u8) ?*Node {
             for (self.children.items) |c| {
                 if (std.mem.eql(u8, c.name, name)) {
@@ -193,10 +202,10 @@ pub const Fdt = struct {
         offset: u64 = undefined,
         value_offset: u64 = undefined,
         value_len: usize = undefined,
-        name: [*:0]u8 = undefined,
+        name: []u8 = undefined,
         owner: *Node = undefined,
 
-        pub fn create(allocator: Allocator, owner: *Node, offset: u64, name: [*:0]u8, value_offset: u64, value_len: usize) Error!*Property {
+        pub fn create(allocator: Allocator, owner: *Node, offset: u64, name: []u8, value_offset: u64, value_len: usize) Error!*Property {
             var prop = try allocator.create(Property);
             prop.* = Property{
                 .allocator = allocator,
@@ -211,6 +220,13 @@ pub const Fdt = struct {
 
         pub fn deinit(self: *Property) void {
             self.allocator.destroy(self);
+        }
+
+        pub fn valueAs(self: *Property, comptime T: anytype) []T {
+            const value_start = self.owner.fdt.struct_base + self.value_offset;
+            const value_ptr: [*]T = @ptrFromInt(value_start);
+            const value_count = self.value_len / @sizeOf(T);
+            return value_ptr[0..value_count];
         }
     };
 
@@ -333,9 +349,14 @@ pub const Fdt = struct {
         }
     }
 
-    inline fn stringAt(self: *Fdt, string_offset: usize) [*:0]u8 {
-        var string_addr = self.strings_base + string_offset;
-        return @ptrFromInt(string_addr);
+    inline fn stringAt(self: *Fdt, string_offset: usize) []u8 {
+        const string_addr = self.strings_base + string_offset;
+        const string_ptr: [*]u8 = @ptrFromInt(string_addr);
+        var len: usize = 0;
+        while (string_ptr[len] != 0) {
+            len += 1;
+        }
+        return string_ptr[0..len];
     }
 
     inline fn ptrFromOffset(self: *Fdt, comptime T: type, offset: usize) *T {
@@ -362,7 +383,12 @@ fn charIndex(ch: u8, s: [:0]const u8, from: usize) ?usize {
     return null;
 }
 
-test "locate node by path" {
+test "locate node and property by path" {
+    const print = std.debug.print;
+    const expect = std.testing.expect;
+    const expectEqual = std.testing.expectEqual;
+    const expectEqualStrings = std.testing.expectEqualStrings;
+
     const fdt_path = "test/resources/fdt.bin";
     const stat = try std.fs.cwd().statFile(fdt_path);
     var buffer = try std.fs.cwd().readFileAlloc(std.testing.allocator, fdt_path, stat.size);
@@ -372,9 +398,6 @@ test "locate node by path" {
     try fdt.initFromPointer(std.testing.allocator, @intFromPtr(buffer.ptr));
     defer fdt.deinit();
 
-    const print = std.debug.print;
-    const expectEqualStrings = std.testing.expectEqualStrings;
-
     print("\n", .{});
 
     var devtree_root = fdt.root_node;
@@ -382,5 +405,27 @@ test "locate node by path" {
     try expectEqualStrings("", devtree_root.name);
 
     var found = try fdt.nodeLookupByPath("thermal-zones/cpu-thermal/cooling-maps");
-    print("{s} @ {d}\n", .{ found.?.name, found.?.offset });
+    try expect(found != null);
+
+    var soc = try fdt.nodeLookupByPath("soc");
+    try expectEqual(soc.?.property("no-such-thing"), null);
+
+    const soc_compat = soc.?.property("compatible");
+    const expected_compat_value = [_]u8{ 's', 'i', 'm', 'p', 'l', 'e', '-', 'b', 'u', 's', 0 };
+    try expectEqualStrings(&expected_compat_value, soc_compat.?.valueAs(u8));
+
+    const soc_phandle = soc.?.property("phandle");
+    const expected_phandle_value = [_]u32{0x3e};
+
+    const phandle_value = soc_phandle.?.valueAs(u32);
+    for (phandle_value, 0..) |actual_word, i| {
+        try expectEqual(expected_phandle_value[i], nativeByteOrder(actual_word));
+    }
+
+    const expected_dma_ranges = [_]u32{ 0xc0000000, 0x00, 0x3f000000, 0x7e000000, 0x3f000000, 0x1000000 };
+    const soc_dma_ranges = soc.?.property("dma-ranges");
+    const dma_ranges_value = soc_dma_ranges.?.valueAs(u32);
+    for (dma_ranges_value, 0..) |actual_word, i| {
+        try expectEqual(expected_dma_ranges[i], nativeByteOrder(actual_word));
+    }
 }
