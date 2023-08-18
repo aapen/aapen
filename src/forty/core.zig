@@ -52,17 +52,20 @@ pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
             },
 
             @intFromEnum(OpCode.jump) => {
-                const offset = body[i + 1];
+                const offset: i64 = @bitCast(body[i + 1]);
                 try forth.trace("Jump {}\n", .{offset});
-                i = i + 2 + offset;
+                const new_i: i64 = @as(i64, @intCast(i + 2)) + offset;
+                i = @intCast(new_i);
             },
 
             @intFromEnum(OpCode.jump_if_not) => {
-                const offset = body[i + 1];
+                const offset: i64 = @bitCast(body[i + 1]);
                 var c: u64 = try forth.stack.pop();
                 try forth.trace("JumpIfNot cond: {} offset {} ", .{ c, offset });
                 if (c == 0) {
-                    i = i + 2 + offset;
+                    //i = i + 2 + offset;
+                    const new_i: i64 = @as(i64, @intCast(i + 2)) + offset;
+                    i = @intCast(new_i);
                     try forth.trace("Jump!, i: {}\n", .{i});
                 } else {
                     i = i + 2;
@@ -165,6 +168,8 @@ pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64
     var name = forth.words.next() orelse return ForthError.WordReadError;
     var header = forth.findWord(name) orelse return ForthError.NotFound;
 
+    // Dump info about a primitive word.
+
     if (header.func != &inner) {
         const h: u64 = @intFromPtr(header);
         const p: u64 = @intFromPtr(header.func);
@@ -173,58 +178,63 @@ pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64
         return 0;
     }
 
+    // Word is a secondary, dump the meta info first.
+
     var body = header.bodyOfType([*]u64);
     var len = header.bodyLen();
     try forth.print("Word name: {s} len: {} immed: {}\n", .{ header.name, len, header.immediate });
     try forth.print("Description: {s}\n", .{header.desc});
 
-    try forth.print("Bytes:", .{});
 
+    // Followed by a byte dump.
+
+    try forth.print("Bytes:", .{});
     var cbody = header.bodyOfType([*]u8);
     for (0..len) |j| {
         const ch = cbody[j];
         const vis_ch = if ((ch >= ' ') and (ch <= '~')) ch else '.';
         if ((j % 8) == 0) {
-            try forth.print("\n{:4}: ", .{j});
+            try forth.print("\n{:4}: ", .{j/8});
         }
         try forth.print("{c}[{x:2}]  ", .{ vis_ch, ch });
     }
     try forth.print("\n\nInstructions:\n", .{});
 
+    // Followed by a dump of the instructions.
     var i: usize = 0;
     while (true) {
+        try forth.print("{:4} {x:8}: ", .{i, body[i]});
         switch (body[i]) {
             @intFromEnum(OpCode.stop) => {
-                try forth.print("{}: Stop\n", .{i});
+                try forth.print("Stop\n", .{});
                 break;
             },
 
             @intFromEnum(OpCode.push_u64) => {
-                try forth.print("{}: PushU64 {x:2}\n", .{ i, body[i + 1] });
+                try forth.print("PushU64 {x:2}\n", .{body[i + 1] });
                 i += 2;
             },
 
             @intFromEnum(OpCode.push_string) => {
                 const data_size = body[i + 1];
                 var p_string: [*:0]u8 = @ptrCast(body + i + 2);
-                try forth.print("{}: PushString [{}] {s}\n", .{ i, data_size, p_string });
+                try forth.print("PushString [{}] {s}\n", .{data_size, p_string });
                 i += data_size + 2;
             },
 
             @intFromEnum(OpCode.jump) => {
-                const offset = body[i + 1];
-                try forth.print("{}: Jump [{}]\n", .{ i, offset });
+                const offset: i64 = @bitCast(body[i + 1]);
+                try forth.print("Jump [{}]\n", .{offset });
                 i = i + 2;
             },
 
             @intFromEnum(OpCode.jump_if_not) => {
-                const offset = body[i + 1];
-                try forth.print("{} :JumpIfNot [{}]\n", .{ i, offset });
+                const offset: i64 = @bitCast(body[i + 1]);
+                try forth.print("JumpIfNot [{}]\n", .{offset });
                 i = i + 2;
             },
             else => {
-                const addr = body[i];
-                try forth.print("{}: Call [{x}]\n", .{ i, addr });
+                try forth.print("Call\n", .{});
                 i = i + 1;
             },
         }
@@ -357,7 +367,22 @@ pub fn wordDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     return 0;
 }
 
-/// sAddr --
+/// n --
+pub fn wordSignedDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    var v: i64 = @bitCast(try forth.stack.pop());
+    try std.fmt.formatInt(v, @intCast(forth.obase), .lower, .{}, forth.writer());
+    return 0;
+}
+
+/// n --
+pub fn wordSDecimalDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    var v: i64 = @bitCast(try forth.stack.pop());
+    try std.fmt.formatInt(v, 10, .lower, .{}, forth.writer());
+    return 0;
+}
+
+
+/// addr --
 pub fn wordSDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     const i = try forth.stack.pop();
     const p_string: [*:0]u8 = @ptrFromInt(i);
@@ -739,6 +764,8 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("over", "w1 w2 -- w1 w2 w1", &wordOver, false);
     _ = try forth.definePrimitiveDesc("2over", ", w1 w2 w3 w4 -- w1 w2 w3 w4 w1 w2", &word2Over, false);
 
+    _ = try forth.definePrimitiveDesc("+.", "n -- :print tos as i64 in current obase", &wordSignedDot, false);
+    _ = try forth.definePrimitiveDesc("+#.", "n -- :print tos as i64 in current obase", &wordSDecimalDot, false);
     _ = try forth.definePrimitiveDesc(".", "n -- :print tos as u64 in current obase", &wordDot, false);
     _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, false);
     _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, false);
