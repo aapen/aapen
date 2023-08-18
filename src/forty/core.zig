@@ -33,7 +33,7 @@ pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
     var body = header.bodyOfType([*]u64);
     var i: usize = 0;
     while (true) {
-        try forth.trace("{}: {x}:\n", .{ i, body[i] });
+        try forth.trace("{:4}: {x:4}: ", .{ i, body[i] });
         switch (body[i]) {
             @intFromEnum(OpCode.stop) => break,
 
@@ -44,9 +44,9 @@ pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
             },
 
             @intFromEnum(OpCode.push_string) => {
-                try forth.trace("Push string {x}\n", .{body[i + 1]});
+                try forth.trace("Push string len: {}\n", .{body[i + 1]});
                 const data_size = body[i + 1];
-                var p_string: [*]u8 = @ptrCast(body + 2);
+                var p_string: [*]u8 = @ptrCast(body + i + 2);
                 try forth.stack.push(@intFromPtr(p_string));
                 i += data_size + 2;
             },
@@ -60,22 +60,75 @@ pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
             @intFromEnum(OpCode.jump_if_not) => {
                 const offset = body[i + 1];
                 var c: u64 = try forth.stack.pop();
-                try forth.trace("JumpIfNot {} {}\n", .{ c, offset });
+                try forth.trace("JumpIfNot cond: {} offset {} ", .{ c, offset });
                 if (c == 0) {
                     i = i + 2 + offset;
+                    try forth.trace("Jump!, i: {}\n", .{i});
                 } else {
                     i = i + 2;
+                    try forth.trace("NoJump!, i: {}\n", .{i});
                 }
             },
 
             else => {
                 const p: *Header = @ptrFromInt(body[i]);
-                try forth.trace("Header: {x}\n", .{&p});
+                try forth.trace("Header: {x}\n", .{body[i]});
                 const delta = try p.func(forth, body, i, p);
                 i = i + 1 + delta;
             },
         }
     }
+    return 0;
+}
+
+// Push the address of the word body onto the stack.
+pub fn pushBodyAddress(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
+    var body = header.bodyOfType([*]u8);
+    try forth.stack.push(@intFromPtr(body));
+    return 0;
+}
+
+// Create a new dictionary definition.
+// Resulting dictionary entry just pushes its body address onto the stack.
+// This is a fairly low level word.
+pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    try forth.assertNotCompiling();
+
+    var name = forth.words.next() orelse return ForthError.WordReadError;
+    var token = forth.words.peek();
+    var desc: []const u8 = "";
+    if (token) |t| {
+        if (parser.isComment(t)) {
+            _ = forth.words.next() orelse return ForthError.WordReadError;
+            desc = try parser.parseComment(t);
+        }
+    }
+    _ = try forth.create(name, desc, &pushBodyAddress, false);
+    return 0;
+}
+
+// Finish out a word created with create.
+// Currently just fills in the length of the word.
+pub fn wordFinish(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    forth.complete();
+    return 0;
+}
+
+// Allocate a word in the dictionary and set its value to TOS.
+// Should be between a create/finish pair, but this is not checked.
+pub fn wordComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    const value = try forth.stack.pop();
+    const addr = forth.allocate(@alignOf(u64), @sizeOf(u64));
+    const wordAddr: [*]u64 = @alignCast(@ptrCast(addr));
+    wordAddr[0] = value;
+    return 0;
+}
+
+// Allocate n words in the dictionary. Should be in the middle
+// of a create/finish pair, but this is not checked.
+pub fn wordAllot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    const n = try forth.stack.pop();
+    _ = forth.allocate(@alignOf(u64), n * @sizeOf(u64));
     return 0;
 }
 
@@ -153,7 +206,7 @@ pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64
 
             @intFromEnum(OpCode.push_string) => {
                 const data_size = body[i + 1];
-                var p_string: [*:0]u8 = @ptrCast(body + 2);
+                var p_string: [*:0]u8 = @ptrCast(body + i + 2);
                 try forth.print("{}: PushString [{}] {s}\n", .{ i, data_size, p_string });
                 i += data_size + 2;
             },
@@ -208,7 +261,7 @@ pub fn wordIf(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     try forth.assertCompiling();
 
-    const current_p = forth.current();
+    const current_p = memory.alignByType(forth.current(), u64);
     const if_jump_p = try forth.rstack.pop();
 
     // Back fill the jump address for the If.
@@ -235,7 +288,7 @@ pub fn wordEndif(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 
     const if_jump_p = try forth.rstack.pop();
 
-    const current_p = forth.current();
+    const current_p = memory.alignByType(forth.current(), u64);
     const delta = ((@intFromPtr(current_p) - if_jump_p) / @sizeOf(u64)) - 1;
     const if_jump_p_u64: [*]u64 = @ptrFromInt(if_jump_p);
     if_jump_p_u64[0] = delta;
@@ -634,6 +687,8 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
 pub fn defineCore(forth: *Forth) !void {
     // Expose internal values to forty.
 
+    try forth.defineConstant("word", @sizeOf(u64));
+
     try forth.defineInternalVariable("ibase", &forth.ibase);
     try forth.defineInternalVariable("obase", &forth.obase);
     try forth.defineInternalVariable("debug", &forth.debug);
@@ -655,6 +710,10 @@ pub fn defineCore(forth: *Forth) !void {
 
     _ = try forth.definePrimitiveDesc(":", " -- :Start a new word definition", &wordColon, false);
     _ = try forth.definePrimitiveDesc(";", " -- :Complete a new word definition", &wordSemi, true);
+    _ = try forth.definePrimitiveDesc("create", " -- :Start a new definition", &wordCreate, false);
+    _ = try forth.definePrimitiveDesc("finish", " -- :Complete a new definition", &wordFinish, false);
+    _ = try forth.definePrimitiveDesc(",", " n -- :Allocate a word and store n in it.", &wordComma, false);
+    _ = try forth.definePrimitiveDesc("allot", " n -- :Allocate n words.", &wordAllot, false);
     _ = try forth.definePrimitiveDesc("if", " -- :If statement", &wordIf, true);
     _ = try forth.definePrimitiveDesc("else", " -- :Part of if/else/endif", &wordElse, true);
     _ = try forth.definePrimitiveDesc("endif", " -- :Part of if/else/endif", &wordEndif, true);

@@ -164,24 +164,43 @@ pub const Forth = struct {
         }
     }
 
-    // Start a new word in the interpreter. Dictionary searches will not find
+    // Start a new dictionary entry in the interpreter. Dictionary searches will not find
     // the new word until completeWord is called.
-    pub fn startWord(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
-        try this.assertNotCompiling();
+    pub fn create(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
         var owned_name = try std.mem.Allocator.dupeZ(this.allocator, u8, name);
         var owned_desc = try std.mem.Allocator.dupeZ(this.allocator, u8, desc);
         const entry: Header = Header.init(owned_name, owned_desc, f, immediate, this.lastWord);
         this.newWord = this.addScalar(Header, entry);
-        this.compiling = true;
         return this.newWord.?;
+    }
+
+    // Finish out the new dictionary entry and add it to the dictionary.
+    pub fn complete(this: *Forth) void {
+        this.newWord.?.len = @intFromPtr(this.memory.current) - @intFromPtr(this.newWord);
+        this.lastWord = this.newWord;
+        this.newWord = null;
+    }
+
+    // Allocate some memory, starting on the given alignment.
+    // Return a pointer to the start of the memory.
+    // Intended for use between create and complete.
+    pub fn allocate(this: *Forth, alignment: usize, n: usize) [*]u8 {
+        return this.memory.allocate(alignment, n);
+    }
+
+    // Start a new word in the interpreter. Dictionary searches will not find
+    // the new word until completeWord is called.
+    pub fn startWord(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
+        try this.assertNotCompiling();
+        const newWord = try this.create(name, desc, f, immediate);
+        this.compiling = true;
+        return newWord;
     }
 
     // Finish out a new word and add it to the dictionary.
     pub fn completeWord(this: *Forth) !void {
         try this.assertCompiling();
-        this.newWord.?.len = @intFromPtr(this.memory.current) - @intFromPtr(this.newWord);
-        this.lastWord = this.newWord;
-        this.newWord = null;
+        this.complete();
         this.compiling = false;
     }
 

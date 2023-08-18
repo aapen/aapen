@@ -31,3 +31,12 @@ F
 
 : tron  ( -- : Turn debugging on.) 1 debug ! ;
 : troff ( -- : Turn debugging off.)  0 debug ! ;
+
+( Address arithmetic )
+
+: words ( n -- n : Number words -> number bytes ) word * ;
+: aligned ( c-addr – a-addr  : Align the address.) word 1 - + word / word * ;
+
+( Testing... )
+
+: even? ( n -- s ) 2 % if "no" else "yes" endif s. cr ;

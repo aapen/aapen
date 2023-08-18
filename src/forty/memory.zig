@@ -61,7 +61,6 @@ pub const Memory = struct {
     p: [*]u8, // The data
     length: usize, // Length of the data.
     current: [*]u8, // Next Free memory space.
-    //alignment: usize = @alignOf(*void),
 
     pub fn init(p: [*]u8, length: usize) Memory {
         return Memory{
@@ -71,10 +70,19 @@ pub const Memory = struct {
         };
     }
 
+    // Allocate some memory, ensuring that the start is aligned.
+    // Returns a pointer to the number in memory.
+    pub fn allocate(this: *Memory, alignment: usize, n: usize) [*]u8 {
+        this.current = alignBy(this.current, alignment);
+        const result = this.current;
+        this.current += n;
+        return result;
+    }
+
     // Add a string to memory, move the current pointer.
     // Note that a string is stored as u64 count of the number of words
     // (including the count) followed by the zero terminated string.
-    // Returns a pointer to the number in memory.
+    // Returns a pointer to the string.
     pub fn addString(this: *Memory, s: []const u8) [*]u8 {
         const len_words = intAlignBy(s.len, @alignOf(u64)) / @sizeOf(u64) + 1;
 
