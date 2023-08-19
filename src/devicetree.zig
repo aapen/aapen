@@ -31,6 +31,7 @@ pub const Fdt = struct {
 
     pub const Error = error{
         OutOfMemory,
+        BadPath,
         NotFound,
         BadVersion,
         BadTagAlignment,
@@ -87,7 +88,11 @@ pub const Fdt = struct {
     }
 
     pub fn nodeLookupByPath(self: *Fdt, path: [:0]const u8) !?*Node {
-        return self.root_node.lookupChildByPath(path, 0, path.len);
+        if (path[0] != '/') {
+            return Error.BadPath;
+        }
+
+        return self.root_node.lookupChildByPath(path, 1, path.len);
     }
 
     pub const TokenType = enum(u32) {
@@ -404,10 +409,10 @@ test "locate node and property by path" {
 
     try expectEqualStrings("", devtree_root.name);
 
-    var found = try fdt.nodeLookupByPath("thermal-zones/cpu-thermal/cooling-maps");
+    var found = try fdt.nodeLookupByPath("/thermal-zones/cpu-thermal/cooling-maps");
     try expect(found != null);
 
-    var soc = try fdt.nodeLookupByPath("soc");
+    var soc = try fdt.nodeLookupByPath("/soc");
     try expectEqual(soc.?.property("no-such-thing"), null);
 
     const soc_compat = soc.?.property("compatible");
