@@ -2,6 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const AutoHashMap = std.AutoHashMap;
+const StringHashMap = std.StringHashMap;
 
 const root = @import("root");
 
@@ -14,6 +15,7 @@ pub const Fdt = struct {
     const Self = @This();
 
     const NodeList = ArrayList(*Node);
+    const AliasMap = StringHashMap([:0]const u8);
     const PHandleMap = AutoHashMap(u32, *Node);
     const PropertyList = ArrayList(*Property);
 
@@ -29,15 +31,18 @@ pub const Fdt = struct {
     strings_base: usize = undefined,
     strings_size: usize = undefined,
 
+    aliases: AliasMap = undefined,
     phandles: PHandleMap = undefined,
     root_node: *Node = undefined,
 
     pub const Error = error{
         OutOfMemory,
-        BadPath,
-        NotFound,
         BadVersion,
         BadTagAlignment,
+        BadPath,
+        NotFound,
+        NoAlias,
+        AliasNotFound,
         IncorrectTag,
         NoTagAtOffset,
         BadContents,
@@ -85,23 +90,62 @@ pub const Fdt = struct {
 
         self.phandles = PHandleMap.init(allocator);
         self.root_node = try parse(self, allocator);
+
+        try readAliases(self, allocator);
     }
 
     pub fn deinit(self: *Fdt) void {
         self.root_node.deinit();
         self.phandles.deinit();
+        self.aliases.deinit();
     }
 
     pub fn nodeLookupByPath(self: *Fdt, path: [:0]const u8) !?*Node {
-        if (path[0] != '/') {
-            return Error.BadPath;
-        }
+        if (path[0] == '/') {
+            return self.root_node.lookupChildByPath(path, 1, path.len);
+        } else {
+            var end = path.len;
 
-        return self.root_node.lookupChildByPath(path, 1, path.len);
+            // a path that doesn't start from root must be an
+            // alias
+            var q = charIndex('/', path, 0) orelse end;
+
+            if (try self.nodeLookupByAlias(path[0..q :0])) |start_node| {
+                if (q == end) {
+                    return start_node;
+                } else {
+                    return start_node.lookupChildByPath(path, q, end);
+                }
+            } else {
+                return Error.AliasNotFound;
+            }
+        }
     }
 
     pub fn nodeLookupByPHandle(self: *Fdt, phandle: u32) !?*Node {
         return self.phandles.get(phandle);
+    }
+
+    pub fn nodeLookupByAlias(self: *Fdt, alias_name: [:0]const u8) Error!?*Node {
+        if (self.aliases.get(alias_name)) |alias_value| {
+            const result = try self.nodeLookupByPath(alias_value);
+            return result;
+        } else {
+            return null;
+        }
+    }
+
+    pub fn readAliases(self: *Fdt, allocator: Allocator) !void {
+        self.aliases = AliasMap.init(allocator);
+
+        const alias_node = try self.nodeLookupByPath("/aliases");
+        if (alias_node) |aliases| {
+            for (aliases.properties.items) |prop| {
+                const alias_name = prop.name;
+                const alias_value = prop.valueAsString();
+                try self.aliases.put(alias_name, alias_value[0 .. alias_value.len - 1 :0]);
+            }
+        }
     }
 
     pub const TokenType = enum(u32) {
@@ -173,8 +217,6 @@ pub const Fdt = struct {
         }
 
         pub fn lookupChildByPath(self: *Node, path: [:0]const u8, start: usize, end: usize) ?*Node {
-            // TODO: handle aliases
-
             if (start == end) {
                 return self;
             }
@@ -241,6 +283,12 @@ pub const Fdt = struct {
             const value_ptr: [*]T = @ptrFromInt(value_start);
             const value_count = self.value_len / @sizeOf(T);
             return value_ptr[0..value_count];
+        }
+
+        pub fn valueAsString(self: *Property) [:0]const u8 {
+            const value_start = self.owner.fdt.struct_base + self.value_offset;
+            const value_ptr: [*]u8 = @ptrFromInt(value_start);
+            return @ptrCast(value_ptr[0..self.value_len]);
         }
     };
 
@@ -434,6 +482,7 @@ test "locate node and property by path" {
     const soc_compat = soc.?.property("compatible");
     const expected_compat_value = [_]u8{ 's', 'i', 'm', 'p', 'l', 'e', '-', 'b', 'u', 's', 0 };
     try expectEqualStrings(&expected_compat_value, soc_compat.?.valueAs(u8));
+    try expectEqualStrings(&expected_compat_value, soc_compat.?.valueAsString());
 
     const soc_phandle = soc.?.property("phandle");
     const expected_phandle_value = [_]u32{0x3e};
@@ -461,4 +510,30 @@ test "locate node and property by path" {
     timer_interrupt_parent_value = nativeByteOrder(timer_interrupt_parent_value);
     const t_i_p = try fdt.nodeLookupByPHandle(timer_interrupt_parent_value);
     try expectEqualStrings(t_i_p.?.name, "local_intc@40000000");
+
+    const serial = try fdt.nodeLookupByPath("/soc/serial@7e201000");
+    const serial_compat = serial.?.property("compatible");
+    var serial_compat_values = std.mem.splitAny(u8, serial_compat.?.valueAsString(), &[_]u8{0});
+    try expectEqualStrings("arm,pl011", serial_compat_values.next().?);
+    try expectEqualStrings("arm,primecell", serial_compat_values.next().?);
+}
+
+test "locate nodes via aliases" {
+    const expect = std.testing.expect;
+
+    const fdt_path = "test/resources/fdt.bin";
+    const stat = try std.fs.cwd().statFile(fdt_path);
+    var buffer = try std.fs.cwd().readFileAlloc(std.testing.allocator, fdt_path, stat.size);
+    defer std.testing.allocator.free(buffer);
+
+    var fdt = Fdt{};
+    try fdt.initFromPointer(std.testing.allocator, @intFromPtr(buffer.ptr));
+    defer fdt.deinit();
+
+    const serial0_by_path = try fdt.nodeLookupByPath("/soc/serial@7e215040");
+    try expect(serial0_by_path != null);
+
+    const serial0 = try fdt.nodeLookupByPath("serial0");
+    try expect(serial0 != null);
+    try expect(serial0 == serial0_by_path);
 }
