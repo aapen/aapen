@@ -433,4 +433,9 @@ test "locate node and property by path" {
     for (dma_ranges_value, 0..) |actual_word, i| {
         try expectEqual(expected_dma_ranges[i], nativeByteOrder(actual_word));
     }
+
+    const reserved_memory = try fdt.nodeLookupByPath("/reserved-memory");
+    const reserved_memory_ranges = reserved_memory.?.property("ranges");
+    try expect(reserved_memory_ranges != null);
+    try expect(reserved_memory_ranges.?.valueAs(u32).len == 0);
 }
