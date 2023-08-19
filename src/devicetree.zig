@@ -148,6 +148,18 @@ pub const Fdt = struct {
         }
     }
 
+    pub fn stringProperty(self: *Fdt, node_path: [:0]const u8, property_name: []const u8) ![:0]const u8 {
+        if (try self.nodeLookupByPath(node_path)) |node| {
+            if (node.property(property_name)) |prop| {
+                return prop.valueAsString();
+            } else {
+                return Error.NotFound;
+            }
+        } else {
+            return Error.NotFound;
+        }
+    }
+
     pub const TokenType = enum(u32) {
         beginNode = 0x00000001,
         endNode = 0x00000002,

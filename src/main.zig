@@ -41,6 +41,10 @@ fn kernelInit() void {
     heap.init(page_size);
     os.page_allocator = heap.allocator();
 
+    fdt.init(os.page_allocator) catch |err| {
+        kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
+    };
+
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
     arch.cpu.exceptionInit();
     arch.cpu.irqInit();
@@ -62,11 +66,13 @@ fn kernelInit() void {
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
 
-    fdt.init(os.page_allocator) catch |err| {
-        kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
-    };
+    if (fdt.stringProperty("/", "model")) |model| {
+        kprint("Firmware model {s}\n", .{model});
+    } else |err| {
+        kprint("Error looking up firmware model: {any}\n", .{err});
+    }
 
-    kprint("Running on {s} (a {s}) with {?}MB\n\n", .{
+    kprint("Board model {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,
         board.model.processor,
         board.model.memory,
