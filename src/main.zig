@@ -37,16 +37,17 @@ pub var fdt: devicetree.Fdt = devicetree.Fdt{};
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
+
+    heap.init(page_size);
+    os.page_allocator = heap.allocator();
+
+    // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
     arch.cpu.exceptionInit();
     arch.cpu.irqInit();
 
-    // State: one core, interrupts, MMU, no heap Allocator, no display, no serial
+    // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     // bsp.timer.timerInit();
     bsp.io.uartInit();
-
-    heap.init(page_size);
-
-    os.page_allocator = heap.allocator();
 
     board.read() catch {};
 
