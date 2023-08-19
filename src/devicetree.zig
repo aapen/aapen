@@ -1,6 +1,7 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+const AutoHashMap = std.AutoHashMap;
 
 const root = @import("root");
 
@@ -13,6 +14,7 @@ pub const Fdt = struct {
     const Self = @This();
 
     const NodeList = ArrayList(*Node);
+    const PHandleMap = AutoHashMap(u32, *Node);
     const PropertyList = ArrayList(*Property);
 
     // These constants come from the device tree specification.
@@ -27,6 +29,7 @@ pub const Fdt = struct {
     strings_base: usize = undefined,
     strings_size: usize = undefined,
 
+    phandles: PHandleMap = undefined,
     root_node: *Node = undefined,
 
     pub const Error = error{
@@ -80,11 +83,13 @@ pub const Fdt = struct {
         self.strings_base = fdt_address + nativeByteOrder(h.off_dt_strings);
         self.strings_size = nativeByteOrder(h.size_dt_strings);
 
+        self.phandles = PHandleMap.init(allocator);
         self.root_node = try parse(self, allocator);
     }
 
     pub fn deinit(self: *Fdt) void {
         self.root_node.deinit();
+        self.phandles.deinit();
     }
 
     pub fn nodeLookupByPath(self: *Fdt, path: [:0]const u8) !?*Node {
@@ -93,6 +98,10 @@ pub const Fdt = struct {
         }
 
         return self.root_node.lookupChildByPath(path, 1, path.len);
+    }
+
+    pub fn nodeLookupByPHandle(self: *Fdt, phandle: u32) !?*Node {
+        return self.phandles.get(phandle);
     }
 
     pub const TokenType = enum(u32) {
@@ -321,6 +330,13 @@ pub const Fdt = struct {
                     const prop = try Property.create(allocator, current_parent.?, prop_offset, prop_name, value_offset, value_len);
 
                     try current_parent.?.properties.append(prop);
+
+                    // if this property is a phandle, add the current
+                    // node to the tree's map from phandle -> *Node
+                    if (std.mem.eql(u8, prop_name, "phandle")) {
+                        const phandle_value = self.valueAtOffset(u32, value_offset);
+                        try self.phandles.put(phandle_value, current_parent.?);
+                    }
                 },
                 inline else => current_tag_offset += tag_size,
             }
@@ -438,4 +454,11 @@ test "locate node and property by path" {
     const reserved_memory_ranges = reserved_memory.?.property("ranges");
     try expect(reserved_memory_ranges != null);
     try expect(reserved_memory_ranges.?.valueAs(u32).len == 0);
+
+    const timer = try fdt.nodeLookupByPath("/timer");
+    const timer_interrupt_parent = timer.?.property("interrupt-parent");
+    var timer_interrupt_parent_value = timer_interrupt_parent.?.valueAs(u32)[0];
+    timer_interrupt_parent_value = nativeByteOrder(timer_interrupt_parent_value);
+    const t_i_p = try fdt.nodeLookupByPHandle(timer_interrupt_parent_value);
+    try expectEqualStrings(t_i_p.?.name, "local_intc@40000000");
 }
