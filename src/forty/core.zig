@@ -7,9 +7,7 @@ const fbcons = @import("../fbcons.zig");
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
-const stack = @import("stack.zig");
-const DataStack = stack.Stack(u64);
-const ReturnStack = stack.Stack(i32);
+//const stack = @import("stack.zig");
 
 const string = @import("string.zig");
 const parser = @import("parser.zig");
@@ -17,298 +15,9 @@ const memory = @import("memory.zig");
 
 const forth_module = @import("forth.zig");
 const Forth = forth_module.Forth;
-const OpCode = forth_module.OpCode;
-
-const formatText = std.fmt.formatText;
-const FormatOptions = std.fmt.FormatOptions;
 
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
-
-const InvalidOffset = std.math.maxInt(u64);
-
-// This is the inner interpreter, effectively the word
-// that runs all the secondary words.
-pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
-    var body = header.bodyOfType([*]u64);
-    var i: usize = 0;
-    while (true) {
-        try forth.trace("{:4}: {x:4}: ", .{ i, body[i] });
-        switch (body[i]) {
-            @intFromEnum(OpCode.stop) => break,
-
-            @intFromEnum(OpCode.push_u64) => {
-                try forth.trace("Push {x}\n", .{body[i + 1]});
-                try forth.stack.push(body[i + 1]);
-                i += 2;
-            },
-
-            @intFromEnum(OpCode.push_string) => {
-                try forth.trace("Push string len: {}\n", .{body[i + 1]});
-                const data_size = body[i + 1];
-                var p_string: [*]u8 = @ptrCast(body + i + 2);
-                try forth.stack.push(@intFromPtr(p_string));
-                i += data_size + 2;
-            },
-
-            @intFromEnum(OpCode.jump) => {
-                const offset = body[i + 1];
-                try forth.trace("Jump {}\n", .{offset});
-                i = i + 2 + offset;
-            },
-
-            @intFromEnum(OpCode.jump_if_not) => {
-                const offset = body[i + 1];
-                var c: u64 = try forth.stack.pop();
-                try forth.trace("JumpIfNot cond: {} offset {} ", .{ c, offset });
-                if (c == 0) {
-                    i = i + 2 + offset;
-                    try forth.trace("Jump!, i: {}\n", .{i});
-                } else {
-                    i = i + 2;
-                    try forth.trace("NoJump!, i: {}\n", .{i});
-                }
-            },
-
-            else => {
-                const p: *Header = @ptrFromInt(body[i]);
-                try forth.trace("Header: {x}\n", .{body[i]});
-                const delta = try p.func(forth, body, i, p);
-                i = i + 1 + delta;
-            },
-        }
-    }
-    return 0;
-}
-
-// Push the address of the word body onto the stack.
-pub fn pushBodyAddress(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
-    var body = header.bodyOfType([*]u8);
-    try forth.stack.push(@intFromPtr(body));
-    return 0;
-}
-
-// Create a new dictionary definition.
-// Resulting dictionary entry just pushes its body address onto the stack.
-// This is a fairly low level word.
-pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    try forth.assertNotCompiling();
-
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var token = forth.words.peek();
-    var desc: []const u8 = "";
-    if (token) |t| {
-        if (parser.isComment(t)) {
-            _ = forth.words.next() orelse return ForthError.WordReadError;
-            desc = try parser.parseComment(t);
-        }
-    }
-    _ = try forth.create(name, desc, &pushBodyAddress, false);
-    return 0;
-}
-
-// Finish out a word created with create.
-// Currently just fills in the length of the word.
-pub fn wordFinish(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    forth.complete();
-    return 0;
-}
-
-// Allocate a word in the dictionary and set its value to TOS.
-// Should be between a create/finish pair, but this is not checked.
-pub fn wordComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    const value = try forth.stack.pop();
-    const addr = forth.allocate(@alignOf(u64), @sizeOf(u64));
-    const wordAddr: [*]u64 = @alignCast(@ptrCast(addr));
-    wordAddr[0] = value;
-    return 0;
-}
-
-// Allocate n words in the dictionary. Should be in the middle
-// of a create/finish pair, but this is not checked.
-pub fn wordAllot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    const n = try forth.stack.pop();
-    _ = forth.allocate(@alignOf(u64), n * @sizeOf(u64));
-    return 0;
-}
-
-// Begin the definition of a new secondary word.
-pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    try forth.assertNotCompiling();
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var token = forth.words.peek() orelse return ForthError.WordReadError;
-    var desc: []const u8 = "";
-    if (parser.isComment(token)) {
-        _ = forth.words.next() orelse return ForthError.WordReadError;
-        desc = try parser.parseComment(token);
-    }
-    _ = try forth.startWord(name, desc, &inner, false);
-    return 0;
-}
-
-// Complete a secondary word.
-pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    try forth.assertCompiling();
-    forth.addOpCode(OpCode.stop);
-    try forth.completeWord();
-    return 0;
-}
-
-pub fn wordDesc(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var header = forth.findWord(name) orelse return ForthError.NotFound;
-    try forth.print("{s}: {s}\n", .{ header.name, header.desc });
-    return 0;
-}
-
-pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var header = forth.findWord(name) orelse return ForthError.NotFound;
-
-    if (header.func != &inner) {
-        const h: u64 = @intFromPtr(header);
-        const p: u64 = @intFromPtr(header.func);
-        try forth.print("Word name: {s} header: {x} func: {x}\n", .{ header.name, h, p });
-        try forth.print("Description: {s}\n", .{header.desc});
-        return 0;
-    }
-
-    var body = header.bodyOfType([*]u64);
-    var len = header.bodyLen();
-    try forth.print("Word name: {s} len: {} immed: {}\n", .{ header.name, len, header.immediate });
-    try forth.print("Description: {s}\n", .{header.desc});
-
-    try forth.print("Bytes:", .{});
-
-    var cbody = header.bodyOfType([*]u8);
-    for (0..len) |j| {
-        const ch = cbody[j];
-        const vis_ch = if ((ch >= ' ') and (ch <= '~')) ch else '.';
-        if ((j % 8) == 0) {
-            try forth.print("\n{:4}: ", .{j});
-        }
-        try forth.print("{c}[{x:2}]  ", .{ vis_ch, ch });
-    }
-    try forth.print("\n\nInstructions:\n", .{});
-
-    var i: usize = 0;
-    while (true) {
-        switch (body[i]) {
-            @intFromEnum(OpCode.stop) => {
-                try forth.print("{}: Stop\n", .{i});
-                break;
-            },
-
-            @intFromEnum(OpCode.push_u64) => {
-                try forth.print("{}: PushU64 {x:2}\n", .{ i, body[i + 1] });
-                i += 2;
-            },
-
-            @intFromEnum(OpCode.push_string) => {
-                const data_size = body[i + 1];
-                var p_string: [*:0]u8 = @ptrCast(body + i + 2);
-                try forth.print("{}: PushString [{}] {s}\n", .{ i, data_size, p_string });
-                i += data_size + 2;
-            },
-
-            @intFromEnum(OpCode.jump) => {
-                const offset = body[i + 1];
-                try forth.print("{}: Jump [{}]\n", .{ i, offset });
-                i = i + 2;
-            },
-
-            @intFromEnum(OpCode.jump_if_not) => {
-                const offset = body[i + 1];
-                try forth.print("{} :JumpIfNot [{}]\n", .{ i, offset });
-                i = i + 2;
-            },
-            else => {
-                const addr = body[i];
-                try forth.print("{}: Call [{x}]\n", .{ i, addr });
-                i = i + 1;
-            },
-        }
-    }
-    return 0;
-}
-
-// Testing - jump relative
-pub fn wordJump(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    try forth.assertCompiling();
-    var s_offset = forth.words.next() orelse return ForthError.WordReadError;
-    try forth.print("Offset: {s}\n", .{s_offset});
-    var i = try parser.parseNumber(s_offset, forth.ibase);
-    forth.addOpCode(OpCode.jump);
-    forth.addNumber(i);
-    return 0;
-}
-
-// Compiler word, generate the code for an if.
-// Emits an jump_if_not instruction with an invalid target address
-// and pushes the address of the target address onto the rstack.
-pub fn wordIf(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    try forth.assertCompiling();
-    forth.addOpCode(OpCode.jump_if_not);
-    try forth.rstack.push(@intFromPtr(forth.current()));
-    forth.addNumber(InvalidOffset);
-    return 0;
-}
-
-// Compiler word, generate the code for the else of if/else/endif.
-// Generates an unconditional jump instruction with an invalid target address,
-// pops the address (pushed by if) off of the rstack and plus in the address
-// just after the jump instruction.
-pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    try forth.assertCompiling();
-
-    const current_p = memory.alignByType(forth.current(), u64);
-    const if_jump_p = try forth.rstack.pop();
-
-    // Back fill the jump address for the If.
-
-    const delta = ((@intFromPtr(current_p) - if_jump_p) / @sizeOf(u64)) + 1;
-    const if_jump_p_u64: [*]u64 = @ptrFromInt(if_jump_p);
-    if_jump_p_u64[0] = delta;
-
-    // Add the else jump instruction and push its address onto the stack
-    // to be filled in later by endif.
-
-    forth.addOpCode(OpCode.jump);
-    try forth.rstack.push(@intFromPtr(forth.current()));
-    forth.addNumber(InvalidOffset);
-
-    return 0;
-}
-
-// Compiler word, generate the end code for if/endif or if/else/endif.
-// Pops the address off of the rstack and plugs in the offset to the
-// current instuction.
-pub fn wordEndif(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    try forth.assertCompiling();
-
-    const if_jump_p = try forth.rstack.pop();
-
-    const current_p = memory.alignByType(forth.current(), u64);
-    const delta = ((@intFromPtr(current_p) - if_jump_p) / @sizeOf(u64)) - 1;
-    const if_jump_p_u64: [*]u64 = @ptrFromInt(if_jump_p);
-    if_jump_p_u64[0] = delta;
-    return 0;
-}
-
-/// sAddr n -- ()
-pub fn wordImmediate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    const i = try forth.stack.pop();
-    const name: [*:0]u8 = @ptrFromInt(i);
-    const l = string.strlen(name);
-
-    var header = forth.findWord(name[0..l]);
-    if (header) |h| {
-        h.immediate = (i != 0);
-    } else {
-        try forth.print("{s}??\n", .{name});
-    }
-    return 0;
-}
 
 /// a -- ()
 pub fn wordEmit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
@@ -357,7 +66,22 @@ pub fn wordDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     return 0;
 }
 
-/// sAddr --
+/// n --
+pub fn wordSignedDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    var v: i64 = @bitCast(try forth.stack.pop());
+    try std.fmt.formatInt(v, @intCast(forth.obase), .lower, .{}, forth.writer());
+    return 0;
+}
+
+/// n --
+pub fn wordSDecimalDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    var v: i64 = @bitCast(try forth.stack.pop());
+    try std.fmt.formatInt(v, 10, .lower, .{}, forth.writer());
+    return 0;
+}
+
+
+/// addr --
 pub fn wordSDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     const i = try forth.stack.pop();
     const p_string: [*:0]u8 = @ptrFromInt(i);
@@ -382,14 +106,6 @@ pub fn wordDecimalDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u
 /// --
 pub fn wordStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     for (forth.stack.items()) |item| {
-        try forth.print("{}\n", .{item});
-    }
-    return 0;
-}
-
-/// --
-pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    for (forth.rstack.items()) |item| {
         try forth.print("{}\n", .{item});
     }
     return 0;
@@ -554,13 +270,10 @@ pub fn wordMod(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 
 /// --
 pub fn wordDictionary(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    //const w = 100;
-    //const options = FormatOptions{ .width = memory.WordNameLen + 1, .alignment = .left };
-
     var e = forth.lastWord;
     var i: usize = 0;
     while (e) |entry| {
-        const immed = if (entry.immediate) "^" else " ";
+        const immed = if (entry.immediate == 0) " " else "^";
         i += 1;
         var sep: u8 = if ((i % 5) == 0) '\n' else '\t';
         try forth.print("{s} {s: <20}{c}", .{ immed, entry.name, sep });
@@ -685,13 +398,13 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
 }
 
 pub fn defineCore(forth: *Forth) !void {
+
     // Expose internal values to forty.
-
     try forth.defineConstant("word", @sizeOf(u64));
-
     try forth.defineInternalVariable("ibase", &forth.ibase);
     try forth.defineInternalVariable("obase", &forth.obase);
-    try forth.defineInternalVariable("debug", &forth.debug);
+
+    // Display.
 
     try forth.defineInternalVariable("screenw", &forth.console.width);
     try forth.defineInternalVariable("screenh", &forth.console.height);
@@ -699,67 +412,52 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineInternalVariable("cursory", &forth.console.ypos);
 
     // IO
-    _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);
-    _ = try forth.definePrimitiveDesc("cr", " -- :Emit a newline", &wordCr, false);
-    _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
-    _ = try forth.definePrimitiveDesc("cls", " -- :Clear the screen", &wordClearScreen, false);
-    _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
-    _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
-
-    // Secondary definition words.
-
-    _ = try forth.definePrimitiveDesc(":", " -- :Start a new word definition", &wordColon, false);
-    _ = try forth.definePrimitiveDesc(";", " -- :Complete a new word definition", &wordSemi, true);
-    _ = try forth.definePrimitiveDesc("create", " -- :Start a new definition", &wordCreate, false);
-    _ = try forth.definePrimitiveDesc("finish", " -- :Complete a new definition", &wordFinish, false);
-    _ = try forth.definePrimitiveDesc(",", " n -- :Allocate a word and store n in it.", &wordComma, false);
-    _ = try forth.definePrimitiveDesc("allot", " n -- :Allocate n words.", &wordAllot, false);
-    _ = try forth.definePrimitiveDesc("if", " -- :If statement", &wordIf, true);
-    _ = try forth.definePrimitiveDesc("else", " -- :Part of if/else/endif", &wordElse, true);
-    _ = try forth.definePrimitiveDesc("endif", " -- :Part of if/else/endif", &wordEndif, true);
-    _ = try forth.definePrimitiveDesc("$jump", " -- :Compile in a jump instruction", &wordJump, true);
-    _ = try forth.definePrimitiveDesc("immediate", " -- :Set the last word to immediate.", &wordImmediate, false);
-    _ = try forth.definePrimitiveDesc("?", " -- :Print description of word.", &wordDesc, false);
+    _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, 0);
+    _ = try forth.definePrimitiveDesc("cr", " -- :Emit a newline", &wordCr, 0);
+    _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, 0);
+    _ = try forth.definePrimitiveDesc("cls", " -- :Clear the screen", &wordClearScreen, 0);
+    _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, 0);
+    _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, 0);
 
     // Debug and inspection words.
-    _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, false);
-    _ = try forth.definePrimitiveDesc("??", " -- :Print the dictionary.", &wordDictionary, false);
-    _ = try forth.definePrimitiveDesc("rstack", " -- :Print the return stack.", &wordRStack, false);
-    _ = try forth.definePrimitiveDesc("?word", " -- :Print details of word.", &wordDumpWord, false);
+    _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, 0);
+    _ = try forth.definePrimitiveDesc("??", " -- :Print the dictionary.", &wordDictionary, 0);
 
     // Basic Forth words.
-    _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, false);
-    _ = try forth.definePrimitiveDesc("2swap", " w1 w2 w3 w4 -- w3 w4 w1 w2 ", &word2Swap, false);
-    _ = try forth.definePrimitiveDesc("dup", "w -- w w", &wordDup, false);
-    _ = try forth.definePrimitiveDesc("2dup", "w1 w2 -- w1 w2 w1 w2", &word2Dup, false);
-    _ = try forth.definePrimitiveDesc("drop", "w --", &wordDrop, false);
-    _ = try forth.definePrimitiveDesc("2drop", "w w --", &word2Drop, false);
-    _ = try forth.definePrimitiveDesc("rot", "w1 w2 w3 -- w2 w3 w1", &wordRot, false);
-    _ = try forth.definePrimitiveDesc("2rot", "w1 w2 w3 w4 w5 w6 -- w3 w4 w5 w6 w1 w2", &word2Rot, false);
-    _ = try forth.definePrimitiveDesc("over", "w1 w2 -- w1 w2 w1", &wordOver, false);
-    _ = try forth.definePrimitiveDesc("2over", ", w1 w2 w3 w4 -- w1 w2 w3 w4 w1 w2", &word2Over, false);
+    _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, 0);
+    _ = try forth.definePrimitiveDesc("2swap", " w1 w2 w3 w4 -- w3 w4 w1 w2 ", &word2Swap, 0);
+    _ = try forth.definePrimitiveDesc("dup", "w -- w w", &wordDup, 0);
+    _ = try forth.definePrimitiveDesc("2dup", "w1 w2 -- w1 w2 w1 w2", &word2Dup, 0);
+    _ = try forth.definePrimitiveDesc("drop", "w --", &wordDrop, 0);
+    _ = try forth.definePrimitiveDesc("2drop", "w w --", &word2Drop, 0);
+    _ = try forth.definePrimitiveDesc("rot", "w1 w2 w3 -- w2 w3 w1", &wordRot, 0);
+    _ = try forth.definePrimitiveDesc("2rot", "w1 w2 w3 w4 w5 w6 -- w3 w4 w5 w6 w1 w2", &word2Rot, 0);
+    _ = try forth.definePrimitiveDesc("over", "w1 w2 -- w1 w2 w1", &wordOver, 0);
+    _ = try forth.definePrimitiveDesc("2over", ", w1 w2 w3 w4 -- w1 w2 w3 w4 w1 w2", &word2Over, 0);
 
-    _ = try forth.definePrimitiveDesc(".", "n -- :print tos as u64 in current obase", &wordDot, false);
-    _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, false);
-    _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, false);
-    _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, false);
-    _ = try forth.definePrimitiveDesc("+", "n n -- n :u64 addition", &wordAdd, false);
-    _ = try forth.definePrimitiveDesc("-", "n n -- n :u64 subtraction", &wordSub, false);
-    _ = try forth.definePrimitiveDesc("*", "n n -- n :u64 multiplication", &wordMul, false);
-    _ = try forth.definePrimitiveDesc("/", "n n -- n :u64 division", &wordDiv, false);
-    _ = try forth.definePrimitiveDesc("%", "n n -- n :u64 modulo", &wordMod, false);
-    _ = try forth.definePrimitiveDesc("=", "n n -- n :u64 equality test", &wordEqualU64, false);
-    _ = try forth.definePrimitiveDesc("<", "n n -- n :u64 less-than test", &wordLessThanU64, false);
-    _ = try forth.definePrimitiveDesc("<=", "n n -- n :u64 less-than or equal test", &wordLessThanEqualU64, false);
-    _ = try forth.definePrimitiveDesc(">", "n n -- n :u64 greater-than test", &wordGreaterThanU64, false);
-    _ = try forth.definePrimitiveDesc(">=", "n n -- n :u64 greater-than or equal test", &wordGreaterThanEqualU64, false);
+    _ = try forth.definePrimitiveDesc("+.", "n -- :print tos as i64 in current obase", &wordSignedDot, 0);
+    _ = try forth.definePrimitiveDesc("+#.", "n -- :print tos as i64 in current obase", &wordSDecimalDot, 0);
+    _ = try forth.definePrimitiveDesc(".", "n -- :print tos as u64 in current obase", &wordDot, 0);
+    _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, 0);
+    _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, 0);
+    _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, 0);
+    _ = try forth.definePrimitiveDesc("+", "n n -- n :u64 addition", &wordAdd, 0);
+    _ = try forth.definePrimitiveDesc("-", "n n -- n :u64 subtraction", &wordSub, 0);
+    _ = try forth.definePrimitiveDesc("*", "n n -- n :u64 multiplication", &wordMul, 0);
+    _ = try forth.definePrimitiveDesc("/", "n n -- n :u64 division", &wordDiv, 0);
+    _ = try forth.definePrimitiveDesc("%", "n n -- n :u64 modulo", &wordMod, 0);
+    _ = try forth.definePrimitiveDesc("=", "n n -- n :u64 equality test", &wordEqualU64, 0);
+    _ = try forth.definePrimitiveDesc("<", "n n -- n :u64 less-than test", &wordLessThanU64, 0);
+    _ = try forth.definePrimitiveDesc("<=", "n n -- n :u64 less-than or equal test", &wordLessThanEqualU64, 0);
+    _ = try forth.definePrimitiveDesc(">", "n n -- n :u64 greater-than test", &wordGreaterThanU64, 0);
+    _ = try forth.definePrimitiveDesc(">=", "n n -- n :u64 greater-than or equal test", &wordGreaterThanEqualU64, 0);
 
-    _ = try forth.definePrimitiveDesc("!", "w addr -- : Store a 64 bit unsigned word.", &wordStoreU64, false);
-    _ = try forth.definePrimitiveDesc("@", "addr - w : Load a 64 bit unsigned word.", &wordLoadU64, false);
-    _ = try forth.definePrimitive("be", &wordByteExchangeU64, false);
-    _ = try forth.definePrimitiveDesc("!b", "b addr -- : Store a byte.", &wordStoreU8, false);
-    _ = try forth.definePrimitiveDesc("@b", "addr -- b : Load a byte.", &wordLoadU8, false);
-    _ = try forth.definePrimitiveDesc("!w", "w addr -- : Store a 32 unsigned bit word.", &wordStoreU32, false);
-    _ = try forth.definePrimitiveDesc("@w", "addr -- : Load a 32 bit unsigned word", &wordLoadU32, false);
-    _ = try forth.definePrimitive("wbe", &wordByteExchangeU32, false);
+    _ = try forth.definePrimitiveDesc("!", "w addr -- : Store a 64 bit unsigned word.", &wordStoreU64, 0);
+    _ = try forth.definePrimitiveDesc("@", "addr - w : Load a 64 bit unsigned word.", &wordLoadU64, 0);
+    _ = try forth.definePrimitive("be", &wordByteExchangeU64, 0);
+    _ = try forth.definePrimitiveDesc("!b", "b addr -- : Store a byte.", &wordStoreU8, 0);
+    _ = try forth.definePrimitiveDesc("@b", "addr -- b : Load a byte.", &wordLoadU8, 0);
+    _ = try forth.definePrimitiveDesc("!w", "w addr -- : Store a 32 unsigned bit word.", &wordStoreU32, 0);
+    _ = try forth.definePrimitiveDesc("@w", "addr -- : Load a 32 bit unsigned word", &wordLoadU32, 0);
+    _ = try forth.definePrimitive("wbe", &wordByteExchangeU32, 0);
 }

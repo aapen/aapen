@@ -26,6 +26,15 @@ F
 : fdt-strings-sz fdt 0x20 field@ ;
 : fdt-struct-sz  fdt 0x24 field@ ;
 
+(compiling words)
+
+: secondary! (addr -- Make the word a secondary)
+  header-func-offset + inner swap !
+;
+
+: immediate! ( f addr -- Change the immediate flag of the word at addr to f)
+  header-immediate-offset + !
+;
 
 ( Debugging )
 
@@ -40,3 +49,25 @@ F
 ( Testing... )
 
 : even? ( n -- s ) 2 % if "no" else "yes" endif s. cr ;
+: countdown hello hello hello while dup 0 > do dup p 1 - done "all done" s. cr ;
+
+: power-of-two ( n -- n ) 
+  1 swap 
+  while dup 0 > 
+  do
+    swap 2 * 
+    swap 1 -
+  done
+  drop
+;
+
+create by-hand (test word)
+  opcode-push-u64 ,
+  999 ,
+  'p ,
+  opcode-stop ,
+finish
+
+'by-hand secondary!
+
+

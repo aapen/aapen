@@ -9,6 +9,7 @@ const buffer = @import("buffer.zig");
 const stack = @import("stack.zig");
 const string = @import("string.zig");
 const core = @import("core.zig");
+const compiler = @import("compiler.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -53,7 +54,7 @@ pub const Forth = struct {
     memory: Memory = undefined,
     lastWord: ?*Header = null,
     newWord: ?*Header = null,
-    compiling: bool = false,
+    compiling: u64 = 0,
     string_buffer: string.LineBuffer = undefined,
     line_buffer: string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
@@ -66,6 +67,7 @@ pub const Forth = struct {
         this.buffer = undefined;
         this.memory = Memory.init(&this.buffer, this.buffer.len);
         try core.defineCore(this);
+        try compiler.defineCompiler(this);
 
         initBuffer.init(init_f);
         var initBufferReader = try buffer.createReader(a, &initBuffer);
@@ -87,7 +89,7 @@ pub const Forth = struct {
         try this.stack.reset();
         try this.rstack.reset();
         this.newWord = null;
-        this.compiling = false;
+        this.compiling = 0;
     }
 
     // Find a word in the dictionary, ignores words that are under construction.
@@ -105,14 +107,14 @@ pub const Forth = struct {
     }
 
     // Define a primitive (i.e. a word backed up by a zig function).
-    pub fn definePrimitiveDesc(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immed: bool) !*Header {
+    pub fn definePrimitiveDesc(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immed: u64) !*Header {
         const header = try this.startWord(name, desc, f, immed);
         try this.completeWord();
         return header;
     }
 
     // Define a primitive w/o a description.
-    pub fn definePrimitive(this: *Forth, name: []const u8, f: WordFunction, immed: bool) !*Header {
+    pub fn definePrimitive(this: *Forth, name: []const u8, f: WordFunction, immed: u64) !*Header {
         const header = try this.startWord(name, "A prim", f, immed);
         try this.completeWord();
         return header;
@@ -121,7 +123,7 @@ pub const Forth = struct {
     // Define a constant with a single u64 value. What we really end up with
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
-        _ = try this.startWord(name, "A constant", &core.inner, false);
+        _ = try this.startWord(name, "A constant", &compiler.inner, 0);
         this.addOpCode(OpCode.push_u64);
         this.addNumber(v);
         this.addOpCode(OpCode.stop);
@@ -152,21 +154,21 @@ pub const Forth = struct {
 
     // Return an error if we are not compiling.
     pub inline fn assertCompiling(this: *Forth) !void {
-        if (!this.compiling) {
+        if (this.compiling == 0) {
             return ForthError.NotCompiling;
         }
     }
 
     // Return an error if we are compiling.
     pub inline fn assertNotCompiling(this: *Forth) !void {
-        if (this.compiling) {
+        if (this.compiling != 0) {
             return ForthError.AlreadyCompiling;
         }
     }
 
     // Start a new dictionary entry in the interpreter. Dictionary searches will not find
     // the new word until completeWord is called.
-    pub fn create(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
+    pub fn create(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: u64) !*Header {
         var owned_name = try std.mem.Allocator.dupeZ(this.allocator, u8, name);
         var owned_desc = try std.mem.Allocator.dupeZ(this.allocator, u8, desc);
         const entry: Header = Header.init(owned_name, owned_desc, f, immediate, this.lastWord);
@@ -190,10 +192,10 @@ pub const Forth = struct {
 
     // Start a new word in the interpreter. Dictionary searches will not find
     // the new word until completeWord is called.
-    pub fn startWord(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
+    pub fn startWord(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: u64) !*Header {
         try this.assertNotCompiling();
         const newWord = try this.create(name, desc, f, immediate);
-        this.compiling = true;
+        this.compiling = 1;
         return newWord;
     }
 
@@ -201,7 +203,7 @@ pub const Forth = struct {
     pub fn completeWord(this: *Forth) !void {
         try this.assertCompiling();
         this.complete();
-        this.compiling = false;
+        this.compiling = 0;
     }
 
     // Convert the token into a value, either a string, a number
@@ -212,6 +214,8 @@ pub const Forth = struct {
 
         if (header) |h| {
             try this.evalHeader(h);
+        } else if (token[0] == '\'') {
+            try this.evalQuoted(token);
         } else if (token[0] == '"') {
             try this.evalString(token);
         } else if (token[0] != '(') {
@@ -220,10 +224,25 @@ pub const Forth = struct {
         }
     }
 
+    // Evaluate a word that starts with a single quote.
+    // We look up the symbol 
+    fn evalQuoted(this: *Forth, token: []const u8) !void {
+        const name = try parser.parseQuoted(token);
+        const header = this.findWord(name) orelse return ForthError.NotFound;
+        const i: u64 = @intFromPtr(header);
+
+        if (this.compiling != 0) {
+            this.addOpCode(OpCode.push_u64);
+            this.addNumber(i);
+        } else {
+            try this.stack.push(i);
+        }
+    }
+
     // If we are compiling, compile the code to push the number onto the stack.
     // If we are not compiling, just push the numnber onto the stack.
     fn evalNumber(this: *Forth, i: u64) !void {
-        if (this.compiling) {
+        if (this.compiling != 0) {
             this.addOpCode(OpCode.push_u64);
             this.addNumber(i);
         } else {
@@ -236,7 +255,7 @@ pub const Forth = struct {
     // and push a reference to the string onto the stack.
     fn evalString(this: *Forth, token: []const u8) !void {
         const s = try parser.parseString(token);
-        if (this.compiling) {
+        if (this.compiling != 0) {
             this.addOpCode(OpCode.push_string);
             this.addString(s);
         } else {
@@ -249,7 +268,7 @@ pub const Forth = struct {
     // Otherwise, if we are compiling, compile a call to the header.
     // Otherwise just execute it.
     fn evalHeader(this: *Forth, header: *Header) !void {
-        if ((!this.compiling) or (header.immediate)) {
+        if ((this.compiling == 0) or (header.immediate != 0)) {
             var fake_body: [1]u64 = .{0};
             _ = try header.func(this, &fake_body, 0, header);
         } else {
