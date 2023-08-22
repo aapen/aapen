@@ -12,11 +12,11 @@ pub const Header = struct {
     name: []const u8 = undefined,
     func: WordFunction = undefined,
     desc: []const u8 = undefined,
-    immediate: bool = false,
+    immediate: u64 = 0,
     previous: ?*Header = null,
     len: u64 = 0,
 
-    pub fn init(name: []const u8, desc: []const u8, func: WordFunction, immediate: bool, previous: ?*Header) Header {
+    pub fn init(name: []const u8, desc: []const u8, func: WordFunction, immediate: u64, previous: ?*Header) Header {
         var this = Header{
             .name = name,
             .func = func,

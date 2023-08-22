@@ -23,7 +23,7 @@ pub fn same(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a[0..alen], b[0..blen]);
 }
 
-pub fn strlen(s: [*:0]u8) usize {
+pub fn strlen(s: [*:0]const u8) usize {
     var i: usize = 0;
     while (s[i] != 0) {
         i += 1;

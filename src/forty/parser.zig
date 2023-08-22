@@ -4,6 +4,14 @@ const Allocator = std.mem.Allocator;
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
+pub fn parseQuoted(token: []const u8) ![]const u8 {
+    if (token[0] != '\'') {
+        return ForthError.ParseError;
+    }
+    const l = token.len;
+    return token[1..l];
+}
+
 pub fn parseString(token: []const u8) ![]const u8 {
     if (token[0] != '"') {
         return ForthError.ParseError;
