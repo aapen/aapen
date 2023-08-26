@@ -129,18 +129,6 @@ fn supplyUsize(name: []const u8, sz: usize) void {
     };
 }
 
-// TODO
-// 1. look up /soc
-// 2. get #address-cells to tell if addresses are u64 or u32
-// 3. get #size-cells to tell how big the length param is
-// 4. read 'from' (#address-cells of u32's), 'to' (#address-cells of
-// u32's), and 'length' (#size-cells of u32's)
-// 5. build translation table from these
-
-// TODO
-// Enumerate children of /soc node, extract 'compatible' from each
-// Look up a driver matching the 'compatible' string.
-
 fn diagnostics() !void {
     try board.arm_memory.print();
     try board.videocore_memory.print();
