@@ -11,6 +11,20 @@ const root = @import("root");
 // point it at some memory.
 pub extern var __fdt_address: usize;
 
+// We use a fixed buffer allocator during boot (before we discover the
+// RAM)
+const parse_buffer_len = 256 * 1024;
+var device_tree_parsed_buffer: [parse_buffer_len]u8 = undefined;
+var fba = std.heap.FixedBufferAllocator.init(device_tree_parsed_buffer[0..parse_buffer_len]);
+
+pub var global_devicetree = Fdt{};
+
+pub fn init() void {
+    global_devicetree.init(fba.allocator()) catch |err| {
+        root.kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
+    };
+}
+
 pub const Fdt = struct {
     const Self = @This();
 
@@ -152,6 +166,18 @@ pub const Fdt = struct {
         if (try self.nodeLookupByPath(node_path)) |node| {
             if (node.property(property_name)) |prop| {
                 return prop.valueAsString();
+            } else {
+                return Error.NotFound;
+            }
+        } else {
+            return Error.NotFound;
+        }
+    }
+
+    pub fn property(self: *Fdt, comptime T: type, node_path: [:0]const u8, property_name: []const u8) ![]const T {
+        if (try self.nodeLookupByPath(node_path)) |node| {
+            if (node.property(property_name)) |prop| {
+                return prop.valueAs(T);
             } else {
                 return Error.NotFound;
             }
@@ -451,7 +477,7 @@ pub const Fdt = struct {
     }
 };
 
-inline fn nativeByteOrder(v: u32) u32 {
+pub inline fn nativeByteOrder(v: u32) u32 {
     return std.mem.bigToNative(u32, v);
 }
 

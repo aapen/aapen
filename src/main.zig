@@ -32,7 +32,6 @@ pub var heap = mem{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
 pub var interpreter: Forth = Forth{};
-pub var fdt: devicetree.Fdt = devicetree.Fdt{};
 
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
@@ -41,9 +40,7 @@ fn kernelInit() void {
     heap.init(page_size);
     os.page_allocator = heap.allocator();
 
-    fdt.init(os.page_allocator) catch |err| {
-        kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
-    };
+    devicetree.init();
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
     arch.cpu.exceptionInit();
@@ -66,12 +63,6 @@ fn kernelInit() void {
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
 
-    if (fdt.stringProperty("/", "model")) |model| {
-        kprint("Firmware model {s}\n", .{model});
-    } else |err| {
-        kprint("Error looking up firmware model: {any}\n", .{err});
-    }
-
     kprint("Board model {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,
         board.model.processor,
@@ -88,15 +79,12 @@ fn kernelInit() void {
 
     bsp.usb.init();
 
-    // sampleDeviceTree();
-
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});
     };
 
     supplyAddress("fb", @intFromPtr(frame_buffer.base));
     supplyUsize("fbsize", frame_buffer.buffer_size);
-    supplyAddress("fdt", devicetree.__fdt_address);
 
     arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
     arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -133,26 +121,17 @@ fn supplyUsize(name: []const u8, sz: usize) void {
     };
 }
 
-fn sampleDeviceTree() void {
-    kprint("\nDevice tree diagnostics\n", .{});
-    reportDeviceTreeNode("soc");
-    reportDeviceTreeNode("reserved-memory");
-    reportDeviceTreeNode("thermal-zones/cpu-thermal");
-    reportDeviceTreeNode("soc/usb@7e980000/usb1@1/ethernet@1");
-}
+// TODO
+// 1. look up /soc
+// 2. get #address-cells to tell if addresses are u64 or u32
+// 3. get #size-cells to tell how big the length param is
+// 4. read 'from' (#address-cells of u32's), 'to' (#address-cells of
+// u32's), and 'length' (#size-cells of u32's)
+// 5. build translation table from these
 
-pub fn reportDeviceTreeNode(path: [:0]const u8) void {
-    const node = fdt.nodeLookupByPath(path) catch |err| blk: {
-        kprint("Error looking up {s}: {any}\n", .{ path, err });
-        break :blk null;
-    };
-
-    if (node) |n| {
-        kprint("{s:>40}: offset: {d}\tchildren: {d}\tproperties: {d}\n", .{ path, n.offset, n.children.items.len, n.properties.items.len });
-    } else {
-        kprint("{s:>40}: not found.\n", .{path});
-    }
-}
+// TODO
+// Enumerate children of /soc node, extract 'compatible' from each
+// Look up a driver matching the 'compatible' string.
 
 fn diagnostics() !void {
     try board.arm_memory.print();
