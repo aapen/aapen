@@ -9,6 +9,7 @@ const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 const debug = @import("debug.zig");
 pub const devicetree = @import("devicetree.zig");
+const drivers = @import("drivers.zig");
 
 pub const kinfo = debug.kinfo;
 pub const kwarn = debug.kwarn;
@@ -33,6 +34,9 @@ pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
 pub var interpreter: Forth = Forth{};
 
+pub var uart_valid = false;
+pub var console_valid = false;
+
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
@@ -49,6 +53,9 @@ fn kernelInit() void {
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     // bsp.timer.timerInit();
     bsp.io.uartInit();
+    uart_valid = true;
+
+    drivers.init(&os.page_allocator);
 
     board.read() catch {};
 
@@ -59,6 +66,7 @@ fn kernelInit() void {
     };
 
     frame_buffer_console.init();
+    console_valid = true;
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
