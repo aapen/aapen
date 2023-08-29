@@ -9,6 +9,7 @@ const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 const debug = @import("debug.zig");
 pub const devicetree = @import("devicetree.zig");
+const drivers = @import("drivers.zig");
 
 pub const kinfo = debug.kinfo;
 pub const kwarn = debug.kwarn;
@@ -32,7 +33,9 @@ pub var heap = mem{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
 pub var interpreter: Forth = Forth{};
-pub var fdt: devicetree.Fdt = devicetree.Fdt{};
+
+pub var uart_valid = false;
+pub var console_valid = false;
 
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
@@ -41,9 +44,7 @@ fn kernelInit() void {
     heap.init(page_size);
     os.page_allocator = heap.allocator();
 
-    fdt.init(os.page_allocator) catch |err| {
-        kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
-    };
+    devicetree.init();
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
     arch.cpu.exceptionInit();
@@ -52,6 +53,9 @@ fn kernelInit() void {
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     // bsp.timer.timerInit();
     bsp.io.uartInit();
+    uart_valid = true;
+
+    drivers.init(&os.page_allocator);
 
     board.read() catch {};
 
@@ -62,15 +66,10 @@ fn kernelInit() void {
     };
 
     frame_buffer_console.init();
+    console_valid = true;
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
-
-    if (fdt.stringProperty("/", "model")) |model| {
-        kprint("Firmware model {s}\n", .{model});
-    } else |err| {
-        kprint("Error looking up firmware model: {any}\n", .{err});
-    }
 
     kprint("Board model {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,
@@ -88,15 +87,17 @@ fn kernelInit() void {
 
     bsp.usb.init();
 
-    // sampleDeviceTree();
-
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});
     };
 
+    interpreter.defineStruct("fbcons", fbcons.FrameBufferConsole) catch |err| {
+        kerror(@src(), "Forth defineStruct: {any}\n", .{err});
+    };
+
+    supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
     supplyAddress("fb", @intFromPtr(frame_buffer.base));
     supplyUsize("fbsize", frame_buffer.buffer_size);
-    supplyAddress("fdt", devicetree.__fdt_address);
 
     arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
     arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -131,27 +132,6 @@ fn supplyUsize(name: []const u8, sz: usize) void {
     interpreter.defineConstant(name, sz) catch |err| {
         kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
     };
-}
-
-fn sampleDeviceTree() void {
-    kprint("\nDevice tree diagnostics\n", .{});
-    reportDeviceTreeNode("soc");
-    reportDeviceTreeNode("reserved-memory");
-    reportDeviceTreeNode("thermal-zones/cpu-thermal");
-    reportDeviceTreeNode("soc/usb@7e980000/usb1@1/ethernet@1");
-}
-
-pub fn reportDeviceTreeNode(path: [:0]const u8) void {
-    const node = fdt.nodeLookupByPath(path) catch |err| blk: {
-        kprint("Error looking up {s}: {any}\n", .{ path, err });
-        break :blk null;
-    };
-
-    if (node) |n| {
-        kprint("{s:>40}: offset: {d}\tchildren: {d}\tproperties: {d}\n", .{ path, n.offset, n.children.items.len, n.properties.items.len });
-    } else {
-        kprint("{s:>40}: not found.\n", .{path});
-    }
 }
 
 fn diagnostics() !void {

@@ -80,7 +80,6 @@ pub fn wordSDecimalDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!
     return 0;
 }
 
-
 /// addr --
 pub fn wordSDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     const i = try forth.stack.pop();
@@ -270,18 +269,30 @@ pub fn wordMod(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 
 /// --
 pub fn wordDictionary(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    try listDictionary(forth, "");
+    return 0;
+}
+
+/// --
+pub fn wordDictionaryFilter(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    const pat = try forth.readWord();
+    try listDictionary(forth, pat);
+    return 0;
+}
+
+fn listDictionary(forth: *Forth, pat: []const u8) ForthError!void {
     var e = forth.lastWord;
     var i: usize = 0;
     while (e) |entry| {
-        const immed = if (entry.immediate == 0) " " else "^";
-        i += 1;
-        var sep: u8 = if ((i % 5) == 0) '\n' else '\t';
-        try forth.print("{s} {s: <20}{c}", .{ immed, entry.name, sep });
-
+        if (std.mem.startsWith(u8, entry.name, pat)) {
+            const immed = if (entry.immediate == 0) " " else "^";
+            i += 1;
+            var sep: u8 = if ((i % 5) == 0) '\n' else '\t';
+            try forth.print("{s} {s: <20}{c}", .{ immed, entry.name, sep });
+        }
         e = entry.previous;
     }
     try forth.print("\n", .{});
-    return 0;
 }
 
 /// addr -- u8
@@ -400,9 +411,8 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
 pub fn defineCore(forth: *Forth) !void {
 
     // Expose internal values to forty.
+
     try forth.defineConstant("word", @sizeOf(u64));
-    try forth.defineInternalVariable("ibase", &forth.ibase);
-    try forth.defineInternalVariable("obase", &forth.obase);
 
     // Display.
 
@@ -422,6 +432,7 @@ pub fn defineCore(forth: *Forth) !void {
     // Debug and inspection words.
     _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, 0);
     _ = try forth.definePrimitiveDesc("??", " -- :Print the dictionary.", &wordDictionary, 0);
+    _ = try forth.definePrimitiveDesc("???", " -- :Print dictionary words that begin with...", &wordDictionaryFilter, 0);
 
     // Basic Forth words.
     _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, 0);

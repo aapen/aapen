@@ -11,11 +11,28 @@ const root = @import("root");
 // point it at some memory.
 pub extern var __fdt_address: usize;
 
+// We use a fixed buffer allocator during boot (before we discover the
+// RAM)
+const parse_buffer_len = 256 * 1024;
+var device_tree_parsed_buffer: [parse_buffer_len]u8 = undefined;
+var fba = std.heap.FixedBufferAllocator.init(device_tree_parsed_buffer[0..parse_buffer_len]);
+
+pub var global_devicetree = Fdt{};
+pub var root_node: *Fdt.Node = undefined;
+
+pub fn init() void {
+    global_devicetree.init(fba.allocator()) catch |err| {
+        root.kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
+    };
+
+    root_node = global_devicetree.root_node;
+}
+
 pub const Fdt = struct {
     const Self = @This();
 
     const NodeList = ArrayList(*Node);
-    const AliasMap = StringHashMap([:0]const u8);
+    const AliasMap = StringHashMap([]const u8);
     const PHandleMap = AutoHashMap(u32, *Node);
     const PropertyList = ArrayList(*Property);
 
@@ -100,7 +117,7 @@ pub const Fdt = struct {
         self.aliases.deinit();
     }
 
-    pub fn nodeLookupByPath(self: *Fdt, path: [:0]const u8) !?*Node {
+    pub fn nodeLookupByPath(self: *Fdt, path: []const u8) !?*Node {
         if (path[0] == '/') {
             return self.root_node.lookupChildByPath(path, 1, path.len);
         } else {
@@ -110,7 +127,7 @@ pub const Fdt = struct {
             // alias
             var q = charIndex('/', path, 0) orelse end;
 
-            if (try self.nodeLookupByAlias(path[0..q :0])) |start_node| {
+            if (try self.nodeLookupByAlias(path[0..q])) |start_node| {
                 if (q == end) {
                     return start_node;
                 } else {
@@ -126,7 +143,7 @@ pub const Fdt = struct {
         return self.phandles.get(phandle);
     }
 
-    pub fn nodeLookupByAlias(self: *Fdt, alias_name: [:0]const u8) Error!?*Node {
+    pub fn nodeLookupByAlias(self: *Fdt, alias_name: []const u8) Error!?*Node {
         if (self.aliases.get(alias_name)) |alias_value| {
             const result = try self.nodeLookupByPath(alias_value);
             return result;
@@ -143,7 +160,7 @@ pub const Fdt = struct {
             for (aliases.properties.items) |prop| {
                 const alias_name = prop.name;
                 const alias_value = prop.valueAsString();
-                try self.aliases.put(alias_name, alias_value[0 .. alias_value.len - 1 :0]);
+                try self.aliases.put(alias_name, alias_value);
             }
         }
     }
@@ -152,6 +169,18 @@ pub const Fdt = struct {
         if (try self.nodeLookupByPath(node_path)) |node| {
             if (node.property(property_name)) |prop| {
                 return prop.valueAsString();
+            } else {
+                return Error.NotFound;
+            }
+        } else {
+            return Error.NotFound;
+        }
+    }
+
+    pub fn property(self: *Fdt, comptime T: type, node_path: [:0]const u8, property_name: []const u8) ![]const T {
+        if (try self.nodeLookupByPath(node_path)) |node| {
+            if (node.property(property_name)) |prop| {
+                return prop.valueAs(T);
             } else {
                 return Error.NotFound;
             }
@@ -228,7 +257,7 @@ pub const Fdt = struct {
             return null;
         }
 
-        pub fn lookupChildByPath(self: *Node, path: [:0]const u8, start: usize, end: usize) ?*Node {
+        pub fn lookupChildByPath(self: *Node, path: []const u8, start: usize, end: usize) ?*Node {
             if (start == end) {
                 return self;
             }
@@ -297,10 +326,10 @@ pub const Fdt = struct {
             return value_ptr[0..value_count];
         }
 
-        pub fn valueAsString(self: *Property) [:0]const u8 {
+        pub fn valueAsString(self: *Property) []const u8 {
             const value_start = self.owner.fdt.struct_base + self.value_offset;
             const value_ptr: [*]u8 = @ptrFromInt(value_start);
-            return @ptrCast(value_ptr[0..self.value_len]);
+            return @ptrCast(value_ptr[0 .. self.value_len - 1]);
         }
     };
 
@@ -451,11 +480,11 @@ pub const Fdt = struct {
     }
 };
 
-inline fn nativeByteOrder(v: u32) u32 {
+pub inline fn nativeByteOrder(v: u32) u32 {
     return std.mem.bigToNative(u32, v);
 }
 
-fn charIndex(ch: u8, s: [:0]const u8, from: usize) ?usize {
+fn charIndex(ch: u8, s: []const u8, from: usize) ?usize {
     for (from..s.len) |i| {
         if (s[i] == ch) {
             return i;
@@ -494,7 +523,7 @@ test "locate node and property by path" {
     const soc_compat = soc.?.property("compatible");
     const expected_compat_value = [_]u8{ 's', 'i', 'm', 'p', 'l', 'e', '-', 'b', 'u', 's', 0 };
     try expectEqualStrings(&expected_compat_value, soc_compat.?.valueAs(u8));
-    try expectEqualStrings(&expected_compat_value, soc_compat.?.valueAsString());
+    try expectEqualStrings(expected_compat_value[0 .. expected_compat_value.len - 1], soc_compat.?.valueAsString());
 
     const soc_phandle = soc.?.property("phandle");
     const expected_phandle_value = [_]u32{0x3e};

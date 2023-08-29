@@ -21,7 +21,13 @@ inline fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth
 
     var result: u64 = 0;
     switch(nParams) {
-        0 => result = func(),
+        0 => {
+            if (pushResult) {
+               result = func();
+            } else {
+               func();
+            }
+        },
         1 => {
             const arg1 = try forth.stack.pop();
             if (pushResult) {
@@ -55,7 +61,6 @@ inline fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth
             return ForthError.BadOperation;
         },
     }
-
 
     if (pushResult) {
         try forth.stack.push(result);

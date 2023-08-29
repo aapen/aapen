@@ -198,6 +198,9 @@ Getting USB up and running is going to be a big job.
 *** Reference
 https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/extensible-host-controler-interface-usb-xhci.pdf
 
+** Allocators
+- https://nega.tv/writing-your-own-vulkan-memory-allocator/
+
 * Open Questions
 ** How should we set up a default allocator for zig?
 *** Notes and references

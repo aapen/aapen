@@ -1,40 +1,68 @@
 const std = @import("std");
 const root = @import("root");
+const bsp = @import("bsp.zig");
 const arch = @import("architecture.zig");
 
-const logLevel: u2 = 1;
+const log_level: u2 = 1;
 
 inline fn log_info() bool {
-    return logLevel > 1;
+    return log_level > 1;
 }
 
 pub fn kinfo(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (log_info()) {
-        root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-        root.frame_buffer_console.print(fmt, args) catch {};
+        if (root.uart_valid) {
+            bsp.io.uart_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            bsp.io.uart_writer.print(fmt, args) catch {};
+        }
+
+        if (root.console_valid) {
+            root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            root.frame_buffer_console.print(fmt, args) catch {};
+        }
     }
 }
 
 inline fn log_warnings() bool {
-    return logLevel > 0;
+    return log_level > 0;
 }
 
 pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (log_warnings()) {
+        if (root.uart_valid) {
+            bsp.io.uart_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            bsp.io.uart_writer.print(fmt, args) catch {};
+        }
+
+        if (root.console_valid) {
+            root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            root.frame_buffer_console.print(fmt, args) catch {};
+        }
+    }
+}
+
+pub fn kerror(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
+    if (root.uart_valid) {
+        bsp.io.uart_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+        bsp.io.uart_writer.print(fmt, args) catch {};
+    }
+
+    if (root.console_valid) {
         root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
         root.frame_buffer_console.print(fmt, args) catch {};
     }
 }
 
-pub fn kerror(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
-    root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-    root.frame_buffer_console.print(fmt, args) catch {};
-}
-
 pub fn kprint(comptime fmt: []const u8, args: anytype) void {
-    root.frame_buffer_console.print(fmt, args) catch {
-        // not much we can do here
-    };
+    if (root.uart_valid) {
+        bsp.io.uart_writer.print(fmt, args) catch {};
+    }
+
+    if (root.console_valid) {
+        root.frame_buffer_console.print(fmt, args) catch {
+            // not much we can do here
+        };
+    }
 }
 
 pub fn panicDisplay(from_addr: ?u64) void {
