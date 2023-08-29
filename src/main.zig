@@ -91,6 +91,8 @@ fn kernelInit() void {
         kerror(@src(), "Forth init: {any}\n", .{err});
     };
 
+    defineStruct("fbcons", fbcons.FrameBufferConsole);
+    supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
     supplyAddress("fb", @intFromPtr(frame_buffer.base));
     supplyUsize("fbsize", frame_buffer.buffer_size);
 
@@ -112,6 +114,19 @@ fn repl() callconv(.C) noreturn {
         interpreter.repl() catch |err| {
             kerror(@src(), "REPL error: {any}\n\nABORT.\n", .{err});
         };
+    }
+}
+
+fn defineStruct(comptime name: []const u8, comptime It: type) void {
+    switch(@typeInfo(It)) {
+        .Struct => |struct_info| {
+            inline for (struct_info.fields) |field| {
+                supplyUsize(name ++ "." ++ field.name, @offsetOf(It, field.name));
+            }
+        },
+        else => {
+            @compileError("expected a struct, found '" ++ @typeName(It) ++ "'");
+        }
     }
 }
 
