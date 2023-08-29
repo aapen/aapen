@@ -92,6 +92,16 @@ pub const Forth = struct {
         this.compiling = 0;
     }
 
+    // Read and return the next word in the input.
+    pub fn readWord(this: *Forth) ForthError![]const u8 {
+        return this.words.next() orelse return ForthError.WordReadError;
+    }
+
+    // Peek at the next word in the input.
+    pub fn peekWord(this: *Forth) ?[]const u8 {
+        return this.words.peek();
+    }
+
     // Find a word in the dictionary, ignores words that are under construction.
     pub fn findWord(this: *Forth, name: []const u8) ?*Header {
         //print("Finding word: {s}\n", .{name});
@@ -128,6 +138,19 @@ pub const Forth = struct {
         this.addNumber(v);
         this.addOpCode(OpCode.stop);
         try this.completeWord();
+    }
+
+    pub fn defineStruct(this: *Forth, comptime name: []const u8, comptime It: type) !void {
+        switch (@typeInfo(It)) {
+            .Struct => |struct_info| {
+                inline for (struct_info.fields) |field| {
+                    try this.defineConstant(name ++ "." ++ field.name, @offsetOf(It, field.name));
+                }
+            },
+            else => {
+                @compileError("expected a struct, found '" ++ @typeName(It) ++ "'");
+            },
+        }
     }
 
     // Returns the constant asssociated with the given Forty name.

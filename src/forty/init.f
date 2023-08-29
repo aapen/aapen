@@ -10,24 +10,29 @@ F
 
 ( Input and output base words )
 
-: base ( n -- : Set the input and output bases.)        dup obase ! ibase ! ;
+: base ( n -- : Set the input and output bases.)
+  dup
+  forth forth.obase + !
+  forth forth.ibase + !
+;
+
 : hex ( -- : Set the input and output bases to 16.)     16 base ;
 : decimal ( -- : Set the input and output bases to 10.) 10 base ;
 
-(compiling words)
+( compiling words )
 
 : secondary! (addr -- Make the word a secondary)
-  header-func-offset + inner swap !
+  header.func + inner swap !
 ;
 
 : immediate! ( f addr -- Change the immediate flag of the word at addr to f)
-  header-immediate-offset + !
+  header.immediate + !
 ;
 
 ( Debugging )
 
-: tron  ( -- : Turn debugging on.) 1 debug ! ;
-: troff ( -- : Turn debugging off.)  0 debug ! ;
+: tron  ( -- : Turn debugging on.)   1 forth forth.debug + ! ;
+: troff ( -- : Turn debugging off.)  0 forth forth.debug + ! ;
 
 ( Address arithmetic )
 

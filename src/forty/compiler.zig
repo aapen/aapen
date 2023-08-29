@@ -116,12 +116,13 @@ pub fn pushBodyAddress(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthE
 pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     try forth.assertNotCompiling();
 
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var token = forth.words.peek();
+    var name = try forth.readWord();
+    var token = forth.peekWord();
+
     var desc: []const u8 = "";
     if (token) |t| {
         if (parser.isComment(t)) {
-            _ = forth.words.next() orelse return ForthError.WordReadError;
+            _ = try forth.readWord();
             desc = try parser.parseComment(t);
         }
     }
@@ -181,12 +182,16 @@ pub fn wordRBrace(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 // Begin the definition of a new secondary word.
 pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     try forth.assertNotCompiling();
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var token = forth.words.peek() orelse return ForthError.WordReadError;
+
+    var name = try forth.readWord();
+    var token = forth.peekWord();
+
     var desc: []const u8 = "";
-    if (parser.isComment(token)) {
-        _ = forth.words.next() orelse return ForthError.WordReadError;
-        desc = try parser.parseComment(token);
+    if (token) |t| {
+        if (parser.isComment(t)) {
+            _ = try forth.readWord();
+            desc = try parser.parseComment(t);
+        }
     }
     _ = try forth.startWord(name, desc, &inner, 0);
     return 0;
@@ -418,17 +423,10 @@ pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 pub fn defineCompiler(forth: *Forth) !void {
     // Expose internal values to forty.
 
-    try forth.defineInternalVariable("compiling", &forth.compiling);
-    try forth.defineInternalVariable("debug", &forth.debug);
-    try forth.defineInternalVariable("last-word", @ptrCast(&forth.lastWord));
-    try forth.defineInternalVariable("new-word", @ptrCast(&forth.newWord));
-
-    try forth.defineConstant("header-name-offset", @offsetOf(Header, "name"));
-    try forth.defineConstant("header-func-offset", @offsetOf(Header, "func"));
-    try forth.defineConstant("header-desc-offset", @offsetOf(Header, "desc"));
-    try forth.defineConstant("header-immediate-offset", @offsetOf(Header, "immediate"));
-    try forth.defineConstant("header-previous-offset", @offsetOf(Header, "previous"));
-    try forth.defineConstant("header-len-offset", @offsetOf(Header, "len"));
+    try forth.defineConstant("forth", @intFromPtr(forth));
+    try forth.defineStruct("forth", Forth);
+    try forth.defineStruct("header", Header);
+    try forth.defineStruct("memory", memory.Memory);
 
     try forth.defineConstant("inner", @intFromPtr(&inner));
     try forth.defineConstant("opcode-stop", @intFromEnum(OpCode.stop));
