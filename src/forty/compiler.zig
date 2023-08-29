@@ -417,9 +417,90 @@ pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     return 0;
 }
 
+inline fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    const f = try forth.stack.pop();
+    const func: FuncT = @ptrFromInt(f);
+
+    const FuncType = @typeInfo(FuncT).Pointer.child;
+    const info = @typeInfo(FuncType).Fn;
+    const nParams: u64 = info.params.len;
+
+    var result: u64 = 0;
+    switch(nParams) {
+        0 => result = func(),
+        1 => {
+            const arg1 = try forth.stack.pop();
+            result = func(arg1);
+        },
+        2 => {
+            const arg1 = try forth.stack.pop();
+            const arg2 = try forth.stack.pop();
+            result = func(arg1, arg2);
+        },
+        3 => {
+            const arg1 = try forth.stack.pop();
+            const arg2 = try forth.stack.pop();
+            const arg3 = try forth.stack.pop();
+            result = func(arg1, arg2, arg3);
+        },
+        else => {
+            try forth.print("Can't handle a function of {} args {x}\n", .{nParams, func});
+            return ForthError.BadOperation;
+        },
+    }
+
+
+    if (pushResult) {
+        try forth.stack.push(result);
+    }
+    return 0;
+}
+
+/// fAddr -- : Call a no args function, no return value.
+pub fn wordInvoke(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return invokeF(*const fn() u64, false, forth, body, offset, header);
+}
+
+
+/// fAddr -- result : Call a no args function, push return value.
+pub fn wordInvokeR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return invokeF(*const fn() u64, true, forth, body, offset, header);
+}
+
+/// u64 fAddr -- result : Call a 1 argument function, push return value.
+pub fn wordInvokeUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return invokeF(*const fn(a: u64) u64, true, forth, body, offset, header);
+}
+
+/// u64 u64 fAddr -- result : Call a 2 argument function, push return value.
+pub fn wordInvokeUUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return invokeF(*const fn(a: u64, b: u64) u64, true, forth, body, offset, header);
+}
+
+
+/// u64 u64 u64 fAddr -- result : Call a 3 argument function, push return value.
+pub fn wordInvokeUUUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
+    return invokeF(*const fn(a: u64, b: u64, c: u64) u64, true, forth, body, offset, header);
+}
+
+fn double_u64(a: u64) u64 {
+    return a*2;
+}
+
+
+fn add_u64(a: u64, b: u64) u64 {
+    return a+b;
+}
+
+
+fn add_3(a: u64, b: u64, c: u64) u64 {
+    return a+b+c;
+}
+
 pub fn defineCompiler(forth: *Forth) !void {
     // Expose internal values to forty.
 
+    try forth.defineConstant("forth", @intFromPtr(forth));
     try forth.defineInternalVariable("compiling", &forth.compiling);
     try forth.defineInternalVariable("debug", &forth.debug);
     try forth.defineInternalVariable("last-word", @ptrCast(&forth.lastWord));

@@ -10,6 +10,7 @@ const stack = @import("stack.zig");
 const string = @import("string.zig");
 const core = @import("core.zig");
 const compiler = @import("compiler.zig");
+const interop = @import("interop.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -68,6 +69,7 @@ pub const Forth = struct {
         this.memory = Memory.init(&this.buffer, this.buffer.len);
         try core.defineCore(this);
         try compiler.defineCompiler(this);
+        try interop.defineInterop(this);
 
         initBuffer.init(init_f);
         var initBufferReader = try buffer.createReader(a, &initBuffer);
