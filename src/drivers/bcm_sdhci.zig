@@ -12,7 +12,7 @@ pub const ident = common.DriverIdent{
     .detect = &Detect,
 };
 
-fn Detect(allocator: *Allocator, devicenode: ?*Node) !?*common.Driver {
+fn Detect(allocator: *Allocator, devicenode: ?*Node) !*common.Driver {
     _ = allocator;
     _ = devicenode;
     return common.Error.NotImplemented;

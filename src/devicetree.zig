@@ -117,7 +117,7 @@ pub const Fdt = struct {
         self.aliases.deinit();
     }
 
-    pub fn nodeLookupByPath(self: *Fdt, path: []const u8) !?*Node {
+    pub fn nodeLookupByPath(self: *Fdt, path: []const u8) !*Node {
         if (path[0] == '/') {
             return self.root_node.lookupChildByPath(path, 1, path.len);
         } else {
@@ -155,13 +155,11 @@ pub const Fdt = struct {
     pub fn readAliases(self: *Fdt, allocator: Allocator) !void {
         self.aliases = AliasMap.init(allocator);
 
-        const alias_node = try self.nodeLookupByPath("/aliases");
-        if (alias_node) |aliases| {
-            for (aliases.properties.items) |prop| {
-                const alias_name = prop.name;
-                const alias_value = prop.valueAsString();
-                try self.aliases.put(alias_name, alias_value);
-            }
+        const aliases = try self.nodeLookupByPath("/aliases");
+        for (aliases.properties.items) |prop| {
+            const alias_name = prop.name;
+            const alias_value = prop.valueAsString();
+            try self.aliases.put(alias_name, alias_value);
         }
     }
 
@@ -257,7 +255,7 @@ pub const Fdt = struct {
             return null;
         }
 
-        pub fn lookupChildByPath(self: *Node, path: []const u8, start: usize, end: usize) ?*Node {
+        pub fn lookupChildByPath(self: *Node, path: []const u8, start: usize, end: usize) !*Node {
             if (start == end) {
                 return self;
             }
@@ -289,7 +287,7 @@ pub const Fdt = struct {
             if (self.getChildByName(path[p..q])) |child| {
                 return child.lookupChildByPath(path, q, end);
             } else {
-                return null;
+                return Error.NotFound;
             }
         }
     };

@@ -7,16 +7,21 @@ const kerror = root.kerror;
 const kinfo = root.kinfo;
 
 const common = @import("drivers/common.zig");
+const DriverIdent = common.DriverIdent;
+const Driver = common.Driver;
+const Device = common.Device;
+const Error = common.Error;
+
 const devicetree = @import("devicetree.zig");
 const Node = devicetree.Fdt.Node;
 
 /// TODO: Should we find a way to conditionally compile this?
-const driver_idents = [_]*const common.DriverIdent{
+const driver_idents = [_]*const DriverIdent{
     &@import("drivers/simple_bus.zig").ident,
     &@import("drivers/bcm_sdhci.zig").ident,
 };
 
-fn findCompatibleDriver(node: *Node) ?*const common.DriverIdent {
+fn deviceIdentifyCompatibleDriver(node: *Node) !*const DriverIdent {
     if (node.property("compatible")) |prop| {
         var compat = prop.valueAsString();
         // strip trailing null
@@ -27,38 +32,59 @@ fn findCompatibleDriver(node: *Node) ?*const common.DriverIdent {
             }
         }
     }
-    return null;
+    return Error.NoCompatibleDriver;
 }
 
-fn detectDriver(
+fn deviceDetect(
     allocator: *Allocator,
     devicenode: *Node,
-    ident: *const common.DriverIdent,
-) ?*common.Driver {
+    ident: *const DriverIdent,
+) !*Driver {
+    var driver = try ident.detect(allocator, devicenode);
+
     kinfo(@src(), "Detected {s} as {s}\n", .{ devicenode.name, ident.compatible });
-
-    var driver = ident.detect(allocator, devicenode) catch |err| {
-        kerror(@src(), "error initializing driver: {any}\n", .{err});
-        return null;
-    };
-
-    if (driver) |d| {
-        //   attach the device
-        _ = d;
-    }
 
     return driver;
 }
 
-pub fn init(allocator: *Allocator) void {
-    // get nodes at top of device tree
-    const root_node = devicetree.root_node;
-    const children = root_node.children.items;
-    for (children) |child| {
-        if (findCompatibleDriver(child)) |ident| {
-            var driver = detectDriver(allocator, child, ident);
+fn deviceConstruct(
+    allocator: *Allocator,
+    devicenode: *Node,
+    ident: *const DriverIdent,
+    driver: *Driver,
+) !*Device {
+    _ = devicenode;
+    _ = ident;
+    var device = try allocator.create(Device);
 
-            _ = driver;
-        }
+    device.* = .{
+        .driver = driver,
+    };
+
+    return device;
+}
+
+pub fn deviceAttemptAttach(allocator: *Allocator, devicenode: *Node) !*Device {
+    var ident = try deviceIdentifyCompatibleDriver(devicenode);
+    var driver = try deviceDetect(allocator, devicenode, ident);
+    return deviceConstruct(allocator, devicenode, ident, driver);
+}
+
+pub fn deviceAttemptAttachByPath(allocator: *Allocator, path: []const u8) void {
+    var tree = devicetree.global_devicetree;
+
+    if (tree.nodeLookupByPath(path)) |node| {
+        _ = deviceAttemptAttach(allocator, node) catch |err| blk: {
+            kerror(@src(), "Failed to load driver for {s} as {s}: {any}\n", .{ path, node.name, err });
+            break :blk null;
+        };
+    } else |err| {
+        kerror(@src(), "Error locating {s} devicetree node: {any}\n", .{ path, err });
     }
+}
+
+pub fn init(allocator: *Allocator) void {
+    deviceAttemptAttachByPath(allocator, "soc");
+    // deviceAttemptAttachByPath(allocator, "mmc");
+    // deviceAttemptAttachByPath(allocator, "dma");
 }

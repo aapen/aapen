@@ -7,6 +7,7 @@ const Node = devicetree.Fdt.Node;
 pub const Error = error{
     OutOfMemory,
     NotImplemented,
+    NoCompatibleDriver,
 };
 
 pub const DriverIdent = struct {
@@ -26,7 +27,7 @@ pub const Driver = struct {
 /// node that might describe it. The return value, if present, is
 /// private to the device and must be passed in to the attach, detach,
 /// and query functions.
-pub const DetectFn = *const fn (allocator: *Allocator, devicenode: ?*Node) Error!?*Driver;
+pub const DetectFn = *const fn (allocator: *Allocator, devicenode: *Node) Error!*Driver;
 
 pub const Device = struct {
     driver: *Driver,
@@ -44,3 +45,29 @@ pub const DetachFn = *const fn (device: *Device) Error!void;
 
 /// TBD not sure how this should work just yet.
 pub const QueryFn = *const fn (device: *Device) Error!void;
+
+// ----------------------------------------------------------------------
+// Utilities
+// ----------------------------------------------------------------------
+
+pub fn propertyFirstValueAs(
+    comptime Int: type,
+    comptime name: []const u8,
+    devicenode: *Node,
+) Int {
+    if (devicenode.property(name)) |prop| {
+        var array = prop.valueAs(Int);
+        // TODO: sanity check array should be length 1
+        return array[0];
+    } else {
+        return 1;
+    }
+}
+
+pub fn addressCells(devicenode: *Node) u32 {
+    return propertyFirstValueAs(u32, "#address-cells", devicenode);
+}
+
+pub fn sizeCells(devicenode: *Node) u32 {
+    return propertyFirstValueAs(u32, "#size-cells", devicenode);
+}

@@ -12,8 +12,8 @@ const Node = devicetree.Fdt.Node;
 const SimpleBus = struct {
     driver: common.Driver,
     devicenode: ?*Node,
-    address_size: usize, // size of an address, in u32s
-    size_size: usize, // size of an index into a range, in u32s
+    address_bits: usize,
+    size_bits: usize,
 };
 
 fn Attach(_: *Device) !void {
@@ -28,8 +28,12 @@ fn Query(_: *Device) !void {
     return common.Error.NotImplemented;
 }
 
-fn Detect(allocator: *Allocator, devicenode: ?*Node) !?*common.Driver {
+fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
     var bus: *SimpleBus = try allocator.create(SimpleBus);
+
+    var address_cells = common.addressCells(devicenode);
+    var size_cells = common.sizeCells(devicenode);
+
     bus.* = SimpleBus{
         .driver = common.Driver{
             .attach = Attach,
@@ -38,8 +42,8 @@ fn Detect(allocator: *Allocator, devicenode: ?*Node) !?*common.Driver {
             .name = "simple-bus",
         },
         .devicenode = devicenode,
-        .address_size = undefined,
-        .size_size = undefined,
+        .address_bits = 32 * address_cells,
+        .size_bits = 32 * size_cells,
     };
     return &bus.driver;
 }
