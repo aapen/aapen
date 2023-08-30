@@ -72,8 +72,9 @@ pub fn deviceAttemptAttach(allocator: *Allocator, devicenode: *Node) !*Device {
 
 pub fn deviceAttemptAttachByPath(allocator: *Allocator, path: []const u8) void {
     var tree = devicetree.global_devicetree;
+    var device_node = tree.nodeLookupByPath(path);
 
-    if (tree.nodeLookupByPath(path)) |node| {
+    if (device_node) |node| {
         _ = deviceAttemptAttach(allocator, node) catch |err| blk: {
             kerror(@src(), "Failed to load driver for {s} as {s}: {any}\n", .{ path, node.name, err });
             break :blk null;

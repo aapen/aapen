@@ -8,6 +8,7 @@ pub const Error = error{
     OutOfMemory,
     NotImplemented,
     NoCompatibleDriver,
+    InitializationError,
 };
 
 pub const DriverIdent = struct {
@@ -49,25 +50,3 @@ pub const QueryFn = *const fn (device: *Device) Error!void;
 // ----------------------------------------------------------------------
 // Utilities
 // ----------------------------------------------------------------------
-
-pub fn propertyFirstValueAs(
-    comptime Int: type,
-    comptime name: []const u8,
-    devicenode: *Node,
-) Int {
-    if (devicenode.property(name)) |prop| {
-        var array = prop.valueAs(Int);
-        // TODO: sanity check array should be length 1
-        return array[0];
-    } else {
-        return 1;
-    }
-}
-
-pub fn addressCells(devicenode: *Node) u32 {
-    return propertyFirstValueAs(u32, "#address-cells", devicenode);
-}
-
-pub fn sizeCells(devicenode: *Node) u32 {
-    return propertyFirstValueAs(u32, "#size-cells", devicenode);
-}

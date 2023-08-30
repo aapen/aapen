@@ -4,7 +4,12 @@ const Allocator = std.mem.Allocator;
 const AutoHashMap = std.AutoHashMap;
 const StringHashMap = std.StringHashMap;
 
+const memory = @import("memory.zig");
+const AddressTranslation = memory.AddressTranslation;
+const AddressTranslations = memory.AddressTranslations;
+
 const root = @import("root");
+const kwarn = root.kwarn;
 
 // This symbol is defined in boot.S.
 // At boot time its value will be supplied by the firmware, which will
@@ -26,6 +31,15 @@ pub fn init() void {
     };
 
     root_node = global_devicetree.root_node;
+}
+
+inline fn cellsAs(cells: []const u32) u64 {
+    var v: u64 = 0;
+    for (cells) |c| {
+        v <<= 32;
+        v |= c;
+    }
+    return v;
 }
 
 pub const Fdt = struct {
@@ -63,6 +77,8 @@ pub const Fdt = struct {
         IncorrectTag,
         NoTagAtOffset,
         BadContents,
+        ValueUnavailable,
+        ValueWrongLength,
     };
 
     /// Note: when reading from the fdt blob, these will all be
@@ -290,6 +306,47 @@ pub const Fdt = struct {
                 return Error.NotFound;
             }
         }
+
+        pub fn propertyFirstValueAs(
+            self: *Node,
+            comptime Int: type,
+            comptime name: []const u8,
+            comptime default: Int,
+        ) Int {
+            if (self.property(name)) |prop| {
+                var array = prop.valueAs(Int) catch return 1;
+                // TODO: sanity check array should be length 1
+                return array[0];
+            } else {
+                return default;
+            }
+        }
+
+        pub fn addressCells(self: *Node) u32 {
+            return self.propertyFirstValueAs(u32, "#address-cells", 1);
+        }
+
+        pub fn sizeCells(self: *Node) u32 {
+            return self.propertyFirstValueAs(u32, "#size-cells", 1);
+        }
+
+        pub fn interruptCells(self: *Node) u32 {
+            return self.propertyFirstValueAs(u32, "#interrupt-cells", 1);
+        }
+
+        pub fn interruptParent(self: *Node) ?*Node {
+            var parent_phandle = self.propertyFirstValueAs(u32, "interrupt-parent", 0);
+            root.kprint("from '{s}', interrupt-parent is {d}\n", .{ self.name, parent_phandle });
+            return self.fdt.phandles.get(parent_phandle);
+        }
+
+        pub fn translations(self: *Node, prop_name: []const u8) !AddressTranslations {
+            if (self.property(prop_name)) |prop| {
+                return prop.asTranslations();
+            } else {
+                return AddressTranslations.init(self.allocator);
+            }
+        }
     };
 
     pub const Property = struct {
@@ -317,17 +374,65 @@ pub const Fdt = struct {
             self.allocator.destroy(self);
         }
 
-        pub fn valueAs(self: *Property, comptime T: anytype) []T {
+        // Caller owns the returned slice.
+        pub fn valueAs(self: *Property, comptime T: anytype) ![]T {
             const value_start = self.owner.fdt.struct_base + self.value_offset;
             const value_ptr: [*]T = @ptrFromInt(value_start);
             const value_count = self.value_len / @sizeOf(T);
-            return value_ptr[0..value_count];
+            const value_slice = value_ptr[0..value_count];
+
+            const list_type = ArrayList(T);
+            var native_value_list = list_type.init(self.allocator);
+            defer native_value_list.deinit();
+
+            for (value_slice) |v| {
+                try native_value_list.append(nativeByteOrder(v));
+            }
+
+            return native_value_list.toOwnedSlice();
         }
 
         pub fn valueAsString(self: *Property) []const u8 {
             const value_start = self.owner.fdt.struct_base + self.value_offset;
             const value_ptr: [*]u8 = @ptrFromInt(value_start);
             return @ptrCast(value_ptr[0 .. self.value_len - 1]);
+        }
+
+        pub fn asTranslations(self: *Property) !AddressTranslations {
+            var raw_ranges = self.valueAs(u32) catch return Error.ValueUnavailable;
+            var translations = AddressTranslations.init(self.allocator);
+
+            var parent_acells = if (self.owner.parent != undefined)
+                self.owner.parent.addressCells()
+            else
+                1;
+            var child_acells = self.owner.addressCells();
+            var scells = self.owner.sizeCells();
+            var entry_len = parent_acells + child_acells + scells;
+
+            if (0 != raw_ranges.len % entry_len) {
+                kwarn(@src(), "value length {d}, expected {d}\n", .{ raw_ranges.len, entry_len });
+                return Error.ValueWrongLength;
+            }
+
+            var idx: usize = 0;
+            while (idx < raw_ranges.len) {
+                var child_addr = cellsAs(raw_ranges[idx..(idx + child_acells)]);
+                idx += child_acells;
+                var parent_addr = cellsAs(raw_ranges[idx..(idx + parent_acells)]);
+                idx += parent_acells;
+                var len = cellsAs(raw_ranges[idx..(idx + scells)]);
+                idx += scells;
+
+                const tln = try self.allocator.create(AddressTranslation);
+                tln.* = AddressTranslation{
+                    .child_address = child_addr,
+                    .parent_address = parent_addr,
+                    .length = len,
+                };
+                try translations.append(tln);
+            }
+            return translations;
         }
     };
 
@@ -364,6 +469,7 @@ pub const Fdt = struct {
 
                     //   add it as a child to the Node on top of `parents`
                     if (parents.getLastOrNull()) |current_parent| {
+                        node.parent = current_parent;
                         try current_parent.children.append(node);
                     }
 
@@ -478,8 +584,8 @@ pub const Fdt = struct {
     }
 };
 
-pub inline fn nativeByteOrder(v: u32) u32 {
-    return std.mem.bigToNative(u32, v);
+pub inline fn nativeByteOrder(v: anytype) @TypeOf(v) {
+    return std.mem.bigToNative(@TypeOf(v), v);
 }
 
 fn charIndex(ch: u8, s: []const u8, from: usize) ?usize {
