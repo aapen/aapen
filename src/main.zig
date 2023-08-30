@@ -2,7 +2,7 @@ const std = @import("std");
 const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
 const qemu = @import("qemu.zig");
-const mem = @import("mem.zig");
+const heap = @import("heap.zig");
 const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
 const forty = @import("forty/forth.zig");
@@ -29,7 +29,7 @@ const Self = @This();
 pub const page_size = arch.cpu.mmu.page_size;
 
 pub var board = bsp.mailbox.BoardInfo{};
-pub var heap = mem{};
+pub var kernel_heap = heap{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
 pub var interpreter: Forth = Forth{};
@@ -41,8 +41,8 @@ fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
 
-    heap.init(page_size);
-    os.page_allocator = heap.allocator();
+    kernel_heap.init(page_size);
+    os.page_allocator = kernel_heap.allocator();
 
     devicetree.init();
 
@@ -137,7 +137,7 @@ fn supplyUsize(name: []const u8, sz: usize) void {
 fn diagnostics() !void {
     try board.arm_memory.print();
     try board.videocore_memory.print();
-    try heap.memory.print();
+    try kernel_heap.memory.print();
     try frame_buffer.memory.print();
 
     try printClockRate(.uart);

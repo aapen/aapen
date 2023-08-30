@@ -1,9 +1,9 @@
 const std = @import("std");
 const assert = std.debug.assert;
 pub const map = @import("memory_map.zig");
-const mem = @import("../../mem.zig");
-const Heap = mem.Heap;
-const Region = mem.Region;
+const heap = @import("../../heap.zig");
+const Heap = heap.Heap;
+const Region = heap.Region;
 
 const Self = @This();
 

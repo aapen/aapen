@@ -1,7 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const mailbox = @import("mailbox.zig");
-const Region = @import("../../mem.zig").Region;
+const Region = @import("../../heap.zig").Region;
 
 const character_rom = @embedFile("../../data/character_rom.bin");
 

@@ -1,7 +1,7 @@
 const mailbox = @import("../mailbox.zig");
 const Message = mailbox.Message;
 const Envelope = mailbox.Envelope;
-const Region = @import("../../../mem.zig").Region;
+const Region = @import("../../../heap.zig").Region;
 
 pub const Model = struct {
     name: []const u8 = undefined,
