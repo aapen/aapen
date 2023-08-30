@@ -26,8 +26,6 @@ var os = Freestanding{
 
 const Self = @This();
 
-pub const page_size = arch.cpu.mmu.page_size;
-
 pub var board = bsp.mailbox.BoardInfo{};
 pub var kernel_heap = heap{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
@@ -41,7 +39,7 @@ fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
 
-    kernel_heap.init(page_size);
+    kernel_heap.init();
     os.page_allocator = kernel_heap.allocator();
 
     devicetree.init();
