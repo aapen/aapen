@@ -21,12 +21,12 @@ pub const BoardInfo = struct {
     model: Model = Model{},
     device: Device = Device{},
     memory_size: u32 = 0,
-    arm_memory: Region = Region{ .name = "ARM Memory" },
-    videocore_memory: Region = Region{ .name = "Videocore Memory" },
+    arm_memory_range: Region = Region{ .name = "ARM Memory" },
+    videocore_memory_range: Region = Region{ .name = "Videocore Memory" },
 
     pub fn read(self: *BoardInfo) !void {
-        var arm_memory = GetMemory.arm();
-        var vc_memory = GetMemory.videocore();
+        var arm_memory = GetMemoryRange.arm();
+        var vc_memory = GetMemoryRange.videocore();
         var revision = GetInfo.boardRevision();
         var mac_address = GetInfo.macAddress();
         var serial = GetInfo.serialNumber();
@@ -40,8 +40,8 @@ pub const BoardInfo = struct {
         var env = mailbox.Envelope.init(&messages);
         _ = env.call() catch 0;
 
-        arm_memory.copy(&self.arm_memory);
-        vc_memory.copy(&self.videocore_memory);
+        arm_memory.copy(&self.arm_memory_range);
+        vc_memory.copy(&self.videocore_memory_range);
 
         self.device.mac_address = mac_address.value;
         self.device.serial_number = serial.value;
@@ -132,7 +132,7 @@ const GetInfo = struct {
     }
 };
 
-const GetMemory = struct {
+const GetMemoryRange = struct {
     const Self = @This();
 
     tag: mailbox.RpiFirmwarePropertyTag = undefined,

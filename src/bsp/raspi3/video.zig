@@ -223,7 +223,7 @@ pub const FrameBuffer = struct {
     xres: usize = undefined,
     yres: usize = undefined,
     bpp: u32 = undefined,
-    memory: Region = Region{ .name = "Frame Buffer" },
+    range: Region = Region{ .name = "Frame Buffer" },
 
     pub fn setResolution(self: *FrameBuffer, xres: u32, yres: u32, bpp: u32) !void {
         var phys = SizeMessage.physical(xres, yres);
@@ -252,7 +252,7 @@ pub const FrameBuffer = struct {
         self.xres = xres;
         self.yres = yres;
         self.bpp = depth.get_bpp();
-        self.memory.fromSize(base_in_arm_address_space, fb.get_buffer_size());
+        self.range.fromSize(base_in_arm_address_space, fb.get_buffer_size());
     }
 
     pub fn drawPixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {

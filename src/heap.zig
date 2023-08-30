@@ -9,7 +9,7 @@ const Self = @This();
 
 pub const linker_heap_start: [*]u8 = @extern([*]u8, .{ .name = "__heap_start" });
 
-memory: Region = Region{.name = "Kernel Heap"},
+range: Region = Region{.name = "Kernel Heap"},
 fba: FixedBufferAllocator = undefined,
 
 pub fn init(self: *Self) void {
@@ -18,7 +18,7 @@ pub fn init(self: *Self) void {
     var heap_len = heap_end - heap_start;
 
     self.fba = FixedBufferAllocator.init(linker_heap_start[0..heap_len]);
-    self.memory.fromStartToEnd(heap_start, heap_end);
+    self.range.fromStartToEnd(heap_start, heap_end);
 }
 
 pub fn allocator(self: *Self) Allocator {

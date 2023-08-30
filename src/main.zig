@@ -133,10 +133,10 @@ fn supplyUsize(name: []const u8, sz: usize) void {
 }
 
 fn diagnostics() !void {
-    try board.arm_memory.print();
-    try board.videocore_memory.print();
-    try kernel_heap.memory.print();
-    try frame_buffer.memory.print();
+    try board.arm_memory_range.print();
+    try board.videocore_memory_range.print();
+    try kernel_heap.range.print();
+    try frame_buffer.range.print();
 
     try printClockRate(.uart);
     try printClockRate(.emmc);
