@@ -33,7 +33,7 @@ pub fn init() void {
     root_node = global_devicetree.root_node;
 }
 
-inline fn cellsAs(cells: []const u32) u64 {
+pub inline fn cellsAs(cells: []const u32) u64 {
     var v: u64 = 0;
     for (cells) |c| {
         v <<= 32;
@@ -322,8 +322,20 @@ pub const Fdt = struct {
             }
         }
 
+        pub fn propertyValueAs(
+            self: *Node,
+            comptime Int: type,
+            comptime name: []const u8,
+        ) ![]Int {
+            if (self.property(name)) |prop| {
+                return prop.valueAs(Int);
+            } else {
+                return Error.NotFound;
+            }
+        }
+
         pub fn addressCells(self: *Node) u32 {
-            return self.propertyFirstValueAs(u32, "#address-cells", 1);
+            return self.propertyFirstValueAs(u32, "#address-cells", 2);
         }
 
         pub fn sizeCells(self: *Node) u32 {
@@ -331,13 +343,24 @@ pub const Fdt = struct {
         }
 
         pub fn interruptCells(self: *Node) u32 {
+            root.kprint("from '{s}', getting property #interrupt-cells\n", .{self.name});
             return self.propertyFirstValueAs(u32, "#interrupt-cells", 1);
         }
 
-        pub fn interruptParent(self: *Node) ?*Node {
+        pub fn mboxCells(self: *Node) u32 {
+            return self.propertyFirstValueAs(u32, "#mbox-cells", 1);
+        }
+
+        pub fn interruptParent(self: *Node) !*Node {
             var parent_phandle = self.propertyFirstValueAs(u32, "interrupt-parent", 0);
-            root.kprint("from '{s}', interrupt-parent is {d}\n", .{ self.name, parent_phandle });
-            return self.fdt.phandles.get(parent_phandle);
+            if (parent_phandle != 0) {
+                root.kprint("from '{s}', interrupt-parent is {d}\n", .{ self.name, parent_phandle });
+                return self.fdt.phandles.get(parent_phandle) orelse Error.NotFound;
+            } else {
+                root.kprint("from '{s}', no explicit interrupt-parent, returning '{s}'\n", .{ self.name, self.parent.name });
+                return self.parent;
+                // return null;
+            }
         }
 
         pub fn translations(self: *Node, prop_name: []const u8) !AddressTranslations {
@@ -425,11 +448,7 @@ pub const Fdt = struct {
                 idx += scells;
 
                 const tln = try self.allocator.create(AddressTranslation);
-                tln.* = AddressTranslation{
-                    .child_address = child_addr,
-                    .parent_address = parent_addr,
-                    .length = len,
-                };
+                AddressTranslation.init(tln, parent_addr, child_addr, len);
                 try translations.append(tln);
             }
             return translations;
@@ -471,6 +490,12 @@ pub const Fdt = struct {
                     if (parents.getLastOrNull()) |current_parent| {
                         node.parent = current_parent;
                         try current_parent.children.append(node);
+                    } else {
+                        // this is the very first node.
+                        // it is the root
+                        node.name = "/";
+                        // it has no parent so make it it's own parent
+                        node.parent = node;
                     }
 
                     // std.debug.print(">>\n", .{});

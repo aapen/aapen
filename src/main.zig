@@ -57,6 +57,8 @@ fn kernelInit() void {
 
     board.read() catch {};
 
+    printDeviceTreeMemoryClaim();
+
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
 
     frame_buffer.setResolution(1024, 768, 8) catch |err| {
@@ -148,6 +150,22 @@ fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
     var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
     var clock_mhz = rate / 1_000_000;
     kprint("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
+}
+
+fn printDeviceTreeMemoryClaim() void {
+    var tree = devicetree.global_devicetree;
+    const memory_node = tree.nodeLookupByPath("/memory@0") catch |err| {
+        kprint("Device tree has no memory@0 node. Weird. {any}\n", .{err});
+        return;
+    };
+    const acells = devicetree.root_node.addressCells();
+    const memsize_cells = memory_node.propertyValueAs(u32, "reg") catch |err| {
+        kprint("memory@0 node has no reg property. Weird. {any}\n", .{err});
+        return;
+    };
+    const memsize = devicetree.cellsAs(memsize_cells[0..acells]);
+
+    kprint("Device tree reports memory@0 is {x} bytes\n", .{memsize});
 }
 
 export fn _soft_reset() noreturn {

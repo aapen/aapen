@@ -6,6 +6,7 @@ const bigToNative = std.mem.bigToNative;
 const root = @import("root");
 const kprint = root.kprint;
 const kwarn = root.kwarn;
+const kinfo = root.kinfo;
 
 const common = @import("common.zig");
 const Driver = common.Driver;
@@ -49,6 +50,10 @@ fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
     var ranges = devicenode.translations("ranges") catch return common.Error.InitializationError;
     var dma_ranges = devicenode.translations("dma-ranges") catch return common.Error.InitializationError;
 
+    for (ranges.items, 0..) |r, i| {
+        kinfo(@src(), "{s} range[{d}] {x} -> {x} for {x}\n", .{ devicenode.name, i, r.parent_space_begin, r.child_space_begin, r.length });
+    }
+
     bus.* = SimpleBus{
         .driver = common.Driver{
             .attach = Attach,
@@ -62,6 +67,7 @@ fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
         .ranges = ranges,
         .dma_ranges = dma_ranges,
     };
+
     return &bus.driver;
 }
 

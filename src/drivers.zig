@@ -19,6 +19,7 @@ const Node = devicetree.Fdt.Node;
 const driver_idents = [_]*const DriverIdent{
     &@import("drivers/simple_bus.zig").ident,
     &@import("drivers/bcm_sdhci.zig").ident,
+    &@import("drivers/bcm_mailbox.zig").ident,
 };
 
 fn deviceIdentifyCompatibleDriver(node: *Node) !*const DriverIdent {
@@ -70,22 +71,26 @@ pub fn deviceAttemptAttach(allocator: *Allocator, devicenode: *Node) !*Device {
     return deviceConstruct(allocator, devicenode, ident, driver);
 }
 
-pub fn deviceAttemptAttachByPath(allocator: *Allocator, path: []const u8) void {
+pub fn deviceAttemptAttachByPath(allocator: *Allocator, path: []const u8) ?*Device {
     var tree = devicetree.global_devicetree;
     var device_node = tree.nodeLookupByPath(path);
 
     if (device_node) |node| {
-        _ = deviceAttemptAttach(allocator, node) catch |err| blk: {
+        return deviceAttemptAttach(allocator, node) catch |err| blk: {
             kerror(@src(), "Failed to load driver for {s} as {s}: {any}\n", .{ path, node.name, err });
             break :blk null;
         };
     } else |err| {
         kerror(@src(), "Error locating {s} devicetree node: {any}\n", .{ path, err });
+        return null;
     }
 }
 
 pub fn init(allocator: *Allocator) void {
-    deviceAttemptAttachByPath(allocator, "soc");
+    const soc = deviceAttemptAttachByPath(allocator, "soc");
+    _ = soc;
+    const mbox = deviceAttemptAttachByPath(allocator, "mailbox");
+    _ = mbox;
     // deviceAttemptAttachByPath(allocator, "mmc");
     // deviceAttemptAttachByPath(allocator, "dma");
 }
