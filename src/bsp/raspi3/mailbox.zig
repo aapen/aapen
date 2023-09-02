@@ -1,9 +1,15 @@
-const root = @import("root");
 const std = @import("std");
 const assert = std.debug.assert;
-const cpu = @import("../../architecture.zig").cpu;
+
+const root = @import("root");
+
+const architecture = @import("../../architecture.zig");
+const barriers = architecture.barriers;
+const cache = architecture.cache;
+
 const reg = @import("../mmio_register.zig");
 const UniformRegister = reg.UniformRegister;
+
 const peripheral_base = @import("memory_map.zig").peripheral_base;
 const memory = @import("memory.zig");
 
@@ -189,12 +195,12 @@ pub const RpiFirmwarePropertyTag = enum(u32) {
 // Send and receive messages
 // ----------------------------------------------------------------------
 fn mailFull() bool {
-    cpu.barrierMemoryDevice();
+    barriers.barrierMemoryDevice();
     return mailbox_0_status.read().mail_full == 1;
 }
 
 fn mailEmpty() bool {
-    cpu.barrierMemoryDevice();
+    barriers.barrierMemoryDevice();
     return mailbox_0_status.read().mail_empty == 1;
 }
 
@@ -268,12 +274,12 @@ pub const Envelope = struct {
         self.buffer[0] = @intCast(idx * @sizeOf(u32));
         self.buffer[1] = rpi_firmware_status_request;
 
-        cpu.memory.flushDCache(u32, &self.buffer);
+        cache.flushDCache(u32, &self.buffer);
         var bus_address = memory.physicalToBus(@intFromPtr(&self.buffer));
         mailboxWrite(self.channel, @truncate(bus_address));
         var data = mailboxRead(self.channel);
 
-        cpu.memory.invalidateDCache(u32, &self.buffer);
+        cache.invalidateDCache(u32, &self.buffer);
 
         idx = 2;
 

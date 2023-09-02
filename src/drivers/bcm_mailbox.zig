@@ -9,6 +9,9 @@ const kprint = root.kprint;
 const kwarn = root.kwarn;
 const kinfo = root.kinfo;
 
+const register = @import("../bsp/mmio_register.zig");
+const UniformRegister = register.UniformRegister;
+
 const common = @import("common.zig");
 const Driver = common.Driver;
 const Device = common.Device;
@@ -17,8 +20,9 @@ const devicetree = @import("../devicetree.zig");
 const Node = devicetree.Fdt.Node;
 const Property = devicetree.Fdt.Property;
 
-const cpu = @import("../../architecture.zig").cpu;
-const UniformRegister = @import("../bsp/mmio_register.zig").UniformRegister;
+const architecture = @import("../../architecture.zig");
+const cache = architecture.cache;
+const barriers = architecture.barriers;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -94,12 +98,12 @@ const BroadcomMailbox = struct {
     // Send and receive messages
     // ----------------------------------------------------------------------
     fn mailFull(self: *BroadcomMailbox) bool {
-        cpu.barrierMemoryDevice();
+        barriers.barrierMemoryDevice();
         return self.mailbox_0_status.read().mail_full == 1;
     }
 
     fn mailEmpty(self: *BroadcomMailbox) bool {
-        cpu.barrierMemoryDevice();
+        barriers.barrierMemoryDevice();
         return self.mailbox_0_status.read().mail_empty == 1;
     }
 
@@ -293,13 +297,13 @@ pub const Envelope = struct {
         self.buffer[0] = @intCast(idx * @sizeOf(u32));
         self.buffer[1] = rpi_firmware_status_request;
 
-        cpu.memory.flushDCache(u32, &self.buffer);
+        cache.flushDCache(u32, &self.buffer);
         var bus_address = memory.physicalToBus(@intFromPtr(&self.buffer));
         _ = bus_address;
         // mbox.mailboxWrite(self.channel, @truncate(bus_address));
         // var data = mailboxRead(self.channel);
 
-        cpu.memory.invalidateDCache(u32, &self.buffer);
+        cache.invalidateDCache(u32, &self.buffer);
 
         idx = 2;
 
@@ -401,9 +405,9 @@ fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
     var device: *MailboxDevice = try allocator.create(MailboxDevice);
     const mbox_cells = devicenode.mboxCells();
     const address_cells = devicenode.parent.addressCells();
-    const register = devicenode.propertyValueAs(u32, "reg") catch return common.Error.InitializationError;
-    const register_base = devicetree.cellsAs(register[0..address_cells]);
-    const register_len = devicetree.cellsAs(register[address_cells .. address_cells + 1]);
+    const reg = devicenode.propertyValueAs(u32, "reg") catch return common.Error.InitializationError;
+    const register_base = devicetree.cellsAs(reg[0..address_cells]);
+    const register_len = devicetree.cellsAs(reg[address_cells .. address_cells + 1]);
 
     const interrupt_parent = devicenode.interruptParent() catch return common.Error.InitializationError;
     const interrupt_cells = interrupt_parent.interruptCells();

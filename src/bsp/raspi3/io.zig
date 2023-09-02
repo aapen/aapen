@@ -393,8 +393,8 @@ var write_buffer = ring.Ring(u8).init();
 
 pub fn stringSend(str: []const u8) void {
     // mask interrupts so we don't get interrupted in the middle of this function.
-    cpu.irqDisable();
-    defer cpu.irqEnable();
+    cpu.exceptions.irqDisable();
+    defer cpu.exceptions.irqEnable();
 
     // enable transmit interrupt (even if it already was)
     pl011_uart_imsc.modify(.{
@@ -422,8 +422,8 @@ pub fn stringSend(str: []const u8) void {
 
 pub fn send(ch: u8) void {
     // mask interrupts so we don't get interrupted in the middle of this function.
-    cpu.irqDisable();
-    defer cpu.irqEnable();
+    cpu.exceptions.irqDisable();
+    defer cpu.exceptions.irqEnable();
 
     // if ready to send
     if (pl011WriteByteReady()) {

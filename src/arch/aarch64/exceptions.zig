@@ -70,8 +70,16 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
 
 export fn irqCurrentElx(context: *const ExceptionContext) void {
     _ = context;
-    cpu.irqDisable();
-    defer cpu.irqEnable();
+    irqDisable();
+    defer irqEnable();
 
     bsp.interrupts.irqHandle();
+}
+
+pub fn irqDisable() void {
+    asm volatile ("msr daifset, #2");
+}
+
+pub fn irqEnable() void {
+    asm volatile ("msr daifclr, #2");
 }
