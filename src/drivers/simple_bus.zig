@@ -22,27 +22,41 @@ const AddressTranslations = memory.AddressTranslations;
 
 const SimpleBus = struct {
     driver: common.Driver,
-    devicenode: ?*Node,
-    address_bits: usize,
-    size_bits: usize,
+    options: *SimpleBusOptions,
+};
+
+fn attach(_: *Device) !void {
+    return common.Error.NotImplemented;
+}
+
+fn detach(_: *Device) !void {
+    return common.Error.NotImplemented;
+}
+
+fn detect(allocator: *Allocator, options: *anyopaque) !*common.Driver {
+    var bus: *SimpleBus = try allocator.create(SimpleBus);
+
+    bus.* = SimpleBus{
+        .driver = common.Driver{
+            .attach = attach,
+            .detach = detach,
+            .name = "simple-bus",
+        },
+        .options = @ptrCast(@alignCast(options)),
+    };
+
+    return &bus.driver;
+}
+
+pub const SimpleBusOptions = struct {
+    address_cells: usize,
+    size_cells: usize,
     ranges: AddressTranslations,
     dma_ranges: AddressTranslations,
 };
 
-fn Attach(_: *Device) !void {
-    return common.Error.NotImplemented;
-}
-
-fn Detach(_: *Device) !void {
-    return common.Error.NotImplemented;
-}
-
-fn Query(_: *Device) !void {
-    return common.Error.NotImplemented;
-}
-
-fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
-    var bus: *SimpleBus = try allocator.create(SimpleBus);
+fn deviceTreeParse(allocator: *Allocator, devicenode: *Node) !*anyopaque {
+    var bus_options: *SimpleBusOptions = try allocator.create(SimpleBusOptions);
 
     var address_cells = devicenode.addressCells();
     var size_cells = devicenode.sizeCells();
@@ -50,28 +64,18 @@ fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
     var ranges = devicenode.translations("ranges") catch return common.Error.InitializationError;
     var dma_ranges = devicenode.translations("dma-ranges") catch return common.Error.InitializationError;
 
-    for (ranges.items, 0..) |r, i| {
-        kinfo(@src(), "{s} range[{d}] {x} -> {x} for {x}\n", .{ devicenode.name, i, r.parent_space_begin, r.child_space_begin, r.length });
-    }
-
-    bus.* = SimpleBus{
-        .driver = common.Driver{
-            .attach = Attach,
-            .detach = Detach,
-            .query = Query,
-            .name = "simple-bus",
-        },
-        .devicenode = devicenode,
-        .address_bits = 32 * address_cells,
-        .size_bits = 32 * size_cells,
+    bus_options.* = SimpleBusOptions{
+        .address_cells = address_cells,
+        .size_cells = size_cells,
         .ranges = ranges,
         .dma_ranges = dma_ranges,
     };
 
-    return &bus.driver;
+    return bus_options;
 }
 
 pub const ident = common.DriverIdent{
     .compatible = "simple-bus",
-    .detect = &Detect,
+    .detect = &detect,
+    .deviceTreeParse = &deviceTreeParse,
 };

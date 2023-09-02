@@ -9,11 +9,18 @@ const Node = devicetree.Fdt.Node;
 
 pub const ident = common.DriverIdent{
     .compatible = "brcm,bcm2835-sdhci",
-    .detect = &Detect,
+    .detect = &detect,
+    .deviceTreeParse = &deviceTreeParse,
 };
 
-fn Detect(allocator: *Allocator, devicenode: ?*Node) !*common.Driver {
+fn deviceTreeParse(allocator: *Allocator, devicenode: *Node) !*anyopaque {
     _ = allocator;
     _ = devicenode;
+    return common.Error.NotImplemented;
+}
+
+fn detect(allocator: *Allocator, options: *anyopaque) !*common.Driver {
+    _ = allocator;
+    _ = options;
     return common.Error.NotImplemented;
 }

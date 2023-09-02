@@ -389,21 +389,40 @@ pub const Message = struct {
     }
 };
 
-fn Attach(_: *Device) !void {
+fn attach(_: *Device) !void {
     return common.Error.NotImplemented;
 }
 
-fn Detach(_: *Device) !void {
+fn detach(_: *Device) !void {
     return common.Error.NotImplemented;
 }
 
-fn Query(_: *Device) !void {
-    return common.Error.NotImplemented;
-}
-
-fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
+fn detect(allocator: *Allocator, options: *anyopaque) !*common.Driver {
     var device: *MailboxDevice = try allocator.create(MailboxDevice);
-    const mbox_cells = devicenode.mboxCells();
+
+    device.* = MailboxDevice{
+        .driver = common.Driver{
+            .attach = attach,
+            .detach = detach,
+            .name = "bcm2835-mbox",
+        },
+        .options = @ptrCast(@alignCast(options)),
+    };
+
+    return &device.driver;
+}
+
+pub const MailboxDeviceOptions = struct {
+    mailbox_cells: usize = 1,
+    register_base: usize,
+    register_len: usize,
+    interrupts: []u32,
+    interrupt_cells: usize = 2,
+};
+
+fn deviceTreeParse(allocator: *Allocator, devicenode: *Node) !*anyopaque {
+    var device_config: *MailboxDeviceOptions = try allocator.create(MailboxDeviceOptions);
+    const mailbox_cells = devicenode.mboxCells();
     const address_cells = devicenode.parent.addressCells();
     const reg = devicenode.propertyValueAs(u32, "reg") catch return common.Error.InitializationError;
     const register_base = devicetree.cellsAs(reg[0..address_cells]);
@@ -413,35 +432,24 @@ fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
     const interrupt_cells = interrupt_parent.interruptCells();
     const interrupts = devicenode.propertyValueAs(u32, "interrupts") catch return common.Error.InitializationError;
 
-    device.* = MailboxDevice{
-        .driver = common.Driver{
-            .attach = Attach,
-            .detach = Detach,
-            .query = Query,
-            .name = "bcm2835-mbox",
-        },
-        .devicenode = devicenode,
-        .mbox_bits = 32 * mbox_cells,
+    device_config.* = MailboxDeviceOptions{
+        .mailbox_cells = mailbox_cells,
         .register_base = register_base,
         .register_len = register_len,
         .interrupt_cells = interrupt_cells,
         .interrupts = interrupts,
     };
 
-    return &device.driver;
+    return device_config;
 }
 
 const MailboxDevice = struct {
     driver: common.Driver,
-    devicenode: *Node,
-    mbox_bits: usize,
-    register_base: usize,
-    register_len: usize,
-    interrupts: []u32,
-    interrupt_cells: usize,
+    options: *MailboxDeviceOptions,
 };
 
 pub const ident = common.DriverIdent{
     .compatible = "brcm,bcm2835-mbox",
-    .detect = &Detect,
+    .detect = &detect,
+    .deviceTreeParse = &deviceTreeParse,
 };
