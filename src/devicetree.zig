@@ -343,7 +343,6 @@ pub const Fdt = struct {
         }
 
         pub fn interruptCells(self: *Node) u32 {
-            root.kprint("from '{s}', getting property #interrupt-cells\n", .{self.name});
             return self.propertyFirstValueAs(u32, "#interrupt-cells", 1);
         }
 
@@ -352,13 +351,11 @@ pub const Fdt = struct {
         }
 
         pub fn interruptParent(self: *Node) !*Node {
-            var parent_phandle = self.propertyFirstValueAs(u32, "interrupt-parent", 0);
-            if (parent_phandle != 0) {
-                root.kprint("from '{s}', interrupt-parent is {d}\n", .{ self.name, parent_phandle });
-                return self.fdt.phandles.get(parent_phandle) orelse Error.NotFound;
+            var iparent_phandle = self.propertyFirstValueAs(u32, "interrupt-parent", 0);
+            if (iparent_phandle != 0) {
+                return self.fdt.phandles.get(iparent_phandle) orelse Error.NotFound;
             } else {
-                root.kprint("from '{s}', no explicit interrupt-parent, returning '{s}'\n", .{ self.name, self.parent.name });
-                return self.parent;
+                return self.parent.interruptParent();
                 // return null;
             }
         }

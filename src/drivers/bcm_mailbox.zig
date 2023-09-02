@@ -413,10 +413,6 @@ fn Detect(allocator: *Allocator, devicenode: *Node) !*common.Driver {
     const interrupt_cells = interrupt_parent.interruptCells();
     const interrupts = devicenode.propertyValueAs(u32, "interrupts") catch return common.Error.InitializationError;
 
-    for (interrupts, 0..) |intc, i| {
-        kprint("Device '{s}' interrupt[{d}] = {x}\n", .{ devicenode.name, i, intc });
-    }
-
     device.* = MailboxDevice{
         .driver = common.Driver{
             .attach = Attach,
