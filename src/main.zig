@@ -68,7 +68,7 @@ fn kernelInit() void {
     frame_buffer_console.init();
     console_valid = true;
 
-    bsp.timer.schedule(200000, printOneDot, &.{});
+    // bsp.timer.schedule(200000, printOneDot, &.{});
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
