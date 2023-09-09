@@ -17,12 +17,10 @@ pub const InterruptController = struct {
 
     pub fn init(
         pointer: anytype,
-        comptime connectFn: fn (ptr: @TypeOf(pointer), id: IrqId, handler: IrqHandlerFn, context: *anyopaque) void,
-        comptime disconnectFn: *const fn (ptr: @TypeOf(pointer), id: IrqId) void,
-        comptime enableFn: *const fn (ptr: @TypeOf(pointer), id: IrqId) void,
-        comptime disableFn: *const fn (ptr: @TypeOf(pointer), id: IrqId) void,
     ) InterruptController {
         const Ptr = @TypeOf(pointer);
+        const ptr_info = @typeInfo(Ptr);
+
         assert(@typeInfo(Ptr) == .Pointer);
         assert(@typeInfo(Ptr).Pointer.size == .One);
         assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
@@ -30,22 +28,22 @@ pub const InterruptController = struct {
         const generic = struct {
             fn connect(ptr: *anyopaque, id: IrqId, handler: IrqHandlerFn, context: *anyopaque) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                connectFn(self, id, handler, context);
+                @call(.always_inline, ptr_info.Pointer.child.connect, .{ self, id, handler, context });
             }
 
             fn disconnect(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                disconnectFn(self, id);
+                @call(.always_inline, ptr_info.Pointer.child.disconnect, .{ self, id });
             }
 
             fn enable(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                enableFn(self, id);
+                @call(.always_inline, ptr_info.Pointer.child.enable, .{ self, id });
             }
 
             fn disable(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                disableFn(self, id);
+                @call(.always_inline, ptr_info.Pointer.child.disable, .{ self, id });
             }
         };
 
@@ -85,9 +83,10 @@ pub const Clock = struct {
 
     pub fn init(
         pointer: anytype,
-        comptime ticksFn: fn (ptr: @TypeOf(pointer)) u64,
     ) Clock {
         const Ptr = @TypeOf(pointer);
+        const ptr_info = @typeInfo(Ptr);
+
         assert(@typeInfo(Ptr) == .Pointer);
         assert(@typeInfo(Ptr).Pointer.size == .One);
         assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
@@ -95,7 +94,7 @@ pub const Clock = struct {
         const generic = struct {
             fn ticks(ptr: *anyopaque) u64 {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                return ticksFn(self);
+                return @call(.always_inline, ptr_info.Pointer.child.ticks, .{self});
             }
         };
 
@@ -122,9 +121,10 @@ pub const Timer = struct {
 
     pub fn init(
         pointer: anytype,
-        comptime scheduleFn: fn (ptr: @TypeOf(pointer), delta: u32, callback: TimerCallbackFn, context: ?*anyopaque) void,
     ) Timer {
         const Ptr = @TypeOf(pointer);
+        const ptr_info = @typeInfo(Ptr);
+
         assert(@typeInfo(Ptr) == .Pointer);
         assert(@typeInfo(Ptr).Pointer.size == .One);
         assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
@@ -132,7 +132,7 @@ pub const Timer = struct {
         const generic = struct {
             fn schedule(ptr: *anyopaque, delta: u32, callback: TimerCallbackFn, context: ?*anyopaque) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                scheduleFn(self, delta, callback, context);
+                @call(.always_inline, ptr_info.Pointer.child.schedule, .{ self, delta, callback, context });
             }
         };
 
@@ -160,12 +160,10 @@ pub const Serial = struct {
 
     pub fn init(
         pointer: anytype,
-        comptime getcFn: fn (ptr: @TypeOf(pointer)) u8,
-        comptime putcFn: fn (ptr: @TypeOf(pointer), ch: u8) void,
-        comptime putsFn: fn (ptr: @TypeOf(pointer), buf: []const u8) void,
-        comptime hascFn: fn (ptr: @TypeOf(pointer)) bool,
     ) Serial {
         const Ptr = @TypeOf(pointer);
+        const ptr_info = @typeInfo(Ptr);
+
         assert(@typeInfo(Ptr) == .Pointer);
         assert(@typeInfo(Ptr).Pointer.size == .One);
         assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
@@ -173,22 +171,22 @@ pub const Serial = struct {
         const generic = struct {
             fn getc(ptr: *anyopaque) u8 {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                return getcFn(self);
+                return @call(.always_inline, ptr_info.Pointer.child.getc, .{self});
             }
 
             fn putc(ptr: *anyopaque, ch: u8) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                return putcFn(self, ch);
+                return @call(.always_inline, ptr_info.Pointer.child.putc, .{ self, ch });
             }
 
             fn puts(ptr: *anyopaque, buf: []const u8) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                return putsFn(self, buf);
+                return @call(.always_inline, ptr_info.Pointer.child.puts, .{ self, buf });
             }
 
             fn hasc(ptr: *anyopaque) bool {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                return hascFn(self);
+                return @call(.always_inline, ptr_info.Pointer.child.hasc, .{self});
             }
         };
 
@@ -228,9 +226,10 @@ pub const USB = struct {
 
     pub fn init(
         pointer: anytype,
-        comptime powerFn: fn (ptr: @TypeOf(pointer), on_off: bool) void,
     ) USB {
         const Ptr = @TypeOf(pointer);
+        const ptr_info = @typeInfo(Ptr);
+
         assert(@typeInfo(Ptr) == .Pointer);
         assert(@typeInfo(Ptr).Pointer.size == .One);
         assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
@@ -238,7 +237,7 @@ pub const USB = struct {
         const generic = struct {
             fn power(ptr: *anyopaque, on_off: bool) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                return powerFn(self, on_off);
+                return @call(.always_inline, ptr_info.Pointer.child.power, .{ self, on_off });
             }
         };
 

@@ -250,7 +250,23 @@ pub const Pl011Uart = struct {
     }
 
     pub fn serial(self: *Pl011Uart) bsp.common.Serial {
-        return bsp.common.Serial.init(self, readByteBlocking, send, stringSend, readByteReady);
+        return bsp.common.Serial.init(self);
+    }
+
+    pub fn getc(self: *Pl011Uart) u8 {
+        return self.readByteBlocking();
+    }
+
+    pub fn putc(self: *Pl011Uart, ch: u8) void {
+        self.send(ch);
+    }
+
+    pub fn puts(self: *Pl011Uart, buf: []const u8) void {
+        self.stringSend(buf);
+    }
+
+    pub fn hasc(self: *Pl011Uart) bool {
+        return self.readByteReady();
     }
 
     inline fn writeByteReady(self: *Pl011Uart) bool {

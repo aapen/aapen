@@ -24,7 +24,7 @@ const FreeRunningCounter = struct {
     }
 
     pub fn clock(self: *FreeRunningCounter) bsp.common.Clock {
-        return bsp.common.Clock.init(self, ticks);
+        return bsp.common.Clock.init(self);
     }
 
     pub fn ticks(self: *FreeRunningCounter) u64 {
@@ -81,7 +81,7 @@ pub const Timer = struct {
     }
 
     pub fn timer(self: *Timer) bsp.common.Timer {
-        return bsp.common.Timer.init(self, schedule);
+        return bsp.common.Timer.init(self);
     }
 
     pub fn deinit(self: *Timer) void {

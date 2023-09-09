@@ -43,7 +43,7 @@ pub const LocalInterruptController = struct {
     }
 
     pub fn controller(self: *LocalInterruptController) bsp.common.InterruptController {
-        return bsp.common.InterruptController.init(self, connect, disconnect, enable, disable);
+        return bsp.common.InterruptController.init(self);
     }
 
     pub fn connect(self: *LocalInterruptController, id: IrqId, handler: IrqHandlerFn, context: *anyopaque) void {

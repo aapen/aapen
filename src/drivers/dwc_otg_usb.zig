@@ -128,7 +128,7 @@ pub const UsbController = struct {
     }
 
     pub fn usb(self: *UsbController) bsp.common.USB {
-        return bsp.common.USB.init(self, power);
+        return bsp.common.USB.init(self);
     }
 
     pub fn power(self: *UsbController, on_off: bool) void {

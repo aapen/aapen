@@ -1,12 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const ArrayList = std.ArrayList;
-const Allocator = std.mem.Allocator;
-const bigToNative = std.mem.bigToNative;
 
 const root = @import("root");
-const kprint = root.kprint;
-const kwarn = root.kwarn;
 const kinfo = root.kinfo;
 
 const bsp = @import("../bsp.zig");
@@ -327,11 +322,11 @@ pub const BroadcomMailbox = struct {
             const Ptr = @TypeOf(pointer);
             const ptr_info = @typeInfo(Ptr);
 
-            if (ptr_info != .Pointer) @compileError("argument `pointer` must be an actual pointer");
-            if (ptr_info.Pointer.size != .One) @compileError("argument `pointer` must be a single-item pointer");
-            if (@typeInfo(ptr_info.Pointer.child) != .Struct) @compileError("argument `pointer` must be a pointer to a struct");
+            assert(@typeInfo(Ptr) == .Pointer);
+            assert(@typeInfo(Ptr).Pointer.size == .One);
+            assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
 
-            const closure = struct {
+            const generic = struct {
                 fn fill(ptr: *anyopaque, buf: []u32) void {
                     const self: Ptr = @ptrCast(@alignCast(ptr));
                     return @call(.always_inline, ptr_info.Pointer.child.fill, .{ self, buf });
@@ -347,8 +342,8 @@ pub const BroadcomMailbox = struct {
 
             return .{
                 .ptr = pointer,
-                .fillFn = closure.fill,
-                .unfillFn = closure.unfill,
+                .fillFn = generic.fill,
+                .unfillFn = generic.unfill,
                 .tag = @intFromEnum(tag),
                 .request_size = request_size,
                 .content_size = content_size,
