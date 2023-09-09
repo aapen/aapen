@@ -1,0 +1,49 @@
+const arch = @import("../architecture.zig");
+
+const bsp = @import("../bsp.zig");
+
+const memory = @import("../memory.zig");
+const AddressTranslations = memory.AddressTranslations;
+
+pub const common = @import("common.zig");
+
+pub const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
+pub const bcm_power = @import("../drivers/bcm_power.zig");
+pub const interrupts = @import("../drivers/arm_local_interrupt_controller.zig");
+pub const pl011 = @import("../drivers/pl011.zig");
+pub const simple_bus = @import("../drivers/simple_bus.zig");
+pub const timer = @import("../drivers/arm_local_timer.zig");
+pub const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
+
+pub const peripheral_base = @import("raspi3/memory_map.zig").peripheral_base;
+
+pub var soc_bus = simple_bus.SimpleBus{};
+pub var local_interrupt_controller = interrupts.LocalInterruptController{};
+pub var pl011_uart = pl011.Pl011Uart{};
+pub var mailbox = bcm_mailbox.BroadcomMailbox{};
+pub var power_controller = bcm_power.PowerController{};
+pub var usb = dwc_otg_usb.UsbController{};
+
+pub fn init() !void {
+    try soc_bus.deviceTreeParse("soc");
+
+    local_interrupt_controller.init(peripheral_base + 0xb200);
+    bsp.interrupt_controller = local_interrupt_controller.controller();
+
+    timer.init(peripheral_base + 0x3000, &bsp.interrupt_controller);
+    bsp.timer = timer.timers[1].timer();
+    bsp.clock = timer.counter.clock();
+
+    pl011_uart.init(peripheral_base + 0x201000, &bsp.interrupt_controller);
+    bsp.serial = pl011_uart.serial();
+
+    mailbox.init(peripheral_base + 0xB880, &bsp.interrupt_controller, &soc_bus.bus_ranges);
+    power_controller.init(&mailbox);
+
+    usb.init(peripheral_base + 0x980000, &bsp.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
+    bsp.usb = usb.usb();
+}
+
+pub fn irqHandleThunk(context: *const arch.cpu.exceptions.ExceptionContext) void {
+    local_interrupt_controller.irqHandle(context);
+}

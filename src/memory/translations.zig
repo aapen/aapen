@@ -3,6 +3,24 @@ const ArrayList = std.ArrayList;
 
 pub const AddressTranslations = ArrayList(*AddressTranslation);
 
+pub fn toChild(translations: *AddressTranslations, parent_addr: u64) u64 {
+    for (translations.items) |t| {
+        if (t.parentBusContains(parent_addr)) {
+            return t.parentToChild(parent_addr);
+        }
+    }
+    return parent_addr;
+}
+
+pub fn toParent(translations: *AddressTranslations, child_addr: u64) u64 {
+    for (translations.items) |t| {
+        if (t.childBusContains(child_addr)) {
+            return t.childToParent(child_addr);
+        }
+    }
+    return child_addr;
+}
+
 pub const AddressTranslation = struct {
     parent_space_begin: u64,
     parent_space_end: u64,
@@ -37,10 +55,10 @@ pub const AddressTranslation = struct {
     }
 
     pub fn parentToChild(self: *const AddressTranslation, address: u64) u64 {
-        return translate(address, self.parent_address, self.child_address);
+        return translate(address, self.parent_space_begin, self.child_space_begin);
     }
 
     pub fn childToParent(self: *const AddressTranslation, address: u64) u64 {
-        return translate(address, self.child_address, self.parent_address);
+        return translate(address, self.child_space_begin, self.parent_space_begin);
     }
 };

@@ -375,3 +375,17 @@ Approach:
 2. That page allocator will be supplied by our OS. The OS will construct it with start of heap and end of heap as provided by the linker.
 3. We can use a FixedBufferAllocator from the standard library, with a giant slice of u8 as the whole of RAM.
 
+* Temp scratchpad
+** DONE Move ~bsp/raspi3/timer.zig~ to ~drivers/arm/system_timer.zig~
+** DONE Make a bsp/raspi3.zig, have it invoke drivers.zig to initialize the right components for this board.
+** TODO Make main.zig look at the model in the devicetree, use that to pick the right module, then invoke it.
+** DONE Make a generic for a serial device (getc, putc)
+** DONE Make a generic for a timer device (schedule)
+** DONE Make a generic for a clock (ticks)
+** DONE Make a generic for an interrupt controller (connect, disconnect, enable, disable)
+** DONE Have the BSP initialize the local interrupt controller.
+** DONE Have the BSP initialize the ~simple_bus~ and address translation.
+** DONE Have the BSP pass the address translation to the mailbox driver.
+** TODO Migrate the video driver to use the new bcm mailbox driver
+** DONE Migrate the power driver to use the new mailbox
+** TODO Migrate the peripheral clock driver to use the new mailbox

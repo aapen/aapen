@@ -1,7 +1,8 @@
 const std = @import("std");
 const root = @import("root");
-const bsp = @import("bsp.zig");
 const arch = @import("architecture.zig");
+const bsp = @import("bsp.zig");
+//const serial_writer = bsp.serial_writer;
 
 const log_level: u2 = 1;
 
@@ -12,8 +13,8 @@ inline fn log_info() bool {
 pub fn kinfo(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (log_info()) {
         if (root.uart_valid) {
-            bsp.io.uart_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-            bsp.io.uart_writer.print(fmt, args) catch {};
+            bsp.serial_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            bsp.serial_writer.print(fmt, args) catch {};
         }
 
         if (root.console_valid) {
@@ -30,8 +31,8 @@ inline fn log_warnings() bool {
 pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (log_warnings()) {
         if (root.uart_valid) {
-            bsp.io.uart_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-            bsp.io.uart_writer.print(fmt, args) catch {};
+            bsp.serial_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            bsp.serial_writer.print(fmt, args) catch {};
         }
 
         if (root.console_valid) {
@@ -43,8 +44,8 @@ pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8,
 
 pub fn kerror(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (root.uart_valid) {
-        bsp.io.uart_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-        bsp.io.uart_writer.print(fmt, args) catch {};
+        bsp.serial_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+        bsp.serial_writer.print(fmt, args) catch {};
     }
 
     if (root.console_valid) {
@@ -55,7 +56,7 @@ pub fn kerror(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8
 
 pub fn kprint(comptime fmt: []const u8, args: anytype) void {
     if (root.uart_valid) {
-        bsp.io.uart_writer.print(fmt, args) catch {};
+        bsp.serial_writer.print(fmt, args) catch {};
     }
 
     if (root.console_valid) {
@@ -65,8 +66,8 @@ pub fn kprint(comptime fmt: []const u8, args: anytype) void {
     }
 }
 
-pub fn panicDisplay(from_addr: ?u64) void {
-    if (from_addr) |addr| {
+pub fn panicDisplay(elr: ?u64) void {
+    if (elr) |addr| {
         kprint("Panic!\nELR: 0x{x:0>8}\n", .{addr});
         stackTraceDisplay(addr);
     } else {

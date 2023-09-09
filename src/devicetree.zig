@@ -7,6 +7,7 @@ const StringHashMap = std.StringHashMap;
 const memory = @import("memory.zig");
 const AddressTranslation = memory.AddressTranslation;
 const AddressTranslations = memory.AddressTranslations;
+const AddressAndLength = memory.AddressAndLength;
 
 const root = @import("root");
 const kwarn = root.kwarn;
@@ -45,9 +46,11 @@ pub inline fn cellsAs(cells: []const u32) u64 {
 pub const Fdt = struct {
     const Self = @This();
 
+    const PHandle = u32;
+
     const NodeList = ArrayList(*Node);
     const AliasMap = StringHashMap([]const u8);
-    const PHandleMap = AutoHashMap(u32, *Node);
+    const PHandleMap = AutoHashMap(PHandle, *Node);
     const PropertyList = ArrayList(*Property);
 
     // These constants come from the device tree specification.
@@ -335,11 +338,30 @@ pub const Fdt = struct {
         }
 
         pub fn addressCells(self: *Node) u32 {
-            return self.propertyFirstValueAs(u32, "#address-cells", 2);
+            const acells = self.propertyFirstValueAs(u32, "#address-cells", 0);
+
+            if (acells == 0) {
+                if (self.parent == self) {
+                    return 2;
+                } else {
+                    return self.parent.addressCells();
+                }
+            } else {
+                return acells;
+            }
         }
 
         pub fn sizeCells(self: *Node) u32 {
-            return self.propertyFirstValueAs(u32, "#size-cells", 1);
+            const scells = self.propertyFirstValueAs(u32, "#size-cells", 0);
+            if (scells == 0) {
+                if (self.parent == self) {
+                    return 1;
+                } else {
+                    return self.parent.sizeCells();
+                }
+            } else {
+                return scells;
+            }
         }
 
         pub fn interruptCells(self: *Node) u32 {
@@ -366,6 +388,21 @@ pub const Fdt = struct {
             } else {
                 return AddressTranslations.init(self.allocator);
             }
+        }
+
+        pub fn addressAndLength(self: *Node, prop_name: []const u8) !AddressAndLength {
+            if (self.property(prop_name)) |prop| {
+                return prop.addressAndLength();
+            } else {
+                return Error.NotFound;
+            }
+        }
+
+        pub fn interrupts(self: *Node) !struct { u32, []u32 } {
+            const iparent = try self.interruptParent();
+            const icells = iparent.interruptCells();
+            const ints = try self.propertyValueAs(u32, "interrupts");
+            return .{ icells, ints };
         }
     };
 
@@ -416,6 +453,15 @@ pub const Fdt = struct {
             const value_start = self.owner.fdt.struct_base + self.value_offset;
             const value_ptr: [*]u8 = @ptrFromInt(value_start);
             return @ptrCast(value_ptr[0 .. self.value_len - 1]);
+        }
+
+        pub fn addressAndLength(self: *Property) !AddressAndLength {
+            var raw = self.valueAs(u32) catch return Error.ValueUnavailable;
+            const acells = self.owner.addressCells();
+            const scells = self.owner.sizeCells();
+            const address: u64 = cellsAs(raw[0..acells]);
+            const length: u64 = cellsAs(raw[acells..(acells + scells)]);
+            return .{ address, length };
         }
 
         pub fn asTranslations(self: *Property) !AddressTranslations {

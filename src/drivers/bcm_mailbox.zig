@@ -9,18 +9,9 @@ const kprint = root.kprint;
 const kwarn = root.kwarn;
 const kinfo = root.kinfo;
 
-const register = @import("../bsp/mmio_register.zig");
-const UniformRegister = register.UniformRegister;
+const bsp = @import("../bsp.zig");
 
-const common = @import("common.zig");
-const Driver = common.Driver;
-const Device = common.Device;
-
-const devicetree = @import("../devicetree.zig");
-const Node = devicetree.Fdt.Node;
-const Property = devicetree.Fdt.Property;
-
-const architecture = @import("../../architecture.zig");
+const architecture = @import("../architecture.zig");
 const cache = architecture.cache;
 const barriers = architecture.barriers;
 
@@ -30,13 +21,7 @@ const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
 
-const MailboxPeekLayout = u32;
-
-const MailboxReadLayout = u32;
-
-const MailboxSenderLayout = u32;
-
-const MailboxStatusLayout = packed struct {
+const MailboxStatusRegister = packed struct {
     _unused_reserved: u30,
     mail_empty: u1,
     mail_full: u1,
@@ -52,7 +37,7 @@ const IrqPendingBit = enum(u1) {
     raised = 0b1,
 };
 
-const MailboxConfigurationLayout = packed struct {
+const MailboxConfigurationRegister = packed struct {
     data_available_irq_enable: IrqEnableBit = .disabled,
     space_available_irq_enable: IrqEnableBit = .disabled,
     opp_empty_irq_enable: IrqEnableBit = .disabled,
@@ -67,31 +52,27 @@ const MailboxConfigurationLayout = packed struct {
     _unused_reserved_1: u21 = 0,
 };
 
-const MailboxWriteLayout = u32;
+pub const BroadcomMailbox = struct {
+    const Registers = extern struct {
+        mailbox_0_read: u32, // 0x00
+        _reserved_0: u32, // 0x04
+        _reserved_1: u32, // 0x08
+        _reserved_2: u32, // 0x0c
+        mailbox_0_peek: u32, // 0x10
+        mailbox_0_sender: u32, // 0x14
+        mailbox_0_status: MailboxStatusRegister, // 0x18
+        mailbox_0_configuration: MailboxConfigurationRegister, // 0x1c
+        mailbox_0_write: u32, // 0x20
+    };
 
-const BroadcomMailbox = struct {
-    mailbox_base: u64,
-    mailbox_0_read: UniformRegister(MailboxReadLayout),
-    mailbox_0_peek: UniformRegister(MailboxPeekLayout),
-    mailbox_0_sender: UniformRegister(MailboxSenderLayout),
-    mailbox_0_status: UniformRegister(MailboxStatusLayout),
-    mailbox_0_configuration: UniformRegister(MailboxConfigurationLayout),
-    mailbox_0_write: UniformRegister(MailboxWriteLayout),
-    translations: *AddressTranslations,
+    registers: *volatile Registers = undefined,
+    intc: *bsp.common.InterruptController = undefined,
+    translations: *AddressTranslations = undefined,
 
-    pub fn init(self: *BroadcomMailbox, register_base: u64, translations: *AddressTranslations) void {
+    pub fn init(self: *BroadcomMailbox, base: u64, interrupt_controller: *bsp.common.InterruptController, translations: *AddressTranslations) void {
+        self.registers = @ptrFromInt(base);
+        self.intc = interrupt_controller;
         self.translations = translations;
-
-        var register_cpu_addr = toChild(translations, register_base);
-        kprint("Mailbox register base {x} -> {x}\n", .{ register_base, register_cpu_addr });
-
-        self.mailbox_base = register_base + 0xB880;
-        self.mailbox_0_read.init(register_base + 0x00);
-        self.mailbox_0_peek.init(register_base + 0x10);
-        self.mailbox_0_sender.init(register_base + 0x14);
-        self.mailbox_0_status.init(register_base + 0x18);
-        self.mailbox_0_configuration.init(register_base + 0x1c);
-        self.mailbox_0_write.init(register_base + 0x20);
     }
 
     // ----------------------------------------------------------------------
@@ -99,19 +80,19 @@ const BroadcomMailbox = struct {
     // ----------------------------------------------------------------------
     fn mailFull(self: *BroadcomMailbox) bool {
         barriers.barrierMemoryDevice();
-        return self.mailbox_0_status.read().mail_full == 1;
+        return self.registers.mailbox_0_status.mail_full == 1;
     }
 
     fn mailEmpty(self: *BroadcomMailbox) bool {
         barriers.barrierMemoryDevice();
-        return self.mailbox_0_status.read().mail_empty == 1;
+        return self.registers.mailbox_0_status.mail_empty == 1;
     }
 
     pub fn mailboxWrite(self: *BroadcomMailbox, channel: MailboxChannel, data: u32) void {
         while (self.mailFull()) {}
 
         var val = (data & 0xfffffff0) | @intFromEnum(channel);
-        self.mailbox_0_write.write(val);
+        self.registers.mailbox_0_write = val;
     }
 
     // TODO: Use peek instead of read so we don't lose messages meant for
@@ -121,7 +102,7 @@ const BroadcomMailbox = struct {
         while (true) {
             while (self.mailEmpty()) {}
 
-            var data: u32 = self.mailbox_0_read.read();
+            var data: u32 = self.registers.mailbox_0_read;
             var channel_read: MailboxChannel = @enumFromInt(data & 0xf);
 
             if (channel_read == channel_expected) {
@@ -129,327 +110,266 @@ const BroadcomMailbox = struct {
             }
         }
     }
-};
 
-// ----------------------------------------------------------------------
-// Peripheral Registers
-// ----------------------------------------------------------------------
-// ----------------------------------------------------------------------
-// ARM <-> Videocore protocol
-// ----------------------------------------------------------------------
+    // ----------------------------------------------------------------------
+    // Peripheral Registers
+    // ----------------------------------------------------------------------
+    // ----------------------------------------------------------------------
+    // ARM <-> Videocore protocol
+    // ----------------------------------------------------------------------
 
-const MailboxChannel = enum(u4) {
-    power = 0,
-    framebuffer = 1,
-    virtual_uart = 2,
-    vchiq = 3,
-    leds = 4,
-    buttons = 5,
-    touch_screen = 6,
-    property_arm_to_vc = 8,
-    property_vc_to_arm = 9,
-};
-
-const rpi_firmware_status_request: u32 = 0;
-const rpi_firmware_status_success: u32 = 0x80000000;
-const rpi_firmware_status_error: u32 = 0x80000001;
-
-pub const RpiFirmwarePropertyTag = enum(u32) {
-    rpi_firmware_property_end = 0x00000000,
-    rpi_firmware_get_firmware_revision = 0x00000001,
-
-    rpi_firmware_set_cursor_info = 0x00008010,
-    rpi_firmware_set_cursor_state = 0x00008011,
-
-    rpi_firmware_get_board_model = 0x00010001,
-    rpi_firmware_get_board_revision = 0x00010002,
-    rpi_firmware_get_board_mac_address = 0x00010003,
-    rpi_firmware_get_board_serial = 0x00010004,
-    rpi_firmware_get_arm_memory = 0x00010005,
-    rpi_firmware_get_vc_memory = 0x00010006,
-    rpi_firmware_get_clocks = 0x00010007,
-    rpi_firmware_get_power_state = 0x00020001,
-    rpi_firmware_get_timing = 0x00020002,
-    rpi_firmware_set_power_state = 0x00028001,
-    rpi_firmware_get_clock_state = 0x00030001,
-    rpi_firmware_get_clock_rate = 0x00030002,
-    rpi_firmware_get_voltage = 0x00030003,
-    rpi_firmware_get_max_clock_rate = 0x00030004,
-    rpi_firmware_get_max_voltage = 0x00030005,
-    rpi_firmware_get_temperature = 0x00030006,
-    rpi_firmware_get_min_clock_rate = 0x00030007,
-    rpi_firmware_get_min_voltage = 0x00030008,
-    rpi_firmware_get_turbo = 0x00030009,
-    rpi_firmware_get_max_temperature = 0x0003000a,
-    rpi_firmware_get_stc = 0x0003000b,
-    rpi_firmware_allocate_memory = 0x0003000c,
-    rpi_firmware_lock_memory = 0x0003000d,
-    rpi_firmware_unlock_memory = 0x0003000e,
-    rpi_firmware_release_memory = 0x0003000f,
-    rpi_firmware_execute_code = 0x00030010,
-    rpi_firmware_execute_qpu = 0x00030011,
-    rpi_firmware_set_enable_qpu = 0x00030012,
-    rpi_firmware_get_dispmanx_resource_mem_handle = 0x00030014,
-    rpi_firmware_get_edid_block = 0x00030020,
-    rpi_firmware_get_customer_otp = 0x00030021,
-    rpi_firmware_get_domain_state = 0x00030030,
-    rpi_firmware_set_clock_state = 0x00038001,
-    rpi_firmware_set_clock_rate = 0x00038002,
-    rpi_firmware_set_voltage = 0x00038003,
-    rpi_firmware_set_turbo = 0x00038009,
-    rpi_firmware_set_customer_otp = 0x00038021,
-    rpi_firmware_set_domain_state = 0x00038030,
-    rpi_firmware_get_gpio_state = 0x00030041,
-    rpi_firmware_set_gpio_state = 0x00038041,
-    rpi_firmware_set_sdhost_clock = 0x00038042,
-    rpi_firmware_get_gpio_config = 0x00030043,
-    rpi_firmware_set_gpio_config = 0x00038043,
-    rpi_firmware_get_periph_reg = 0x00030045,
-    rpi_firmware_set_periph_reg = 0x00038045,
-
-    // Dispmanx TAGS
-    rpi_firmware_framebuffer_allocate = 0x00040001,
-    rpi_firmware_framebuffer_blank = 0x00040002,
-    rpi_firmware_framebuffer_get_physical_width_height = 0x00040003,
-    rpi_firmware_framebuffer_get_virtual_width_height = 0x00040004,
-    rpi_firmware_framebuffer_get_depth = 0x00040005,
-    rpi_firmware_framebuffer_get_pixel_order = 0x00040006,
-    rpi_firmware_framebuffer_get_alpha_mode = 0x00040007,
-    rpi_firmware_framebuffer_get_pitch = 0x00040008,
-    rpi_firmware_framebuffer_get_virtual_offset = 0x00040009,
-    rpi_firmware_framebuffer_get_overscan = 0x0004000a,
-    rpi_firmware_framebuffer_get_palette = 0x0004000b,
-    rpi_firmware_framebuffer_get_touchbuf = 0x0004000f,
-    rpi_firmware_framebuffer_get_gpiovirtbuf = 0x00040010,
-    rpi_firmware_framebuffer_release = 0x00048001,
-    rpi_firmware_framebuffer_test_physical_width_height = 0x00044003,
-    rpi_firmware_framebuffer_test_virtual_width_height = 0x00044004,
-    rpi_firmware_framebuffer_test_depth = 0x00044005,
-    rpi_firmware_framebuffer_test_pixel_order = 0x00044006,
-    rpi_firmware_framebuffer_test_alpha_mode = 0x00044007,
-    rpi_firmware_framebuffer_test_virtual_offset = 0x00044009,
-    rpi_firmware_framebuffer_test_overscan = 0x0004400a,
-    rpi_firmware_framebuffer_test_palette = 0x0004400b,
-    rpi_firmware_framebuffer_test_vsync = 0x0004400e,
-    rpi_firmware_framebuffer_set_physical_width_height = 0x00048003,
-    rpi_firmware_framebuffer_set_virtual_width_height = 0x00048004,
-    rpi_firmware_framebuffer_set_depth = 0x00048005,
-    rpi_firmware_framebuffer_set_pixel_order = 0x00048006,
-    rpi_firmware_framebuffer_set_alpha_mode = 0x00048007,
-    rpi_firmware_framebuffer_set_virtual_offset = 0x00048009,
-    rpi_firmware_framebuffer_set_overscan = 0x0004800a,
-    rpi_firmware_framebuffer_set_palette = 0x0004800b,
-    rpi_firmware_framebuffer_set_touchbuf = 0x0004801f,
-    rpi_firmware_framebuffer_set_gpiovirtbuf = 0x00048020,
-    rpi_firmware_framebuffer_set_vsync = 0x0004800e,
-    rpi_firmware_framebuffer_set_backlight = 0x0004800f,
-
-    rpi_firmware_vchiq_init = 0x00048010,
-
-    rpi_firmware_get_command_line = 0x00050001,
-    rpi_firmware_get_dma_channels = 0x00060001,
-};
-
-// ----------------------------------------------------------------------
-// Support for marshalling / unmarshalling
-// ----------------------------------------------------------------------
-
-pub const Envelope = struct {
-    const Error = error{
-        StatusError,
-        NoResponse,
+    const MailboxChannel = enum(u4) {
+        power = 0,
+        framebuffer = 1,
+        virtual_uart = 2,
+        vchiq = 3,
+        leds = 4,
+        buttons = 5,
+        touch_screen = 6,
+        property_arm_to_vc = 8,
+        property_vc_to_arm = 9,
     };
 
-    const max_buffer_length = 128;
+    const rpi_firmware_status_request: u32 = 0;
+    const rpi_firmware_status_success: u32 = 0x80000000;
+    const rpi_firmware_status_error: u32 = 0x80000001;
 
-    channel: MailboxChannel = .property_arm_to_vc,
-    messages: []Message,
-    buffer: [max_buffer_length]u32 align(16),
-    total_size: u32,
+    pub const RpiFirmwarePropertyTag = enum(u32) {
+        rpi_firmware_property_end = 0x00000000,
+        rpi_firmware_get_firmware_revision = 0x00000001,
 
-    pub fn init(messages: []Message) Envelope {
-        var content_size: u32 = 0;
-        for (messages) |m| {
-            content_size += m.total_size;
-        }
+        rpi_firmware_set_cursor_info = 0x00008010,
+        rpi_firmware_set_cursor_state = 0x00008011,
 
-        var total_size = content_size + 3;
+        rpi_firmware_get_board_model = 0x00010001,
+        rpi_firmware_get_board_revision = 0x00010002,
+        rpi_firmware_get_board_mac_address = 0x00010003,
+        rpi_firmware_get_board_serial = 0x00010004,
+        rpi_firmware_get_arm_memory = 0x00010005,
+        rpi_firmware_get_vc_memory = 0x00010006,
+        rpi_firmware_get_clocks = 0x00010007,
+        rpi_firmware_get_power_state = 0x00020001,
+        rpi_firmware_get_timing = 0x00020002,
+        rpi_firmware_set_power_state = 0x00028001,
+        rpi_firmware_get_clock_state = 0x00030001,
+        rpi_firmware_get_clock_rate = 0x00030002,
+        rpi_firmware_get_voltage = 0x00030003,
+        rpi_firmware_get_max_clock_rate = 0x00030004,
+        rpi_firmware_get_max_voltage = 0x00030005,
+        rpi_firmware_get_temperature = 0x00030006,
+        rpi_firmware_get_min_clock_rate = 0x00030007,
+        rpi_firmware_get_min_voltage = 0x00030008,
+        rpi_firmware_get_turbo = 0x00030009,
+        rpi_firmware_get_max_temperature = 0x0003000a,
+        rpi_firmware_get_stc = 0x0003000b,
+        rpi_firmware_allocate_memory = 0x0003000c,
+        rpi_firmware_lock_memory = 0x0003000d,
+        rpi_firmware_unlock_memory = 0x0003000e,
+        rpi_firmware_release_memory = 0x0003000f,
+        rpi_firmware_execute_code = 0x00030010,
+        rpi_firmware_execute_qpu = 0x00030011,
+        rpi_firmware_set_enable_qpu = 0x00030012,
+        rpi_firmware_get_dispmanx_resource_mem_handle = 0x00030014,
+        rpi_firmware_get_edid_block = 0x00030020,
+        rpi_firmware_get_customer_otp = 0x00030021,
+        rpi_firmware_get_domain_state = 0x00030030,
+        rpi_firmware_set_clock_state = 0x00038001,
+        rpi_firmware_set_clock_rate = 0x00038002,
+        rpi_firmware_set_voltage = 0x00038003,
+        rpi_firmware_set_turbo = 0x00038009,
+        rpi_firmware_set_customer_otp = 0x00038021,
+        rpi_firmware_set_domain_state = 0x00038030,
+        rpi_firmware_get_gpio_state = 0x00030041,
+        rpi_firmware_set_gpio_state = 0x00038041,
+        rpi_firmware_set_sdhost_clock = 0x00038042,
+        rpi_firmware_get_gpio_config = 0x00030043,
+        rpi_firmware_set_gpio_config = 0x00038043,
+        rpi_firmware_get_periph_reg = 0x00030045,
+        rpi_firmware_set_periph_reg = 0x00038045,
 
-        assert(total_size < max_buffer_length);
+        // Dispmanx TAGS
+        rpi_firmware_framebuffer_allocate = 0x00040001,
+        rpi_firmware_framebuffer_blank = 0x00040002,
+        rpi_firmware_framebuffer_get_physical_width_height = 0x00040003,
+        rpi_firmware_framebuffer_get_virtual_width_height = 0x00040004,
+        rpi_firmware_framebuffer_get_depth = 0x00040005,
+        rpi_firmware_framebuffer_get_pixel_order = 0x00040006,
+        rpi_firmware_framebuffer_get_alpha_mode = 0x00040007,
+        rpi_firmware_framebuffer_get_pitch = 0x00040008,
+        rpi_firmware_framebuffer_get_virtual_offset = 0x00040009,
+        rpi_firmware_framebuffer_get_overscan = 0x0004000a,
+        rpi_firmware_framebuffer_get_palette = 0x0004000b,
+        rpi_firmware_framebuffer_get_touchbuf = 0x0004000f,
+        rpi_firmware_framebuffer_get_gpiovirtbuf = 0x00040010,
+        rpi_firmware_framebuffer_release = 0x00048001,
+        rpi_firmware_framebuffer_test_physical_width_height = 0x00044003,
+        rpi_firmware_framebuffer_test_virtual_width_height = 0x00044004,
+        rpi_firmware_framebuffer_test_depth = 0x00044005,
+        rpi_firmware_framebuffer_test_pixel_order = 0x00044006,
+        rpi_firmware_framebuffer_test_alpha_mode = 0x00044007,
+        rpi_firmware_framebuffer_test_virtual_offset = 0x00044009,
+        rpi_firmware_framebuffer_test_overscan = 0x0004400a,
+        rpi_firmware_framebuffer_test_palette = 0x0004400b,
+        rpi_firmware_framebuffer_test_vsync = 0x0004400e,
+        rpi_firmware_framebuffer_set_physical_width_height = 0x00048003,
+        rpi_firmware_framebuffer_set_virtual_width_height = 0x00048004,
+        rpi_firmware_framebuffer_set_depth = 0x00048005,
+        rpi_firmware_framebuffer_set_pixel_order = 0x00048006,
+        rpi_firmware_framebuffer_set_alpha_mode = 0x00048007,
+        rpi_firmware_framebuffer_set_virtual_offset = 0x00048009,
+        rpi_firmware_framebuffer_set_overscan = 0x0004800a,
+        rpi_firmware_framebuffer_set_palette = 0x0004800b,
+        rpi_firmware_framebuffer_set_touchbuf = 0x0004801f,
+        rpi_firmware_framebuffer_set_gpiovirtbuf = 0x00048020,
+        rpi_firmware_framebuffer_set_vsync = 0x0004800e,
+        rpi_firmware_framebuffer_set_backlight = 0x0004800f,
 
-        return .{
-            .buffer = [_]u32{0} ** max_buffer_length,
-            .total_size = total_size,
-            .messages = messages,
+        rpi_firmware_vchiq_init = 0x00048010,
+
+        rpi_firmware_get_command_line = 0x00050001,
+        rpi_firmware_get_dma_channels = 0x00060001,
+    };
+
+    // ----------------------------------------------------------------------
+    // Support for marshalling / unmarshalling
+    // ----------------------------------------------------------------------
+
+    pub const Envelope = struct {
+        const Error = error{
+            StatusError,
+            NoResponse,
         };
-    }
 
-    pub fn call(self: *Envelope) !u32 {
-        var idx: usize = 2;
+        const max_buffer_length = 128;
 
-        for (self.messages) |m| {
-            m.fill(self.buffer[idx..]);
-            idx += m.total_size;
-        }
+        owner: *BroadcomMailbox = undefined,
+        channel: MailboxChannel = .property_arm_to_vc,
+        messages: []Message,
+        buffer: [max_buffer_length]u32 align(16),
+        total_size: u32,
 
-        self.buffer[idx] = @intFromEnum(RpiFirmwarePropertyTag.RPI_FIRMWARE_PROPERTY_END);
-
-        self.buffer[0] = @intCast(idx * @sizeOf(u32));
-        self.buffer[1] = rpi_firmware_status_request;
-
-        cache.flushDCache(u32, &self.buffer);
-        var bus_address = memory.physicalToBus(@intFromPtr(&self.buffer));
-        _ = bus_address;
-        // mbox.mailboxWrite(self.channel, @truncate(bus_address));
-        // var data = mailboxRead(self.channel);
-
-        cache.invalidateDCache(u32, &self.buffer);
-
-        idx = 2;
-
-        for (self.messages) |m| {
-            m.unfill(self.buffer[idx..]);
-            idx += m.total_size;
-        }
-
-        if (self.buffer[1] == rpi_firmware_status_error) {
-            return Error.StatusError;
-        }
-
-        if (self.buffer[1] != rpi_firmware_status_success) {
-            return Error.NoResponse;
-        }
-
-        // return data;
-        return 0;
-    }
-};
-
-pub const Message = struct {
-    // Should be set in the message response to indicate the word now
-    // holds the length of the response body
-    const message_value_length_response = @as(u32, 1) << 31;
-
-    fillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
-    unfillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
-
-    ptr: *anyopaque,
-    tag: u32,
-    request_size: u32,
-    content_size: u32,
-    total_size: u32,
-
-    pub fn init(pointer: anytype, tag: RpiFirmwarePropertyTag, request_size: u32, response_size: u32) Message {
-        const Ptr = @TypeOf(pointer);
-        const ptr_info = @typeInfo(Ptr);
-
-        if (ptr_info != .Pointer) @compileError("argument `pointer` must be an actual pointer");
-        if (ptr_info.Pointer.size != .One) @compileError("argument `pointer` must be a single-item pointer");
-        if (@typeInfo(ptr_info.Pointer.child) != .Struct) @compileError("argument `pointer` must be a pointer to a struct");
-
-        const closure = struct {
-            fn fill(ptr: *anyopaque, buf: []u32) void {
-                const self: Ptr = @ptrCast(@alignCast(ptr));
-                return @call(.always_inline, ptr_info.Pointer.child.fill, .{ self, buf });
+        pub fn init(owner: *BroadcomMailbox, messages: []Message) Envelope {
+            var content_size: u32 = 0;
+            for (messages) |m| {
+                content_size += m.total_size;
             }
 
-            fn unfill(ptr: *anyopaque, buf: []u32) void {
-                const self: Ptr = @ptrCast(@alignCast(ptr));
-                return @call(.always_inline, ptr_info.Pointer.child.unfill, .{ self, buf });
-            }
-        };
+            var total_size = content_size + 3;
 
-        const content_size = @max(request_size, response_size);
+            assert(total_size < max_buffer_length);
 
-        return .{
-            .ptr = pointer,
-            .fillFn = closure.fill,
-            .unfillFn = closure.unfill,
-            .tag = @intFromEnum(tag),
-            .request_size = request_size,
-            .content_size = content_size,
-            .total_size = content_size + 3,
-        };
-    }
-
-    pub fn fill(self: Message, buf: []u32) void {
-        buf[0] = self.tag;
-        buf[1] = self.content_size * @sizeOf(u32);
-        buf[2] = self.request_size * @sizeOf(u32);
-        self.fillFn(self.ptr, buf[3..]);
-    }
-
-    pub fn unfill(self: Message, buf: []u32) void {
-        if (buf[1] & message_value_length_response == 0) {
-            root.kinfo(@src(), "expected bit 31 to be set, but it wasn't\n", .{});
-        } else {
-            buf[1] &= ~message_value_length_response;
+            return .{
+                .owner = owner,
+                .buffer = [_]u32{0} ** max_buffer_length,
+                .total_size = total_size,
+                .messages = messages,
+            };
         }
-        self.unfillFn(self.ptr, buf[3..]);
-    }
-};
 
-fn attach(_: *Device) !void {
-    return common.Error.NotImplemented;
-}
+        pub fn call(self: *Envelope) !u32 {
+            var idx: usize = 2;
 
-fn detach(_: *Device) !void {
-    return common.Error.NotImplemented;
-}
+            for (self.messages) |m| {
+                m.fill(self.buffer[idx..]);
+                idx += m.total_size;
+            }
 
-fn detect(allocator: *Allocator, options: *anyopaque) !*common.Driver {
-    var device: *MailboxDevice = try allocator.create(MailboxDevice);
+            self.buffer[idx] = @intFromEnum(RpiFirmwarePropertyTag.rpi_firmware_property_end);
 
-    device.* = MailboxDevice{
-        .driver = common.Driver{
-            .attach = attach,
-            .detach = detach,
-            .name = "bcm2835-mbox",
-        },
-        .options = @ptrCast(@alignCast(options)),
+            self.buffer[0] = @intCast(idx * @sizeOf(u32));
+            self.buffer[1] = rpi_firmware_status_request;
+
+            cache.flushDCache(u32, &self.buffer);
+
+            var cpu_address = @intFromPtr(&self.buffer);
+            var bus_address = toChild(self.owner.translations, cpu_address);
+
+            self.owner.mailboxWrite(self.channel, @truncate(bus_address));
+            _ = self.owner.mailboxRead(self.channel);
+
+            cache.invalidateDCache(u32, &self.buffer);
+
+            idx = 2;
+
+            for (self.messages) |m| {
+                m.unfill(self.buffer[idx..]);
+                idx += m.total_size;
+            }
+
+            if (self.buffer[1] == rpi_firmware_status_error) {
+                return Error.StatusError;
+            }
+
+            if (self.buffer[1] != rpi_firmware_status_success) {
+                return Error.NoResponse;
+            }
+
+            // return data;
+            return 0;
+        }
     };
 
-    return &device.driver;
-}
+    pub const Message = struct {
+        // Should be set in the message response to indicate the word now
+        // holds the length of the response body
+        const message_value_length_response = @as(u32, 1) << 31;
 
-pub const MailboxDeviceOptions = struct {
-    mailbox_cells: usize = 1,
-    register_base: usize,
-    register_len: usize,
-    interrupts: []u32,
-    interrupt_cells: usize = 2,
-};
+        fillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
+        unfillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
 
-fn deviceTreeParse(allocator: *Allocator, devicenode: *Node) !*anyopaque {
-    var device_config: *MailboxDeviceOptions = try allocator.create(MailboxDeviceOptions);
-    const mailbox_cells = devicenode.mboxCells();
-    const address_cells = devicenode.parent.addressCells();
-    const reg = devicenode.propertyValueAs(u32, "reg") catch return common.Error.InitializationError;
-    const register_base = devicetree.cellsAs(reg[0..address_cells]);
-    const register_len = devicetree.cellsAs(reg[address_cells .. address_cells + 1]);
+        ptr: *anyopaque,
+        tag: u32,
+        request_size: u32,
+        content_size: u32,
+        total_size: u32,
 
-    const interrupt_parent = devicenode.interruptParent() catch return common.Error.InitializationError;
-    const interrupt_cells = interrupt_parent.interruptCells();
-    const interrupts = devicenode.propertyValueAs(u32, "interrupts") catch return common.Error.InitializationError;
+        pub fn init(pointer: anytype, tag: RpiFirmwarePropertyTag, request_size: u32, response_size: u32) Message {
+            const Ptr = @TypeOf(pointer);
+            const ptr_info = @typeInfo(Ptr);
 
-    device_config.* = MailboxDeviceOptions{
-        .mailbox_cells = mailbox_cells,
-        .register_base = register_base,
-        .register_len = register_len,
-        .interrupt_cells = interrupt_cells,
-        .interrupts = interrupts,
+            if (ptr_info != .Pointer) @compileError("argument `pointer` must be an actual pointer");
+            if (ptr_info.Pointer.size != .One) @compileError("argument `pointer` must be a single-item pointer");
+            if (@typeInfo(ptr_info.Pointer.child) != .Struct) @compileError("argument `pointer` must be a pointer to a struct");
+
+            const closure = struct {
+                fn fill(ptr: *anyopaque, buf: []u32) void {
+                    const self: Ptr = @ptrCast(@alignCast(ptr));
+                    return @call(.always_inline, ptr_info.Pointer.child.fill, .{ self, buf });
+                }
+
+                fn unfill(ptr: *anyopaque, buf: []u32) void {
+                    const self: Ptr = @ptrCast(@alignCast(ptr));
+                    return @call(.always_inline, ptr_info.Pointer.child.unfill, .{ self, buf });
+                }
+            };
+
+            const content_size = @max(request_size, response_size);
+
+            return .{
+                .ptr = pointer,
+                .fillFn = closure.fill,
+                .unfillFn = closure.unfill,
+                .tag = @intFromEnum(tag),
+                .request_size = request_size,
+                .content_size = content_size,
+                .total_size = content_size + 3,
+            };
+        }
+
+        pub fn fill(self: Message, buf: []u32) void {
+            buf[0] = self.tag;
+            buf[1] = self.content_size * @sizeOf(u32);
+            buf[2] = self.request_size * @sizeOf(u32);
+            self.fillFn(self.ptr, buf[3..]);
+        }
+
+        pub fn unfill(self: Message, buf: []u32) void {
+            if (buf[1] & message_value_length_response == 0) {
+                root.kinfo(@src(), "expected bit 31 to be set, but it wasn't\n", .{});
+            } else {
+                buf[1] &= ~message_value_length_response;
+            }
+            self.unfillFn(self.ptr, buf[3..]);
+        }
     };
-
-    return device_config;
-}
-
-const MailboxDevice = struct {
-    driver: common.Driver,
-    options: *MailboxDeviceOptions,
-};
-
-pub const ident = common.DriverIdent{
-    .compatible = "brcm,bcm2835-mbox",
-    .detect = &detect,
-    .deviceTreeParse = &deviceTreeParse,
 };

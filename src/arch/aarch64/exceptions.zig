@@ -18,8 +18,12 @@ pub var global_unwind_point = UnwindPoint{};
 
 pub extern fn markUnwindPoint(point: *UnwindPoint) void;
 
-pub fn init() void {
+const IrqHandler = *const fn (context: *const ExceptionContext) void;
+
+pub fn init(handler: IrqHandler) void {
     registers.vbar_el1.write(@intFromPtr(__exception_handler_table));
+    irq_handler = handler;
+    irqEnable();
 }
 
 /// Context passed in to every exception handler.
@@ -68,12 +72,12 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
     }
 }
 
-export fn irqCurrentElx(context: *const ExceptionContext) void {
-    _ = context;
-    irqDisable();
-    defer irqEnable();
+var irq_handler: ?IrqHandler = null;
 
-    bsp.interrupts.irqHandle();
+export fn irqCurrentElx(context: *const ExceptionContext) void {
+    if (irq_handler != null) {
+        irq_handler.?(context);
+    }
 }
 
 pub fn irqDisable() void {

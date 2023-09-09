@@ -41,6 +41,13 @@ pub fn wordKeyMaybe(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64
     return 0;
 }
 
+/// -- n
+pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+    var ticks = bsp.clock.ticks();
+    try forth.stack.push(ticks);
+    return 0;
+}
+
 /// --
 pub fn wordCr(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     forth.console.emit(0x0a);
@@ -428,6 +435,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("cls", " -- :Clear the screen", &wordClearScreen, 0);
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, 0);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, 0);
+    _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, 0);
 
     // Debug and inspection words.
     _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, 0);

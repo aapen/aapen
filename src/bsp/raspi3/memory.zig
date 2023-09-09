@@ -22,9 +22,3 @@ pub fn physicalToBus(physicalAddress: u64) u64 {
     var ba: u64 = pa | 0x4000_0000;
     return ba;
 }
-
-pub fn busToPhysical(busAddress: u64) u64 {
-    var ba: u64 = busAddress;
-    var pa: u64 = ba & ~0xc000_0000;
-    return pa;
-}

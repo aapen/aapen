@@ -9,7 +9,6 @@ const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 const debug = @import("debug.zig");
 pub const devicetree = @import("devicetree.zig");
-const drivers = @import("drivers.zig");
 
 pub const kinfo = debug.kinfo;
 pub const kwarn = debug.kwarn;
@@ -44,29 +43,32 @@ fn kernelInit() void {
 
     devicetree.init();
 
+    bsp.raspi3.init() catch {
+        // We can try to emit an error, but there's no guarantee the
+        // UART is even going to work.
+        bsp.serial.puts("Early init error. Cannot proceed.");
+        return;
+    };
+
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
-    arch.cpu.exceptionInit();
-    arch.cpu.irqInit();
+    arch.cpu.exceptions.init(&bsp.raspi3.irqHandleThunk);
 
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
-    // bsp.timer.timerInit();
-    bsp.io.uartInit();
     uart_valid = true;
 
-    drivers.init(&os.page_allocator);
-
     board.read() catch {};
-
-    printDeviceTreeMemoryClaim();
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
 
     frame_buffer.setResolution(1024, 768, 8) catch |err| {
         bsp.io.uart_writer.print("Error initializing framebuffer: {any}\n", .{err}) catch {};
+        return;
     };
 
     frame_buffer_console.init();
     console_valid = true;
+
+    bsp.timer.schedule(200000, printOneDot, &.{});
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
@@ -85,7 +87,7 @@ fn kernelInit() void {
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    bsp.usb.init();
+    bsp.usb.powerOn();
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});
@@ -110,6 +112,11 @@ fn kernelInit() void {
     qemu.exit(0);
 
     unreachable;
+}
+
+fn printOneDot(_: ?*anyopaque) u32 {
+    frame_buffer_console.emit('%');
+    return 300000;
 }
 
 fn repl() callconv(.C) noreturn {
@@ -150,22 +157,6 @@ fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
     var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
     var clock_mhz = rate / 1_000_000;
     kprint("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
-}
-
-fn printDeviceTreeMemoryClaim() void {
-    var tree = devicetree.global_devicetree;
-    const memory_node = tree.nodeLookupByPath("/memory@0") catch |err| {
-        kprint("Device tree has no memory@0 node. Weird. {any}\n", .{err});
-        return;
-    };
-    const acells = devicetree.root_node.addressCells();
-    const memsize_cells = memory_node.propertyValueAs(u32, "reg") catch |err| {
-        kprint("memory@0 node has no reg property. Weird. {any}\n", .{err});
-        return;
-    };
-    const memsize = devicetree.cellsAs(memsize_cells[0..acells]);
-
-    kprint("Device tree reports memory@0 is {x} bytes\n", .{memsize});
 }
 
 export fn _soft_reset() noreturn {

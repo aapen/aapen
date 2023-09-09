@@ -17,14 +17,6 @@ pub inline fn wfi() void {
     asm volatile ("wfi");
 }
 
-pub fn irqInit() void {
-    exceptions.irqEnable();
-}
-
 pub fn mmuInit() void {
     mmu.init();
-}
-
-pub fn exceptionInit() void {
-    exceptions.init();
 }

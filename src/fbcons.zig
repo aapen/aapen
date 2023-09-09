@@ -158,18 +158,18 @@ pub const FrameBufferConsole = struct {
 
     pub fn getc(self: *FrameBufferConsole) u8 {
         _ = self;
-        var ch = bsp.io.receive();
+        var ch = bsp.serial.getc();
         return if (ch == '\r') '\n' else ch;
     }
 
     pub fn putc(self: *FrameBufferConsole, ch: u8) void {
-        bsp.io.send(ch);
+        bsp.serial.putc(ch);
         self.emit(ch);
     }
 
     pub fn char_available(self: *FrameBufferConsole) bool {
         _ = self;
-        return bsp.io.byte_available();
+        return bsp.serial.hasc();
     }
 };
 
