@@ -153,10 +153,13 @@ fn diagnostics() !void {
     try printClockRate(.arm);
 }
 
-fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
-    var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
-    var clock_mhz = rate / 1_000_000;
-    kprint("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
+fn printClockRate(clock_type: bsp.raspi3.bcm_peripheral_clocks.ClockId) !void {
+    var min_rate = bsp.raspi3.peripheral_clock_controller.clockRateMin(clock_type);
+    var max_rate = bsp.raspi3.peripheral_clock_controller.clockRateMax(clock_type);
+    var current = bsp.raspi3.peripheral_clock_controller.clockRateCurrent(clock_type);
+
+    var clock_mhz = current / 1_000_000;
+    kprint("{s:>14} clock: current {} MHz (min: {}, max {})\n", .{ @tagName(clock_type), clock_mhz, min_rate / 1_000_000, max_rate / 1_000_000 });
 }
 
 export fn _soft_reset() noreturn {

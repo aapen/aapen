@@ -388,4 +388,5 @@ Approach:
 ** DONE Have the BSP pass the address translation to the mailbox driver.
 ** TODO Migrate the video driver to use the new bcm mailbox driver
 ** DONE Migrate the power driver to use the new mailbox
-** TODO Migrate the peripheral clock driver to use the new mailbox
+** DONE Migrate the peripheral clock driver to use the new mailbox
+** TODO Migrate board info to use the new bcm mailbox driver.

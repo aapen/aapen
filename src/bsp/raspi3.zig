@@ -8,6 +8,7 @@ const AddressTranslations = memory.AddressTranslations;
 pub const common = @import("common.zig");
 
 pub const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
+pub const bcm_peripheral_clocks = @import("../drivers/bcm_peripheral_clocks.zig");
 pub const bcm_power = @import("../drivers/bcm_power.zig");
 pub const interrupts = @import("../drivers/arm_local_interrupt_controller.zig");
 pub const pl011 = @import("../drivers/pl011.zig");
@@ -21,6 +22,7 @@ pub var soc_bus = simple_bus.SimpleBus{};
 pub var local_interrupt_controller = interrupts.LocalInterruptController{};
 pub var pl011_uart = pl011.Pl011Uart{};
 pub var mailbox = bcm_mailbox.BroadcomMailbox{};
+pub var peripheral_clock_controller = bcm_peripheral_clocks.PeripheralClockController{};
 pub var power_controller = bcm_power.PowerController{};
 pub var usb = dwc_otg_usb.UsbController{};
 
@@ -38,6 +40,7 @@ pub fn init() !void {
     bsp.serial = pl011_uart.serial();
 
     mailbox.init(peripheral_base + 0xB880, &bsp.interrupt_controller, &soc_bus.bus_ranges);
+    peripheral_clock_controller.init(&mailbox);
     power_controller.init(&mailbox);
 
     usb.init(peripheral_base + 0x980000, &bsp.interrupt_controller, &soc_bus.bus_ranges, &power_controller);

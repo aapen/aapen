@@ -13,15 +13,6 @@ const UniformRegister = reg.UniformRegister;
 const peripheral_base = @import("memory_map.zig").peripheral_base;
 const memory = @import("memory.zig");
 
-const clock = @import("mailbox/clock.zig");
-pub const Clock = clock.Clock;
-pub const getClockRate = clock.getClockRate;
-
-const power = @import("mailbox/power.zig");
-pub const PowerDevice = power.PowerDevice;
-pub const isPowered = power.isPowered;
-pub const powerOn = power.powerOn;
-
 const board_info = @import("mailbox/board_info.zig");
 pub const BoardInfo = board_info.BoardInfo;
 
