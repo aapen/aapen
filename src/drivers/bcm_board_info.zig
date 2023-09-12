@@ -1,56 +1,61 @@
-const mailbox = @import("../mailbox.zig");
-const Message = mailbox.Message;
-const Envelope = mailbox.Envelope;
-const Region = @import("../../../memory.zig").Region;
+const bcm_mailbox = @import("bcm_mailbox.zig");
+const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
+const Message = BroadcomMailbox.Message;
+const Envelope = BroadcomMailbox.Envelope;
 
-pub const Model = struct {
-    name: []const u8 = undefined,
-    version: ?u8 = null,
-    processor: []const u8 = undefined,
-    memory: ?u32 = null,
-    pcb_revision: ?u32 = null,
-};
+const common = @import("../bsp/common.zig");
+const BoardInfo = common.BoardInfo;
+const BoardInfoController = common.BoardInfoController;
 
-pub const Device = struct {
-    manufacturer: []const u8 = undefined,
-    serial_number: ?u32 = null,
-    mac_address: ?u32 = null,
-};
+const memory = @import("../memory.zig");
+const Regions = memory.Regions;
+const Region = memory.Region;
 
-pub const BoardInfo = struct {
-    model: Model = Model{},
-    device: Device = Device{},
-    memory_size: u32 = 0,
+pub const BroadcomBoardInfoController = struct {
     arm_memory_range: Region = Region{ .name = "ARM Memory" },
     videocore_memory_range: Region = Region{ .name = "Videocore Memory" },
 
-    pub fn read(self: *BoardInfo) !void {
+    mailbox: *BroadcomMailbox = undefined,
+
+    pub fn init(self: *BroadcomBoardInfoController, mailbox: *BroadcomMailbox) void {
+        self.mailbox = mailbox;
+    }
+
+    pub fn controller(self: *BroadcomBoardInfoController) BoardInfoController {
+        return common.BoardInfoController.init(self);
+    }
+
+    pub fn inspect(self: *BroadcomBoardInfoController, info: *BoardInfo) void {
         var arm_memory = GetMemoryRange.arm();
         var vc_memory = GetMemoryRange.videocore();
         var revision = GetInfo.boardRevision();
         var mac_address = GetInfo.macAddress();
         var serial = GetInfo.serialNumber();
-        var messages = [_]mailbox.Message{
+        var messages = [_]Message{
             arm_memory.message(),
             vc_memory.message(),
             revision.message(),
             mac_address.message(),
             serial.message(),
         };
-        var env = mailbox.Envelope.init(&messages);
+        var env = Envelope.init(self.mailbox, &messages);
         _ = env.call() catch 0;
 
         arm_memory.copy(&self.arm_memory_range);
         vc_memory.copy(&self.videocore_memory_range);
 
-        self.device.mac_address = mac_address.value;
-        self.device.serial_number = serial.value;
-        self.decode_revision(revision.value);
+        info.memory.regions.append(self.arm_memory_range) catch {};
+        info.memory.regions.append(self.videocore_memory_range) catch {};
+
+        info.device.mac_address = mac_address.value;
+        info.device.serial_number = serial.value;
+
+        self.decode_revision(revision.value, info);
     }
 
-    fn decode_revision(self: *BoardInfo, revision: u32) void {
+    fn decode_revision(self: *BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
         if (revision & 0x800000 == 0x800000) {
-            self.decode_revision_new_scheme(revision);
+            self.decode_revision_new_scheme(revision, info);
         } else {}
     }
 
@@ -81,45 +86,45 @@ pub const BoardInfo = struct {
         BoardType{ .name = "Model 4B", .version = 4 },
     };
 
-    fn decode_revision_new_scheme(self: *BoardInfo, revision: u32) void {
+    fn decode_revision_new_scheme(_: *BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
         // var warranty: u2 = (revision >> 24) & 0b11;
-        var memory: u32 = (revision >> 20) & 0b111;
+        var memsize: u32 = (revision >> 20) & 0b111;
         var manufacturer: u32 = (revision >> 16) & 0b1111;
         var processor: u32 = (revision >> 12) & 0b1111;
         var board: u32 = (revision >> 4) & 0b11111111;
         var pcb_revision: u32 = revision & 0b1111;
 
-        self.model = Model{
+        info.model = BoardInfo.Model{
             .name = if (board < board_types.len) board_types[board].name else "Unknown",
             .version = if (board < board_types.len) board_types[board].version else null,
             .pcb_revision = pcb_revision,
-            .memory = if (memory < memory_sizes.len) memory_sizes[memory] else 0,
+            .memory = if (memsize < memory_sizes.len) memory_sizes[memsize] else 0,
             .processor = if (processor < processor_names.len) processor_names[processor] else "Unknown",
         };
-        self.device.manufacturer = if (manufacturer < manufacturer_names.len) manufacturer_names[manufacturer] else "Unknown";
+        info.device.manufacturer = if (manufacturer < manufacturer_names.len) manufacturer_names[manufacturer] else "Unknown";
     }
 };
 
 const GetInfo = struct {
     const Self = @This();
 
-    tag: mailbox.RpiFirmwarePropertyTag = undefined,
+    tag: BroadcomMailbox.RpiFirmwarePropertyTag = undefined,
     value: u32 = undefined,
 
     pub fn boardRevision() Self {
-        return Self{ .tag = .RPI_FIRMWARE_GET_BOARD_REVISION };
+        return Self{ .tag = .rpi_firmware_get_board_revision };
     }
 
     pub fn macAddress() Self {
-        return Self{ .tag = .RPI_FIRMWARE_GET_BOARD_MAC_ADDRESS };
+        return Self{ .tag = .rpi_firmware_get_board_mac_address };
     }
 
     pub fn serialNumber() Self {
-        return Self{ .tag = .RPI_FIRMWARE_GET_BOARD_SERIAL };
+        return Self{ .tag = .rpi_firmware_get_board_serial };
     }
 
-    pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, self.tag, 0, 1);
+    pub fn message(self: *Self) Message {
+        return Message.init(self, self.tag, 0, 1);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {
@@ -135,20 +140,20 @@ const GetInfo = struct {
 const GetMemoryRange = struct {
     const Self = @This();
 
-    tag: mailbox.RpiFirmwarePropertyTag = undefined,
+    tag: BroadcomMailbox.RpiFirmwarePropertyTag = undefined,
     memory_base: u32 = undefined,
     memory_size: u32 = undefined,
 
     pub fn arm() Self {
-        return Self{ .tag = .RPI_FIRMWARE_GET_ARM_MEMORY };
+        return Self{ .tag = .rpi_firmware_get_arm_memory };
     }
 
     pub fn videocore() Self {
-        return Self{ .tag = .RPI_FIRMWARE_GET_VC_MEMORY };
+        return Self{ .tag = .rpi_firmware_get_vc_memory };
     }
 
-    pub fn message(self: *Self) mailbox.Message {
-        return mailbox.Message.init(self, self.tag, 0, 2);
+    pub fn message(self: *Self) Message {
+        return Message.init(self, self.tag, 0, 2);
     }
 
     pub fn fill(self: *Self, buf: []u32) void {

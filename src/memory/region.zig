@@ -1,6 +1,9 @@
 const root = @import("root");
 const std = @import("std");
+const ArrayList = std.ArrayList;
 const assert = std.debug.assert;
+
+pub const Regions = ArrayList(Region);
 
 pub const Region = struct {
     name: ?[]const u8 = null,

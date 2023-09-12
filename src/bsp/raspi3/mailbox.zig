@@ -13,9 +13,6 @@ const UniformRegister = reg.UniformRegister;
 const peripheral_base = @import("memory_map.zig").peripheral_base;
 const memory = @import("memory.zig");
 
-const board_info = @import("mailbox/board_info.zig");
-pub const BoardInfo = board_info.BoardInfo;
-
 // ----------------------------------------------------------------------
 // Peripheral Registers
 // ----------------------------------------------------------------------

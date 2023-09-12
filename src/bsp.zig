@@ -14,6 +14,7 @@ pub const memory = @import("bsp/raspi3/memory.zig");
 //pub const usb = @import("bsp/raspi3/usb.zig");
 pub const video = @import("bsp/raspi3/video.zig");
 
+pub var info_controller: common.BoardInfoController = undefined;
 pub var interrupt_controller: common.InterruptController = undefined;
 pub var timer: common.Timer = undefined;
 pub var clock: common.Clock = undefined;

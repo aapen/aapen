@@ -1,5 +1,10 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
+
+const memory = @import("../memory.zig");
+const Regions = memory.Regions;
+const Region = memory.Region;
 
 // ----------------------------------------------------------------------
 // Generic Interrupt Controller
@@ -253,5 +258,69 @@ pub const USB = struct {
 
     pub fn powerOff(usb: *USB) void {
         usb.powerFn(usb.ptr, false);
+    }
+};
+
+// ----------------------------------------------------------------------
+// Generic Board Info
+// ----------------------------------------------------------------------
+
+pub const BoardInfo = struct {
+    pub const Model = struct {
+        name: []const u8 = undefined,
+        version: ?u8 = null,
+        processor: []const u8 = undefined,
+        memory: ?u32 = null,
+        pcb_revision: ?u32 = null,
+    };
+
+    pub const Device = struct {
+        manufacturer: []const u8 = undefined,
+        serial_number: ?u32 = null,
+        mac_address: ?u32 = null,
+    };
+
+    pub const Memory = struct {
+        regions: memory.Regions = undefined,
+    };
+
+    model: Model = Model{},
+    device: Device = Device{},
+    memory: Memory = Memory{},
+
+    pub fn init(self: *BoardInfo, allocator: *Allocator) void {
+        self.memory.regions = memory.Regions.init(allocator.*);
+    }
+};
+
+pub const BoardInfoController = struct {
+    ptr: *anyopaque,
+    inspectFn: *const fn (ptr: *anyopaque, info: *BoardInfo) void,
+
+    pub fn init(
+        pointer: anytype,
+    ) BoardInfoController {
+        const Ptr = @TypeOf(pointer);
+        const ptr_info = @typeInfo(Ptr);
+
+        assert(@typeInfo(Ptr) == .Pointer);
+        assert(@typeInfo(Ptr).Pointer.size == .One);
+        assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
+
+        const generic = struct {
+            fn inspect(ptr: *anyopaque, info: *BoardInfo) void {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                return @call(.always_inline, ptr_info.Pointer.child.inspect, .{ self, info });
+            }
+        };
+
+        return .{
+            .ptr = pointer,
+            .inspectFn = generic.inspect,
+        };
+    }
+
+    pub fn inspect(controller: *BoardInfoController, info: *BoardInfo) void {
+        controller.inspectFn(controller.ptr, info);
     }
 };

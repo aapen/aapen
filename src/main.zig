@@ -25,7 +25,7 @@ var os = Freestanding{
 
 const Self = @This();
 
-pub var board = bsp.mailbox.BoardInfo{};
+pub var board = bsp.common.BoardInfo{};
 pub var kernel_heap = heap{};
 pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
@@ -56,8 +56,6 @@ fn kernelInit() void {
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     uart_valid = true;
 
-    board.read() catch {};
-
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
 
     frame_buffer.setResolution(1024, 768, 8) catch |err| {
@@ -67,6 +65,10 @@ fn kernelInit() void {
 
     frame_buffer_console.init();
     console_valid = true;
+
+    board.init(&os.page_allocator);
+    bsp.info_controller.inspect(&board);
+    // board.read() catch {};
 
     // bsp.timer.schedule(200000, printOneDot, &.{});
 
@@ -142,8 +144,9 @@ fn supplyUsize(name: []const u8, sz: usize) void {
 }
 
 fn diagnostics() !void {
-    try board.arm_memory_range.print();
-    try board.videocore_memory_range.print();
+    for (board.memory.regions.items) |r| {
+        try r.print();
+    }
     try kernel_heap.range.print();
     try frame_buffer.range.print();
 
