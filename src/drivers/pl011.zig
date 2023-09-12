@@ -4,6 +4,9 @@ const bsp = @import("../bsp.zig");
 const InterruptController = bsp.common.InterruptController;
 const IrqId = bsp.common.IrqId;
 
+const bcm_gpio = @import("bcm_gpio.zig");
+const BroadcomGpio = bcm_gpio.BroadcomGpio;
+
 const ring = @import("../ring.zig");
 
 const arch = @import("../architecture.zig");
@@ -195,18 +198,18 @@ pub const Pl011Uart = struct {
     read_buffer: ring.Ring(u8) = undefined,
     write_buffer: ring.Ring(u8) = undefined,
 
-    pub fn init(self: *Pl011Uart, base: u64, interrupt_controller: *bsp.common.InterruptController) void {
+    pub fn init(self: *Pl011Uart, base: u64, interrupt_controller: *bsp.common.InterruptController, gpio: *BroadcomGpio) void {
         self.registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
         self.read_buffer = ring.Ring(u8).init();
         self.write_buffer = ring.Ring(u8).init();
 
         // Configure GPIO pins for serial I/O
-        bsp.io.pins.Pin14.enable();
-        bsp.io.pins.Pin15.enable();
+        gpio.pins[14].enable();
+        gpio.pins[15].enable();
 
-        bsp.io.pins.Pin14.selectFunction(bsp.io.GPIOFunctionSelect.alt0);
-        bsp.io.pins.Pin15.selectFunction(bsp.io.GPIOFunctionSelect.alt0);
+        gpio.pins[14].selectFunction(.alt0);
+        gpio.pins[15].selectFunction(.alt0);
 
         // Turn UART off while initializing
         self.registers.control.uart_enable = .disable;

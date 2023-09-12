@@ -257,7 +257,6 @@ In the devicetree, nodes with the GIC as interrupt-parent have
 |    1 | ??             | 33                                 |      33 |
 |    2 | IRQ type flags | ~IRG_TYPE_LEVEL_HIGH~                |       4 |
 
-
 * Open Questions
 ** Device drivers
 *** Should a device driver know about its devicetree node?
@@ -389,8 +388,8 @@ Approach:
 ** DONE Migrate the peripheral clock driver to use the new mailbox
 ** DONE Migrate board info to use the new bcm mailbox driver.
 ** DONE Migrate the video driver to use the new bcm mailbox driver
-** TODO Migrate GPIO to the new driver model
-** TODO Delete ~bsp/raspi3/io.zig~
-** TODO Delete ~bsp/raspi3/memory.zig~
-** TODO Delete ~bsp/raspi3/memory_map.zig~
+** DONE Migrate GPIO to the new driver model
+** DONE Delete ~bsp/raspi3/io.zig~
+** DONE Delete ~bsp/raspi3/memory.zig~
+** DONE Delete ~bsp/raspi3/memory_map.zig~
 ** TODO Make main.zig look at the model in the devicetree, use that to pick the right module, then invoke it.
