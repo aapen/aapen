@@ -2,6 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
+const frame_buffer = @import("../frame_buffer.zig");
+const FrameBuffer = frame_buffer.FrameBuffer;
+
 const memory = @import("../memory.zig");
 const Regions = memory.Regions;
 const Region = memory.Region;
@@ -258,6 +261,48 @@ pub const USB = struct {
 
     pub fn powerOff(usb: *USB) void {
         usb.powerFn(usb.ptr, false);
+    }
+};
+
+// ----------------------------------------------------------------------
+// Generic Video Controller
+// ----------------------------------------------------------------------
+pub const VideoController = struct {
+    ptr: *anyopaque,
+    allocFrameBufferFn: *const fn (ptr: *anyopaque, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, palette: []const u32) void,
+
+    pub fn init(
+        pointer: anytype,
+    ) VideoController {
+        const Ptr = @TypeOf(pointer);
+        const ptr_info = @typeInfo(Ptr);
+
+        assert(@typeInfo(Ptr) == .Pointer);
+        assert(@typeInfo(Ptr).Pointer.size == .One);
+        assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
+
+        const generic = struct {
+            fn allocFrameBuffer(ptr: *anyopaque, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, palette: []const u32) void {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                return @call(.always_inline, ptr_info.Pointer.child.allocFrameBuffer, .{
+                    self,
+                    fb,
+                    xres,
+                    yres,
+                    depth,
+                    palette,
+                });
+            }
+        };
+
+        return .{
+            .ptr = pointer,
+            .allocFrameBufferFn = generic.allocFrameBuffer,
+        };
+    }
+
+    pub fn allocFrameBuffer(video_controller: *VideoController, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, palette: []const u32) void {
+        video_controller.allocFrameBufferFn(video_controller.ptr, fb, xres, yres, depth, palette);
     }
 };
 
