@@ -41,8 +41,17 @@ F
 
 ( Testing... )
 
-: even? ( n -- s ) 2 % if "no" else "yes" endif s. cr ;
-: countdown hello hello hello while dup 0 > do dup p 1 - done "all done" s. cr ;
+: assert ( b desc -- if b is not true )
+  "Assert: " s.
+  s.
+  if
+    " OK"
+  else
+    " ** FAILED! **"
+  endif
+  s. cr
+  clear
+;
 
 : power-of-two ( n -- n ) 
   1 swap 
@@ -55,12 +64,60 @@ F
 ;
 
 create by-hand (test word)
-  opcode-push-u64 ,
-  999 ,
-  'p ,
-  opcode-stop ,
+  '*push-u64 ,
+  900 ,
+  '*push-u64 ,
+  99 ,
+  '+ ,
+  *stop ,
 finish
 
 'by-hand secondary!
 
+: test-math 
+  103      103  = "Equality" assert
+  1 1 +      2  = "Simple addition" assert
+  99 1 -    98  = "Subtraction" assert
+  3 7 *     21  = "Multipication" assert
+;
 
+: test-if
+  77 1    if 100 endif         100 = "If true" assert
+  77 0    if 100 endif          77 = "If false" assert
+  1       if 100 else 99 endif 100 = "If else true" assert
+  0       if 100 else 99 endif  99 = "If else false" assert
+; 
+
+: test-loop
+   0 power-of-two     1 = "While loop, zero iterations" assert
+  16 power-of-two 65536 = "While loop, 16 iterations" assert
+;
+
+: test-strings
+  "hello world" "hello world" s= "String comparison" assert
+;
+
+: test-create
+  by-hand 999 = "Word created with create/finish" assert
+;
+
+: test-constants
+  word 8 = "Word size constant" assert
+;
+
+: test-structures
+  'hello header.name + @ "hello" s= "Struct offsets" assert
+;
+
+: test-all
+  "Self test..." s. cr
+  test-if
+  test-math
+  test-loop
+  test-strings
+  test-constants
+  test-structures
+  test-create
+;
+
+test-all

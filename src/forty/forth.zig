@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArenaAllocator = std.heap.ArenaAllocator;
 
 const bsp = @import("../bsp.zig");
 const fbcons = @import("../fbcons.zig");
@@ -27,48 +28,60 @@ const InputStack = stack.Stack(*Readline);
 const DataStack = stack.Stack(u64);
 const ReturnStack = stack.Stack(u64);
 
-pub const WordFunction = *const fn (forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64;
+pub const WordFunction = *const fn (forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64;
 
 const parser = @import("parser.zig");
 const ForthTokenIterator = parser.ForthTokenIterator;
 
-// These are the special op codes that we may see when interpreting a
-// secondary.
-pub const OpCode = enum(u64) {
-    stop = 0,
-    push_u64 = 1,
-    push_string = 3,
-    jump_if_not = 5,
-    jump = 7,
-};
-
 pub const Forth = struct {
     allocator: Allocator = undefined,
+    arena_allocator: ArenaAllocator = undefined,
+    temp_allocator: Allocator = undefined,
     console: *fbcons.FrameBufferConsole = undefined,
     stack: DataStack = undefined,
     rstack: ReturnStack = undefined,
     input: InputStack = undefined,
-    buffer: [20000]u8 = undefined,
+    buffer: []u8 = undefined,
     ibase: u64 = 10,
     obase: u64 = 10,
     debug: u64 = 0,
     memory: Memory = undefined,
     lastWord: ?*Header = null,
     newWord: ?*Header = null,
+    pushU64: *Header = undefined,
+    pushString: *Header = undefined,
+    jump: *Header = undefined,
+    jumpIfNot: *Header = undefined,
     compiling: u64 = 0,
-    string_buffer: string.LineBuffer = undefined,
+    //string_buffer: string.LineBuffer = undefined,
     line_buffer: string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
 
     pub fn init(this: *Forth, a: Allocator, c: *fbcons.FrameBufferConsole) !void {
         this.allocator = a;
+        this.arena_allocator = ArenaAllocator.init(a);
+        this.temp_allocator = this.arena_allocator.allocator();
         this.console = c;
         this.stack = DataStack.init(&a);
         this.rstack = ReturnStack.init(&a);
-        this.buffer = undefined;
-        this.memory = Memory.init(&this.buffer, this.buffer.len);
-        try core.defineCore(this);
+        this.buffer = try a.alloc(u8, 20000); // TBD make size a parameter.
+        this.memory = Memory.init(this.buffer.ptr, this.buffer.len);
+
+        this.pushString = try this.definePrimitive("*push-string", &wordPushString, 0);
+        this.pushU64 = try this.definePrimitive("*push-u64", &wordPushU64, 0);
+        this.jump = try this.definePrimitive("*jump", &wordJump, 0);
+        this.jumpIfNot = try this.definePrimitive("*jump-if-not", &wordJumpIfNot, 0);
+
+        try this.defineConstant("inner", @intFromPtr(&inner));
+        try this.defineConstant("*stop", 0);
+        try this.defineConstant("forth", @intFromPtr(this));
+        try this.defineConstant("this", @intFromPtr(this));
+        try this.defineStruct("forth", Forth);
+        try this.defineStruct("header", Header);
+        try this.defineStruct("memory", Memory);
+
         try compiler.defineCompiler(this);
+        try core.defineCore(this);
         try interop.defineInterop(this);
 
         initBuffer.init(init_f);
@@ -94,6 +107,15 @@ pub const Forth = struct {
         this.compiling = 0;
     }
 
+    // Begin a new interactive transaction. We take the opportunity to
+    // reset the arena allocator that is used for temp string operations.
+    pub fn begin(this: *Forth) void {
+        _ = this.arena_allocator.reset(.{ .retain_with_limit = 2048 });
+    }
+
+    // Eng an interactive transation.
+    pub fn end(_: *Forth) void {}
+
     // Read and return the next word in the input.
     pub fn readWord(this: *Forth) ForthError![]const u8 {
         return this.words.next() orelse return ForthError.WordReadError;
@@ -104,7 +126,7 @@ pub const Forth = struct {
         return this.words.peek();
     }
 
-    // Find a word in the dictionary, ignores words that are under construction.
+    // Find a word in the dictionary by name, ignores words that are under construction.
     pub fn findWord(this: *Forth, name: []const u8) ?*Header {
         //print("Finding word: {s}\n", .{name});
         var e = this.lastWord;
@@ -116,6 +138,18 @@ pub const Forth = struct {
             e = entry.previous;
         }
         return null;
+    }
+
+    // Returns true if wp points at a word in the dictionary, ignores words that are under construction.
+    pub fn isWordP(this: *Forth, wp: u64) bool {
+        var e = this.lastWord;
+        while (e) |entry| {
+            if (wp == @intFromPtr(entry)) {
+                return true;
+            }
+            e = entry.previous;
+        }
+        return false;
     }
 
     // Define a primitive (i.e. a word backed up by a zig function).
@@ -135,10 +169,10 @@ pub const Forth = struct {
     // Define a constant with a single u64 value. What we really end up with
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
-        _ = try this.startWord(name, "A constant", &compiler.inner, 0);
-        this.addOpCode(OpCode.push_u64);
+        _ = try this.startWord(name, "A constant", &inner, 0);
+        this.addCall(this.pushU64);
         this.addNumber(v);
-        this.addOpCode(OpCode.stop);
+        this.addStop();
         try this.completeWord();
     }
 
@@ -231,6 +265,61 @@ pub const Forth = struct {
         this.compiling = 0;
     }
 
+    // This is the inner interpreter, effectively the word
+    // that runs all the secondary words.
+    pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!i64 {
+        var body = header.bodyOfType([*]u64);
+        var i: usize = 0;
+        while (true) {
+            try forth.trace("{:4}: {x:4}: ", .{ i, body[i] });
+            if (body[i] == 0) {
+                break;
+            }
+            const p: *Header = @ptrFromInt(body[i]);
+            try forth.trace("Call: {x} {s}\n", .{ body[i], p.name });
+            const delta = try p.func(forth, body, i, p);
+            var new_i: i64 = @intCast(i);
+            new_i = new_i + 1 + delta;
+            i = @intCast(new_i);
+        }
+        return 0;
+    }
+
+    // This is the word that pushes ints onto the stack.
+    fn wordPushU64(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
+        try this.stack.push(body[i + 1]);
+        return 1;
+    }
+
+    // This is the word that pushes strings onto the stack.
+    fn wordPushString(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
+        try this.trace("Push string len: {}\n", .{body[i + 1]});
+        const data_size = body[i + 1];
+        var p_string: [*]u8 = @ptrCast(body + i + 2);
+        try this.stack.push(@intFromPtr(p_string));
+        return @intCast(data_size + 1);
+    }
+
+    // This is the word that does an unconditional jump, used in loops and if's etc.
+    fn wordJump(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
+        const delta: i64 = @as(i64, @bitCast(body[i + 1]));
+        try this.trace("Jump -> {}\n", .{i});
+        return delta - 1;
+    }
+
+    // This is the word that does a conditional jump, used in loops and if's etc.
+    fn wordJumpIfNot(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
+        var c: u64 = try this.stack.pop();
+        const delta: i64 = @as(i64, @bitCast(body[i + 1]));
+        try this.trace("JumpIfNot cond: {} target {} ", .{ c, delta });
+
+        if (c == 0) {
+            return delta - 1;
+        } else {
+            return 1;
+        }
+    }
+
     // Convert the token into a value, either a string, a number
     // or a reference to a word and either compile it or execute
     // directly. Note that this is the place where we ignore comments.
@@ -257,7 +346,7 @@ pub const Forth = struct {
         const i: u64 = @intFromPtr(header);
 
         if (this.compiling != 0) {
-            this.addOpCode(OpCode.push_u64);
+            this.addCall(this.pushU64);
             this.addNumber(i);
         } else {
             try this.stack.push(i);
@@ -268,7 +357,7 @@ pub const Forth = struct {
     // If we are not compiling, just push the numnber onto the stack.
     fn evalNumber(this: *Forth, i: u64) !void {
         if (this.compiling != 0) {
-            this.addOpCode(OpCode.push_u64);
+            this.addCall(this.pushU64);
             this.addNumber(i);
         } else {
             try this.stack.push(i);
@@ -281,11 +370,12 @@ pub const Forth = struct {
     fn evalString(this: *Forth, token: []const u8) !void {
         const s = try parser.parseString(token);
         if (this.compiling != 0) {
-            this.addOpCode(OpCode.push_string);
+            this.addCall(this.pushString);
             this.addString(s);
         } else {
-            string.copyTo(&this.string_buffer, s);
-            try this.stack.push(@intFromPtr(&this.string_buffer));
+            //string.copyTo(&this.string_buffer, s);
+            const allocated_s = try this.temp_allocator.dupeZ(u8, s);
+            try this.stack.push(@intFromPtr(allocated_s.ptr));
         }
     }
 
@@ -311,9 +401,9 @@ pub const Forth = struct {
         _ = this.memory.addBytes(@constCast(@ptrCast(&v)), @alignOf(u64), @sizeOf(u64));
     }
 
-    // Copy an opcode into memory.
-    pub inline fn addOpCode(this: *Forth, oc: OpCode) void {
-        this.addNumber(@intFromEnum(oc));
+    // Add a stop command to memory.
+    pub inline fn addStop(this: *Forth) void {
+        this.addNumber(0);
     }
 
     // Copy a call to a word into memory.
@@ -376,6 +466,7 @@ pub const Forth = struct {
     pub fn repl(this: *Forth) !void {
         // outer loop, one line at a time.
         while (true) {
+            this.begin();
             if (this.readline()) |line_len| {
                 this.words = ForthTokenIterator.init(this.line_buffer[0..line_len]);
 
@@ -398,6 +489,7 @@ pub const Forth = struct {
                     else => return err,
                 }
             }
+            this.end();
         }
     }
 };

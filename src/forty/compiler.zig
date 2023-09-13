@@ -17,7 +17,6 @@ const memory = @import("memory.zig");
 
 const forth_module = @import("forth.zig");
 const Forth = forth_module.Forth;
-const OpCode = forth_module.OpCode;
 const WordFunction = forth_module.WordFunction;
 
 const formatText = std.fmt.formatText;
@@ -48,63 +47,8 @@ inline fn wordOffset(a: anytype, b: anytype) i64 {
     return @divTrunc(diff, sizeOf(i64, u64));
 }
 
-// This is the inner interpreter, effectively the word
-// that runs all the secondary words.
-pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
-    var body = header.bodyOfType([*]u64);
-    var i: usize = 0;
-    while (true) {
-        try forth.trace("{:4}: {x:4}: ", .{ i, body[i] });
-        switch (body[i]) {
-            @intFromEnum(OpCode.stop) => break,
-
-            @intFromEnum(OpCode.push_u64) => {
-                try forth.trace("Push {x}\n", .{body[i + 1]});
-                try forth.stack.push(body[i + 1]);
-                i += 2;
-            },
-
-            @intFromEnum(OpCode.push_string) => {
-                try forth.trace("Push string len: {}\n", .{body[i + 1]});
-                const data_size = body[i + 1];
-                var p_string: [*]u8 = @ptrCast(body + i + 2);
-                try forth.stack.push(@intFromPtr(p_string));
-                i += data_size + 2;
-            },
-
-            @intFromEnum(OpCode.jump) => {
-                const delta: i64 = @as(i64, @bitCast(body[i + 1]));
-                i = addDelta(i, delta);
-                try forth.trace("Jump -> {}\n", .{i});
-            },
-
-            @intFromEnum(OpCode.jump_if_not) => {
-                var c: u64 = try forth.stack.pop();
-                const delta: i64 = @as(i64, @bitCast(body[i + 1]));
-                try forth.trace("JumpIfNot cond: {} target {} ", .{ c, delta });
-
-                if (c == 0) {
-                    i = addDelta(i, delta);
-                    try forth.trace(" -> {}\n", .{i});
-                } else {
-                    i = i + 2;
-                    try forth.trace(" {}\n", .{i});
-                }
-            },
-
-            else => {
-                const p: *Header = @ptrFromInt(body[i]);
-                try forth.trace("Header: {x}\n", .{body[i]});
-                const delta = try p.func(forth, body, i, p);
-                i = i + 1 + delta;
-            },
-        }
-    }
-    return 0;
-}
-
 // Push the address of the word body onto the stack.
-pub fn pushBodyAddress(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!u64 {
+pub fn pushBodyAddress(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!i64 {
     var body = header.bodyOfType([*]u8);
     try forth.stack.push(@intFromPtr(body));
     return 0;
@@ -113,7 +57,7 @@ pub fn pushBodyAddress(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthE
 // Create a new dictionary definition.
 // Resulting dictionary entry just pushes its body address onto the stack.
 // This is a fairly low level word.
-pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertNotCompiling();
 
     var name = try forth.readWord();
@@ -132,25 +76,22 @@ pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 
 // Finish out a word created with create.
 // Currently just fills in the length of the word.
-pub fn wordFinish(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordFinish(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     forth.complete();
     return 0;
 }
 
 // Allocate a word in the dictionary and set its value to TOS.
 // Should be between a create/finish pair, but this is not checked.
-pub fn wordComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const value = try forth.stack.pop();
-    //const addr = forth.allocate(@alignOf(u64), @sizeOf(u64));
-    //const wordAddr: [*]u64 = @alignCast(@ptrCast(addr));
-    //wordAddr[0] = value;
     forth.addNumber(value);
     return 0;
 }
 
 // Allocate a word in the dictionary and set its value to the string point to by TOS.
 // Should be between a create/finish pair, but this is not checked.
-pub fn wordSComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordSComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const value = try forth.stack.pop();
     const s: [*:0]const u8 = @ptrFromInt(value);
     forth.addString(s[0..string.strlen(s)]);
@@ -159,28 +100,28 @@ pub fn wordSComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 
 // Allocate n words in the dictionary. Should be in the middle
 // of a create/finish pair, but this is not checked.
-pub fn wordAllot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordAllot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const n = try forth.stack.pop();
     _ = forth.allocate(@alignOf(u64), n * @sizeOf(u64));
     return 0;
 }
 
 // Temporarily turn compile mode off.
-pub fn wordLBrace(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordLBrace(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
     forth.compiling = 0;
     return 0;
 }
 
 // Turn compile mode back on.
-pub fn wordRBrace(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordRBrace(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertNotCompiling();
     forth.compiling = 1;
     return 0;
 }
 
 // Begin the definition of a new secondary word.
-pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertNotCompiling();
 
     var name = try forth.readWord();
@@ -193,119 +134,71 @@ pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
             desc = try parser.parseComment(t);
         }
     }
-    _ = try forth.startWord(name, desc, &inner, 0);
+    _ = try forth.startWord(name, desc, Forth.inner, 0);
     return 0;
 }
 
 // Complete a secondary word.
-pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
-    forth.addOpCode(OpCode.stop);
+    forth.addStop();
     try forth.completeWord();
     return 0;
 }
 
-pub fn wordDesc(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordDesc(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var name = forth.words.next() orelse return ForthError.WordReadError;
     var header = forth.findWord(name) orelse return ForthError.NotFound;
     try forth.print("{s}: {s}\n", .{ header.name, header.desc });
     return 0;
 }
 
-pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var name = forth.words.next() orelse return ForthError.WordReadError;
     var header = forth.findWord(name) orelse return ForthError.NotFound;
 
     // Dump info about a primitive word.
 
-    if (header.func != &inner) {
+    if (header.func != &Forth.inner) {
         const h: u64 = @intFromPtr(header);
         const p: u64 = @intFromPtr(header.func);
-        try forth.print("Word name: {s} header: {x} func: {x}\n", .{ header.name, h, p });
+        try forth.print("Word name: {s} len: {} header: {x} func: {x}\n", .{ header.name, header.len, h, p });
+
         try forth.print("Description: {s}\n", .{header.desc});
         return 0;
     }
 
     // Word is a secondary, dump the meta info first.
 
-    var body = header.bodyOfType([*]u64);
+    //    var body = header.bodyOfType([*]u64);
     var len = header.bodyLen();
     try forth.print("Word name: {s} len: {} immed: {}\n", .{ header.name, len, header.immediate });
-    try forth.print("Description: {s}\n", .{header.desc});
+    try forth.print("Description: {s}\n\n", .{header.desc});
 
     // Followed by a byte dump.
 
-    try forth.print("Bytes:", .{});
-    var cbody = header.bodyOfType([*]u8);
-    for (0..len) |j| {
-        const ch = cbody[j];
-        const vis_ch = if ((ch >= ' ') and (ch <= '~')) ch else '.';
-        if ((j % 8) == 0) {
-            try forth.print("\n{:4}: ", .{j / 8});
+    var ubody = header.bodyOfType([*]u64);
+
+    const wLen = len / @sizeOf(u64);
+    for (0..wLen) |j| {
+        const chars = string.u64ToChars(ubody[j]);
+        try forth.print("{:4} {x:16}   {s}", .{ j, ubody[j], chars });
+        if (forth.isWordP(ubody[j])) {
+            const hp: *Header = @ptrFromInt(ubody[j]);
+            try forth.print("      {s}", .{hp.name});
         }
-        try forth.print("{c}[{x:2}]  ", .{ vis_ch, ch });
+        try forth.print("\n", .{});
     }
-    try forth.print("\n\nInstructions:\n", .{});
 
-    // Followed by a dump of the instructions.
-    var i: usize = 0;
-    while (true) {
-        try forth.print("{:4} {x:8}: ", .{ i, body[i] });
-        switch (body[i]) {
-            @intFromEnum(OpCode.stop) => {
-                try forth.print("Stop\n", .{});
-                break;
-            },
-
-            @intFromEnum(OpCode.push_u64) => {
-                try forth.print("PushU64 {x:2}\n", .{body[i + 1]});
-                i += 2;
-            },
-
-            @intFromEnum(OpCode.push_string) => {
-                const data_size = body[i + 1];
-                var p_string: [*:0]u8 = @ptrCast(body + i + 2);
-                try forth.print("PushString [{}] {s}\n", .{ data_size, p_string });
-                i += data_size + 2;
-            },
-
-            @intFromEnum(OpCode.jump) => {
-                const offset: i64 = @bitCast(body[i + 1]);
-                try forth.print("Jump [{}]\n", .{offset});
-                i = i + 2;
-            },
-
-            @intFromEnum(OpCode.jump_if_not) => {
-                const offset: i64 = @bitCast(body[i + 1]);
-                try forth.print("JumpIfNot [{}]\n", .{offset});
-                i = i + 2;
-            },
-            else => {
-                try forth.print("Call\n", .{});
-                i = i + 1;
-            },
-        }
-    }
-    return 0;
-}
-
-// n --  : Jump relative
-pub fn wordJump(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    try forth.assertCompiling();
-    var s_offset = forth.words.next() orelse return ForthError.WordReadError;
-    try forth.print("Offset: {s}\n", .{s_offset});
-    var i = try parser.parseNumber(s_offset, forth.ibase);
-    forth.addOpCode(OpCode.jump);
-    forth.addNumber(i);
     return 0;
 }
 
 // Compiler word, generate the code for an if.
 // Emits an jump_if_not instruction with an invalid target address
 // and pushes the address of the target address onto the rstack.
-pub fn wordIf(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordIf(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
-    forth.addOpCode(OpCode.jump_if_not);
+    forth.addCall(forth.jumpIfNot);
     try forth.rstack.push(@intFromPtr(forth.current()));
     forth.addNumber(InvalidOffset);
     return 0;
@@ -315,7 +208,7 @@ pub fn wordIf(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 // Generates an unconditional jump instruction with an invalid target address,
 // pops the address (pushed by if) off of the rstack and plugs in the address
 // just after the jump instruction.
-pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
 
     const if_jump_p = try forth.rstack.pop();
@@ -324,7 +217,7 @@ pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     // Add the else jump instruction and push its address onto the stack
     // to be filled in later by endif.
 
-    forth.addOpCode(OpCode.jump);
+    forth.addCall(forth.jump);
     try forth.rstack.push(@intFromPtr(forth.current()));
     forth.addNumber(InvalidOffset);
 
@@ -340,7 +233,7 @@ pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 // Compiler word, generate the end code for if/endif or if/else/endif.
 // Pops the address off of the rstack and plugs in the offset to the
 // current instuction.
-pub fn wordEndif(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordEndif(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
 
     const if_jump_p = try forth.rstack.pop();
@@ -357,7 +250,7 @@ pub fn wordEndif(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 // Compiler word, generate the code for the begining of a while loop.
 // Just pushes the current address onto the rstack.
 // Structure of a while loop is:  while <cond> do <body> done
-pub fn wordWhile(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordWhile(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
     try forth.rstack.push(@intFromPtr(forth.current()));
     return 0;
@@ -366,9 +259,9 @@ pub fn wordWhile(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 // Compiler word, generate the code for do, which ends the condition part of a while loop.
 // Emits an jump_if_not instruction with an invalid target address (done will fill it in)
 // and pushes the address of the target address onto the rstack.
-pub fn wordDo(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordDo(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
-    forth.addOpCode(OpCode.jump_if_not);
+    forth.addCall(forth.jumpIfNot);
     try forth.rstack.push(@intFromPtr(forth.current()));
     forth.addNumber(InvalidOffset);
     return 0;
@@ -379,7 +272,7 @@ pub fn wordDo(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 // beginning of the loop off of the rstack.
 // Generates the jump back to the beginning of the loop and
 // fills in the jump-if-not target with the post loop address.
-pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
 
     const do_p: [*]u64 = @ptrFromInt(try forth.rstack.pop());
@@ -387,7 +280,7 @@ pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
 
     // Add jump to begining of the loop instruction.
 
-    forth.addOpCode(OpCode.jump);
+    forth.addCall(forth.jump);
     var current_p = memory.alignByType(forth.current(), u64);
     const while_offset = wordOffset(while_p, current_p) + 1;
     forth.addNumber(@bitCast(while_offset));
@@ -400,121 +293,27 @@ pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
     return 0;
 }
 
-pub fn wordToRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordToRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const v = try forth.stack.pop();
     try forth.rstack.push(v);
     return 0;
 }
 
-pub fn wordFromRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordFromRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const v = try forth.rstack.pop();
     try forth.stack.push(v);
     return 0;
 }
 
 /// --
-pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
+pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     for (forth.rstack.items()) |item| {
         try forth.print("{}\n", .{item});
     }
     return 0;
 }
 
-inline fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!u64 {
-    const f = try forth.stack.pop();
-    const func: FuncT = @ptrFromInt(f);
-
-    const FuncType = @typeInfo(FuncT).Pointer.child;
-    const info = @typeInfo(FuncType).Fn;
-    const nParams: u64 = info.params.len;
-
-    var result: u64 = 0;
-    switch(nParams) {
-        0 => result = func(),
-        1 => {
-            const arg1 = try forth.stack.pop();
-            result = func(arg1);
-        },
-        2 => {
-            const arg1 = try forth.stack.pop();
-            const arg2 = try forth.stack.pop();
-            result = func(arg1, arg2);
-        },
-        3 => {
-            const arg1 = try forth.stack.pop();
-            const arg2 = try forth.stack.pop();
-            const arg3 = try forth.stack.pop();
-            result = func(arg1, arg2, arg3);
-        },
-        else => {
-            try forth.print("Can't handle a function of {} args {x}\n", .{nParams, func});
-            return ForthError.BadOperation;
-        },
-    }
-
-
-    if (pushResult) {
-        try forth.stack.push(result);
-    }
-    return 0;
-}
-
-/// fAddr -- : Call a no args function, no return value.
-pub fn wordInvoke(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
-    return invokeF(*const fn() u64, false, forth, body, offset, header);
-}
-
-
-/// fAddr -- result : Call a no args function, push return value.
-pub fn wordInvokeR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
-    return invokeF(*const fn() u64, true, forth, body, offset, header);
-}
-
-/// u64 fAddr -- result : Call a 1 argument function, push return value.
-pub fn wordInvokeUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
-    return invokeF(*const fn(a: u64) u64, true, forth, body, offset, header);
-}
-
-/// u64 u64 fAddr -- result : Call a 2 argument function, push return value.
-pub fn wordInvokeUUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
-    return invokeF(*const fn(a: u64, b: u64) u64, true, forth, body, offset, header);
-}
-
-
-/// u64 u64 u64 fAddr -- result : Call a 3 argument function, push return value.
-pub fn wordInvokeUUUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!u64 {
-    return invokeF(*const fn(a: u64, b: u64, c: u64) u64, true, forth, body, offset, header);
-}
-
-fn double_u64(a: u64) u64 {
-    return a*2;
-}
-
-
-fn add_u64(a: u64, b: u64) u64 {
-    return a+b;
-}
-
-
-fn add_3(a: u64, b: u64, c: u64) u64 {
-    return a+b+c;
-}
-
 pub fn defineCompiler(forth: *Forth) !void {
-    // Expose internal values to forty.
-
-    try forth.defineConstant("forth", @intFromPtr(forth));
-    try forth.defineStruct("forth", Forth);
-    try forth.defineStruct("header", Header);
-    try forth.defineStruct("memory", memory.Memory);
-
-    try forth.defineConstant("inner", @intFromPtr(&inner));
-    try forth.defineConstant("opcode-stop", @intFromEnum(OpCode.stop));
-    try forth.defineConstant("opcode-push-u64", @intFromEnum(OpCode.push_u64));
-    try forth.defineConstant("opcode-push-string", @intFromEnum(OpCode.push_string));
-    try forth.defineConstant("opcode-jump", @intFromEnum(OpCode.jump));
-    try forth.defineConstant("opcode-jump-if-not", @intFromEnum(OpCode.jump_if_not));
-
     // Return stack.
 
     _ = try forth.definePrimitiveDesc("->rstack", " n -- : Push the TOS onto the rstack", &wordToRStack, 0);
@@ -537,7 +336,6 @@ pub fn defineCompiler(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("if", " -- :If statement", &wordIf, 1);
     _ = try forth.definePrimitiveDesc("else", " -- :Part of if/else/endif", &wordElse, 1);
     _ = try forth.definePrimitiveDesc("endif", " -- :Part of if/else/endif", &wordEndif, 1);
-    _ = try forth.definePrimitiveDesc("$jump", " -- :Compile in a jump instruction", &wordJump, 1);
 
     _ = try forth.definePrimitiveDesc("while", " -- :Compile the head of a while loop.", &wordWhile, 1);
     _ = try forth.definePrimitiveDesc("do", " -- :Compile the condition part of a while loop.", &wordDo, 1);

@@ -10,6 +10,7 @@ pub fn newline(ch: u8) bool {
     return ch == '\r' or ch == '\n';
 }
 
+// Return true if the two (possibly zero terminated) slices are equal.
 pub fn same(a: []const u8, b: []const u8) bool {
     const alen = chIndex(0, a) catch a.len;
     const blen = chIndex(0, b) catch b.len;
@@ -21,6 +22,23 @@ pub fn same(a: []const u8, b: []const u8) bool {
     }
 
     return std.mem.eql(u8, a[0..alen], b[0..blen]);
+}
+
+// Return true if the two zero terminated strings are equal.
+pub fn streql(a: [*:0]const u8, b: [*:0]const u8) bool {
+    const alen = strlen(a);
+    const blen = strlen(b);
+
+    if (alen != blen) {
+        return false;
+    }
+
+    for (0..alen) |i| {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 pub fn strlen(s: [*:0]const u8) usize {
@@ -74,6 +92,18 @@ pub fn asSlice(s: [*]u8) []u8 {
 
 pub fn clear(s: [:0]u8) void {
     @memset(s, 0);
+}
+
+pub fn u64ToChars(i: u64) [8]u8 {
+    var result: [8]u8 = undefined;
+
+    var j = i;
+    for (0..8) |iChar| {
+        const ch: u8 = @truncate(j);
+        result[iChar] = if ((ch >= ' ') and (ch <= '~')) ch else '.';
+        j = j >> 8;
+    }
+    return result;
 }
 
 test "duplicating a slice" {
