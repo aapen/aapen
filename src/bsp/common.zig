@@ -2,6 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
+const arch = @import("../architecture.zig");
+
 const frame_buffer = @import("../frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
 
@@ -15,6 +17,7 @@ const Region = memory.Region;
 
 pub const IrqId = struct { u2, u5 };
 pub const IrqHandlerFn = *const fn (irq_id: IrqId, context: ?*anyopaque) void;
+pub const IrqThunk = *const fn (context: *const arch.cpu.exceptions.ExceptionContext) void;
 
 pub const InterruptController = struct {
     ptr: *anyopaque,

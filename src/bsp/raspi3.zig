@@ -39,6 +39,7 @@ pub fn init() !void {
 
     local_interrupt_controller.init(peripheral_base + 0xb200);
     bsp.interrupt_controller = local_interrupt_controller.controller();
+    bsp.irq_thunk = irqHandleThunk;
 
     timer.init(peripheral_base + 0x3000, &bsp.interrupt_controller);
     bsp.timer = timer.timers[1].timer();

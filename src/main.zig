@@ -44,16 +44,12 @@ fn kernelInit() void {
 
     devicetree.init();
 
-    // TODO: Choose which BSP to instantiate based on a boot time value
-    raspi3.init() catch {
-        // We can try to emit an error, but there's no guarantee the
-        // UART is even going to work.
+    bsp.detect.detectAndInit(devicetree.root_node) catch {
         bsp.serial.puts("Early init error. Cannot proceed.");
-        return;
     };
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
-    arch.cpu.exceptions.init(&raspi3.irqHandleThunk);
+    arch.cpu.exceptions.init(bsp.irq_thunk);
 
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     uart_valid = true;
@@ -146,19 +142,6 @@ fn diagnostics() !void {
     }
     try kernel_heap.range.print();
     try fb.range.print();
-
-    try printClockRate(.uart);
-    try printClockRate(.core);
-    try printClockRate(.arm);
-}
-
-fn printClockRate(clock_type: raspi3.bcm_peripheral_clocks.ClockId) !void {
-    var min_rate = raspi3.peripheral_clock_controller.clockRateMin(clock_type);
-    var max_rate = raspi3.peripheral_clock_controller.clockRateMax(clock_type);
-    var current = raspi3.peripheral_clock_controller.clockRateCurrent(clock_type);
-
-    var clock_mhz = current / 1_000_000;
-    kprint("{s:>14} clock: current {} MHz (min: {}, max {})\n", .{ @tagName(clock_type), clock_mhz, min_rate / 1_000_000, max_rate / 1_000_000 });
 }
 
 export fn _soft_reset() noreturn {

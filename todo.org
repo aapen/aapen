@@ -392,4 +392,4 @@ Approach:
 ** DONE Delete ~bsp/raspi3/io.zig~
 ** DONE Delete ~bsp/raspi3/memory.zig~
 ** DONE Delete ~bsp/raspi3/memory_map.zig~
-** TODO Make main.zig look at the model in the devicetree, use that to pick the right module, then invoke it.
+** DONE Make main.zig look at the model in the devicetree, use that to pick the right module, then invoke it.
