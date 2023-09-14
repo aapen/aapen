@@ -372,3 +372,38 @@ pub const BoardInfoController = struct {
         controller.inspectFn(controller.ptr, info);
     }
 };
+
+// ------------------------------------------------------------------------------
+// Generic DMA driver
+// ------------------------------------------------------------------------------
+pub const DMAController = struct {
+    ptr: *anyopaque,
+    initiateFn: *const fn (controller: *anyopaque, source: u64, destination: u64, len: usize, stride: usize) void,
+
+    pub fn init(
+        pointer: anytype,
+    ) DMAController {
+        const Ptr = @TypeOf(pointer);
+        const ptr_info = @typeInfo(Ptr);
+
+        assert(@typeInfo(Ptr) == .Pointer);
+        assert(@typeInfo(Ptr).Pointer.size == .One);
+        assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
+
+        const generic = struct {
+            fn initiate(ptr: *anyopaque, source: u64, dest: u64, len: usize, stride: usize) void {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                @call(.always_inline, ptr_info.Pointer.child.initiate, .{ self, source, dest, len, stride });
+            }
+        };
+
+        return .{
+            .ptr = pointer,
+            .initiateFn = generic.initiate,
+        };
+    }
+
+    pub fn initiate(controller: *DMAController, source: u64, dest: u64, len: usize, stride: usize) void {
+        controller.initiateFn(controller.ptr, source, dest, len, stride);
+    }
+};
