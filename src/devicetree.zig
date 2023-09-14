@@ -684,48 +684,60 @@ test "locate node and property by path" {
 
     var devtree_root = fdt.root_node;
 
-    try expectEqualStrings("", devtree_root.name);
+    try expectEqualStrings("/", devtree_root.name);
 
     var found = try fdt.nodeLookupByPath("/thermal-zones/cpu-thermal/cooling-maps");
-    try expect(found != null);
+    _ = found;
 
     var soc = try fdt.nodeLookupByPath("/soc");
-    try expectEqual(soc.?.property("no-such-thing"), null);
+    try expectEqual(soc.property("no-such-thing"), null);
 
-    const soc_compat = soc.?.property("compatible");
+    const soc_compat = soc.property("compatible");
     const expected_compat_value = [_]u8{ 's', 'i', 'm', 'p', 'l', 'e', '-', 'b', 'u', 's', 0 };
-    try expectEqualStrings(&expected_compat_value, soc_compat.?.valueAs(u8));
+    const actual_compat_value = try soc_compat.?.valueAs(u8);
+    defer std.testing.allocator.free(actual_compat_value);
+
+    try expectEqualStrings(&expected_compat_value, actual_compat_value);
     try expectEqualStrings(expected_compat_value[0 .. expected_compat_value.len - 1], soc_compat.?.valueAsString());
 
-    const soc_phandle = soc.?.property("phandle");
+    const soc_phandle = soc.property("phandle");
     const expected_phandle_value = [_]u32{0x3e};
 
-    const phandle_value = soc_phandle.?.valueAs(u32);
+    const phandle_value = try soc_phandle.?.valueAs(u32);
+    defer std.testing.allocator.free(phandle_value);
+
     for (phandle_value, 0..) |actual_word, i| {
-        try expectEqual(expected_phandle_value[i], nativeByteOrder(actual_word));
+        try expectEqual(expected_phandle_value[i], actual_word);
     }
 
     const expected_dma_ranges = [_]u32{ 0xc0000000, 0x00, 0x3f000000, 0x7e000000, 0x3f000000, 0x1000000 };
-    const soc_dma_ranges = soc.?.property("dma-ranges");
-    const dma_ranges_value = soc_dma_ranges.?.valueAs(u32);
+    const soc_dma_ranges = soc.property("dma-ranges");
+    const dma_ranges_value = try soc_dma_ranges.?.valueAs(u32);
+    defer std.testing.allocator.free(dma_ranges_value);
+
     for (dma_ranges_value, 0..) |actual_word, i| {
-        try expectEqual(expected_dma_ranges[i], nativeByteOrder(actual_word));
+        try expectEqual(expected_dma_ranges[i], actual_word);
     }
 
     const reserved_memory = try fdt.nodeLookupByPath("/reserved-memory");
-    const reserved_memory_ranges = reserved_memory.?.property("ranges");
+    const reserved_memory_ranges = reserved_memory.property("ranges");
     try expect(reserved_memory_ranges != null);
-    try expect(reserved_memory_ranges.?.valueAs(u32).len == 0);
+
+    const reserved_memory_ranges_value = try reserved_memory_ranges.?.valueAs(u32);
+    defer std.testing.allocator.free(reserved_memory_ranges_value);
+
+    try expect(reserved_memory_ranges_value.len == 0);
 
     const timer = try fdt.nodeLookupByPath("/timer");
-    const timer_interrupt_parent = timer.?.property("interrupt-parent");
-    var timer_interrupt_parent_value = timer_interrupt_parent.?.valueAs(u32)[0];
-    timer_interrupt_parent_value = nativeByteOrder(timer_interrupt_parent_value);
-    const t_i_p = try fdt.nodeLookupByPHandle(timer_interrupt_parent_value);
+    const timer_interrupt_parent = timer.property("interrupt-parent");
+    var timer_interrupt_parent_value = try timer_interrupt_parent.?.valueAs(u32);
+    defer std.testing.allocator.free(timer_interrupt_parent_value);
+
+    const t_i_p = try fdt.nodeLookupByPHandle(timer_interrupt_parent_value[0]);
     try expectEqualStrings(t_i_p.?.name, "local_intc@40000000");
 
     const serial = try fdt.nodeLookupByPath("/soc/serial@7e201000");
-    const serial_compat = serial.?.property("compatible");
+    const serial_compat = serial.property("compatible");
     var serial_compat_values = std.mem.splitAny(u8, serial_compat.?.valueAsString(), &[_]u8{0});
     try expectEqualStrings("arm,pl011", serial_compat_values.next().?);
     try expectEqualStrings("arm,primecell", serial_compat_values.next().?);
@@ -744,9 +756,6 @@ test "locate nodes via aliases" {
     defer fdt.deinit();
 
     const serial0_by_path = try fdt.nodeLookupByPath("/soc/serial@7e215040");
-    try expect(serial0_by_path != null);
-
     const serial0 = try fdt.nodeLookupByPath("serial0");
-    try expect(serial0 != null);
     try expect(serial0 == serial0_by_path);
 }
