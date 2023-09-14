@@ -7,10 +7,17 @@ ZIG_BUILD_ARGS  = -Doptimize=Debug -freference-trace
 
 QEMU_EXEC       = qemu-system-aarch64 -semihosting
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
+#QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2711-rpi-400.dtb
 QEMU_DEBUG_ARGS = -s -S -serial pty
 QEMU_NOBUG_ARGS = -serial stdio
 
+OS              = $(shell uname -o)
+ifeq ($(OS), Darwin)
+GDB_EXEC        = aarch64-elf-gdb
+else
 GDB_EXEC        = aarch64-unknown-linux-gnu-gdb
+endif
+
 GDB_ARGS        = -s lib
 GDB_TARGET_HOST = --ex "target remote :1234"
 GDB_TARGET_DEV  = --ex "target extended-remote :3333"

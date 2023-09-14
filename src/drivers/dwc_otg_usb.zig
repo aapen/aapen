@@ -1,8 +1,20 @@
 const std = @import("std");
 const root = @import("root");
-const mailbox = @import("mailbox.zig");
-const memory_map = @import("memory_map.zig");
-const UniformRegister = @import("../mmio_register.zig").UniformRegister;
+const kprint = root.kprint;
+
+const bsp = @import("../bsp.zig");
+
+const memory = @import("../memory.zig");
+const AddressTranslation = memory.AddressTranslation;
+const AddressTranslations = memory.AddressTranslations;
+const toChild = memory.toChild;
+const toParent = memory.toParent;
+
+const bcm_power = @import("bcm_power.zig");
+const PowerController = bcm_power.PowerController;
+
+const mailbox = @import("bcm_mailbox.zig");
+const memory_map = @import("../bsp/raspi3/memory_map.zig");
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
@@ -75,16 +87,16 @@ const core_registers: *volatile CoreRegisters = @ptrFromInt(usb_dwc_base);
 pub fn init() void {
     // Attempt to power up the USB
     if (mailbox.powerOn(.usb_hcd)) |usb_power_result| {
-        root.kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
+        kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     } else |err| {
-        root.kprint("\n{s:>20}: {any}\n", .{ "USB power error", err });
+        kprint("\n{s:>20}: {any}\n", .{ "USB power error", err });
     }
 
     var id = core_registers.gsnpsid;
-    root.kprint("{s:>20}: {x}.{x:0>3}\n", .{ "USB Core release", (id >> 12 & 0xf), id & 0xfff });
+    kprint("{s:>20}: {x}.{x:0>3}\n", .{ "USB Core release", (id >> 12 & 0xf), id & 0xfff });
 
     var state = mailbox.isPowered(.usb_hcd) catch .failed;
-    root.kprint("{s:>14} power: {s}\n", .{ @tagName(.usb_hcd), @tagName(state) });
+    kprint("{s:>14} power: {s}\n", .{ @tagName(.usb_hcd), @tagName(state) });
 }
 
 // snpsid = readl(&regs->gsnpsid);
@@ -95,3 +107,39 @@ pub fn init() void {
 //     (snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_3xx) {
 // 	dev_info(dev, "SNPSID invalid (not DWC2 OTG device): %08x\n",
 // 		 snpsid);
+
+pub const UsbController = struct {
+    core_registers: *volatile CoreRegisters = undefined,
+    intc: *bsp.common.InterruptController = undefined,
+    translations: *AddressTranslations = undefined,
+    power_controller: *PowerController = undefined,
+
+    pub fn init(
+        self: *UsbController,
+        base: u64,
+        interrupt_controller: *bsp.common.InterruptController,
+        translations: *AddressTranslations,
+        power_controller: *PowerController,
+    ) void {
+        self.core_registers = @ptrFromInt(base);
+        self.intc = interrupt_controller;
+        self.translations = translations;
+        self.power_controller = power_controller;
+    }
+
+    pub fn usb(self: *UsbController) bsp.common.USB {
+        return bsp.common.USB.init(self);
+    }
+
+    pub fn power(self: *UsbController, on_off: bool) void {
+        if (on_off) {
+            if (self.power_controller.powerOn(.usb_hcd)) |usb_power_result| {
+                kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
+            } else |err| {
+                kprint("\n{s:>20}: {any}\n", .{ "USB power error", err });
+            }
+        } else {
+            kprint("Oops... not supported.\n", .{});
+        }
+    }
+};

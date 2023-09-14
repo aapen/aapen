@@ -3,13 +3,15 @@ const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
 const qemu = @import("qemu.zig");
 const heap = @import("heap.zig");
+const frame_buffer = @import("frame_buffer.zig");
 const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 const debug = @import("debug.zig");
+const raspi3 = @import("bsp/raspi3.zig");
+
 pub const devicetree = @import("devicetree.zig");
-const drivers = @import("drivers.zig");
 
 pub const kinfo = debug.kinfo;
 pub const kwarn = debug.kwarn;
@@ -24,12 +26,10 @@ var os = Freestanding{
     .page_allocator = undefined,
 };
 
-const Self = @This();
-
-pub var board = bsp.mailbox.BoardInfo{};
+pub var board = bsp.common.BoardInfo{};
 pub var kernel_heap = heap{};
-pub var frame_buffer: bsp.video.FrameBuffer = bsp.video.FrameBuffer{};
-pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .frame_buffer = &frame_buffer };
+pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
+pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
 pub var interpreter: Forth = Forth{};
 
 pub var uart_valid = false;
@@ -39,32 +39,35 @@ fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
 
-    kernel_heap.init();
+    kernel_heap.init(raspi3.device_start - 1);
     os.page_allocator = kernel_heap.allocator();
 
     devicetree.init();
 
-    // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
-    arch.cpu.exceptionInit();
-    arch.cpu.irqInit();
-
-    // State: one core, interrupts, MMU, heap Allocator, no display, no serial
-    // bsp.timer.timerInit();
-    bsp.io.uartInit();
-    uart_valid = true;
-
-    drivers.init(&os.page_allocator);
-
-    board.read() catch {};
-
-    // State: one core, interrupts, MMU, heap Allocator, no display, serial
-
-    frame_buffer.setResolution(1024, 768, 8) catch |err| {
-        bsp.io.uart_writer.print("Error initializing framebuffer: {any}\n", .{err}) catch {};
+    // TODO: Choose which BSP to instantiate based on a boot time value
+    raspi3.init() catch {
+        // We can try to emit an error, but there's no guarantee the
+        // UART is even going to work.
+        bsp.serial.puts("Early init error. Cannot proceed.");
+        return;
     };
 
-    frame_buffer_console.init();
+    // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
+    arch.cpu.exceptions.init(&raspi3.irqHandleThunk);
+
+    // State: one core, interrupts, MMU, heap Allocator, no display, no serial
+    uart_valid = true;
+
+    // State: one core, interrupts, MMU, heap Allocator, no display, serial
+    bsp.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
+
+    frame_buffer_console.init(&bsp.serial);
     console_valid = true;
+
+    board.init(&os.page_allocator);
+    bsp.info_controller.inspect(&board);
+
+    // bsp.timer.schedule(200000, printOneDot, &.{});
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
@@ -83,7 +86,7 @@ fn kernelInit() void {
         bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    bsp.usb.init();
+    bsp.usb.powerOn();
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});
@@ -94,8 +97,8 @@ fn kernelInit() void {
     };
 
     supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
-    supplyAddress("fb", @intFromPtr(frame_buffer.base));
-    supplyUsize("fbsize", frame_buffer.buffer_size);
+    supplyAddress("fb", @intFromPtr(fb.base));
+    supplyUsize("fbsize", fb.buffer_size);
 
     arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
     arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -108,6 +111,11 @@ fn kernelInit() void {
     qemu.exit(0);
 
     unreachable;
+}
+
+fn printOneDot(_: ?*anyopaque) u32 {
+    frame_buffer_console.emit('%');
+    return 300000;
 }
 
 fn repl() callconv(.C) noreturn {
@@ -133,21 +141,24 @@ fn supplyUsize(name: []const u8, sz: usize) void {
 }
 
 fn diagnostics() !void {
-    try board.arm_memory_range.print();
-    try board.videocore_memory_range.print();
+    for (board.memory.regions.items) |r| {
+        try r.print();
+    }
     try kernel_heap.range.print();
-    try frame_buffer.range.print();
+    try fb.range.print();
 
     try printClockRate(.uart);
-    try printClockRate(.emmc);
     try printClockRate(.core);
     try printClockRate(.arm);
 }
 
-fn printClockRate(clock_type: bsp.mailbox.Clock) !void {
-    var rate = bsp.mailbox.getClockRate(clock_type) catch 0;
-    var clock_mhz = rate / 1_000_000;
-    kprint("{s:>14} clock: {} MHz \n", .{ @tagName(clock_type), clock_mhz });
+fn printClockRate(clock_type: raspi3.bcm_peripheral_clocks.ClockId) !void {
+    var min_rate = raspi3.peripheral_clock_controller.clockRateMin(clock_type);
+    var max_rate = raspi3.peripheral_clock_controller.clockRateMax(clock_type);
+    var current = raspi3.peripheral_clock_controller.clockRateCurrent(clock_type);
+
+    var clock_mhz = current / 1_000_000;
+    kprint("{s:>14} clock: current {} MHz (min: {}, max {})\n", .{ @tagName(clock_type), clock_mhz, min_rate / 1_000_000, max_rate / 1_000_000 });
 }
 
 export fn _soft_reset() noreturn {

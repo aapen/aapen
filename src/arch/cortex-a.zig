@@ -1,10 +1,9 @@
-pub const registers = @import("aarch64/registers.zig");
-pub const time = @import("aarch64/time.zig");
+pub const barriers = @import("aarch64/barriers.zig");
+pub const cache = @import("aarch64/cache.zig");
 pub const exceptions = @import("aarch64/exceptions.zig");
 pub const mmu = @import("aarch64/mmu.zig");
-pub const memory = @import("aarch64/memory.zig");
-
-pub const cache_line_size = memory.cache_line_size;
+pub const registers = @import("aarch64/registers.zig");
+pub const time = @import("aarch64/time.zig");
 
 /// Note: this performs an "exception return" on the CPU. It will
 /// change the stack point and exception level, meaning that this does
@@ -18,62 +17,6 @@ pub inline fn wfi() void {
     asm volatile ("wfi");
 }
 
-pub const BarrierType = enum {
-    SY,
-    ST,
-    LD,
-    ISH,
-    ISHST,
-    ISHLD,
-    NSH,
-    NSHST,
-    NSHLD,
-    OSH,
-    OSHHT,
-    OSHLD,
-};
-
-pub fn dmb(comptime ty: BarrierType) void {
-    asm volatile ("dmb " ++ @tagName(ty));
-}
-
-pub fn dsb(comptime ty: BarrierType) void {
-    asm volatile ("dsb " ++ @tagName(ty));
-}
-
-pub fn isb() void {
-    asm volatile ("isb sy");
-}
-
-pub inline fn barrierMemory() void {
-    dmb(BarrierType.SY);
-}
-
-// Memory barrier for device read
-pub inline fn barrierMemoryDevice() void {
-    dsb(BarrierType.SY);
-}
-
-pub inline fn barrierInstruction() void {
-    isb();
-}
-
-pub fn irqInit() void {
-    irqEnable();
-}
-
-pub fn irqDisable() void {
-    asm volatile ("msr daifset, #2");
-}
-
-pub fn irqEnable() void {
-    asm volatile ("msr daifclr, #2");
-}
-
 pub fn mmuInit() void {
     mmu.init();
-}
-
-pub fn exceptionInit() void {
-    exceptions.init();
 }

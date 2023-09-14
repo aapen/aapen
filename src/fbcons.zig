@@ -1,6 +1,12 @@
 const std = @import("std");
+
+const frame_buffer = @import("frame_buffer.zig");
+const FrameBuffer = frame_buffer.FrameBuffer;
+
 const bsp = @import("bsp.zig");
+const Serial = bsp.common.Serial;
 const Allocator = std.mem.Allocator;
+
 const Readline = @import("readline.zig");
 
 /// display console
@@ -10,17 +16,19 @@ pub const FrameBufferConsole = struct {
     ypos: u64 = 0,
     width: u64 = undefined,
     height: u64 = undefined,
-    frame_buffer: *bsp.video.FrameBuffer = undefined,
+    fb: *FrameBuffer = undefined,
+    serial: *Serial = undefined,
 
-    pub fn init(self: *FrameBufferConsole) void {
+    pub fn init(self: *FrameBufferConsole, serial: *Serial) void {
+        self.serial = serial;
         self.xpos = 0;
         self.ypos = 0;
-        self.width = @truncate(self.frame_buffer.xres / 8);
-        self.height = @truncate(self.frame_buffer.yres / 16);
+        self.width = @truncate(self.fb.xres / 8);
+        self.height = @truncate(self.fb.yres / 16);
     }
 
     pub fn clear(self: *FrameBufferConsole) void {
-        self.frame_buffer.clear();
+        self.fb.clear();
         self.xpos = 0;
         self.ypos = 0;
     }
@@ -61,23 +69,23 @@ pub const FrameBufferConsole = struct {
         y *= 16;
 
         for (0..8) |i| {
-            self.frame_buffer.drawPixel(x + i, y, color);
+            self.fb.drawPixel(x + i, y, color);
         }
     }
 
     fn eraseCursor(self: *FrameBufferConsole) void {
-        self.underbar(bsp.video.FrameBuffer.COLOR_BACKGROUND);
+        self.underbar(FrameBuffer.COLOR_BACKGROUND);
     }
 
     fn drawCursor(self: *FrameBufferConsole) void {
-        self.underbar(bsp.video.FrameBuffer.COLOR_FOREGROUND);
+        self.underbar(FrameBuffer.COLOR_FOREGROUND);
     }
 
     fn backspace(self: *FrameBufferConsole) void {
         if (self.xpos > 0) {
             self.xpos -= 1;
         }
-        self.frame_buffer.eraseChar(self.xpos * 8, self.ypos * 16);
+        self.fb.eraseChar(self.xpos * 8, self.ypos * 16);
     }
 
     fn isPrintable(ch: u8) bool {
@@ -94,7 +102,7 @@ pub const FrameBufferConsole = struct {
             '\t' => self.nextTab(),
             '\n' => self.nextLine(),
             else => if (isPrintable(ch)) {
-                self.frame_buffer.drawChar(self.xpos * 8, self.ypos * 16, ch);
+                self.fb.drawChar(self.xpos * 8, self.ypos * 16, ch);
                 self.next();
             },
         }
@@ -157,19 +165,17 @@ pub const FrameBufferConsole = struct {
     }
 
     pub fn getc(self: *FrameBufferConsole) u8 {
-        _ = self;
-        var ch = bsp.io.receive();
+        var ch = self.serial.getc();
         return if (ch == '\r') '\n' else ch;
     }
 
     pub fn putc(self: *FrameBufferConsole, ch: u8) void {
-        bsp.io.send(ch);
+        self.serial.putc(ch);
         self.emit(ch);
     }
 
     pub fn char_available(self: *FrameBufferConsole) bool {
-        _ = self;
-        return bsp.io.byte_available();
+        return self.serial.hasc();
     }
 };
 
