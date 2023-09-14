@@ -73,7 +73,8 @@ ARM docs on the semihosting interface: https://github.com/ARM-software/abi-aa/bl
 Stage 1 on the SD card
 Stage 2 (the chainboot) downloaded automatically by minipush.rb
 Stage 3 (the real kernel) loaded via gdb (connected via openocd)
-** HOLD Use Python and the Python binding to libfdt to parse .dtb files?                                        :HOLD:
+** CANCELED Use Python and the Python binding to libfdt to parse .dtb files?                                :CANCELED:
+Not needed, we're parsing the real thing.
 * Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware*
@@ -87,7 +88,7 @@ Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 - [X] Set up translation tables
 - [X] Reserve the device pages, mark them in TT properly
 - [X] Mark kernel text pages as RX, kernel data (GOT, stack, BSS) as RW/NX
-** TODO Perform "Hello world" on RPi4 hardware
+** DONE Perform "Hello world" on RPi4 hardware
 * Milestone: Interact
 ** DONE Read from UART on RPi3 under QEMU
 Read and echo characters.
@@ -101,36 +102,12 @@ This will actually be the host machine's keyboard in a terminal, proxied to the 
 ** DONE Read from UART on RPi3
 - [X] Read and echo characters.
 - [X] Use UART interrupts, don't spinloop
-** TODO Read from UART on RPi4
-** TODO Read from USB keyboard input under QEMU
-** TODO Read from USB on RPi3 hardware
-** TODO Read from USB on RPi4 hardware
 ** DONE Switch to using interrupts instead of polling
 * Milestone: Get Ziggy
 ** DONE Replace C stubs with equivalent Zig
 ** DONE Use Zig cross-compilation instead of crosstools
-* Milestone: Monitor it
-** DONE Read commands from input
-Command line looks like:
-
-~! 00000000 ffffffff~ - write a 32 bit words at the address
-~? 00000000 xx~ - display xx words of memory starting at the address
-
-All other starting characters are ignored.
-
-* Milestone: Show the World
-** TODO Read from USB keyboard on RPi 400
-** DONE Create interface for "mailbox" from CPU to GPU
-** TODO Enable DMA for video blitting
-** DONE Create a "character ROM" for displaying text
-** TODO Initialize video system on RPi 400
-** TODO Clear screen on RPi 400
-** DONE Display a text cursor
-** DONE Write characters to the screen
-** DONE Echo typed characters to the screen
-** DONE Make panics write to the screen
 * Milestone: Set Forth
-** NEXT Read basic words
+** DONE Read basic words
 Stack ops:
 - [X] swap
 - [X] dup
@@ -166,6 +143,38 @@ Memory:
 - [X] !i
 - [X] @i
 
+* Milestone: Monitor it
+** DONE Read commands from input
+Command line looks like:
+
+~! 00000000 ffffffff~ - write a 32 bit words at the address
+~? 00000000 xx~ - display xx words of memory starting at the address
+
+All other starting characters are ignored.
+
+* Milestone: Show the World
+** DONE Create interface for "mailbox" from CPU to GPU
+** DONE Create a "character ROM" for displaying text
+** DONE Display a text cursor
+** DONE Write characters to the screen
+** DONE Echo typed characters to the screen
+** DONE Make panics write to the screen
+* Milestone: Up and running on the 4
+** TODO Read from UART on RPi4
+* Milestone: Up and running on the 400
+** TODO Initialize video system on RPi 400
+** TODO Clear screen on RPi 400
+* Milestone: USB keyboard working
+** TODO Write DWC OTG USB driver for RPi3
+** TODO Read from USB keyboard input under QEMU
+** TODO Read from USB on RPi3 hardware
+** TODO Write PCI driver for RPi4
+** TODO Write xHCI driver for RPi4 
+** TODO Read from USB on RPi4 hardware
+** TODO Read from USB keyboard on RPi 400
+* Milestone: Better video performance
+** TODO Enable DMA for video blitting
+** TODO Scroll the window instead of wrapping
 * Other references
 ** Understanding the ARM ecosystem
 https://www.youtube.com/watch?v=NNol7fRGo2E
@@ -258,31 +267,6 @@ In the devicetree, nodes with the GIC as interrupt-parent have
 |    2 | IRQ type flags | ~IRG_TYPE_LEVEL_HIGH~                |       4 |
 
 * Open Questions
-** Device drivers
-*** Should a device driver know about its devicetree node?
-Yes
-*** Should we be able to initialize a device driver without a devicetree node by filling in it's options?
-Yes, but maybe not right at first.
-*** How does a driver figure out its address translations?
-**** Option: walk the device tree, looking for ranges in each parent node.
-Requires DT navigation, some way to compose address translations.
-Will result in copies of the address translation structs for every driver. E.g., the /soc ranges will have a couple dozen copies.
-Keeps the driver interface simple. An outer loop can walk the DT and initialize drivers for compatible nodes.
-**** [CHOSEN] Option: tell the driver what it's parent bus is
-Must be a common struct type (like ~AddressTranslations~) since Zig is so bad with polymorphism.
-Driver code does not need to understand DT navigation.
-This is a tell-don't-ask approach. If there are other parent-node concerns we may get a lot of parameters.
-**** Option: tell the driver what it's parent device driver is
-Requires a common set of operations for driver-to-driver collaboration.
-*** How does a device driver get instantiated?
-**** Option: outer loop walks the tree and starts all compatible devices
-**** Option: parent device instantiates child devices (follow-the-tree)
-**** [CHOSEN] Option: parent device optionally uses a common routine to follow-the-tree, or starts devices "by hand"
-*** New approach to starting device drivers
-**** Common routine for tree-following devices
-**** Common ~DeviceOptions~ struct to supply ~AddressTranslations~ and other injected parameters
-**** We start by locating the ~/soc~ node and having it initialize it's child devices.
-
 * Closed Questions
 ** DONE Should we use device tree? If so, how?
    Answer: Not yet. We need to keep things as simple as possible while we get up and running. Rather than doing a bunch of things dynamically at boot based on hardware discovery, we want to get a single model working first. That means we accept that some things (such as MMIO address) will be built in at compile time.
@@ -317,7 +301,7 @@ Answer: Best to stick with the default at boot.
 Additional note: Devicetree is always written in big-endian format so we have to be careful to convert all types larger than u8 to native byte order.
 ** DONE Speaking of which, what _does_ it use as a default?
    Answer: Big endian
-** How does the RPi 400 keyboard work? Is it just USB connected internally?
+** DONE How does the RPi 400 keyboard work? Is it just USB connected internally?
    Answer: According to https://www.40percent.club/2020/11/raspberry-pi-400-keyboard-controller.html, the Pi 400 keyboard goes through a custom microcontroller (Holtek HT45R0072) which then goes into one of the 4 USB ports on the builtin controller. So it presents as a USB HID.
 ** DONE Trying to initialize the framebuffer on real hardware.
 It's not working the same way as in the emulator.
