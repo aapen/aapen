@@ -1,4 +1,6 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const root = @import("root");
 
 const devicetree = @import("../devicetree.zig");
@@ -49,7 +51,7 @@ pub fn identify(root_node: *Node) !SupportedBoard {
     return Error.NotSupported;
 }
 
-pub fn detectAndInit(root_node: *Node) !void {
+pub fn detectAndInit(root_node: *Node, allocator: *Allocator) !void {
     const board = try identify(root_node);
 
     switch (board) {
@@ -58,7 +60,7 @@ pub fn detectAndInit(root_node: *Node) !void {
         .RaspberryPi_3b_plus,
         => {
             const raspi3 = @import("raspi3.zig");
-            try raspi3.init();
+            try raspi3.init(allocator);
         },
         .RaspberryPi_4,
         .RaspberryPi_4b,

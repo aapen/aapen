@@ -18,11 +18,15 @@ const AddressTranslations = memory.AddressTranslations;
 
 pub const SimpleBus = struct {
     bus_ranges: AddressTranslations = undefined,
+    dma_ranges: AddressTranslations = undefined,
 
     pub fn deviceTreeParse(self: *SimpleBus, node_name: []const u8) !void {
         const devicenode = try devicetree.global_devicetree.nodeLookupByPath(node_name);
 
         var bus_ranges = try devicenode.translations("ranges");
         self.bus_ranges = bus_ranges;
+
+        var dma_ranges = try devicenode.translations("dma-ranges");
+        self.dma_ranges = dma_ranges;
     }
 };

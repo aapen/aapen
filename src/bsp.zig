@@ -3,6 +3,7 @@ const std = @import("std");
 pub const detect = @import("bsp/detect.zig");
 pub const common = @import("bsp/common.zig");
 
+pub var dma_controller: common.DMAController = undefined;
 pub var irq_thunk: common.IrqThunk = undefined;
 pub var info_controller: common.BoardInfoController = undefined;
 pub var interrupt_controller: common.InterruptController = undefined;

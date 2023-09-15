@@ -376,9 +376,28 @@ pub const BoardInfoController = struct {
 // ------------------------------------------------------------------------------
 // Generic DMA driver
 // ------------------------------------------------------------------------------
+pub const DMARequest = struct {
+    source: u64 = 0,
+    destination: u64 = 0,
+    length: usize = 0,
+    stride: usize = 0,
+};
+
+pub const DMAChannel = struct {
+    context: usize,
+};
+
+pub const DMAError = error{
+    NoAvailableChannel,
+    OutOfMemory,
+};
+
 pub const DMAController = struct {
     ptr: *anyopaque,
-    initiateFn: *const fn (controller: *anyopaque, source: u64, destination: u64, len: usize, stride: usize) void,
+    initiateFn: *const fn (controller: *anyopaque, channel: DMAChannel, request: *DMARequest) DMAError!void,
+    reserveChannelFn: *const fn (controller: *anyopaque) DMAError!DMAChannel,
+    releaseChannelFn: *const fn (controller: *anyopaque, channel: DMAChannel) void,
+    channelWaitClearFn: *const fn (controller: *anyopaque, channel: DMAChannel) void,
 
     pub fn init(
         pointer: anytype,
@@ -391,19 +410,49 @@ pub const DMAController = struct {
         assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
 
         const generic = struct {
-            fn initiate(ptr: *anyopaque, source: u64, dest: u64, len: usize, stride: usize) void {
+            fn initiate(ptr: *anyopaque, channel: DMAChannel, req: *DMARequest) DMAError!void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.initiate, .{ self, source, dest, len, stride });
+                return @call(.always_inline, ptr_info.Pointer.child.initiate, .{ self, channel, req });
+            }
+
+            fn reserveChannel(ptr: *anyopaque) DMAError!DMAChannel {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                return @call(.always_inline, ptr_info.Pointer.child.reserveChannel, .{self});
+            }
+
+            fn releaseChannel(ptr: *anyopaque, channel: DMAChannel) void {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                @call(.always_inline, ptr_info.Pointer.child.releaseChannel, .{ self, channel });
+            }
+
+            fn channelWaitClear(ptr: *anyopaque, channel: DMAChannel) void {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                @call(.always_inline, ptr_info.Pointer.child.channelWaitClear, .{ self, channel });
             }
         };
 
         return .{
             .ptr = pointer,
             .initiateFn = generic.initiate,
+            .reserveChannelFn = generic.reserveChannel,
+            .releaseChannelFn = generic.releaseChannel,
+            .channelWaitClearFn = generic.channelWaitClear,
         };
     }
 
-    pub fn initiate(controller: *DMAController, source: u64, dest: u64, len: usize, stride: usize) void {
-        controller.initiateFn(controller.ptr, source, dest, len, stride);
+    pub fn initiate(controller: *DMAController, channel: DMAChannel, request: *DMARequest) !void {
+        return controller.initiateFn(controller.ptr, channel, request);
+    }
+
+    pub fn reserveChannel(controller: *DMAController) !DMAChannel {
+        return controller.reserveChannelFn(controller.ptr);
+    }
+
+    pub fn releaseChannel(controller: *DMAController, channel: DMAChannel) void {
+        return controller.releaseChannelFn(controller.ptr, channel);
+    }
+
+    pub fn channelWaitClear(controller: *DMAController, channel: DMAChannel) void {
+        controller.channelWaitClearFn(controller.ptr, channel);
     }
 };

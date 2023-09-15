@@ -44,7 +44,7 @@ fn kernelInit() void {
 
     devicetree.init();
 
-    bsp.detect.detectAndInit(devicetree.root_node) catch {
+    bsp.detect.detectAndInit(devicetree.root_node, &os.page_allocator) catch {
         bsp.serial.puts("Early init error. Cannot proceed.");
     };
 
