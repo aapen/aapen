@@ -62,11 +62,12 @@ pub const FrameBufferConsole = struct {
     }
 
     fn nextScreen(self: *FrameBufferConsole) void {
-        self.fb.blit(0, 16, self.fb.xres, self.fb.yres - 16, 0, 0);
-        self.fb.clearRegion(0, self.fb.yres - 16, self.fb.xres, 16);
+        // self.fb.blit(0, 16, self.fb.xres, self.fb.yres - 16, 0, 0);
+        // self.fb.clearRegion(0, self.fb.yres - 16, self.fb.xres, 16);
 
         self.xpos = 0;
-        self.ypos = self.height - 1;
+        self.ypos = 0;
+        // self.ypos = self.height - 1;
     }
 
     fn underbar(self: *FrameBufferConsole, color: u8) void {
