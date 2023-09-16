@@ -257,7 +257,7 @@ pub const Pl011Uart = struct {
     }
 
     pub fn getc(self: *Pl011Uart) u8 {
-        return self.readByteBlocking();
+        return self.receive();
     }
 
     pub fn putc(self: *Pl011Uart, ch: u8) void {
