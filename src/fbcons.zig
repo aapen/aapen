@@ -1,9 +1,14 @@
 const std = @import("std");
+const root = @import("root");
+const debug = root.debug;
+const kinfo = root.kinfo;
+const kprint = root.kprint;
 
 const frame_buffer = @import("frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
 
 const bsp = @import("bsp.zig");
+const VideoController = bsp.common.VideoController;
 const Serial = bsp.common.Serial;
 const Allocator = std.mem.Allocator;
 
@@ -57,9 +62,11 @@ pub const FrameBufferConsole = struct {
     }
 
     fn nextScreen(self: *FrameBufferConsole) void {
+        self.fb.blit(0, 16, self.fb.xres, self.fb.yres - 16, 0, 0);
+        self.fb.clearRegion(0, self.fb.yres - 16, self.fb.xres, 16);
+
         self.xpos = 0;
-        self.ypos = 0;
-        // TODO: clear screen?
+        self.ypos = self.height - 1;
     }
 
     fn underbar(self: *FrameBufferConsole, color: u8) void {

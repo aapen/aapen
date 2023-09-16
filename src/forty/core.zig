@@ -58,8 +58,9 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     single_dma_request.stride = try forth.stack.pop();
     const channel = bsp.dma_controller.reserveChannel() catch return ForthError.BadOperation;
     bsp.dma_controller.initiate(channel, &single_dma_request) catch return ForthError.BadOperation;
-    bsp.dma_controller.channelWaitClear(channel);
+    var success = bsp.dma_controller.awaitChannel(channel);
     bsp.dma_controller.releaseChannel(channel);
+    try forth.stack.push(if (success) 1 else 0);
     return 0;
 }
 

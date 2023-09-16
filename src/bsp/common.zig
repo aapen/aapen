@@ -384,7 +384,7 @@ pub const DMARequest = struct {
 };
 
 pub const DMAChannel = struct {
-    context: usize,
+    context: *anyopaque,
 };
 
 pub const DMAError = error{
@@ -397,7 +397,7 @@ pub const DMAController = struct {
     initiateFn: *const fn (controller: *anyopaque, channel: DMAChannel, request: *DMARequest) DMAError!void,
     reserveChannelFn: *const fn (controller: *anyopaque) DMAError!DMAChannel,
     releaseChannelFn: *const fn (controller: *anyopaque, channel: DMAChannel) void,
-    channelWaitClearFn: *const fn (controller: *anyopaque, channel: DMAChannel) void,
+    awaitChannelFn: *const fn (controller: *anyopaque, channel: DMAChannel) bool,
 
     pub fn init(
         pointer: anytype,
@@ -425,9 +425,9 @@ pub const DMAController = struct {
                 @call(.always_inline, ptr_info.Pointer.child.releaseChannel, .{ self, channel });
             }
 
-            fn channelWaitClear(ptr: *anyopaque, channel: DMAChannel) void {
+            fn awaitChannel(ptr: *anyopaque, channel: DMAChannel) bool {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.channelWaitClear, .{ self, channel });
+                return @call(.always_inline, ptr_info.Pointer.child.awaitChannel, .{ self, channel });
             }
         };
 
@@ -436,7 +436,7 @@ pub const DMAController = struct {
             .initiateFn = generic.initiate,
             .reserveChannelFn = generic.reserveChannel,
             .releaseChannelFn = generic.releaseChannel,
-            .channelWaitClearFn = generic.channelWaitClear,
+            .awaitChannelFn = generic.awaitChannel,
         };
     }
 
@@ -452,7 +452,7 @@ pub const DMAController = struct {
         return controller.releaseChannelFn(controller.ptr, channel);
     }
 
-    pub fn channelWaitClear(controller: *DMAController, channel: DMAChannel) void {
-        controller.channelWaitClearFn(controller.ptr, channel);
+    pub fn awaitChannel(controller: *DMAController, channel: DMAChannel) bool {
+        return controller.awaitChannelFn(controller.ptr, channel);
     }
 };

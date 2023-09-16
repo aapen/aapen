@@ -4,19 +4,29 @@ const arch = @import("architecture.zig");
 const bsp = @import("bsp.zig");
 //const serial_writer = bsp.serial_writer;
 
+const serial_log_level: u2 = 2;
 const log_level: u2 = 1;
+
+pub inline fn ticks() u64 {
+    return bsp.clock.ticks();
+}
 
 inline fn log_info() bool {
     return log_level > 1;
 }
 
+inline fn serial_log_info() bool {
+    return serial_log_level > 1;
+}
+
 pub fn kinfo(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
-    if (log_info()) {
+    if (serial_log_info()) {
         if (root.uart_valid) {
             bsp.serial_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
             bsp.serial_writer.print(fmt, args) catch {};
         }
-
+    }
+    if (log_info()) {
         if (root.console_valid) {
             root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
             root.frame_buffer_console.print(fmt, args) catch {};
@@ -28,13 +38,18 @@ inline fn log_warnings() bool {
     return log_level > 0;
 }
 
+inline fn serial_log_warnings() bool {
+    return serial_log_level > 0;
+}
+
 pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
-    if (log_warnings()) {
+    if (serial_log_warnings()) {
         if (root.uart_valid) {
             bsp.serial_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
             bsp.serial_writer.print(fmt, args) catch {};
         }
-
+    }
+    if (log_warnings()) {
         if (root.console_valid) {
             root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
             root.frame_buffer_console.print(fmt, args) catch {};

@@ -65,11 +65,11 @@ pub fn init(alloc: *Allocator) !void {
     board_info_controller.init(&mailbox);
     bsp.info_controller = board_info_controller.controller();
 
-    video_controller.init(&mailbox);
-    bsp.video_controller = video_controller.controller();
-
     dma_controller.init(allocator, peripheral_base + 0x7100, &bsp.interrupt_controller, &soc_bus.dma_ranges);
     bsp.dma_controller = dma_controller.dma();
+
+    video_controller.init(&mailbox, &bsp.dma_controller);
+    bsp.video_controller = video_controller.controller();
 
     usb.init(peripheral_base + 0x980000, &bsp.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
     bsp.usb = usb.usb();

@@ -1,5 +1,12 @@
 const std = @import("std");
 const assert = std.debug.assert;
+
+const bsp = @import("bsp.zig");
+const common = bsp.common;
+const DMAController = bsp.common.DMAController;
+const DMAChannel = bsp.common.DMAChannel;
+const DMARequest = bsp.common.DMARequest;
+
 const Region = @import("memory.zig").Region;
 
 const character_rom = @embedFile("data/character_rom.bin");
@@ -16,6 +23,8 @@ pub const default_palette = [_]u32{
 };
 
 pub const FrameBuffer = struct {
+    dma: *DMAController = undefined,
+    dma_channel: ?DMAChannel = undefined,
     base: [*]u8 = undefined,
     buffer_size: usize = undefined,
     pitch: usize = undefined,
@@ -44,6 +53,19 @@ pub const FrameBuffer = struct {
     pub fn clear(self: *FrameBuffer) void {
         for (0..self.buffer_size) |i| {
             self.base[i] = 0;
+        }
+    }
+
+    pub fn clearRegion(self: *FrameBuffer, x: usize, y: usize, w: usize, h: usize) void {
+        var line_stride = self.pitch;
+        var fbidx = x + (y * line_stride);
+        var line_step = line_stride - w;
+        for (0..h) |_| {
+            for (0..w) |_| {
+                self.base[fbidx] = COLOR_BACKGROUND;
+                fbidx += 1;
+            }
+            fbidx += line_step;
         }
     }
 
@@ -80,6 +102,29 @@ pub const FrameBuffer = struct {
             }
             fbidx -= 8;
             fbidx += line_stride;
+        }
+    }
+
+    pub fn blit(fb: *FrameBuffer, src_x: usize, src_y: usize, src_w: usize, src_h: usize, dest_x: usize, dest_y: usize) void {
+        if (fb.dma_channel) |ch| {
+            // TODO: probably ought to clip some of these values to
+            // make sure they're all inside the framebuffer!
+            const fb_base: usize = @intFromPtr(fb.base);
+            const fb_pitch = fb.pitch;
+            const stride_2d = fb.xres - src_w;
+            const xfer_y_len = src_h;
+            const xfer_x_len = src_w;
+
+            const len = if (stride_2d > 0) ((xfer_y_len << 16) + xfer_x_len) else (src_h * fb.xres);
+
+            var req = DMARequest{
+                .source = fb_base + (src_y * fb_pitch) + src_x,
+                .destination = fb_base + (dest_y * fb_pitch) + dest_x,
+                .length = len,
+                .stride = (stride_2d << 16) | stride_2d,
+            };
+            fb.dma.initiate(ch, &req) catch {};
+            _ = fb.dma.awaitChannel(ch);
         }
     }
 };

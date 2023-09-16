@@ -8,9 +8,9 @@ const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
-const debug = @import("debug.zig");
 const raspi3 = @import("bsp/raspi3.zig");
 
+pub const debug = @import("debug.zig");
 pub const devicetree = @import("devicetree.zig");
 
 pub const kinfo = debug.kinfo;

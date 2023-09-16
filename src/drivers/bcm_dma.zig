@@ -16,6 +16,8 @@ const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
 
+extern fn spinDelay(cpu_cycles: u32) void;
+
 pub const BroadcomDMAController = struct {
     const ControlAndStatus = packed struct {
         active: u1 = 0,
@@ -83,7 +85,7 @@ pub const BroadcomDMAController = struct {
     };
 
     const BroadcomDMAControlBlock = extern struct {
-        transfer_information: u32,
+        transfer_information: TransferInformation,
         source_address: u32,
         destination_address: u32,
         transfer_length: u32,
@@ -93,18 +95,27 @@ pub const BroadcomDMAController = struct {
         _reserved_1: u32 = 0,
     };
 
+    const ChannelId = u5;
+
+    const max_channel_id: ChannelId = 14;
+
+    const ChannelContext = struct {
+        id: ChannelId,
+        registers: *volatile ChannelRegisters,
+    };
+
     allocator: *Allocator = undefined,
+    register_base: u64 = undefined,
     dma_translations: *AddressTranslations = undefined,
-    channel_registers: [*]volatile ChannelRegisters = undefined,
     interrupt_status: *volatile u32 = undefined,
     transfer_enabled: *volatile u32 = undefined,
     intc: *InterruptController = undefined,
-    in_use: [16]bool = [_]bool{false} ** 16,
+    in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
 
     pub fn init(self: *BroadcomDMAController, allocator: *Allocator, base: u64, interrupt_controller: *InterruptController, dma_translations: *AddressTranslations) void {
         self.allocator = allocator;
         self.dma_translations = dma_translations;
-        self.channel_registers = @ptrFromInt(base);
+        self.register_base = base;
         self.interrupt_status = @ptrFromInt(base + 0xfe0);
         self.transfer_enabled = @ptrFromInt(base + 0xff0);
         self.intc = interrupt_controller;
@@ -114,57 +125,86 @@ pub const BroadcomDMAController = struct {
         return bsp.common.DMAController.init(self);
     }
 
+    fn channelClaimUnused(self: *BroadcomDMAController) !ChannelId {
+        for (self.in_use, 0..max_channel_id) |b, i| {
+            if (!b) {
+                self.in_use[i] = true;
+                return @as(ChannelId, @intCast(i));
+            }
+        }
+        return bsp.common.DMAError.NoAvailableChannel;
+    }
+
+    fn channelRegisters(self: *BroadcomDMAController, channel_id: ChannelId) *volatile ChannelRegisters {
+        return @ptrFromInt(self.register_base + (0x100 * @as(usize, channel_id)));
+    }
+
+    pub fn reserveChannel(self: *BroadcomDMAController) !DMAChannel {
+        var channel_id = try self.channelClaimUnused();
+        var context = try self.allocator.create(ChannelContext);
+        var channel_registers = self.channelRegisters(channel_id);
+
+        context.* = ChannelContext{
+            .id = channel_id,
+            .registers = channel_registers,
+        };
+
+        self.transfer_enabled.* = @as(u32, 1) << channel_id;
+
+        spinDelay(3);
+
+        // we assert the reset flag, the DMA controller deasserts it
+        // when reset completes
+        channel_registers.control.reset = 1;
+        while (channel_registers.control.reset == 1) {}
+
+        return DMAChannel{ .context = context };
+    }
+
     // TODO: after dma completes, free the control block
     pub fn initiate(self: *BroadcomDMAController, channel: DMAChannel, request: *DMARequest) bsp.common.DMAError!void {
         const control_block = try self.allocator.create(BroadcomDMAControlBlock);
-        const which_registers = channel.context;
+        const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
+        var channel_registers = context.registers;
 
-        self.awaitCompletionSpin(which_registers);
+        const mode_2d: u1 = if (request.stride != 0) 1 else 0;
 
-        control_block.transfer_information = 0;
+        control_block.transfer_information = TransferInformation{
+            .source_width = 1,
+            .source_increment = 1,
+            .destination_width = 1,
+            .destination_increment = 1,
+            .two_d_mode = mode_2d,
+        };
+
         control_block.source_address = @truncate(toChild(self.dma_translations, request.source));
         control_block.destination_address = @truncate(toChild(self.dma_translations, request.destination));
         control_block.transfer_length = @truncate(request.length);
         control_block.stride = @truncate(request.stride);
         control_block.next_control_block = 0;
 
-        self.channel_registers[which_registers].control_block_addr = @truncate(toChild(self.dma_translations, @intFromPtr(control_block)));
-        // self.channel_registers[which_registers].control_block_addr = @truncate(@intFromPtr(control_block));
-
-        self.channel_registers[which_registers].control.active = 1;
-
-        const control = self.channel_registers[which_registers].control;
-        kprint("dma src: {x:0>8}\tdst: {x:0>8}\tlen: {x:0>8}\tstride: {x:0>8}\n", .{ control_block.source_address, control_block.destination_address, control_block.transfer_length, control_block.stride });
-        kprint("dma status: active = {}\tend = {}\terror = {}\n", .{ control.active, control.end, control.dma_error });
+        channel_registers.control_block_addr = @truncate(toChild(self.dma_translations, @intFromPtr(control_block)));
+        channel_registers.control = ControlAndStatus{
+            .active = 1,
+            .priority = 1,
+            .panic_priority = 15,
+            .wait_for_outstanding_writes = 0,
+        };
     }
 
-    inline fn dmaBusy(self: *BroadcomDMAController, channel: usize) bool {
-        return self.channel_registers[channel].control.active == 0x1;
-    }
+    /// blocks until DMA completes. returns true on success, false if
+    /// an error happened
+    pub fn awaitChannel(_: *BroadcomDMAController, channel: DMAChannel) bool {
+        const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
+        const channel_registers = context.registers;
 
-    fn awaitCompletionSpin(self: *BroadcomDMAController, channel: usize) void {
-        while (self.dmaBusy(channel)) {}
-    }
+        while (channel_registers.control.active == 0b1) {}
 
-    pub fn reserveChannel(self: *BroadcomDMAController) !DMAChannel {
-        for (self.in_use, 0..) |b, i| {
-            if (!b) {
-                self.in_use[i] = true;
-                return DMAChannel{ .context = i };
-            }
-        }
-        return bsp.common.DMAError.NoAvailableChannel;
+        return channel_registers.control.dma_error == 0;
     }
 
     pub fn releaseChannel(self: *BroadcomDMAController, channel: DMAChannel) void {
-        const idx = channel.context;
-        self.in_use[idx] = false;
-    }
-
-    pub fn channelWaitClear(self: *BroadcomDMAController, channel: DMAChannel) void {
-        const control = self.channel_registers[channel.context].control;
-        kprint("dma status: active = {}\tend = {}\terror = {}\n", .{ control.active, control.end, control.dma_error });
-
-        self.awaitCompletionSpin(channel.context);
+        const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
+        self.in_use[context.id] = false;
     }
 };
