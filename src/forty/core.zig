@@ -52,6 +52,22 @@ pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
+var single_dma_request: bsp.common.DMARequest = bsp.common.DMARequest{};
+
+/// stride len dest src --
+pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    single_dma_request.source = try forth.stack.pop();
+    single_dma_request.destination = try forth.stack.pop();
+    single_dma_request.length = try forth.stack.pop();
+    single_dma_request.stride = try forth.stack.pop();
+    const channel = bsp.dma_controller.reserveChannel() catch return ForthError.BadOperation;
+    bsp.dma_controller.initiate(channel, &single_dma_request) catch return ForthError.BadOperation;
+    var success = bsp.dma_controller.awaitChannel(channel);
+    bsp.dma_controller.releaseChannel(channel);
+    try forth.stack.push(if (success) 1 else 0);
+    return 0;
+}
+
 /// --
 pub fn wordCr(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     forth.console.emit(0x0a);
@@ -473,6 +489,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, 0);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, 0);
     _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, 0);
+    _ = try forth.definePrimitiveDesc("dma", "stride len dest src -- : Perform a DMA", &wordDma, 0);
 
     // Debug and inspection words.
     _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, 0);
