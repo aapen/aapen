@@ -98,6 +98,7 @@ fn kernelInit() void {
 
     supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
     supplyAddress("fb", @intFromPtr(fb.base));
+    supplyAddress("board", @intFromPtr(&board));
     supplyUsize("fbsize", fb.buffer_size);
 
     arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);

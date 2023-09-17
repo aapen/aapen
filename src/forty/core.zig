@@ -7,17 +7,21 @@ const fbcons = @import("../fbcons.zig");
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
-//const stack = @import("stack.zig");
-
 const string = @import("string.zig");
 const parser = @import("parser.zig");
-const memory = @import("memory.zig");
+//const memory = @import("memory.zig");
+
 
 const forth_module = @import("forth.zig");
 const Forth = forth_module.Forth;
 
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
+
+const os_memory = @import("../memory/region.zig");
+const os_main = @import("../main.zig");
+
+const BoardInfo = bsp.common.BoardInfo;
 
 /// a -- ()
 pub fn wordEmit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
@@ -68,7 +72,7 @@ pub fn wordHello(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
 /// n --
 pub fn wordDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var v: u64 = try forth.stack.pop();
+    var v = try forth.popAs(i64);
     try std.fmt.formatInt(v, @intCast(forth.obase), .lower, .{}, forth.writer());
     return 0;
 }
@@ -253,41 +257,41 @@ pub fn word2Over(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
 /// n n -- n
 pub fn wordAdd(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const a = try forth.stack.pop();
-    const b = try forth.stack.pop();
-    try forth.stack.push(a + b);
+    const a = try forth.popAs(i64);
+    const b = try forth.popAs(i64);
+    try forth.pushAny(b+a);
     return 0;
 }
 
 /// n n -- n
 pub fn wordSub(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const a = try forth.stack.pop();
-    const b = try forth.stack.pop();
-    try forth.stack.push(b - a);
+    const a = try forth.popAs(i64);
+    const b = try forth.popAs(i64);
+    try forth.pushAny(b-a);
     return 0;
 }
 
 /// n n -- n
 pub fn wordMul(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const a = try forth.stack.pop();
-    const b = try forth.stack.pop();
-    try forth.stack.push(a * b);
+    const a = try forth.popAs(i64);
+    const b = try forth.popAs(i64);
+    try forth.pushAny(b*a);
     return 0;
 }
 
 /// n n -- n
 pub fn wordDiv(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const a = try forth.stack.pop();
-    const b = try forth.stack.pop();
-    try forth.stack.push(b / a);
+    const a = try forth.popAs(i64);
+    const b = try forth.popAs(i64);
+    try forth.pushAny(@divTrunc(b,a));
     return 0;
 }
 
 /// n n -- n
 pub fn wordMod(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const a = try forth.stack.pop();
-    const b = try forth.stack.pop();
-    try forth.stack.push(b % a);
+    const a = try forth.popAs(i64);
+    const b = try forth.popAs(i64);
+    try forth.pushAny(@mod(b,a));
     return 0;
 }
 
@@ -448,6 +452,11 @@ pub fn defineCore(forth: *Forth) !void {
     // Expose internal values to forty.
 
     try forth.defineConstant("word", @sizeOf(u64));
+    //try forth.defineStruct("region", os_memory.Region);
+    try forth.defineStruct("board-info", BoardInfo);
+    try forth.defineStruct("board-info.model", BoardInfo.Model);
+    try forth.defineStruct("board-info.device", BoardInfo.Device);
+    try forth.defineStruct("board-info.memory", BoardInfo.Memory);
 
     // Display.
 
@@ -489,7 +498,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, 0);
     _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, 0);
     _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, 0);
-    _ = try forth.definePrimitiveDesc("s=", "s s -- b :string contents equalit", &wordSEqual, 0);
+    _ = try forth.definePrimitiveDesc("s=", "s s -- b :string contents equality", &wordSEqual, 0);
     _ = try forth.definePrimitiveDesc("+", "n n -- n :u64 addition", &wordAdd, 0);
     _ = try forth.definePrimitiveDesc("-", "n n -- n :u64 subtraction", &wordSub, 0);
     _ = try forth.definePrimitiveDesc("*", "n n -- n :u64 multiplication", &wordMul, 0);

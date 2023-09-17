@@ -53,7 +53,6 @@ pub const Forth = struct {
     jump: *Header = undefined,
     jumpIfNot: *Header = undefined,
     compiling: u64 = 0,
-    //string_buffer: string.LineBuffer = undefined,
     line_buffer: string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
 
@@ -96,6 +95,18 @@ pub const Forth = struct {
     pub fn deinit(this: *Forth) !void {
         this.stack.deinit();
         this.rstack.deinit();
+    }
+
+    pub inline fn popAs(this: *Forth, comptime T: type) !T {
+        const v = try this.stack.pop();
+        const casted_v: T = @bitCast(v);
+        return casted_v;
+    }
+
+    // TBD handle pointers...
+    pub inline fn pushAny(this: *Forth, v: anytype) !void {
+        const v_u64: u64 = @bitCast(v);
+        try this.stack.push(v_u64);
     }
 
     // Reset the state of the interpreter, probably due to an error.
@@ -328,9 +339,9 @@ pub const Forth = struct {
 
         if (header) |h| {
             try this.evalHeader(h);
-        } else if (token[0] == '\'') {
+        } else if (token[0] == '`') {
             try this.evalQuoted(token);
-        } else if (token[0] == '"') {
+        } else if (token[0] == '"' or token[0] == '\'') {
             try this.evalString(token);
         } else if (token[0] != '(') {
             var v: u64 = try parser.parseNumber(token, this.ibase);

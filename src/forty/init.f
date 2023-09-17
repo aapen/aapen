@@ -39,6 +39,12 @@ F
 : words ( n -- n : Number words -> number bytes ) word * ;
 : aligned ( c-addr – a-addr  : Align the address.) word 1 - + word / word * ;
 
+create [[
+finish
+
+: +]] 0 while swap dup [[ = not do + done drop ;
+
+
 ( Testing... )
 
 : assert ( b desc -- if b is not true )
@@ -64,21 +70,23 @@ F
 ;
 
 create by-hand (test word)
-  '*push-u64 ,
+  `*push-u64 ,
   900 ,
-  '*push-u64 ,
+  `*push-u64 ,
   99 ,
-  '+ ,
+  `+ ,
   *stop ,
 finish
 
-'by-hand secondary!
+`by-hand secondary!
 
 : test-math 
   103      103  = "Equality" assert
   1 1 +      2  = "Simple addition" assert
   99 1 -    98  = "Subtraction" assert
   3 7 *     21  = "Multipication" assert
+  0 100 - -100  = "Negative numbers" assert
+  11 5 %     1  = "Modulo" assert
 ;
 
 : test-if
@@ -106,7 +114,7 @@ finish
 ;
 
 : test-structures
-  'hello header.name + @ "hello" s= "Struct offsets" assert
+  `hello header.name + @ "hello" s= "Struct offsets" assert
 ;
 
 : test-all
