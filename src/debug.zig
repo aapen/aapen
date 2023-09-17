@@ -2,9 +2,8 @@ const std = @import("std");
 const root = @import("root");
 const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
-//const serial_writer = hal.serial_writer;
 
-const serial_log_level: u2 = 2;
+const serial_log_level: u2 = 1;
 const log_level: u2 = 1;
 
 pub inline fn ticks() u64 {
