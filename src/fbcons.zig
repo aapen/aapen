@@ -59,6 +59,7 @@ pub const FrameBufferConsole = struct {
         if (self.ypos >= self.height) {
             self.nextScreen();
         }
+        self.fb.clearRegion(0, self.ypos * 16, self.fb.xres, 16);
     }
 
     fn nextScreen(self: *FrameBufferConsole) void {
