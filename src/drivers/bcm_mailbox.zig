@@ -4,7 +4,7 @@ const assert = std.debug.assert;
 const root = @import("root");
 const kinfo = root.kinfo;
 
-const bsp = @import("../bsp.zig");
+const hal = @import("../hal.zig");
 
 const architecture = @import("../architecture.zig");
 const cache = architecture.cache;
@@ -61,10 +61,10 @@ pub const BroadcomMailbox = struct {
     };
 
     registers: *volatile Registers = undefined,
-    intc: *bsp.common.InterruptController = undefined,
+    intc: *hal.common.InterruptController = undefined,
     translations: *AddressTranslations = undefined,
 
-    pub fn init(self: *BroadcomMailbox, base: u64, interrupt_controller: *bsp.common.InterruptController, translations: *AddressTranslations) void {
+    pub fn init(self: *BroadcomMailbox, base: u64, interrupt_controller: *hal.common.InterruptController, translations: *AddressTranslations) void {
         self.registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
         self.translations = translations;

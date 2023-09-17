@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const arch = @import("../architecture.zig");
 
-const bsp = @import("../bsp.zig");
+const hal = @import("../hal.zig");
 
 const memory = @import("../memory.zig");
 const AddressTranslations = memory.AddressTranslations;
@@ -46,33 +46,33 @@ pub fn init(alloc: *Allocator) !void {
     try soc_bus.deviceTreeParse("soc");
 
     local_interrupt_controller.init(peripheral_base + 0xb200);
-    bsp.interrupt_controller = local_interrupt_controller.controller();
-    bsp.irq_thunk = irqHandleThunk;
+    hal.interrupt_controller = local_interrupt_controller.controller();
+    hal.irq_thunk = irqHandleThunk;
 
-    timer.init(peripheral_base + 0x3000, &bsp.interrupt_controller);
-    bsp.timer = timer.timers[1].timer();
-    bsp.clock = timer.counter.clock();
+    timer.init(peripheral_base + 0x3000, &hal.interrupt_controller);
+    hal.timer = timer.timers[1].timer();
+    hal.clock = timer.counter.clock();
 
     gpio.init(peripheral_base + 0x200000);
 
-    pl011_uart.init(peripheral_base + 0x201000, &bsp.interrupt_controller, &gpio);
-    bsp.serial = pl011_uart.serial();
+    pl011_uart.init(peripheral_base + 0x201000, &hal.interrupt_controller, &gpio);
+    hal.serial = pl011_uart.serial();
 
-    mailbox.init(peripheral_base + 0xB880, &bsp.interrupt_controller, &soc_bus.bus_ranges);
+    mailbox.init(peripheral_base + 0xB880, &hal.interrupt_controller, &soc_bus.bus_ranges);
     peripheral_clock_controller.init(&mailbox);
     power_controller.init(&mailbox);
 
     board_info_controller.init(&mailbox);
-    bsp.info_controller = board_info_controller.controller();
+    hal.info_controller = board_info_controller.controller();
 
-    dma_controller.init(allocator, peripheral_base + 0x7100, &bsp.interrupt_controller, &soc_bus.dma_ranges);
-    bsp.dma_controller = dma_controller.dma();
+    dma_controller.init(allocator, peripheral_base + 0x7100, &hal.interrupt_controller, &soc_bus.dma_ranges);
+    hal.dma_controller = dma_controller.dma();
 
-    video_controller.init(&mailbox, &bsp.dma_controller);
-    bsp.video_controller = video_controller.controller();
+    video_controller.init(&mailbox, &hal.dma_controller);
+    hal.video_controller = video_controller.controller();
 
-    usb.init(peripheral_base + 0x980000, &bsp.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
-    bsp.usb = usb.usb();
+    usb.init(peripheral_base + 0x980000, &hal.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
+    hal.usb = usb.usb();
 }
 
 pub fn irqHandleThunk(context: *const arch.cpu.exceptions.ExceptionContext) void {

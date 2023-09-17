@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const Error = Allocator.Error;
-const bsp = @import("bsp.zig");
+const hal = @import("hal.zig");
 const Region = @import("memory.zig").Region;
 
 const Self = @This();

@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
-const bsp = @import("../bsp.zig");
+const hal = @import("../hal.zig");
 const fbcons = @import("../fbcons.zig");
 const Readline = @import("../readline.zig");
 const buffer = @import("buffer.zig");

@@ -1,16 +1,16 @@
-const bsp = @import("../bsp.zig");
-const InterruptController = bsp.common.InterruptController;
-const IrqId = bsp.common.IrqId;
+const hal = @import("../hal.zig");
+const InterruptController = hal.common.InterruptController;
+const IrqId = hal.common.IrqId;
 
 /// Returns a number of ticks to schedule the next invocation. A zero
 /// return means don't schedule.
 //pub const TimerCallbackFn = *const fn (timer: *Timer, context: ?*anyopaque) u32;
 
-// fn rawTicks(_: *bsp.common.Timer) u64 {
+// fn rawTicks(_: *hal.common.Timer) u64 {
 //     return counter.ticks();
 // }
 
-// fn rawSchedule(_: *bsp.common.Timer, delta: u32, callback: *bsp.common.TimerCallbackFn, context: ?*anyopaque) void {
+// fn rawSchedule(_: *hal.common.Timer, delta: u32, callback: *hal.common.TimerCallbackFn, context: ?*anyopaque) void {
 //     timers[1].schedule(delta, callback, context);
 // }
 
@@ -23,8 +23,8 @@ const FreeRunningCounter = struct {
         self.count_high = @ptrFromInt(timer_base + 0x08);
     }
 
-    pub fn clock(self: *FreeRunningCounter) bsp.common.Clock {
-        return bsp.common.Clock.init(self);
+    pub fn clock(self: *FreeRunningCounter) hal.common.Clock {
+        return hal.common.Clock.init(self);
     }
 
     pub fn ticks(self: *FreeRunningCounter) u64 {
@@ -41,7 +41,7 @@ const FreeRunningCounter = struct {
 
 pub const Timer = struct {
     const CallbackThunk = struct {
-        callback: bsp.common.TimerCallbackFn,
+        callback: hal.common.TimerCallbackFn,
         context: ?*anyopaque,
     };
 
@@ -80,8 +80,8 @@ pub const Timer = struct {
         self.intc.connect(self.irq, timerIrqHandle, self);
     }
 
-    pub fn timer(self: *Timer) bsp.common.Timer {
-        return bsp.common.Timer.init(self);
+    pub fn timer(self: *Timer) hal.common.Timer {
+        return hal.common.Timer.init(self);
     }
 
     pub fn deinit(self: *Timer) void {
@@ -102,7 +102,7 @@ pub const Timer = struct {
         self.control.match = self.match_reset;
     }
 
-    pub fn schedule(self: *Timer, in_ticks: u32, cb: bsp.common.TimerCallbackFn, context: ?*anyopaque) void {
+    pub fn schedule(self: *Timer, in_ticks: u32, cb: hal.common.TimerCallbackFn, context: ?*anyopaque) void {
         self.disable();
         const tick = counter.ticksReadLow();
 

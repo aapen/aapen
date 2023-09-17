@@ -3,7 +3,7 @@ const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
-const common = @import("../bsp/common.zig");
+const common = @import("../hal/common.zig");
 const DMAController = common.DMAController;
 const DMAChannel = common.DMAChannel;
 const DMARequest = common.DMARequest;

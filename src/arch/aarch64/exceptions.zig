@@ -1,7 +1,7 @@
 const root = @import("root");
 const debug = @import("../../debug.zig");
 const cpu = @import("../../architecture.zig").cpu;
-const bsp = @import("../../bsp.zig");
+const hal = @import("../../hal.zig");
 const registers = @import("registers.zig");
 const Esr = @import("registers/esr.zig").Layout;
 

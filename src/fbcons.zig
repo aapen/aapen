@@ -7,9 +7,9 @@ const kprint = root.kprint;
 const frame_buffer = @import("frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
 
-const bsp = @import("bsp.zig");
-const VideoController = bsp.common.VideoController;
-const Serial = bsp.common.Serial;
+const hal = @import("hal.zig");
+const VideoController = hal.common.VideoController;
+const Serial = hal.common.Serial;
 const Allocator = std.mem.Allocator;
 
 const Readline = @import("readline.zig");

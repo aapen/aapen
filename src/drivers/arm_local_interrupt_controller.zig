@@ -1,7 +1,7 @@
-const bsp = @import("../bsp.zig");
-const InterruptController = bsp.common.InterruptController;
-const IrqId = bsp.common.IrqId;
-const IrqHandlerFn = bsp.common.IrqHandlerFn;
+const hal = @import("../hal.zig");
+const InterruptController = hal.common.InterruptController;
+const IrqId = hal.common.IrqId;
+const IrqHandlerFn = hal.common.IrqHandlerFn;
 
 const exceptions = @import("../architecture.zig").cpu.exceptions;
 const ExceptionContext = exceptions.ExceptionContext;
@@ -42,8 +42,8 @@ pub const LocalInterruptController = struct {
         }
     }
 
-    pub fn controller(self: *LocalInterruptController) bsp.common.InterruptController {
-        return bsp.common.InterruptController.init(self);
+    pub fn controller(self: *LocalInterruptController) hal.common.InterruptController {
+        return hal.common.InterruptController.init(self);
     }
 
     pub fn connect(self: *LocalInterruptController, id: IrqId, handler: IrqHandlerFn, context: *anyopaque) void {

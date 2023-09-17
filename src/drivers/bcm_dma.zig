@@ -4,11 +4,11 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const kprint = root.kprint;
 
-const bsp = @import("../bsp.zig");
-const InterruptController = bsp.common.InterruptController;
-const DMAController = bsp.common.DMAController;
-const DMAChannel = bsp.common.DMAChannel;
-const DMARequest = bsp.common.DMARequest;
+const hal = @import("../hal.zig");
+const InterruptController = hal.common.InterruptController;
+const DMAController = hal.common.DMAController;
+const DMAChannel = hal.common.DMAChannel;
+const DMARequest = hal.common.DMARequest;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -121,8 +121,8 @@ pub const BroadcomDMAController = struct {
         self.intc = interrupt_controller;
     }
 
-    pub fn dma(self: *BroadcomDMAController) bsp.common.DMAController {
-        return bsp.common.DMAController.init(self);
+    pub fn dma(self: *BroadcomDMAController) hal.common.DMAController {
+        return hal.common.DMAController.init(self);
     }
 
     fn channelClaimUnused(self: *BroadcomDMAController) !ChannelId {
@@ -132,7 +132,7 @@ pub const BroadcomDMAController = struct {
                 return @as(ChannelId, @intCast(i));
             }
         }
-        return bsp.common.DMAError.NoAvailableChannel;
+        return hal.common.DMAError.NoAvailableChannel;
     }
 
     fn channelRegisters(self: *BroadcomDMAController, channel_id: ChannelId) *volatile ChannelRegisters {
@@ -162,7 +162,7 @@ pub const BroadcomDMAController = struct {
     }
 
     // TODO: after dma completes, free the control block
-    pub fn initiate(self: *BroadcomDMAController, channel: DMAChannel, request: *DMARequest) bsp.common.DMAError!void {
+    pub fn initiate(self: *BroadcomDMAController, channel: DMAChannel, request: *DMARequest) hal.common.DMAError!void {
         const control_block = try self.allocator.create(BroadcomDMAControlBlock);
         const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
         var channel_registers = context.registers;

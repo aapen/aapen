@@ -2,7 +2,7 @@ const std = @import("std");
 const root = @import("root");
 const kprint = root.kprint;
 
-const bsp = @import("../bsp.zig");
+const hal = @import("../hal.zig");
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -14,7 +14,7 @@ const bcm_power = @import("bcm_power.zig");
 const PowerController = bcm_power.PowerController;
 
 const mailbox = @import("bcm_mailbox.zig");
-const memory_map = @import("../bsp/raspi3/memory_map.zig");
+const memory_map = @import("../hal/raspi3/memory_map.zig");
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
@@ -110,14 +110,14 @@ pub fn init() void {
 
 pub const UsbController = struct {
     core_registers: *volatile CoreRegisters = undefined,
-    intc: *bsp.common.InterruptController = undefined,
+    intc: *hal.common.InterruptController = undefined,
     translations: *AddressTranslations = undefined,
     power_controller: *PowerController = undefined,
 
     pub fn init(
         self: *UsbController,
         base: u64,
-        interrupt_controller: *bsp.common.InterruptController,
+        interrupt_controller: *hal.common.InterruptController,
         translations: *AddressTranslations,
         power_controller: *PowerController,
     ) void {
@@ -127,8 +127,8 @@ pub const UsbController = struct {
         self.power_controller = power_controller;
     }
 
-    pub fn usb(self: *UsbController) bsp.common.USB {
-        return bsp.common.USB.init(self);
+    pub fn usb(self: *UsbController) hal.common.USB {
+        return hal.common.USB.init(self);
     }
 
     pub fn power(self: *UsbController, on_off: bool) void {

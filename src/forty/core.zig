@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const bsp = @import("../bsp.zig");
+const hal = @import("../hal.zig");
 const fbcons = @import("../fbcons.zig");
 
 const errors = @import("errors.zig");
@@ -21,7 +21,7 @@ const Header = memory_module.Header;
 const os_memory = @import("../memory/region.zig");
 const os_main = @import("../main.zig");
 
-const BoardInfo = bsp.common.BoardInfo;
+const BoardInfo = hal.common.BoardInfo;
 
 /// a -- ()
 pub fn wordEmit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
@@ -47,12 +47,12 @@ pub fn wordKeyMaybe(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
 
 /// -- n
 pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var ticks = bsp.clock.ticks();
+    var ticks = hal.clock.ticks();
     try forth.stack.push(ticks);
     return 0;
 }
 
-var single_dma_request: bsp.common.DMARequest = bsp.common.DMARequest{};
+var single_dma_request: hal.common.DMARequest = hal.common.DMARequest{};
 
 /// stride len dest src --
 pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
@@ -60,10 +60,10 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     single_dma_request.destination = try forth.stack.pop();
     single_dma_request.length = try forth.stack.pop();
     single_dma_request.stride = try forth.stack.pop();
-    const channel = bsp.dma_controller.reserveChannel() catch return ForthError.BadOperation;
-    bsp.dma_controller.initiate(channel, &single_dma_request) catch return ForthError.BadOperation;
-    var success = bsp.dma_controller.awaitChannel(channel);
-    bsp.dma_controller.releaseChannel(channel);
+    const channel = hal.dma_controller.reserveChannel() catch return ForthError.BadOperation;
+    hal.dma_controller.initiate(channel, &single_dma_request) catch return ForthError.BadOperation;
+    var success = hal.dma_controller.awaitChannel(channel);
+    hal.dma_controller.releaseChannel(channel);
     try forth.stack.push(if (success) 1 else 0);
     return 0;
 }

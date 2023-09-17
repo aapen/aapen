@@ -3,7 +3,7 @@ const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
-const common = @import("../bsp/common.zig");
+const common = @import("../hal/common.zig");
 const BoardInfo = common.BoardInfo;
 const BoardInfoController = common.BoardInfoController;
 

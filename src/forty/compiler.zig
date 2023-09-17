@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const bsp = @import("../bsp.zig");
+const hal = @import("../hal.zig");
 const fbcons = @import("../fbcons.zig");
 
 const errors = @import("errors.zig");

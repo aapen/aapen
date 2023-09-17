@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const bsp = @import("../bsp.zig");
-const InterruptController = bsp.common.InterruptController;
-const IrqId = bsp.common.IrqId;
+const hal = @import("../hal.zig");
+const InterruptController = hal.common.InterruptController;
+const IrqId = hal.common.IrqId;
 
 const bcm_gpio = @import("bcm_gpio.zig");
 const BroadcomGpio = bcm_gpio.BroadcomGpio;
@@ -194,11 +194,11 @@ pub const Pl011Uart = struct {
     };
 
     registers: *volatile Registers = undefined,
-    intc: *bsp.common.InterruptController = undefined,
+    intc: *hal.common.InterruptController = undefined,
     read_buffer: ring.Ring(u8) = undefined,
     write_buffer: ring.Ring(u8) = undefined,
 
-    pub fn init(self: *Pl011Uart, base: u64, interrupt_controller: *bsp.common.InterruptController, gpio: *BroadcomGpio) void {
+    pub fn init(self: *Pl011Uart, base: u64, interrupt_controller: *hal.common.InterruptController, gpio: *BroadcomGpio) void {
         self.registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
         self.read_buffer = ring.Ring(u8).init();
@@ -252,8 +252,8 @@ pub const Pl011Uart = struct {
         self.intc.enable(Pl011Uart.irq);
     }
 
-    pub fn serial(self: *Pl011Uart) bsp.common.Serial {
-        return bsp.common.Serial.init(self);
+    pub fn serial(self: *Pl011Uart) hal.common.Serial {
+        return hal.common.Serial.init(self);
     }
 
     pub fn getc(self: *Pl011Uart) u8 {

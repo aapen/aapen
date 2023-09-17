@@ -1,6 +1,6 @@
 const std = @import("std");
 const arch = @import("architecture.zig");
-const bsp = @import("bsp.zig");
+const hal = @import("hal.zig");
 const qemu = @import("qemu.zig");
 const heap = @import("heap.zig");
 const frame_buffer = @import("frame_buffer.zig");
@@ -8,7 +8,7 @@ const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
-const raspi3 = @import("bsp/raspi3.zig");
+const raspi3 = @import("hal/raspi3.zig");
 
 pub const debug = @import("debug.zig");
 pub const devicetree = @import("devicetree.zig");
@@ -26,7 +26,7 @@ var os = Freestanding{
     .page_allocator = undefined,
 };
 
-pub var board = bsp.common.BoardInfo{};
+pub var board = hal.common.BoardInfo{};
 pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
@@ -44,26 +44,26 @@ fn kernelInit() void {
 
     devicetree.init();
 
-    bsp.detect.detectAndInit(devicetree.root_node, &os.page_allocator) catch {
-        bsp.serial.puts("Early init error. Cannot proceed.");
+    hal.detect.detectAndInit(devicetree.root_node, &os.page_allocator) catch {
+        hal.serial.puts("Early init error. Cannot proceed.");
     };
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
-    arch.cpu.exceptions.init(bsp.irq_thunk);
+    arch.cpu.exceptions.init(hal.irq_thunk);
 
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     uart_valid = true;
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
-    bsp.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
+    hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
 
-    frame_buffer_console.init(&bsp.serial);
+    frame_buffer_console.init(&hal.serial);
     console_valid = true;
 
     board.init(&os.page_allocator);
-    bsp.info_controller.inspect(&board);
+    hal.info_controller.inspect(&board);
 
-    // bsp.timer.schedule(200000, printOneDot, &.{});
+    // hal.timer.schedule(200000, printOneDot, &.{});
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available
@@ -79,10 +79,10 @@ fn kernelInit() void {
 
     diagnostics() catch |err| {
         kerror(@src(), "Error printing diagnostics: {any}\n", .{err});
-        bsp.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
+        hal.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    bsp.usb.powerOn();
+    hal.usb.powerOn();
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});

@@ -1,4 +1,4 @@
-pub const memory_map = @import("../../bsp/raspi3/memory_map.zig");
+pub const memory_map = @import("../../hal/raspi3/memory_map.zig");
 
 // Assumptions
 //
