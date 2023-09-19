@@ -5,7 +5,7 @@ const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
 pub fn parseQuoted(token: []const u8) ![]const u8 {
-    if (token[0] == '`') {
+    if (token[0] == '\'') {
         const l = token.len;
         return token[1..l];
     }
@@ -15,13 +15,10 @@ pub fn parseQuoted(token: []const u8) ![]const u8 {
 pub fn parseString(token: []const u8) ![]const u8 {
     var l: usize = 0;
 
-    if (token[0] == '"') {
-        l = token.len - 1;
-    } else if (token[0] == '\'') {
-        l = token.len;
-    } else {
+    if (token[0] != '"') {
         return ForthError.ParseError;
     }
+    l = token.len - 1;
     return token[1..l];
 }
 

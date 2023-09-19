@@ -342,9 +342,9 @@ pub const Forth = struct {
 
         if (header) |h| {
             try this.evalHeader(h);
-        } else if (token[0] == '`') {
+        } else if (token[0] == '\'') {
             try this.evalQuoted(token);
-        } else if (token[0] == '"' or token[0] == '\'') {
+        } else if (token[0] == '"') {
             try this.evalString(token);
         } else if (token[0] != '(') {
             var v: u64 = try parser.parseNumber(token, this.ibase);
