@@ -12,6 +12,7 @@ const string = @import("string.zig");
 const core = @import("core.zig");
 const compiler = @import("compiler.zig");
 const interop = @import("interop.zig");
+const inspect = @import("inspect.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -53,7 +54,7 @@ pub const Forth = struct {
     jump: *Header = undefined,
     jumpIfNot: *Header = undefined,
     compiling: u64 = 0,
-    line_buffer: string.LineBuffer = undefined,
+    line_buffer: *string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
 
     pub fn init(this: *Forth, a: Allocator, c: *fbcons.FrameBufferConsole) !void {
@@ -65,6 +66,7 @@ pub const Forth = struct {
         this.rstack = ReturnStack.init(&a);
         this.buffer = try a.alloc(u8, 20000); // TBD make size a parameter.
         this.memory = Memory.init(this.buffer.ptr, this.buffer.len);
+        this.line_buffer = try a.create(string.LineBuffer);
 
         this.pushString = try this.definePrimitive("*push-string", &wordPushString, 0);
         this.pushU64 = try this.definePrimitive("*push-u64", &wordPushU64, 0);
@@ -81,6 +83,7 @@ pub const Forth = struct {
 
         try compiler.defineCompiler(this);
         try core.defineCore(this);
+        try inspect.defineInspect(this);
         try interop.defineInterop(this);
 
         initBuffer.init(init_f);
@@ -384,7 +387,6 @@ pub const Forth = struct {
             this.addCall(this.pushString);
             this.addString(s);
         } else {
-            //string.copyTo(&this.string_buffer, s);
             const allocated_s = try this.temp_allocator.dupeZ(u8, s);
             try this.stack.push(@intFromPtr(allocated_s.ptr));
         }
@@ -461,7 +463,7 @@ pub const Forth = struct {
 
     fn readline(this: *Forth) !usize {
         var source = try this.input.peek();
-        return source.read("OK>> ", &this.line_buffer);
+        return source.read("OK>> ", this.line_buffer);
     }
 
     fn popSource(this: *Forth) !void {
