@@ -70,15 +70,15 @@ finish
 ;
 
 create by-hand (test word)
-  `*push-u64 ,
+  '*push-u64 ,
   900 ,
-  `*push-u64 ,
+  '*push-u64 ,
   99 ,
-  `+ ,
+  '+ ,
   *stop ,
 finish
 
-`by-hand secondary!
+'by-hand secondary!
 
 : test-math 
   103      103  = "Equality" assert
@@ -114,7 +114,7 @@ finish
 ;
 
 : test-structures
-  `hello header.name + @ "hello" s= "Struct offsets" assert
+  'hello header.name + @ "hello" s= "Struct offsets" assert
 ;
 
 : test-all
