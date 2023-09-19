@@ -60,7 +60,7 @@ pub fn wordLet(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const name: [*:0]u8 = @ptrFromInt(iName);
     const len = string.strlen(name);
 
-    _  = try forth.create(name[0..len], "A constant", &pushBodyValue, 0);
+    _ = try forth.create(name[0..len], "A constant", &pushBodyValue, 0);
     forth.addNumber(value);
     forth.complete();
     return 0;
@@ -72,7 +72,6 @@ pub fn pushBodyAddress(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthE
     try forth.stack.push(@intFromPtr(body));
     return 0;
 }
-
 
 // Create a new dictionary definition.
 // Resulting dictionary entry just pushes its body address onto the stack.
@@ -163,53 +162,6 @@ pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
     forth.addStop();
     try forth.completeWord();
-    return 0;
-}
-
-pub fn wordDesc(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var header = forth.findWord(name) orelse return ForthError.NotFound;
-    try forth.print("{s}: {s}\n", .{ header.name, header.desc });
-    return 0;
-}
-
-pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var header = forth.findWord(name) orelse return ForthError.NotFound;
-
-    // Dump info about a primitive word.
-
-    if (header.func != &Forth.inner) {
-        const h: u64 = @intFromPtr(header);
-        const p: u64 = @intFromPtr(header.func);
-        try forth.print("Word name: {s} len: {} header: {x} func: {x}\n", .{ header.name, header.len, h, p });
-
-        try forth.print("Description: {s}\n", .{header.desc});
-        return 0;
-    }
-
-    // Word is a secondary, dump the meta info first.
-
-    //    var body = header.bodyOfType([*]u64);
-    var len = header.bodyLen();
-    try forth.print("Word name: {s} len: {} immed: {}\n", .{ header.name, len, header.immediate });
-    try forth.print("Description: {s}\n\n", .{header.desc});
-
-    // Followed by a byte dump.
-
-    var ubody = header.bodyOfType([*]u64);
-
-    const wLen = len / @sizeOf(u64);
-    for (0..wLen) |j| {
-        const chars = string.u64ToChars(ubody[j]);
-        try forth.print("{:4} {x:16}   {s}", .{ j, ubody[j], chars });
-        if (forth.isWordP(ubody[j])) {
-            const hp: *Header = @ptrFromInt(ubody[j]);
-            try forth.print("      {s}", .{hp.name});
-        }
-        try forth.print("\n", .{});
-    }
-
     return 0;
 }
 
@@ -361,7 +313,4 @@ pub fn defineCompiler(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("while", " -- :Compile the head of a while loop.", &wordWhile, 1);
     _ = try forth.definePrimitiveDesc("do", " -- :Compile the condition part of a while loop.", &wordDo, 1);
     _ = try forth.definePrimitiveDesc("done", " -- :Compile the end of a while loop.", &wordDone, 1);
-
-    _ = try forth.definePrimitiveDesc("?", " -- :Print description of word.", &wordDesc, 0);
-    _ = try forth.definePrimitiveDesc("?word", " -- :Print details of word.", &wordDumpWord, 0);
 }
