@@ -11,7 +11,6 @@ const string = @import("string.zig");
 const parser = @import("parser.zig");
 //const memory = @import("memory.zig");
 
-
 const forth_module = @import("forth.zig");
 const Forth = forth_module.Forth;
 
@@ -137,14 +136,6 @@ pub fn wordHexDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordDecimalDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var v: u64 = try forth.stack.pop();
     try std.fmt.formatInt(v, 10, .lower, .{}, forth.writer());
-    return 0;
-}
-
-/// --
-pub fn wordStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    for (forth.stack.items()) |item| {
-        try forth.print("{}\n", .{item});
-    }
     return 0;
 }
 
@@ -275,7 +266,7 @@ pub fn word2Over(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordAdd(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const a = try forth.popAs(i64);
     const b = try forth.popAs(i64);
-    try forth.pushAny(b+a);
+    try forth.pushAny(b + a);
     return 0;
 }
 
@@ -283,7 +274,7 @@ pub fn wordAdd(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordSub(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const a = try forth.popAs(i64);
     const b = try forth.popAs(i64);
-    try forth.pushAny(b-a);
+    try forth.pushAny(b - a);
     return 0;
 }
 
@@ -291,7 +282,7 @@ pub fn wordSub(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordMul(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const a = try forth.popAs(i64);
     const b = try forth.popAs(i64);
-    try forth.pushAny(b*a);
+    try forth.pushAny(b * a);
     return 0;
 }
 
@@ -299,7 +290,7 @@ pub fn wordMul(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordDiv(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const a = try forth.popAs(i64);
     const b = try forth.popAs(i64);
-    try forth.pushAny(@divTrunc(b,a));
+    try forth.pushAny(@divTrunc(b, a));
     return 0;
 }
 
@@ -307,7 +298,7 @@ pub fn wordDiv(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordMod(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const a = try forth.popAs(i64);
     const b = try forth.popAs(i64);
-    try forth.pushAny(@mod(b,a));
+    try forth.pushAny(@mod(b, a));
     return 0;
 }
 
@@ -321,35 +312,6 @@ pub fn wordNot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     }
     return 0;
 }
-
-/// --
-pub fn wordDictionary(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    try listDictionary(forth, "");
-    return 0;
-}
-
-/// --
-pub fn wordDictionaryFilter(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const pat = try forth.readWord();
-    try listDictionary(forth, pat);
-    return 0;
-}
-
-fn listDictionary(forth: *Forth, pat: []const u8) ForthError!void {
-    var e = forth.lastWord;
-    var i: usize = 0;
-    while (e) |entry| {
-        if (std.mem.startsWith(u8, entry.name, pat)) {
-            const immed = if (entry.immediate == 0) " " else "^";
-            i += 1;
-            var sep: u8 = if ((i % 5) == 0) '\n' else '\t';
-            try forth.print("{s} {s: <20}{c}", .{ immed, entry.name, sep });
-        }
-        e = entry.previous;
-    }
-    try forth.print("\n", .{});
-}
-
 /// addr -- u8
 pub fn wordLoadU8(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return wordLoad(u8, forth, body, offset, header);
@@ -469,10 +431,10 @@ pub fn defineCore(forth: *Forth) !void {
 
     try forth.defineConstant("word", @sizeOf(u64));
     //try forth.defineStruct("region", os_memory.Region);
-    try forth.defineStruct("board-info", BoardInfo);
-    try forth.defineStruct("board-info.model", BoardInfo.Model);
-    try forth.defineStruct("board-info.device", BoardInfo.Device);
-    try forth.defineStruct("board-info.memory", BoardInfo.Memory);
+    try forth.defineStruct("board", BoardInfo);
+    try forth.defineStruct("board.model", BoardInfo.Model);
+    try forth.defineStruct("board.device", BoardInfo.Device);
+    try forth.defineStruct("board.memory", BoardInfo.Memory);
 
     // Display.
 
@@ -490,11 +452,6 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, 0);
     _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, 0);
     _ = try forth.definePrimitiveDesc("dma", "stride len dest src -- : Perform a DMA", &wordDma, 0);
-
-    // Debug and inspection words.
-    _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, 0);
-    _ = try forth.definePrimitiveDesc("??", " -- :Print the dictionary.", &wordDictionary, 0);
-    _ = try forth.definePrimitiveDesc("???", " -- :Print dictionary words that begin with...", &wordDictionaryFilter, 0);
 
     // Basic Forth words.
     _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, 0);

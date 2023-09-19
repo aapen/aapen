@@ -6,8 +6,8 @@ const ForthError = errors.ForthError;
 
 pub fn parseQuoted(token: []const u8) ![]const u8 {
     if (token[0] == '`') {
-      const l = token.len;
-      return token[1..l];
+        const l = token.len;
+        return token[1..l];
     }
     return ForthError.ParseError;
 }
@@ -16,9 +16,9 @@ pub fn parseString(token: []const u8) ![]const u8 {
     var l: usize = 0;
 
     if (token[0] == '"') {
-      l = token.len - 1;
+        l = token.len - 1;
     } else if (token[0] == '\'') {
-      l = token.len;
+        l = token.len;
     } else {
         return ForthError.ParseError;
     }

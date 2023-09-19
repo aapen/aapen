@@ -94,13 +94,17 @@ pub fn clear(s: [:0]u8) void {
     @memset(s, 0);
 }
 
+pub fn toPrintable(ch: u8) u8 {
+    return if ((ch >= ' ') and (ch <= '~')) ch else '.';
+}
+
 pub fn u64ToChars(i: u64) [8]u8 {
     var result: [8]u8 = undefined;
 
     var j = i;
     for (0..8) |iChar| {
         const ch: u8 = @truncate(j);
-        result[iChar] = if ((ch >= ' ') and (ch <= '~')) ch else '.';
+        result[iChar] = toPrintable(ch);
         j = j >> 8;
     }
     return result;
