@@ -59,7 +59,7 @@ pub const BroadcomDMAController = struct {
         _reserved_1: u5 = 0,
     };
 
-    const DebugInforamtion = extern struct {
+    const DebugInformation = extern struct {
         read_last_not_set_error: u1 = 0,
         fifo_error: u1 = 0,
         read_error: u1 = 0,
