@@ -1,0 +1,21 @@
+* OPEN Boot fail on HW if ~debug.serial_log_level~ is 2 or greater
+Symptoms:
+- kinfo call from ~bcm_mailbox.zig:363~ causes panic loop on ~debug.zig:24~
+* OPEN Flaky boot on HW
+Symptoms:
+- Stepping through ~kernelInit~ one line at a time via openocd and gdb, boot succeeds and gets to prompt.
+- Some lines, like the call to ~diagnostics~ at ~main.zig:80~ result in a corrupted PC
+- Timing problem? Interrupts versus the stack?
+* OPEN DMA sometimes doesn't complete on HW
+Symptoms:
+- Using
+Repo:
+Run the following commands from ~OK>>~
+#+begin_src
+0 0x4000 fb fb 0x4000 + dma
+0 0x4000 fb 0x4000 + fb 0x4000 2 * + dma
+#+end_src
+
+The first command copies the 2nd line of the framebuffer over the 1st. (0x4000 is the byte length of one row in the console.)
+
+The second command should copy the 3rd line of the framebuffer over the 2nd. It doesn't complete. ~BroadcomDMAController.awaitChannel~ always sees the DMA as still active.
