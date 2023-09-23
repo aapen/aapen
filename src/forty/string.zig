@@ -101,6 +101,7 @@ pub fn u64ToChars(i: u64) [8]u8 {
 }
 
 test "toPrintable" {
+    std.debug.print("\n", .{});
     const assert = std.debug.assert;
     assert(toPrintable(' ') == ' ');
     assert(toPrintable('a') == 'a');
@@ -111,6 +112,7 @@ test "toPrintable" {
 }
 
 test "streq" {
+    std.debug.print("\n", .{});
     const assert = std.debug.assert;
     assert(streql("abc", "abc"));
     assert(streql("a", "a"));
@@ -122,6 +124,7 @@ test "streq" {
     assert(!streql("abc", "abx"));
 }
 test "strlen" {
+    std.debug.print("\n", .{});
     const assert = std.debug.assert;
     assert(strlen("abc") == 3);
     assert(strlen("ab") == 2);
