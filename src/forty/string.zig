@@ -72,16 +72,6 @@ pub fn copyTo(dst: [:0]u8, src: []const u8) void {
     dst[i] = 0;
 }
 
-pub fn dupCString(allocator: Allocator, src: [*:0]const u8) ![*]u8 {
-    const len = std.mem.indexOfSentinel(u8, 0, src);
-    const result = try allocator.alloc(u8, len);
-    for (0..len) |i| {
-        result[i] = src[i];
-    }
-    //result[len] = 0;
-    return result.ptr;
-}
-
 pub fn asSlice(s: [*]u8) []u8 {
     var l: usize = 0;
     while (s[l] != 0) {
@@ -110,15 +100,31 @@ pub fn u64ToChars(i: u64) [8]u8 {
     return result;
 }
 
-test "duplicating a slice" {
-    std.debug.print("\n", .{});
-
+test "toPrintable" {
     const assert = std.debug.assert;
-    const allocator = std.testing.allocator;
+    assert(toPrintable(' ') == ' ');
+    assert(toPrintable('a') == 'a');
+    assert(toPrintable(4) == '.');
 
-    const s = "abcdef";
-    const p = try dupCString(allocator, s);
-    assert(p[0] == 'a');
+    //const allocator = std.testing.allocator;
+    //allocator.free(p);
+}
 
-    //    allocator.free(p);
+test "streq" {
+    const assert = std.debug.assert;
+    assert(streql("abc", "abc"));
+    assert(streql("a", "a"));
+    assert(streql("", ""));
+
+    assert(!streql("x", ""));
+    assert(!streql("", "x"));
+    assert(!streql("ab", "qq"));
+    assert(!streql("abc", "abx"));
+}
+test "strlen" {
+    const assert = std.debug.assert;
+    assert(strlen("abc") == 3);
+    assert(strlen("ab") == 2);
+    assert(strlen("a") == 1);
+    assert(strlen("") == 0);
 }
