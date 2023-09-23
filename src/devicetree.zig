@@ -666,7 +666,8 @@ fn charIndex(ch: u8, s: []const u8, from: usize) ?usize {
 }
 
 test "locate node and property by path" {
-    const print = std.debug.print;
+    std.debug.print("\n", .{});
+
     const expect = std.testing.expect;
     const expectEqual = std.testing.expectEqual;
     const expectEqualStrings = std.testing.expectEqualStrings;
@@ -679,8 +680,6 @@ test "locate node and property by path" {
     var fdt = Fdt{};
     try fdt.initFromPointer(std.testing.allocator, @intFromPtr(buffer.ptr));
     defer fdt.deinit();
-
-    print("\n", .{});
 
     var devtree_root = fdt.root_node;
 
@@ -744,6 +743,8 @@ test "locate node and property by path" {
 }
 
 test "locate nodes via aliases" {
+    std.debug.print("\n", .{});
+
     const expect = std.testing.expect;
 
     const fdt_path = "test/resources/fdt.bin";

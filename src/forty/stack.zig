@@ -57,18 +57,20 @@ pub fn Stack(comptime T: type) type {
 }
 
 test "Basic stack operation" {
+    std.debug.print("\n", .{});
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.testing.expect(gpa.deinit() == .ok) catch @panic("leak");
     var allocator = gpa.allocator();
 
-    const print = std.debug.print;
+    //    const print = std.debug.print;
 
     const DStack = Stack(i32);
-    var dstack = DStack.init(allocator);
+    var dstack = DStack.init(&allocator);
     defer dstack.deinit();
 
     const RStack = Stack(u16);
-    var rstack = RStack.init(allocator);
+    var rstack = RStack.init(&allocator);
     defer rstack.deinit();
 
     for (0..7) |i| {
@@ -78,11 +80,13 @@ test "Basic stack operation" {
 
     while (!dstack.isEmpty()) {
         var v = try dstack.pop();
-        print("pop: {}\n", .{v});
+        _ = v;
+        //        print("pop: {}\n", .{v});
     }
 
     while (!rstack.isEmpty()) {
         var v = try rstack.pop();
-        print("rop: {}\n", .{v});
+        _ = v;
+        //        print("rop: {}\n", .{v});
     }
 }

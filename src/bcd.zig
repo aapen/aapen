@@ -14,10 +14,12 @@ pub fn decode(comptime T: type, val: T) !T {
     return ret;
 }
 
-const expect = std.testing.expect;
-const expectError = std.testing.expectError;
-
 test "small numbers" {
+    std.debug.print("\n", .{});
+
+    const expect = std.testing.expect;
+    const expectError = std.testing.expectError;
+
     try expect(1 == try decode(u8, 0b0001));
     try expect(2 == try decode(u8, 0b0010));
     try expect(4 == try decode(u8, 0b0100));
@@ -29,6 +31,11 @@ test "small numbers" {
 }
 
 test "middley numbers" {
+    std.debug.print("\n", .{});
+
+    const expect = std.testing.expect;
+    const expectError = std.testing.expectError;
+
     try expect(1 == try decode(u8, 0b0000_0001));
     try expect(10 == try decode(u8, 0b0001_0000));
     try expect(19 == try decode(u8, 0b0001_1001));
@@ -38,6 +45,11 @@ test "middley numbers" {
 }
 
 test "larger numbers" {
+    std.debug.print("\n", .{});
+
+    const expect = std.testing.expect;
+    const expectError = std.testing.expectError;
+
     try expect(1000 == try decode(u16, 0b0001_0000_0000_0000));
     try expect(9000 == try decode(u16, 0b1001_0000_0000_0000));
     try expect(9001 == try decode(u16, 0b1001_0000_0000_0001));

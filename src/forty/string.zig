@@ -111,7 +111,8 @@ pub fn u64ToChars(i: u64) [8]u8 {
 }
 
 test "duplicating a slice" {
-    //const print = std.debug.print;
+    std.debug.print("\n", .{});
+
     const assert = std.debug.assert;
     const allocator = std.testing.allocator;
 
@@ -119,5 +120,5 @@ test "duplicating a slice" {
     const p = try dupCString(allocator, s);
     assert(p[0] == 'a');
 
-    allocator.free(p);
+    //    allocator.free(p);
 }

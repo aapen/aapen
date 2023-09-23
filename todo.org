@@ -266,6 +266,50 @@ In the devicetree, nodes with the GIC as interrupt-parent have
 |    1 | ??             | 33                                 |      33 |
 |    2 | IRQ type flags | ~IRG_TYPE_LEVEL_HIGH~                |       4 |
 
+** Dumb stuff about ~zig test~
+- The only way to "run all tests" is with a magic incantation that is only documented as [[https://ziglang.org/documentation/0.11.0/#Nested-Container-Tests][Nested container tests]]
+#+begin_src
+const std = @import("std");
+pub const ring = @import("ring.zig");
+
+test {
+  std.testing.refAllDecls(@This());
+}
+#+end_src
+- ~zig test~ only takes a single source file
+This is related to the "run all tests" papercut. So we either have to loop over all files, running zig test on each, or we have to make sure a single "test parent" file imports every source that has tests in it.
+- If the test doesn't do any output, then it will not appear in the summary report. This results in output like:
+#+begin_src
+Test [1/12] test.parent of all tests...
+Test [2/12] test.locate node and property by path...
+Test [3/12] test.locate nodes via aliases...
+Test [4/12] test.starts empty...
+Test [5/12] test.consume what you produce...
+Test [6/12] test.consume up to capacity items...
+Test [7/12] test.consumer chases producer...
+Test [8/12] test.items are overwritten...
+Test [12/12] test.Basic stack operation...
+All 12 tests passed.  
+#+end_src
+
+The solution is to add a single print to the start of each and every test block:
+#+begin_src
+  std.debug.print("\n", .{});
+#+end_src
+
+- ~zig build test~ caches the test runner binary. So if you run it twice, the tests are only executed on the first call. Since caching only uses source files, tests that read resources from files will not be executed a second time even if you change the external file.
+- If ~zig build test~ succeeds, it shows no output at all. Not even the "Test [x/y] ..." lines. It has an argument ~--summary~ that takes a parameter. But even ~--summary all~ doesn't show the output.
+- Compilation error in any test file results in no tests at all being executed. Sounds OK, except that some compilation errors do not point to the actual source of the problem. E.g.,
+#+begin_src
+ zig test src/tests.zig
+/opt/zig-linux-x86_64-0.11.0/lib/std/mem.zig:4143:9: error: expected []T or *[_]T, passed [*]u8
+        @compileError("expected []T or *[_]T, passed " ++ @typeName(sliceType));
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/opt/zig-linux-x86_64-0.11.0/lib/std/mem.zig:4150:59: note: called from here
+pub fn sliceAsBytes(slice: anytype) SliceAsBytesReturnType(@TypeOf(slice)) {
+                                    ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+#+end_src
+- ~zig test~ seems to ignore the ~-freference-trace~ argument. (Discovered while trying to uncover the offending source for the type error in the above example.)
 * Open Questions
 * Closed Questions
 ** DONE Should we use device tree? If so, how?

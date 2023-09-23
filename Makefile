@@ -30,6 +30,10 @@ rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$
 # How to recursively find all files that match a pattern
 SRCS           := $(call rwildcard,src/,*.zig) $(call rwildcard,src/,*.f) $(call rwildcard,src/,*.S)
 
+TEST_SRC        = src/tests.zig
+
+.PHONY: test clean
+
 all: init emulate
 
 init: download_firmware dirs
@@ -44,6 +48,9 @@ firmware/COPYING.linux:
 
 $(KERNEL): $(SRCS)
 	$(ZIG) build $(ZIG_BUILD_ARGS)
+
+test:
+	$(ZIG) test $(TEST_SRC)
 
 emulate: $(KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(KERNEL)

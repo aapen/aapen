@@ -41,12 +41,16 @@ pub fn Ring(comptime T: anytype) type {
 }
 
 test "starts empty" {
+    std.debug.print("\n", .{});
+
     const expect = std.testing.expect;
     var ring = Ring(u32).init();
     try expect(ring.empty());
 }
 
 test "consume what you produce" {
+    std.debug.print("\n", .{});
+
     const expect = std.testing.expect;
     var ring = Ring(u8).init();
 
@@ -66,6 +70,8 @@ test "consume what you produce" {
 }
 
 test "consume up to capacity items" {
+    std.debug.print("\n", .{});
+
     const expect = std.testing.expect;
     var ring = Ring(usize).init();
     for (0..64) |i| {
@@ -77,6 +83,8 @@ test "consume up to capacity items" {
 }
 
 test "consumer chases producer" {
+    std.debug.print("\n", .{});
+
     const expect = std.testing.expect;
     var ring = Ring(u8).init();
     inline for (65..75) |c| {
@@ -94,6 +102,8 @@ test "consumer chases producer" {
 }
 
 test "items are overwritten" {
+    std.debug.print("\n", .{});
+
     const expect = std.testing.expect;
     var ring = Ring(usize).init();
     for (0..65) |i| {
