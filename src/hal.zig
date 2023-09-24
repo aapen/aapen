@@ -1,4 +1,7 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+const devicetree = @import("devicetree.zig");
 
 pub const detect = @import("hal/detect.zig");
 pub const common = @import("hal/common.zig");
@@ -13,10 +16,15 @@ pub var serial: common.Serial = undefined;
 pub var usb: common.USB = undefined;
 pub var video_controller: common.VideoController = undefined;
 
-const SerialWriter = std.io.Writer(u32, error{}, serialStringSend);
-pub var serial_writer = SerialWriter{ .context = 0 };
+const SerialWriter = std.io.Writer(*common.Serial, error{}, serialStringSend);
 
-fn serialStringSend(_: u32, str: []const u8) !usize {
-    serial.puts(str);
-    return str.len;
+pub var serial_writer: SerialWriter = undefined;
+
+fn serialStringSend(uart: *common.Serial, str: []const u8) !usize {
+    return uart.puts(str);
+}
+
+pub fn init(root: *devicetree.Fdt.Node, allocator: *Allocator) !void {
+    try detect.detectAndInit(root, allocator);
+    serial_writer = SerialWriter{ .context = &serial };
 }

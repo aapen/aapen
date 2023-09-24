@@ -44,8 +44,8 @@ fn kernelInit() void {
 
     devicetree.init();
 
-    hal.detect.detectAndInit(devicetree.root_node, &os.page_allocator) catch {
-        hal.serial.puts("Early init error. Cannot proceed.");
+    hal.init(devicetree.root_node, &os.page_allocator) catch {
+        hal.serial_writer.print("Early init error. Cannot proceed.", .{}) catch {};
     };
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
@@ -210,14 +210,28 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 // TODO: re-enable this when
 // https://github.com/ziglang/zig/issues/16327 is fixed.
 
-// pub fn panic(msg: []const u8, stack: ?*std.builtin.StackTrace, return_addr: ?usize) noreturn {
-//     _ = stack;
-//     _ = return_addr;
+const StackTrace = std.builtin.StackTrace;
 
-//     kerror(@src(), msg, .{});
-//     while (true) {
-//         arch.cpu.wfe();
-//     }
+pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn {
+    _ = return_addr;
+    _ = msg;
+    @setCold(true);
 
-//     unreachable;
-// }
+    // if (return_addr) |ret| {
+    //     kerror(@src(), "[{x:0>8}] {s}", .{ ret, msg });
+    // } else {
+    //     kerror(@src(), "[unknown] {s}", .{msg});
+    // }
+
+    if (stack) |stack_trace| {
+        for (stack_trace.instruction_addresses, 0..) |addr, i| {
+            kprint("{d}: {x:0>8}\n", .{ i, addr });
+        }
+    }
+
+    while (true) {
+        arch.cpu.wfi();
+    }
+
+    unreachable;
+}

@@ -21,13 +21,14 @@ pub const block_size: u64 = 0x40000000;
 pub const device_start: u64 = memory_map.device_start;
 
 // These are choices about memory protection
+// These must match the value written to MAIR_EL1 in mmu.S
 pub const mair_device_ng_nr_ne: u8 = 0x0;
 pub const mair_device_ng_nr_ne_index: u2 = 0;
 
 pub const mair_normal_nc: u8 = 0x44;
-pub const mair_normal_nc_INDEX: u2 = 1;
+pub const mair_normal_nc_index: u2 = 1;
 
-pub const mair_value: u64 = (mair_normal_nc << (8 * mair_normal_nc_INDEX)) | (mair_device_ng_nr_ne << (8 * mair_device_ng_nr_ne_index));
+//pub const mair_value: u64 = (mair_normal_nc << (8 * mair_normal_nc_index)) | (mair_device_ng_nr_ne << (8 * mair_device_ng_nr_ne_index));
 
 pub const table_descriptor_valid: u64 = (1 << 0);
 pub const table_descriptor_is_table: u64 = (1 << 1);
@@ -36,8 +37,8 @@ pub const table_descriptor_kernel_perms: u64 = (1 << 54);
 pub const table_descriptor_inner_shareable: u64 = (3 << 8);
 
 pub const kernel_table_flags: u64 = (table_descriptor_is_table | table_descriptor_valid);
-pub const kernel_block_flags: u64 = (table_descriptor_access | table_descriptor_inner_shareable | table_descriptor_kernel_perms | (@as(u8, mair_normal_nc_INDEX) << 2) | table_descriptor_valid);
-pub const device_block_flags: u64 = (table_descriptor_access | table_descriptor_inner_shareable | table_descriptor_kernel_perms | (@as(u8, mair_device_ng_nr_ne_index) << 2) | table_descriptor_valid);
+pub const kernel_block_flags: u64 = (table_descriptor_access | table_descriptor_inner_shareable | table_descriptor_kernel_perms | (@as(u8, mair_normal_nc_index) << 2) | table_descriptor_valid);
+pub const device_block_flags: u64 = (table_descriptor_access | table_descriptor_kernel_perms | (@as(u8, mair_device_ng_nr_ne_index) << 2) | table_descriptor_valid);
 
 // AArch64 address translation
 // Assumes 4KB translation granule
@@ -108,6 +109,8 @@ fn blockMappingCreate(page_middle_directory: u64, virtual_addr_start: u64, virtu
     vend -= 1;
     vend &= (entries_per_table - 1);
 
+    // zero out the bottom `section_shift` bits of the address, to
+    // turn it into a table entry
     var pa = phys_addr_start >> section_shift;
     pa <<= section_shift;
 

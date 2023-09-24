@@ -21,13 +21,13 @@ inline fn serial_log_info() bool {
 pub fn kinfo(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (serial_log_info()) {
         if (root.uart_valid) {
-            hal.serial_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
             hal.serial_writer.print(fmt, args) catch {};
         }
     }
     if (log_info()) {
         if (root.console_valid) {
-            root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            root.frame_buffer_console.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
             root.frame_buffer_console.print(fmt, args) catch {};
         }
     }
@@ -44,13 +44,13 @@ inline fn serial_log_warnings() bool {
 pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (serial_log_warnings()) {
         if (root.uart_valid) {
-            hal.serial_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
             hal.serial_writer.print(fmt, args) catch {};
         }
     }
     if (log_warnings()) {
         if (root.console_valid) {
-            root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            root.frame_buffer_console.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
             root.frame_buffer_console.print(fmt, args) catch {};
         }
     }
@@ -58,12 +58,12 @@ pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8,
 
 pub fn kerror(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (root.uart_valid) {
-        hal.serial_writer.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+        hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
         hal.serial_writer.print(fmt, args) catch {};
     }
 
     if (root.console_valid) {
-        root.frame_buffer_console.print("{s}.{s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+        root.frame_buffer_console.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
         root.frame_buffer_console.print(fmt, args) catch {};
     }
 }

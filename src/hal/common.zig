@@ -165,8 +165,8 @@ pub const Timer = struct {
 pub const Serial = struct {
     ptr: *anyopaque,
     getcFn: *const fn (ptr: *anyopaque) u8,
-    putcFn: *const fn (ptr: *anyopaque, ch: u8) void,
-    putsFn: *const fn (ptr: *anyopaque, buf: []const u8) void,
+    putcFn: *const fn (ptr: *anyopaque, ch: u8) bool,
+    putsFn: *const fn (ptr: *anyopaque, buf: []const u8) usize,
     hascFn: *const fn (ptr: *anyopaque) bool,
 
     pub fn init(
@@ -185,12 +185,12 @@ pub const Serial = struct {
                 return @call(.always_inline, ptr_info.Pointer.child.getc, .{self});
             }
 
-            fn putc(ptr: *anyopaque, ch: u8) void {
+            fn putc(ptr: *anyopaque, ch: u8) bool {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
                 return @call(.always_inline, ptr_info.Pointer.child.putc, .{ self, ch });
             }
 
-            fn puts(ptr: *anyopaque, buf: []const u8) void {
+            fn puts(ptr: *anyopaque, buf: []const u8) usize {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
                 return @call(.always_inline, ptr_info.Pointer.child.puts, .{ self, buf });
             }
@@ -214,12 +214,12 @@ pub const Serial = struct {
         return serial.getcFn(serial.ptr);
     }
 
-    pub fn putc(serial: *Serial, ch: u8) void {
-        serial.putcFn(serial.ptr, ch);
+    pub fn putc(serial: *Serial, ch: u8) bool {
+        return serial.putcFn(serial.ptr, ch);
     }
 
-    pub fn puts(serial: *Serial, buffer: []const u8) void {
-        serial.putsFn(serial.ptr, buffer);
+    pub fn puts(serial: *Serial, buffer: []const u8) usize {
+        return serial.putsFn(serial.ptr, buffer);
     }
 
     pub fn hasc(serial: *Serial) bool {

@@ -37,6 +37,14 @@ pub fn Ring(comptime T: anytype) type {
         pub fn empty(self: *const Self) bool {
             return self.produce == self.consume;
         }
+
+        pub fn availableToWrite(self: *const Self) usize {
+            var wr = self.capacity + self.consume - self.produce;
+            if (wr > self.capacity) {
+                wr -= self.capacity;
+            }
+            return wr;
+        }
     };
 }
 
@@ -46,16 +54,20 @@ test "starts empty" {
     const expect = std.testing.expect;
     var ring = Ring(u32).init();
     try expect(ring.empty());
+    try expect(ring.availableToWrite() == 64);
 }
 
 test "consume what you produce" {
     std.debug.print("\n", .{});
 
     const expect = std.testing.expect;
+    const expectEqual = std.testing.expectEqual;
     var ring = Ring(u8).init();
 
     ring.enqueue(115);
     try expect(!ring.empty());
+    try expectEqual(@as(usize, 63), ring.availableToWrite());
+
     try expect(115 == ring.dequeue());
 
     try expect(ring.empty());
@@ -63,6 +75,8 @@ test "consume what you produce" {
     ring.enqueue(97);
     ring.enqueue(65);
     try expect(!ring.empty());
+    try expectEqual(@as(usize, 62), ring.availableToWrite());
+
     try expect(97 == ring.dequeue());
     try expect(65 == ring.dequeue());
 
@@ -73,10 +87,17 @@ test "consume up to capacity items" {
     std.debug.print("\n", .{});
 
     const expect = std.testing.expect;
+    const expectEqual = std.testing.expectEqual;
+
     var ring = Ring(usize).init();
     for (0..64) |i| {
         ring.enqueue(i);
     }
+
+    std.debug.print("Capacity: {d}, consume {d}, produce {d}\n", .{ ring.capacity, ring.consume, ring.produce });
+
+    try expectEqual(@as(usize, 0), ring.availableToWrite());
+
     for (0..64) |i| {
         try expect(i == ring.dequeue());
     }
