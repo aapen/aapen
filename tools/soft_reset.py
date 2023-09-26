@@ -29,18 +29,11 @@ class SoftReset(gdb.Command):
         return target_address
 
     def reset_cpu_state(self, inferior, dt_ptr):
-        # get address of 'main.kernelInit'
-        kinit_sym = gdb.lookup_symbol('main.kernelInit')[0]
-        if not kinit_sym:
-            raise gdb.GdbError("Cannot find address of main.kernelInit")
-        kinit = kinit_sym.value().address
-
-        stack = gdb.parse_and_eval('&__boot_core_stack_end_exclusive')
-        if not stack:
-            raise gdb.GdbError("Cannot find address of __boot_core_stack_end_exclusive")
-
-        print (f"monitor rpi3.core0 set_reg {{pc {hex(kinit)} sp {hex(stack)} x0 {hex(dt_ptr)} }}")
-        gdb.execute(f"monitor rpi3.core0 set_reg {{pc {hex(kinit)} sp {hex(stack)} x0 {hex(dt_ptr)} }}")
+        gdb.execute(f"interrupt")
+        gdb.execute(f"set $x0 = {hex(dt_ptr)}")
+        gdb.execute(f"set $x1 = 'main.kernelInit'")
+        gdb.execute(f"set $pc = soft_reset")
+        print("Run 'continue' at the gdb prompt to reset")
 
     def invoke(self, arg, from_tty):
         inferior = gdb.selected_inferior()

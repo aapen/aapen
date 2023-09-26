@@ -40,3 +40,33 @@
 1:
         ret
         END(memzero)
+
+// ----------------------------------------------------------------------
+// fn soft_reset
+//
+// Jump back to an entry point, resetting the stack. Note that this
+// does not change EL.
+//
+// Alignment:
+//
+// Arguments:
+//      x0 - argument to target fn
+//      x1 - target fn address
+// Returns: none
+// Clobbers: x1
+// ----------------------------------------------------------------------
+
+        ENTRY(soft_reset)
+        mov x29, xzr                    // Clear the frame pointer
+        mov x30, xzr                    // Clear the link register
+
+        mrs x2, sctlr_el1               // Get control register
+        mov x3, 1
+        bic x2, x2, x3                  // Turn off the MMU enable bit
+        msr sctlr_el1, x2               // Make it so
+        isb
+
+        LDR_REL(x2, __boot_core_stack_end_exclusive)
+        mov sp, x2
+        br x1
+        END(soft_reset)
