@@ -27,7 +27,8 @@ pub fn init(handler: IrqHandler) void {
 }
 
 /// Context passed in to every exception handler.
-/// This is created by the KERNEL_ENTRY macro in `exceptions.s`
+/// This is created by the KERNEL_ENTRY macro in `exceptions.s` and it
+/// is stored on the stack.
 pub const ExceptionContext = struct {
     /// General purpose registers' stored state
     gpr: [30]u64,
@@ -44,6 +45,9 @@ pub const ExceptionContext = struct {
 
     /// Exception Syndrome Register
     esr: Esr,
+
+    /// Override the actual stack with this stack pointer on return
+    force_sp: u64,
 };
 
 // TODO Seems odd to have a dependency from the CPU-specific module to
@@ -61,7 +65,8 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
             debug.panicDisplay(context.elr);
             if (global_unwind_point.sp != undefined) {
                 context.elr = global_unwind_point.pc;
-                context.lr = global_unwind_point.sp;
+                context.force_sp = global_unwind_point.sp;
+                context.lr = global_unwind_point.lr;
                 context.gpr[29] = global_unwind_point.fp;
             }
         } else {

@@ -12,7 +12,7 @@ const ExceptionContext = exceptions.ExceptionContext;
 
 fn nullHandler(_: IrqId, _: ?*anyopaque) void {}
 
-const HandlerThunk = struct {
+const Handler = struct {
     handler: IrqHandlerFn,
     context: ?*anyopaque,
 };
@@ -29,7 +29,7 @@ pub const LocalInterruptController = struct {
         disable_basic_irqs: u32,
     };
 
-    handlers: [96]HandlerThunk = undefined,
+    handlers: [96]Handler = undefined,
     registers: *volatile Registers = undefined,
 
     pub fn init(self: *LocalInterruptController, interrupt_controller_base: u64) void {
@@ -80,8 +80,8 @@ pub const LocalInterruptController = struct {
 
     inline fn handle(self: *LocalInterruptController, id: IrqId) void {
         const idx: usize = @as(usize, id[0]) * 32 + id[1];
-        const thunk = self.handlers[idx];
-        thunk.handler(id, thunk.context);
+        const h = self.handlers[idx];
+        h.handler(id, h.context);
     }
 
     inline fn basicIrqHandleIfRaised(self: *LocalInterruptController, pending: u32, comptime bit: u5, comptime irq_id: IrqId) void {

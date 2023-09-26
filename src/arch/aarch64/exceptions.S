@@ -11,7 +11,7 @@
         EC_VALUE_BKPT                   = 0x3C
         // kernel entry frame = 17 pairs of 64 bit registers, plus a
         // new invocation frame
-        KERNEL_ENTRY_FRAME_SIZE         = 0x130
+        KERNEL_ENTRY_FRAME_SIZE         = 0x140
 
         SYNCHRONOUS_INVALID_EL1T        = 0b0000
         IRQ_INVALID_EL1T                = 0b0001
@@ -87,6 +87,7 @@
 
 	stp	lr,  x1,  [sp, #16 * 16]
         stp     x2,  x3,  [sp, #16 * 17]
+        str     xzr,      [sp, #16 * 18]
 
         // x0 will be the first parameter to the handler function
         // it should point to the context structure that starts just
@@ -119,6 +120,19 @@
 	ldp	x26, x27, [sp, #16 * 14]
 	ldp	x28, x29, [sp, #16 * 15]
 
+        // if we have an override stack pointer in the context
+        // the application wants to throw away the current stack
+        // we can temporarily use x30 for the value since it will be
+        // overwritten by the processor when we do the eret
+        //
+        // note that the frame pointer (x29) must have been set correctly by the
+        // exception handler
+        ldr     x30,      [sp, #16 * 18]
+        cbz     x30, 2f
+        mov     sp,  x30
+        eret
+
+2:
         // restore frame pointer and link register
         ldp     x29, x30, [sp]
 	add	sp,  sp,  #KERNEL_ENTRY_FRAME_SIZE
