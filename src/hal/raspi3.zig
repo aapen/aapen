@@ -31,7 +31,7 @@ pub var allocator: *Allocator = undefined;
 pub var soc_bus = simple_bus.SimpleBus{};
 pub var local_interrupt_controller = interrupts.LocalInterruptController{};
 pub var gpio = bcm_gpio.BroadcomGpio{};
-pub var pl011_uart = pl011.Pl011Uart{};
+pub var pl011_uart = pl011.Pl011Uart{ .irq = interrupts.mkid(2, 25) };
 pub var mailbox = bcm_mailbox.BroadcomMailbox{};
 pub var peripheral_clock_controller = bcm_peripheral_clocks.PeripheralClockController{};
 pub var dma_controller = bcm_dma.BroadcomDMAController{};

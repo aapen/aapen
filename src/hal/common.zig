@@ -15,7 +15,10 @@ const Region = memory.Region;
 // Generic Interrupt Controller
 // ----------------------------------------------------------------------
 
-pub const IrqId = struct { u2, u5 };
+pub const IrqId = struct {
+    index: usize = undefined,
+};
+
 pub const IrqHandlerFn = *const fn (irq_id: IrqId, context: ?*anyopaque) void;
 pub const IrqThunk = *const fn (context: *const arch.cpu.exceptions.ExceptionContext) void;
 
@@ -39,22 +42,22 @@ pub const InterruptController = struct {
         const generic = struct {
             fn connect(ptr: *anyopaque, id: IrqId, handler: IrqHandlerFn, context: *anyopaque) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.connect, .{ self, id, handler, context });
+                @call(.auto, ptr_info.Pointer.child.connect, .{ self, id, handler, context });
             }
 
             fn disconnect(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.disconnect, .{ self, id });
+                @call(.auto, ptr_info.Pointer.child.disconnect, .{ self, id });
             }
 
             fn enable(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.enable, .{ self, id });
+                @call(.auto, ptr_info.Pointer.child.enable, .{ self, id });
             }
 
             fn disable(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.disable, .{ self, id });
+                @call(.auto, ptr_info.Pointer.child.disable, .{ self, id });
             }
         };
 

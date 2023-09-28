@@ -172,9 +172,6 @@ pub const Pl011Uart = struct {
         _unused_reserved: u21 = 0,
     };
 
-    // This is defined by the Broadcom chip itself.
-    const irq = IrqId{ 2, 25 };
-
     const Registers = extern struct {
         data: DataRegister, // 0x00
         rsrecr: ReceiveStatusErrorClearRegister, // 0x04
@@ -193,6 +190,8 @@ pub const Pl011Uart = struct {
         interrupt_clear: InterruptClearRegister, //0x44
     };
 
+    irq: IrqId,
+
     registers: *volatile Registers = undefined,
     intc: *hal.common.InterruptController = undefined,
     fba: FixedBufferAllocator = undefined,
@@ -203,8 +202,6 @@ pub const Pl011Uart = struct {
     pub fn init(self: *Pl011Uart, base: u64, interrupt_controller: *hal.common.InterruptController, gpio: *BroadcomGpio) void {
         self.registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
-        // self.read_buffer = ring.Ring(u8).init();
-        // self.write_buffer = ring.Ring(u8).init();
         self.fba = FixedBufferAllocator.init(&self.buffer_space);
         self.read_buffer = RingBuffer.init(self.fba.allocator(), 64) catch unreachable;
         self.write_buffer = RingBuffer.init(self.fba.allocator(), 64) catch unreachable;
@@ -253,8 +250,8 @@ pub const Pl011Uart = struct {
         self.registers.control.uart_enable = .enable;
 
         // Connect interrupts
-        self.intc.connect(Pl011Uart.irq, irqHandleThunk, self);
-        self.intc.enable(Pl011Uart.irq);
+        self.intc.connect(self.irq, irqHandleThunk, self);
+        self.intc.enable(self.irq);
     }
 
     pub fn serial(self: *Pl011Uart) hal.common.Serial {
