@@ -1,8 +1,17 @@
 #include <asm/macro.h>
 
-/*
- * Set translation table and enable MMU
- */
+
+// ----------------------------------------------------------------------
+// fn mmu_on
+//
+// Set translation table and enable MMU
+//
+// Alignment:
+//
+// Arguments:
+// Returns: none
+// Clobbers: x1, x2, x6
+// ----------------------------------------------------------------------
         ENTRY(mmu_on)
 
 	adrp    x6, __page_tables_start	// address of first table
@@ -21,19 +30,40 @@
         //
         // This must match the definitions in arch/aarch64/mmu.zig
 
-	LDR_IMM64 x1, 0xbbff4400        // program mair on this CPU
+	LDR_IMM64 x1, 0xbbff4400        // program mair on this PE
 	msr     mair_el1, x1		//
-	LDR_IMM64 x1, 0x200803518       // program tcr on this CPU
+	LDR_IMM64 x1, 0x200803518       // program tcr on this PE
 	msr     tcr_el1, x1		//
 	isb				//
-	mrs     x2, tcr_el1		// verify CPU supports desired config
+	mrs     x2, tcr_el1		// verify PE supports desired config
 	cmp     x2, x1			//
-	b.ne    .			//
-//      LDR_IMM64(x1, 0x1005)		// program sctlr on this CPU
+	b.ne    pe_hang			//
+//      LDR_IMM64(x1, 0x1005)		// program sctlr on this PE
 //      msr     sctlr_el1, x1		//
         mrs     x1, sctlr_el1           // get the control register
         orr     x1, x1, #1              // turn on the MMU enable bit
 	msr     sctlr_el1, x1		// and make it so
-	isb				// synchronize context on this CPU
+	isb				// synchronize context on this PE
 	ret				//
         END(mmu_on)
+
+// ----------------------------------------------------------------------
+// fn mmu_off
+//
+// Disable MMU
+//
+// Alignment:
+//
+// Arguments:
+// Returns: none
+// Clobbers: x1, x3
+// ----------------------------------------------------------------------
+
+        ENTRY(mmu_off)
+        mrs     x1, sctlr_el1            // get the control register
+        mov     x3, 1                    //
+        bic     x1, x1, x3               // turn off the MMU enable bit
+        msr     sctlr_el1, x1            // and make it so
+        isb                              // synchronize context on PE
+        ret
+        END(mmu_off)

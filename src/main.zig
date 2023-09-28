@@ -145,12 +145,6 @@ fn diagnostics() !void {
     try fb.range.print();
 }
 
-export fn _soft_reset() noreturn {
-    kernelInit();
-
-    unreachable;
-}
-
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
     const registers = arch.cpu.registers;
 
@@ -230,4 +224,11 @@ pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn
     @breakpoint();
 
     unreachable;
+}
+
+// The assembly portion of soft reset (does the stack magic)
+pub extern fn _soft_reset(resume_address: u64) noreturn;
+
+pub fn resetSoft() noreturn {
+    _soft_reset(@intFromPtr(&kernelInit));
 }

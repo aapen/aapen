@@ -1,5 +1,6 @@
 const root = @import("root");
 const debug = @import("../../debug.zig");
+const devicetree = @import("../../devicetree.zig");
 const cpu = @import("../../architecture.zig").cpu;
 const hal = @import("../../hal.zig");
 const registers = @import("registers.zig");
@@ -69,8 +70,16 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
                 context.lr = global_unwind_point.lr;
                 context.gpr[29] = global_unwind_point.fp;
             }
+        } else if (breakpoint_number == soft_reset_breakpoint) {
+            root.resetSoft();
+
+            // Adjust ELR to resume execution _after_ the breakpoint instruction
+            context.elr += 4;
         } else {
             debug.unknownBreakpointDisplay(context.elr, breakpoint_number);
+
+            // Adjust ELR to resume execution _after_ the breakpoint instruction
+            context.elr += 4;
         }
     } else {
         debug.unhandledExceptionDisplay(context.elr, entry_type, @as(u64, @bitCast(context.esr)), context.esr.ec);
@@ -91,4 +100,11 @@ pub fn irqDisable() void {
 
 pub fn irqEnable() void {
     asm volatile ("msr daifclr, #2");
+}
+
+// This is an arbitrary, but unique, number
+const soft_reset_breakpoint = 0x7c5;
+
+pub fn triggerSoftReset() void {
+    asm volatile ("brk 0x7c5");
 }

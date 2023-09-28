@@ -52,22 +52,17 @@
 
         // We're on the main core. Initialize memory and stack.
         //
+        // __boot_core_stack_end_exclusive is provided by the linker
+        // script which puts it right below _start itself
+        LDR_REL(x0, __boot_core_stack_end_exclusive)
+        mov sp, x0
+
         // The BSS symbols are provided by the linker script, which computes
         // them from the object files produced by the compiler.
         //
         // BSS is never loaded from the program image// only the addresses
         // are specified. We're required to zero out that range of memory.
-
-        LDR_REL(x0, __bss_start)               // Put the starting address in x0
-        LDR_REL(x1, __bss_end_exclusive)       // Put the last address + 1 in x1
-        bl memzero
-
-        // Set up the stack.
-        //
-        // __boot_core_stack_end_exclusive is provided by the linker
-        // script which puts it right below _start itself
-        LDR_REL(x0, __boot_core_stack_end_exclusive)
-        mov sp, x0
+        bl init_bss
 
         // Jump to Zig code, with x0, x1, and x2 as function arguments
         b _start_zig

@@ -14,8 +14,8 @@
 // ----------------------------------------------------------------------
 
         ENTRY(spinDelay)
-        subs x0, x0, #1
-        bne  spinDelay
+        subs    x0, x0, #1
+        bne     spinDelay
         ret
         END(spinDelay)
 
@@ -32,41 +32,69 @@
 // ----------------------------------------------------------------------
 
         ENTRY(memzero)
-        cmp x0, x1                      // Has x0 reached x1?
-        b.eq 1f                         // If so, we're done
-        stp xzr, xzr, [x0], #16         // Otherwise, store 16 bits of zeros and
+        cmp     x0, x1                  // Has x0 reached x1?
+        b.eq    1f                      // If so, we're done
+        stp     xzr, xzr, [x0], #16     // Otherwise, store 16 bits of zeros and
                                         // post-increment x0 by 16
-        b memzero                       // Repeat until done
+        b       memzero                 // Repeat until done
 1:
         ret
         END(memzero)
 
+
+// ----------------------------------------------------------------------
+// fn init_bss
+//
+// Zero out the BSS memory
+//
+// Alignment:
+//
+// Arguments:
+// Returns: none
+// Clobbers: x0, x1
+// ----------------------------------------------------------------------
+        ENTRY(init_bss)
+        sub     sp, sp, #0x10
+        stp     x29, x30, [sp]
+        mov     x29, sp
+        LDR_REL(x0, __bss_start)
+        LDR_REL(x1, __bss_end_exclusive)
+        bl      memzero
+        ldp     x29, x30, [sp]
+        add     sp, sp, #0x10
+        ret
+        END(init_bss)
+
 // ----------------------------------------------------------------------
 // fn soft_reset
 //
-// Jump back to an entry point, resetting the stack. Note that this
+// Jump back to an entry point, resetting the call stack. Note that this
 // does not change EL.
 //
 // Alignment:
 //
 // Arguments:
-//      x0 - argument to target fn
-//      x1 - target fn address
+//      x0 - target fn address
 // Returns: none
-// Clobbers: x1
+// Clobbers: x1, x3, x8
 // ----------------------------------------------------------------------
 
-        ENTRY(soft_reset)
-        mov x29, xzr                    // Clear the frame pointer
-        mov x30, xzr                    // Clear the link register
+        ENTRY(_soft_reset)
+        // Reset the stack
+        LDR_REL(x1, __boot_core_stack_end_exclusive)
+        mov     sp, x1
 
-        mrs x2, sctlr_el1               // Get control register
-        mov x3, 1
-        bic x2, x2, x3                  // Turn off the MMU enable bit
-        msr sctlr_el1, x2               // Make it so
-        isb
+        // Turn off the MMU
+        bl      mmu_off
 
-        LDR_REL(x2, __boot_core_stack_end_exclusive)
-        mov sp, x2
-        br x1
+        // Re-zero the BSS (but save x0 first since it gets clobbered)
+        mov     x8, x0
+        bl      init_bss
+        mov     x0, x8
+
+        // Reset the call frames
+        mov     x29, xzr
+        mov     x30, xzr
+
+        br      x0
         END(soft_reset)
