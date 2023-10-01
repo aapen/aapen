@@ -297,6 +297,7 @@ pub const Pl011Uart = struct {
 
     pub fn irqHandle(self: *Pl011Uart, _: IrqId) void {
         cpu.barriers.barrierMemoryRead();
+        defer cpu.barriers.barrierMemoryWrite();
 
         var interrupts_raised = self.registers.masked_interrupt_status;
 
@@ -316,7 +317,6 @@ pub const Pl011Uart = struct {
                 self.registers.interrupt_mask_set_clear.transmit_interrupt_mask = .not_raised;
             }
         }
-        cpu.barriers.barrierMemoryWrite();
     }
 
     // ----------------------------------------------------------------------
