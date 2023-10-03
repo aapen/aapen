@@ -66,30 +66,16 @@ pub fn wordLet(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
-// Push the address of the word body onto the stack.
-pub fn pushBodyAddress(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!i64 {
-    var body = header.bodyOfType([*]u8);
-    try forth.stack.push(@intFromPtr(body));
-    return 0;
-}
-
 // Create a new dictionary definition.
 // Resulting dictionary entry just pushes its body address onto the stack.
 // This is a fairly low level word.
 pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertNotCompiling();
+    var pName = try forth.popAs([*:0]u8);
+    var lName = string.strlen(pName);
+    var name = pName[0..lName];
 
-    var name = try forth.readWord();
-    var token = forth.peekWord();
-
-    var desc: []const u8 = "";
-    if (token) |t| {
-        if (parser.isComment(t)) {
-            _ = try forth.readWord();
-            desc = try parser.parseComment(t);
-        }
-    }
-    _ = try forth.create(name, desc, &pushBodyAddress, 0);
+    _ = try forth.create(name, "", Forth.pushBodyAddress, 0);
     return 0;
 }
 

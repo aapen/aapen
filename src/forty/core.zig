@@ -22,11 +22,35 @@ const os_main = @import("../main.zig");
 
 const BoardInfo = hal.common.BoardInfo;
 
+/// len *[]u8  --  <results>
+pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const len = try forth.stack.pop();
+    const pStr: [*]u8 = try forth.popAs([*]u8);
+    const token = pStr[0..len];
+    try forth.evalToken(token);
+    return 0;
+}
+
+/// value addr len --
+pub fn wordSetMemory(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const len = try forth.stack.pop();
+    const addr = try forth.popAs([*]u8);
+    const value = try forth.popAs(u8);
+
+    var offset: usize = 0;
+    while (offset < len) {
+        try forth.print("setting {*} to {}\n", .{ addr + offset, value });
+        addr[offset] = value;
+        offset += 1;
+    }
+    return 0;
+}
+
 /// a -- ()
 pub fn wordEmit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const a = try forth.stack.pop();
     var ch: u8 = @intCast(a);
-    forth.console.emit(ch);
+    try forth.emit(ch);
     return 0;
 }
 
@@ -69,13 +93,13 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
 /// --
 pub fn wordCr(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    forth.console.emit(0x0a);
+    try forth.emit(0x0a);
     return 0;
 }
 
 /// --
 pub fn wordClearScreen(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    forth.console.emit(0x0c);
+    try forth.emit(0x0c);
     return 0;
 }
 
@@ -184,7 +208,7 @@ pub fn word2Dup(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
-/// <anything> -- : Clear the stack.
+///  -- : Clear the stack.
 pub fn wordClear(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.stack.reset();
     return 0;
@@ -454,6 +478,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("dma", "stride len dest src -- : Perform a DMA", &wordDma, 0);
 
     // Basic Forth words.
+    _ = try forth.definePrimitiveDesc("eval", "len pStr -- <Results>", &wordEval, 0);
     _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, 0);
     _ = try forth.definePrimitiveDesc("2swap", " w1 w2 w3 w4 -- w3 w4 w1 w2 ", &word2Swap, 0);
     _ = try forth.definePrimitiveDesc("dup", "w -- w w", &wordDup, 0);
@@ -493,4 +518,6 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("!w", "w addr -- : Store a 32 unsigned bit word.", &wordStoreU32, 0);
     _ = try forth.definePrimitiveDesc("@w", "addr -- : Load a 32 bit unsigned word", &wordLoadU32, 0);
     _ = try forth.definePrimitive("wbe", &wordByteExchangeU32, 0);
+
+    _ = try forth.definePrimitive("set-mem", &wordSetMemory, 0);
 }
