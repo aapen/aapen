@@ -49,6 +49,8 @@ firmware/COPYING.linux:
 $(KERNEL): $(SRCS)
 	$(ZIG) build $(ZIG_BUILD_ARGS)
 
+kernel: $(KERNEL)
+
 test:
 	$(ZIG) test $(TEST_SRC)
 
