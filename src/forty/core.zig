@@ -22,7 +22,7 @@ const BoardInfo = hal.common.BoardInfo;
 pub fn wordEmit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const a = try forth.stack.pop();
     var ch: u8 = @intCast(a);
-    forth.console.emit(ch);
+    try forth.emit(ch);
     return 0;
 }
 
@@ -71,13 +71,13 @@ pub fn wordReset(_: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
 /// --
 pub fn wordCr(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    forth.console.emit(0x0a);
+    try forth.emit(0x0a);
     return 0;
 }
 
 /// --
 pub fn wordClearScreen(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    forth.console.emit(0x0c);
+    try forth.emit(0x0c);
     return 0;
 }
 

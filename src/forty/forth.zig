@@ -463,6 +463,11 @@ pub const Forth = struct {
         try hal.serial_writer.print(fmt, args);
     }
 
+    pub fn emit(this: *Forth, ch: u8) !void {
+        this.console.emit(ch);
+        try hal.serial_writer.writeByte(ch);
+    }
+
     pub fn writer(this: *Forth) fbcons.FrameBufferConsole.Writer {
         return this.console.writer();
     }
