@@ -15,8 +15,6 @@ pub const UnwindPoint = struct {
     lr: u64 = undefined,
 };
 
-pub var global_unwind_point = UnwindPoint{};
-
 pub extern fn markUnwindPoint(point: *UnwindPoint) void;
 
 const IrqHandler = *const fn (context: *const ExceptionContext) void;
@@ -64,11 +62,12 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
             // Could we get the panic string and arguments from the
             // stack?
             debug.panicDisplay(context.elr);
-            if (global_unwind_point.sp != undefined) {
-                context.elr = global_unwind_point.pc;
-                context.force_sp = global_unwind_point.sp;
-                context.lr = global_unwind_point.lr;
-                context.gpr[29] = global_unwind_point.fp;
+            var unwind = unwindPointLocate(context);
+            if (unwind.sp != undefined) {
+                context.elr = unwind.pc;
+                context.force_sp = unwind.sp;
+                context.lr = unwind.lr;
+                context.gpr[29] = unwind.fp;
             }
         } else if (breakpoint_number == soft_reset_breakpoint) {
             root.resetSoft();
@@ -84,6 +83,10 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
     } else {
         debug.unhandledExceptionDisplay(context.elr, entry_type, @as(u64, @bitCast(context.esr)), context.esr.ec);
     }
+}
+
+fn unwindPointLocate(_: *ExceptionContext) *UnwindPoint {
+    return &root.global_unwind_point;
 }
 
 var irq_handler: ?IrqHandler = null;

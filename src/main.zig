@@ -31,11 +31,14 @@ pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
 pub var interpreter: Forth = Forth{};
+pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{};
 
 pub var uart_valid = false;
 pub var console_valid = false;
 
 fn kernelInit() void {
+    global_unwind_point = .{};
+
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
 
@@ -97,8 +100,8 @@ fn kernelInit() void {
     supplyAddress("board", @intFromPtr(&board));
     supplyUsize("fbsize", fb.buffer_size);
 
-    arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
-    arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
+    arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
+    global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available, exception recovery available
