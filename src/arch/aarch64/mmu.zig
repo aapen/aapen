@@ -1,3 +1,5 @@
+const cortex_a = @import("../cortex-a.zig");
+
 pub const memory_map = @import("../../hal/raspi3/memory_map.zig");
 
 // Assumptions
@@ -89,9 +91,9 @@ pub fn init() void {
     mmu_on();
 }
 
-extern const __page_tables_start: u64;
+//extern const __page_tables_start: u64;
 
-extern fn memzero(begin: u64, end_exclusive: u64) void;
+//extern fn memzero(begin: u64, end_exclusive: u64) void;
 
 fn tableEntryCreate(table: u64, next_level_table: u64, virtual_address: u64, chosen_table_shift: u6, flags: u64) void {
     var table_index = virtual_address >> chosen_table_shift;
@@ -130,19 +132,13 @@ fn blockMappingCreate(page_middle_directory: u64, virtual_addr_start: u64, virtu
     }
 }
 
-fn pageTablesStart() u64 {
-    // the symbol is provided by the linker script
-    return @intFromPtr(&__page_tables_start);
-}
-
 /// Define an identity-mapped set of page tables
 fn pageTablesCreate() void {
-    var tables = pageTablesStart();
-
-    memzero(tables, tables + page_table_size);
+    const tables_start: [*]u8 = @ptrCast(&cortex_a.sections.__page_tables_start);
+    @memset(tables_start[0..page_table_size], 0);
 
     var map_base: u64 = 0;
-    var table: u64 = tables;
+    var table: u64 = @intFromPtr(tables_start);
     var next_level_table: u64 = table + page_size;
 
     // Level 0

@@ -333,8 +333,8 @@ pub const Pl011Uart = struct {
 
     pub fn stringSend(self: *Pl011Uart, str: []const u8) usize {
         // mask interrupts so we don't get interrupted in the middle of this function.
-        //        cpu.exceptions.irqDisable();
-        //        defer cpu.exceptions.irqEnable();
+        cpu.exceptions.irqDisable();
+        defer cpu.exceptions.irqEnable();
 
         // enable transmit interrupt (even if it already was)
         self.registers.interrupt_mask_set_clear.transmit_interrupt_mask = .raised;

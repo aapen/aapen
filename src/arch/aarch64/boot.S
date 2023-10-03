@@ -61,11 +61,14 @@
         // them from the object files produced by the compiler.
         //
         // BSS is never loaded from the program image// only the addresses
-        // are specified. We're required to zero out that range of memory.
-        bl init_bss
+        // are specified. We're required to zero out that range of
+        // memory.
+        mov     x19, x0                       // Save the stack top
+        bl      bssInit
+        mov     x0, x19                       // Restore stack top as arg
 
-        // Jump to Zig code, with x0, x1, and x2 as function arguments
-        b _start_zig
+        // Jump to Zig code, with x0 (stack top) as a function argument
+        b       _start_zig
 
         // unreachable
 
