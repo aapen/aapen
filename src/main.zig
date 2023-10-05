@@ -31,14 +31,17 @@ pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
 pub var interpreter: Forth = Forth{};
-pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{};
+pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
+    .sp = undefined,
+    .pc = undefined,
+    .fp = undefined,
+    .lr = undefined,
+};
 
 pub var uart_valid = false;
 pub var console_valid = false;
 
 fn kernelInit() void {
-    global_unwind_point = .{};
-
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
 
