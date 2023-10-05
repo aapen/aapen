@@ -43,7 +43,7 @@ pub var console_valid = false;
 
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
-    arch.cpu.mmuInit();
+    arch.cpu.mmu.init();
 
     kernel_heap.init(raspi3.device_start - 1);
     os.page_allocator = kernel_heap.allocator();
