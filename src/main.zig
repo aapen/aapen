@@ -216,9 +216,6 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
     unreachable;
 }
 
-// TODO: re-enable this when
-// https://github.com/ziglang/zig/issues/16327 is fixed.
-
 const StackTrace = std.builtin.StackTrace;
 
 pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn {
