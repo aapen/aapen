@@ -26,6 +26,12 @@ var os = Freestanding{
     .page_allocator = undefined,
 };
 
+// mring is used for debugging low level issues (like when the serial
+// port isn't working.)
+const mring_space_bytes = 1024 * 1024;
+export var mring_storage: [mring_space_bytes]u8 = undefined;
+pub var mring: debug.MessageBuffer = undefined;
+
 pub var board = hal.common.BoardInfo{};
 pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
@@ -44,6 +50,9 @@ pub var console_valid = false;
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmu.init();
+
+    mring = debug.MessageBuffer.init(&mring_storage) catch unreachable;
+    mring.append("mring init");
 
     kernel_heap.init(raspi3.device_start - 1);
     os.page_allocator = kernel_heap.allocator();
