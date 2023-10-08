@@ -1,0 +1,100 @@
+#+title: PL011 Implementation Notes
+#+author: Michael Nygard <mtnygard@gmail.com>
+
+* State Machine and Interrupts
+
+We want to use interrupt-driven IO to allow the device driver to
+buffer outbound data then drain it out a byte at a time. (We currently
+don't use the Tx or Rx FIFOs.) This means there is an interplay
+between direct calls to the device driver and interrupt calls.
+
+This state chart should help debug to make sure we get the sequencing right.
+
+Current understanding:
+
+- After initialization and while it is idle, the UART's "raw interrupt status" (RIS) will not have any interrupt raised.
+- To get a transmit (TX) interrupt, we must first set the interrupt enable bit, then write an initial byte to the data register. Once that has finished sending, the UARTTXINTR will be raised.
+- This interrupt (as well as all other UART related interrupts) will be visible on the "masked interrupt status" (MIS) register if and only if the corresponding "interrupt mask set clear" (IMSC) bit has been set high.
+  - I.e., set bit 5 of IMSC to 1 to enable the TX interrupt. 
+  - Then, when the TX interrupt occurs, it will signal to the interrupt controller (more about that later) _and_ we will see bit 5 of the MIS register set high.
+- The "raw interrupt status" (RIS) register always reflects the interrupt bits, but an IRQ to the processor only happens when ~RIS & IMSC~ is not all zeroes.
+- The "interrupt clear register" (ICR) clears interrupts by setting the corresponding bit to high.
+  - I.e., set ICR bit 5 to 1 to clear the TX interrupt
+- However, the TX interrupt can also be cleared by writing one byte of data to the "data register" (DR)
+- The situation is analogous for a receive (RX) interrupt  with the following exceptions
+  - There is no need to "kick start" the RX interrupt. It happens as soon as the UART receives a byte.
+  - The RX interrupt is cleared by reading the DR.
+  - RX interrupts are on bit 4 of the various interrupt registers
+
+* References
+
+[[https://developer.arm.com/documentation/ddi0183/g/][PrimeCell UART (PL011) Technical Reference Manual]]
+
+* Statechart
+
+*Incomplete and incorrect*. This doesn't properly reflect the concurrency inherent in interrupt-driven I/O. It's only here as WIP.
+
+#+begin_src plantuml :file pl011_notes_state_chart.png
+  @startuml
+
+  [*] --> Uninitialized
+
+  Uninitialized -> Initialized : init
+  Initialized : DR empty
+  Initialized : FR.busy = 0
+  Initialized : write buffer empty
+  Initialized : IMSC.txim = 0
+  Initialized : RIS.txris = 0
+
+  state Sending {
+          state C1 <<choice>>
+          [*] --> C1
+          C1 --> FirstCharSending : [ RIS.txris == 0 ]
+          C1 --> BufferedWriteSpaceAvailable : [ RIS.txris == 1 ]
+          state FirstCharSending 
+          state BufferedWriteSpaceAvailable
+          state BufferedWriteSpaceFull
+  }
+
+  state InterruptRaised {
+          state C2
+          [*] --> C2
+          C2 --> TxInterrupt : [ MIS.txmis == 1 ]
+          C2 --> RxInterrupt : [ MIS.rxmis == 1 ]
+
+          state TxInterrupt {
+           
+          }
+  }        
+
+  Initialized -> Sending : stringSend
+
+  FirstCharSending --> BufferedWriteSpaceAvailable : space available
+
+  BufferedWriteSpaceAvailable -> BufferedWriteSpaceAvailable : stringSend / space available
+  BufferedWriteSpaceAvailable --> BufferedWriteSpaceFull : stringSend / buffer full
+
+  FirstCharSending : write to DR
+  FirstCharSending : FR.busy = 1
+  FirstCharSending : write buffer empty
+  FirstCharSending : IMSC.txim = 1
+  FirstCharSending : RIS.txris = 0
+
+  BufferedWriteSpaceAvailable : data register X
+  BufferedWriteSpaceAvailable : busy flag X
+  BufferedWriteSpaceAvailable : write buffer partial
+  BufferedWriteSpaceAvailable : tx interrupt mask set
+  BufferedWriteSpaceAvailable : tx interrupt X
+
+  BufferedWriteSpaceFull : data register X
+  BufferedWriteSpaceFull : busy flag X
+  BufferedWriteSpaceFull : write buffer full
+  BufferedWriteSpaceFull : tx interrupt mask set
+  BufferedWriteSpaceFull : tx interrupt X
+
+
+  @enduml
+#+end_src
+
+#+RESULTS:
+[[file:pl011_notes_state_chart.png]]
