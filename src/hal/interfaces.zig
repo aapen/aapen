@@ -18,6 +18,10 @@ pub const InterruptController = interrupt_controller.InterruptController;
 pub const IrqId = interrupt_controller.IrqId;
 pub const IrqHandlerFn = interrupt_controller.IrqHandlerFn;
 
+const power_controller = @import("interfaces/power_controller.zig");
+pub const PowerController = power_controller.PowerController;
+pub const PowerResult = power_controller.PowerResult;
+
 const serial = @import("interfaces/serial.zig");
 pub const Serial = serial.Serial;
 

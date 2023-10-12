@@ -31,7 +31,7 @@ pub var mailbox = bcm_mailbox.BroadcomMailbox{};
 pub var peripheral_clock_controller = bcm_peripheral_clocks.PeripheralClockController{};
 pub var dma_controller = bcm_dma.BroadcomDMAController{};
 pub var video_controller = bcm_video.BroadcomVideoController{};
-pub var power_controller = bcm_power.PowerController{};
+pub var power_controller = bcm_power.BroadcomPowerController{};
 pub var board_info_controller = bcm_board_info.BroadcomBoardInfoController{};
 pub var usb = dwc_otg_usb.UsbController{};
 
@@ -54,7 +54,9 @@ pub fn init(alloc: *Allocator) !void {
 
     mailbox.init(peripheral_base + 0xB880, hal.interrupt_controller, &soc_bus.bus_ranges);
     peripheral_clock_controller.init(&mailbox);
+
     power_controller.init(&mailbox);
+    hal.power_controller = power_controller.controller();
 
     board_info_controller.init(&mailbox);
     hal.info_controller = board_info_controller.controller();
@@ -65,6 +67,6 @@ pub fn init(alloc: *Allocator) !void {
     video_controller.init(&mailbox, hal.dma_controller);
     hal.video_controller = video_controller.controller();
 
-    usb.init(peripheral_base + 0x980000, hal.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
+    usb.init(peripheral_base + 0x980000, hal.interrupt_controller, &soc_bus.bus_ranges, hal.power_controller);
     hal.usb = usb.usb();
 }

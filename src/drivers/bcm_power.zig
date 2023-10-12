@@ -1,24 +1,30 @@
+const hal = @import("../hal.zig");
+const PowerController = hal.interfaces.PowerController;
+const PowerResult = hal.interfaces.PowerResult;
+
 const bcm_mailbox = @import("bcm_mailbox.zig");
 const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
-pub const PowerController = struct {
+pub const BroadcomPowerController = struct {
+    interface: PowerController = undefined,
     mailbox: *BroadcomMailbox = undefined,
 
-    pub fn init(self: *PowerController, mailbox: *BroadcomMailbox) void {
+    pub fn init(self: *BroadcomPowerController, mailbox: *BroadcomMailbox) void {
+        self.interface = .{
+            .powerOn = powerOn,
+            .powerOff = powerOff,
+            .isPowered = isPowered,
+        };
         self.mailbox = mailbox;
     }
 
-    pub const Result = enum {
-        unknown,
-        failed,
-        no_such_device,
-        power_on,
-        power_off,
-    };
+    pub fn controller(self: *BroadcomPowerController) *PowerController {
+        return &self.interface;
+    }
 
-    fn decode(state: u32) Result {
+    fn decode(state: u32) PowerResult {
         var no_device = (state & 0x02) != 0;
         var actual_state = (state & 0x01) != 0;
 
@@ -34,7 +40,7 @@ pub const PowerController = struct {
     const QueryMessage = struct {
         const Self = @This();
         device: PowerDevice,
-        state: Result = .unknown,
+        state: PowerResult = .unknown,
 
         pub fn init(device: PowerDevice) Self {
             return Self{
@@ -72,7 +78,7 @@ pub const PowerController = struct {
         device: PowerDevice,
         desired_state: DesiredState = .on,
         wait: WaitForTransition = .wait,
-        state: Result = .unknown,
+        state: PowerResult = .unknown,
 
         pub fn init(device: PowerDevice) Self {
             return Self{
@@ -106,7 +112,11 @@ pub const PowerController = struct {
         ccp2tx = 8,
     };
 
-    pub fn isPowered(self: *PowerController, device: PowerDevice) !Result {
+    pub fn isPowered(intf: *PowerController, power_domain: u32) PowerResult {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+
+        const device: PowerDevice = @enumFromInt(power_domain);
+
         var power_query = QueryMessage.init(device);
         var messages = [_]Message{power_query.message()};
         var env = Envelope.init(self.mailbox, &messages);
@@ -115,7 +125,10 @@ pub const PowerController = struct {
         return power_query.state;
     }
 
-    pub fn powerOn(self: *PowerController, device: PowerDevice) !Result {
+    pub fn powerOn(intf: *PowerController, power_domain: u32) PowerResult {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+        const device: PowerDevice = @enumFromInt(power_domain);
+
         var power_control = ControlMessage.init(device);
         var messages = [_]Message{power_control.message()};
         var env = Envelope.init(self.mailbox, &messages);
@@ -124,7 +137,10 @@ pub const PowerController = struct {
         return power_control.state;
     }
 
-    pub fn powerOff(self: *PowerController, device: PowerDevice) !Result {
+    pub fn powerOff(intf: *PowerController, power_domain: u32) PowerResult {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+        const device: PowerDevice = @enumFromInt(power_domain);
+
         var power_control = ControlMessage.init(device);
         power_control.desired_state = .off;
         var messages = [_]Message{power_control.message()};

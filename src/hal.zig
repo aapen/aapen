@@ -14,6 +14,7 @@ pub var clock: *interfaces.Clock = undefined;
 pub var serial: *interfaces.Serial = undefined;
 pub var usb: *interfaces.USB = undefined;
 pub var video_controller: *interfaces.VideoController = undefined;
+pub var power_controller: *interfaces.PowerController = undefined;
 
 const SerialWriter = std.io.Writer(*interfaces.Serial, error{}, serialStringSend);
 
