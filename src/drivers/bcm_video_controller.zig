@@ -3,11 +3,10 @@ const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
-const common = @import("../hal/common.zig");
-const DMAController = common.DMAController;
-const DMAChannel = common.DMAChannel;
-const DMARequest = common.DMARequest;
-const VideoController = common.VideoController;
+const hal = @import("../hal.zig");
+const DMAController = hal.interfaces.DMAController;
+const DMAChannel = hal.interfaces.DMAChannel;
+const DMARequest = hal.interfaces.DMARequest;
 
 const frame_buffer = @import("../frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
@@ -19,15 +18,14 @@ const Region = memory.Region;
 pub const BroadcomVideoController = struct {
     mailbox: *BroadcomMailbox = undefined,
     dma: *DMAController = undefined,
-    dma_channel: ?DMAChannel = undefined,
 
     pub fn init(self: *BroadcomVideoController, mailbox: *BroadcomMailbox, dma: *DMAController) void {
         self.mailbox = mailbox;
         self.dma = dma;
     }
 
-    pub fn controller(self: *BroadcomVideoController) common.VideoController {
-        return common.VideoController.init(self);
+    pub fn controller(self: *BroadcomVideoController) hal.common.VideoController {
+        return hal.common.VideoController.init(self);
     }
 
     pub fn allocFrameBuffer(self: *BroadcomVideoController, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, default_palette: []const u32) void {
@@ -60,7 +58,7 @@ pub const BroadcomVideoController = struct {
         fb.bpp = bpp.get_bpp();
         fb.range.fromSize(base_in_arm_address_space, alloc.get_buffer_size());
         fb.dma = self.dma;
-        fb.dma_channel = self.dma.reserveChannel() catch null;
+        fb.dma_channel = self.dma.reserveChannel(self.dma) catch null;
     }
 };
 

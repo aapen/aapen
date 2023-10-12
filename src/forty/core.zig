@@ -55,10 +55,10 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     single_dma_request.destination = try forth.stack.pop();
     single_dma_request.length = try forth.stack.pop();
     single_dma_request.stride = try forth.stack.pop();
-    const channel = hal.dma_controller2.reserveChannel(hal.dma_controller2) catch return ForthError.BadOperation;
-    hal.dma_controller2.initiate(hal.dma_controller2, channel, &single_dma_request) catch return ForthError.BadOperation;
-    var success = hal.dma_controller2.awaitChannel(hal.dma_controller2, channel);
-    hal.dma_controller2.releaseChannel(hal.dma_controller2, channel);
+    const channel = hal.dma_controller.reserveChannel(hal.dma_controller) catch return ForthError.BadOperation;
+    hal.dma_controller.initiate(hal.dma_controller, channel, &single_dma_request) catch return ForthError.BadOperation;
+    var success = hal.dma_controller.awaitChannel(hal.dma_controller, channel);
+    hal.dma_controller.releaseChannel(hal.dma_controller, channel);
     try forth.stack.push(if (success) 1 else 0);
     return 0;
 }
