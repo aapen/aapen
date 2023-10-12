@@ -67,6 +67,7 @@ pub fn init(alloc: *Allocator) !void {
 
     dma_controller.init(allocator, peripheral_base + 0x7100, &hal.interrupt_controller, &soc_bus.dma_ranges);
     hal.dma_controller = dma_controller.dma();
+    hal.dma_controller2 = dma_controller.dma2();
 
     video_controller.init(&mailbox, &hal.dma_controller);
     hal.video_controller = video_controller.controller();

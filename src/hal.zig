@@ -8,6 +8,7 @@ pub const detect = @import("hal/detect.zig");
 pub const common = @import("hal/common.zig");
 
 pub var dma_controller: common.DMAController = undefined;
+pub var dma_controller2: *interfaces.DMAController = undefined;
 pub var irq_thunk: common.IrqThunk = undefined;
 pub var info_controller: common.BoardInfoController = undefined;
 pub var interrupt_controller: common.InterruptController = undefined;

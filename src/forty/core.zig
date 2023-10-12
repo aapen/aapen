@@ -47,7 +47,7 @@ pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
-var single_dma_request: hal.common.DMARequest = hal.common.DMARequest{};
+var single_dma_request: hal.interfaces.DMARequest = hal.interfaces.DMARequest{};
 
 /// stride len dest src --
 pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
@@ -55,10 +55,10 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     single_dma_request.destination = try forth.stack.pop();
     single_dma_request.length = try forth.stack.pop();
     single_dma_request.stride = try forth.stack.pop();
-    const channel = hal.dma_controller.reserveChannel() catch return ForthError.BadOperation;
-    hal.dma_controller.initiate(channel, &single_dma_request) catch return ForthError.BadOperation;
-    var success = hal.dma_controller.awaitChannel(channel);
-    hal.dma_controller.releaseChannel(channel);
+    const channel = hal.dma_controller2.reserveChannel(hal.dma_controller2) catch return ForthError.BadOperation;
+    hal.dma_controller2.initiate(hal.dma_controller2, channel, &single_dma_request) catch return ForthError.BadOperation;
+    var success = hal.dma_controller2.awaitChannel(hal.dma_controller2, channel);
+    hal.dma_controller2.releaseChannel(hal.dma_controller2, channel);
     try forth.stack.push(if (success) 1 else 0);
     return 0;
 }
