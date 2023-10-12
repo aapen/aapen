@@ -70,7 +70,7 @@ fn kernelInit() void {
     uart_valid = true;
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
-    hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
+    hal.video_controller2.allocFrameBuffer(hal.video_controller2, &fb, 1024, 768, 8, &frame_buffer.default_palette);
 
     frame_buffer_console.init(hal.serial);
     console_valid = true;
