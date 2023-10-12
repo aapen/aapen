@@ -5,7 +5,6 @@ const devicetree = @import("devicetree.zig");
 
 pub const interfaces = @import("hal/interfaces.zig");
 pub const detect = @import("hal/detect.zig");
-pub const common = @import("hal/common.zig");
 
 pub var dma_controller: *interfaces.DMAController = undefined;
 pub var info_controller: *interfaces.BoardInfoController = undefined;
