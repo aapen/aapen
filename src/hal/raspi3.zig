@@ -57,7 +57,6 @@ pub fn init(alloc: *Allocator) !void {
 
     pl011_uart.init(peripheral_base + 0x201000, &gpio);
     hal.serial = pl011_uart.serial();
-    hal.serial2 = pl011_uart.serial2();
 
     mailbox.init(peripheral_base + 0xB880, &hal.interrupt_controller, &soc_bus.bus_ranges);
     peripheral_clock_controller.init(&mailbox);

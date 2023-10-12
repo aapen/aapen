@@ -13,20 +13,19 @@ pub var info_controller: common.BoardInfoController = undefined;
 pub var interrupt_controller: common.InterruptController = undefined;
 pub var timer: common.Timer = undefined;
 pub var clock: common.Clock = undefined;
-pub var serial: common.Serial = undefined;
-pub var serial2: *interfaces.Serial = undefined;
+pub var serial: *interfaces.Serial = undefined;
 pub var usb: common.USB = undefined;
 pub var video_controller: common.VideoController = undefined;
 
-const SerialWriter = std.io.Writer(*common.Serial, error{}, serialStringSend);
+const SerialWriter = std.io.Writer(*interfaces.Serial, error{}, serialStringSend);
 
 pub var serial_writer: SerialWriter = undefined;
 
-fn serialStringSend(uart: *common.Serial, str: []const u8) !usize {
-    return uart.puts(str);
+fn serialStringSend(uart: *interfaces.Serial, str: []const u8) !usize {
+    return uart.puts(uart, str);
 }
 
 pub fn init(root: *devicetree.Fdt.Node, allocator: *Allocator) !void {
     try detect.detectAndInit(root, allocator);
-    serial_writer = SerialWriter{ .context = &serial };
+    serial_writer = SerialWriter{ .context = serial };
 }
