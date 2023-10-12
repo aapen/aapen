@@ -73,7 +73,6 @@ pub fn init(alloc: *Allocator) !void {
 
     usb.init(peripheral_base + 0x980000, &hal.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
     hal.usb = usb.usb();
-    hal.usb2 = usb.usb2();
 }
 
 pub fn irqHandleThunk(context: *const arch.cpu.exceptions.ExceptionContext) void {

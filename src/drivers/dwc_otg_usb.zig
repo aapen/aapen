@@ -133,11 +133,7 @@ pub const UsbController = struct {
         self.power_controller = power_controller;
     }
 
-    pub fn usb(self: *UsbController) hal.common.USB {
-        return hal.common.USB.init(self);
-    }
-
-    pub fn usb2(self: *UsbController) *hal.interfaces.USB {
+    pub fn usb(self: *UsbController) *hal.interfaces.USB {
         return &self.interface;
     }
 
@@ -151,7 +147,7 @@ pub const UsbController = struct {
         self.power(false);
     }
 
-    pub fn power(self: *UsbController, on_off: bool) void {
+    fn power(self: *UsbController, on_off: bool) void {
         if (on_off) {
             if (self.power_controller.powerOn(.usb_hcd)) |usb_power_result| {
                 kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
