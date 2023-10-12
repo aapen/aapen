@@ -47,10 +47,8 @@ pub fn init(alloc: *Allocator) !void {
 
     local_interrupt_controller.init(peripheral_base + 0xb200);
     hal.interrupt_controller = local_interrupt_controller.controller();
-    hal.interrupt_controller2 = local_interrupt_controller.controller2();
-    hal.irq_thunk = irqHandleThunk;
 
-    timer.init(peripheral_base + 0x3000, &hal.interrupt_controller);
+    timer.init(peripheral_base + 0x3000, hal.interrupt_controller);
     hal.timer = timer.timers[1].timer();
     hal.clock = timer.counter.clock();
 
@@ -59,23 +57,19 @@ pub fn init(alloc: *Allocator) !void {
     pl011_uart.init(peripheral_base + 0x201000, &gpio);
     hal.serial = pl011_uart.serial();
 
-    mailbox.init(peripheral_base + 0xB880, &hal.interrupt_controller, &soc_bus.bus_ranges);
+    mailbox.init(peripheral_base + 0xB880, hal.interrupt_controller, &soc_bus.bus_ranges);
     peripheral_clock_controller.init(&mailbox);
     power_controller.init(&mailbox);
 
     board_info_controller.init(&mailbox);
     hal.info_controller = board_info_controller.controller();
 
-    dma_controller.init(allocator, peripheral_base + 0x7100, &hal.interrupt_controller, &soc_bus.dma_ranges);
+    dma_controller.init(allocator, peripheral_base + 0x7100, hal.interrupt_controller, &soc_bus.dma_ranges);
     hal.dma_controller = dma_controller.dma();
 
     video_controller.init(&mailbox, hal.dma_controller);
     hal.video_controller = video_controller.controller();
 
-    usb.init(peripheral_base + 0x980000, &hal.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
+    usb.init(peripheral_base + 0x980000, hal.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
     hal.usb = usb.usb();
-}
-
-pub fn irqHandleThunk(context: *const arch.cpu.exceptions.ExceptionContext) void {
-    local_interrupt_controller.irqHandle(context);
 }

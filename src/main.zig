@@ -64,7 +64,7 @@ fn kernelInit() void {
     };
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
-    arch.cpu.exceptions.init(hal.irq_thunk);
+    arch.cpu.exceptions.init();
 
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     uart_valid = true;

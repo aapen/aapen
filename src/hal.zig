@@ -8,10 +8,8 @@ pub const detect = @import("hal/detect.zig");
 pub const common = @import("hal/common.zig");
 
 pub var dma_controller: *interfaces.DMAController = undefined;
-pub var irq_thunk: common.IrqThunk = undefined;
 pub var info_controller: *interfaces.BoardInfoController = undefined;
-pub var interrupt_controller: common.InterruptController = undefined;
-pub var interrupt_controller2: *interfaces.InterruptController = undefined;
+pub var interrupt_controller: *interfaces.InterruptController = undefined;
 pub var timer: *interfaces.Timer = undefined;
 pub var clock: *interfaces.Clock = undefined;
 pub var serial: *interfaces.Serial = undefined;

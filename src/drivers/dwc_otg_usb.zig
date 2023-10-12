@@ -3,6 +3,7 @@ const root = @import("root");
 const kprint = root.kprint;
 
 const hal = @import("../hal.zig");
+const InterruptController = hal.interfaces.InterruptController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -112,14 +113,14 @@ pub const UsbController = struct {
     interface: hal.interfaces.USB = undefined,
 
     core_registers: *volatile CoreRegisters = undefined,
-    intc: *hal.common.InterruptController = undefined,
+    intc: *InterruptController = undefined,
     translations: *AddressTranslations = undefined,
     power_controller: *PowerController = undefined,
 
     pub fn init(
         self: *UsbController,
         base: u64,
-        interrupt_controller: *hal.common.InterruptController,
+        interrupt_controller: *InterruptController,
         translations: *AddressTranslations,
         power_controller: *PowerController,
     ) void {

@@ -19,9 +19,8 @@ pub extern fn markUnwindPoint(point: *UnwindPoint) void;
 
 const IrqHandler = *const fn (context: *const ExceptionContext) void;
 
-pub fn init(handler: IrqHandler) void {
+pub fn init() void {
     registers.vbar_el1.write(@intFromPtr(__exception_handler_table));
-    irq_handler = handler;
     irqEnable();
 }
 
@@ -89,12 +88,8 @@ fn unwindPointLocate(_: *ExceptionContext) *UnwindPoint {
     return &root.global_unwind_point;
 }
 
-var irq_handler: ?IrqHandler = null;
-
 export fn irqCurrentElx(context: *const ExceptionContext) void {
-    if (irq_handler != null) {
-        irq_handler.?(context);
-    }
+    hal.interrupt_controller.irqHandle(hal.interrupt_controller, context);
 }
 
 pub fn irqDisable() void {

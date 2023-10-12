@@ -1,6 +1,6 @@
 const hal = @import("../hal.zig");
-const InterruptController = hal.common.InterruptController;
-const IrqId = hal.common.IrqId;
+const InterruptController = hal.interfaces.InterruptController;
+const IrqId = hal.interfaces.IrqId;
 
 const interrupts = @import("arm_local_interrupt_controller.zig");
 
@@ -37,12 +37,7 @@ const FreeRunningCounter = struct {
 };
 
 pub const Timer = struct {
-    const CallbackThunk = struct {
-        callback: hal.common.TimerCallbackFn,
-        context: ?*anyopaque,
-    };
-
-    fn noAction(intf: *anyopaque) u32 {
+    fn noAction(intf: *const anyopaque) u32 {
         _ = intf;
         return 0;
     }
@@ -80,7 +75,7 @@ pub const Timer = struct {
         self.compare = @ptrFromInt(timer_base + 0x0c + (@as(u64, self.timer_id) * 4));
         self.next_callback = noAction;
         self.intc = intc;
-        self.intc.connect(self.irq, timerIrqHandle, self);
+        self.intc.connect(self.intc, self.irq, irqHandle);
     }
 
     pub fn timer(self: *Timer) *hal.interfaces.Timer {
@@ -88,15 +83,15 @@ pub const Timer = struct {
     }
 
     pub fn deinit(self: *Timer) void {
-        self.intc.disconnect(self.irq);
+        self.intc.disconnect(self.intc, self.irq);
     }
 
     pub fn enable(self: *Timer) void {
-        self.intc.enable(self.irq);
+        self.intc.enable(self.intc, self.irq);
     }
 
     pub fn disable(self: *Timer) void {
-        self.intc.disable(self.irq);
+        self.intc.disable(self.intc, self.irq);
     }
 
     fn clearDetectedFlag(self: *Timer) void {
@@ -119,7 +114,10 @@ pub const Timer = struct {
         self.enable();
     }
 
-    pub fn irqHandle(self: *Timer) void {
+    pub fn irqHandle(_: *anyopaque, id: IrqId) void {
+        const which_timer = id.index & 0x3;
+        var self = timers[which_timer];
+
         // invoke callback
         const next_delta = self.next_callback(&self.interface);
         self.clearDetectedFlag();
@@ -146,17 +144,4 @@ pub fn init(system_timer_base: u64, intc: *InterruptController) void {
     inline for (0..3) |timer_id| {
         timers[timer_id].init(system_timer_base, intc, timer_id, interrupts.mkid(0, timer_id));
     }
-}
-
-// ----------------------------------------------------------------------
-// Trampoline function
-// ----------------------------------------------------------------------
-
-pub fn timerIrqHandle(_: IrqId, context: ?*anyopaque) void {
-    if (null == context) {
-        return;
-    }
-
-    var which: *Timer = @ptrCast(@alignCast(context));
-    which.irqHandle();
 }

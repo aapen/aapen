@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const hal = @import("../hal.zig");
-const InterruptController = hal.common.InterruptController;
+const InterruptController = hal.interfaces.InterruptController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
