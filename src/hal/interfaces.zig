@@ -13,6 +13,11 @@ pub const DMAChannel = dma.DMAChannel;
 pub const DMAError = dma.DMAError;
 pub const DMAController = dma.DMAController;
 
+const interrupt_controller = @import("interfaces/interrupt_controller.zig");
+pub const InterruptController = interrupt_controller.InterruptController;
+pub const IrqId = interrupt_controller.IrqId;
+pub const IrqHandlerFn = interrupt_controller.IrqHandlerFn;
+
 const serial = @import("interfaces/serial.zig");
 pub const Serial = serial.Serial;
 

@@ -47,6 +47,7 @@ pub fn init(alloc: *Allocator) !void {
 
     local_interrupt_controller.init(peripheral_base + 0xb200);
     hal.interrupt_controller = local_interrupt_controller.controller();
+    hal.interrupt_controller2 = local_interrupt_controller.controller2();
     hal.irq_thunk = irqHandleThunk;
 
     timer.init(peripheral_base + 0x3000, &hal.interrupt_controller);
