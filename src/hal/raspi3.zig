@@ -51,7 +51,9 @@ pub fn init(alloc: *Allocator) !void {
 
     timer.init(peripheral_base + 0x3000, &hal.interrupt_controller);
     hal.timer = timer.timers[1].timer();
+    hal.timer2 = timer.timers[1].timer2();
     hal.clock = timer.counter.clock();
+    hal.clock2 = timer.counter.clock2();
 
     gpio.init(peripheral_base + 0x200000);
 

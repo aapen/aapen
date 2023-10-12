@@ -17,10 +17,16 @@ const interrupts = @import("arm_local_interrupt_controller.zig");
 // }
 
 const FreeRunningCounter = struct {
+    interface: hal.interfaces.Clock = undefined,
+
     count_low: *volatile u32,
     count_high: *volatile u32,
 
     pub fn init(self: *FreeRunningCounter, timer_base: u64) void {
+        self.interface = .{
+            .ticks = ticks2,
+        };
+
         self.count_low = @ptrFromInt(timer_base + 0x04);
         self.count_high = @ptrFromInt(timer_base + 0x08);
     }
@@ -29,8 +35,20 @@ const FreeRunningCounter = struct {
         return hal.common.Clock.init(self);
     }
 
+    pub fn clock2(self: *FreeRunningCounter) *hal.interfaces.Clock {
+        return &self.interface;
+    }
+
     pub fn ticks(self: *FreeRunningCounter) u64 {
         // TODO Probably should disable interrupts during this.
+        const low: u32 = self.count_low.*;
+        const high: u32 = self.count_high.*;
+        return @as(u64, high) << 32 | low;
+    }
+
+    fn ticks2(intf: *hal.interfaces.Clock) u64 {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+
         const low: u32 = self.count_low.*;
         const high: u32 = self.count_high.*;
         return @as(u64, high) << 32 | low;
@@ -51,12 +69,19 @@ pub const Timer = struct {
         return 0;
     }
 
+    fn noAction2(intf: *anyopaque) u32 {
+        _ = intf;
+        return 0;
+    }
+
     const null_callback = CallbackThunk{ .callback = noAction, .context = null };
 
     const TimerControlStatus = packed struct {
         match: u4,
         _unused_reserved: u28 = 0,
     };
+
+    interface: hal.interfaces.Timer = undefined,
 
     intc: *InterruptController,
     irq: IrqId,
@@ -65,6 +90,7 @@ pub const Timer = struct {
     compare: *volatile u32,
     match_reset: u4 = 0,
     next_callback: CallbackThunk = null_callback,
+    next_callback2: hal.interfaces.TimerCallbackFn = noAction2,
 
     pub fn init(
         self: *Timer,
@@ -73,18 +99,27 @@ pub const Timer = struct {
         timer_id: u2,
         irq: IrqId,
     ) void {
+        self.interface = .{
+            .schedule = schedule2,
+        };
+
         self.timer_id = timer_id;
         self.irq = irq;
         self.match_reset = @as(u4, 1) << self.timer_id;
         self.control = @ptrFromInt(timer_base);
         self.compare = @ptrFromInt(timer_base + 0x0c + (@as(u64, self.timer_id) * 4));
         self.next_callback = null_callback;
+        self.next_callback2 = noAction2;
         self.intc = intc;
         self.intc.connect(self.irq, timerIrqHandle, self);
     }
 
     pub fn timer(self: *Timer) hal.common.Timer {
         return hal.common.Timer.init(self);
+    }
+
+    pub fn timer2(self: *Timer) *hal.interfaces.Timer {
+        return &self.interface;
     }
 
     pub fn deinit(self: *Timer) void {
@@ -105,6 +140,20 @@ pub const Timer = struct {
         self.control.match = self.match_reset;
     }
 
+    fn schedule2(intf: *hal.interfaces.Timer, in_ticks: u32, cb: hal.interfaces.TimerCallbackFn) void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+
+        self.disable();
+        const tick = counter.ticksReadLow();
+
+        // we ignore overflow because the counter will wrap around the
+        // same way the compare value does.
+        const next_tick = @addWithOverflow(tick, in_ticks)[0];
+        self.compare.* = next_tick;
+        self.next_callback2 = cb;
+        self.enable();
+    }
+
     pub fn schedule(self: *Timer, in_ticks: u32, cb: hal.common.TimerCallbackFn, context: ?*anyopaque) void {
         self.disable();
         const tick = counter.ticksReadLow();
@@ -119,7 +168,7 @@ pub const Timer = struct {
 
     pub fn irqHandle(self: *Timer) void {
         // invoke callback
-        const next_delta = self.next_callback.callback(self.next_callback.context);
+        const next_delta = self.next_callback2(&self.interface);
         self.clearDetectedFlag();
 
         if (next_delta >= 0) {
@@ -142,7 +191,7 @@ pub fn init(system_timer_base: u64, intc: *InterruptController) void {
     // TODO externalize this constant
     counter.init(system_timer_base);
     inline for (0..3) |timer_id| {
-        timers[timer_id].init(system_timer_base, intc, timer_id, interrupts.mkid(1, 0));
+        timers[timer_id].init(system_timer_base, intc, timer_id, interrupts.mkid(0, timer_id));
     }
 }
 
