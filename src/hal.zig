@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const devicetree = @import("devicetree.zig");
 
+pub const interfaces = @import("hal/interfaces.zig");
 pub const detect = @import("hal/detect.zig");
 pub const common = @import("hal/common.zig");
 
@@ -13,6 +14,7 @@ pub var interrupt_controller: common.InterruptController = undefined;
 pub var timer: common.Timer = undefined;
 pub var clock: common.Clock = undefined;
 pub var serial: common.Serial = undefined;
+pub var serial2: *interfaces.Serial = undefined;
 pub var usb: common.USB = undefined;
 pub var video_controller: common.VideoController = undefined;
 

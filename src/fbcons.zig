@@ -9,7 +9,7 @@ const FrameBuffer = frame_buffer.FrameBuffer;
 
 const hal = @import("hal.zig");
 const VideoController = hal.common.VideoController;
-const Serial = hal.common.Serial;
+const Serial = hal.interfaces.Serial;
 const Allocator = std.mem.Allocator;
 
 const Readline = @import("readline.zig");
@@ -174,20 +174,20 @@ pub const FrameBufferConsole = struct {
     }
 
     pub fn getc(self: *FrameBufferConsole) u8 {
-        var ch = self.serial.getc();
+        var ch = self.serial.getc(self.serial);
         return if (ch == '\r') '\n' else ch;
     }
 
     pub fn putc(self: *FrameBufferConsole, ch: u8) void {
         if (ch == '\n') {
-            _ = self.serial.putc('\r');
+            _ = self.serial.putc(self.serial, '\r');
         }
-        _ = self.serial.putc(ch);
+        _ = self.serial.putc(self.serial, ch);
         self.emit(ch);
     }
 
     pub fn char_available(self: *FrameBufferConsole) bool {
-        return self.serial.hasc();
+        return self.serial.hasc(self.serial);
     }
 };
 

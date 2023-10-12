@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const hal = @import("../hal.zig");
+const Serial2 = hal.interfaces.Serial;
 
 const bcm_gpio = @import("bcm_gpio.zig");
 const BroadcomGpio = bcm_gpio.BroadcomGpio;
@@ -187,9 +188,17 @@ pub const Pl011Uart = struct {
     };
 
     registers: *volatile Registers = undefined,
+    interface: hal.interfaces.Serial = undefined,
 
     pub fn init(self: *Pl011Uart, base: u64, gpio: *BroadcomGpio) void {
         self.registers = @ptrFromInt(base);
+
+        self.interface = .{
+            .getc = getc2,
+            .putc = putc2,
+            .puts = puts2,
+            .hasc = hasc2,
+        };
 
         // Configure GPIO pins for serial I/O
         gpio.pins[14].enable();
@@ -240,6 +249,10 @@ pub const Pl011Uart = struct {
         return hal.common.Serial.init(self);
     }
 
+    pub fn serial2(self: *Pl011Uart) *Serial2 {
+        return &self.interface;
+    }
+
     pub fn getc(self: *Pl011Uart) u8 {
         while (self.registers.flags.receive_fifo_empty != 0) {}
 
@@ -250,14 +263,42 @@ pub const Pl011Uart = struct {
         return self.send(ch);
     }
 
-    pub fn puts(self: *Pl011Uart, buf: []const u8) usize {
-        for (buf) |ch| {
+    pub fn puts(self: *Pl011Uart, buffer: []const u8) usize {
+        for (buffer) |ch| {
             self.send(ch);
         }
-        return buf.len;
+        return buffer.len;
     }
 
     pub fn hasc(self: *Pl011Uart) bool {
+        return self.registers.flags.receive_fifo_empty == 0;
+    }
+
+    fn getc2(intf: *Serial2) u8 {
+        const self = @fieldParentPtr(Pl011Uart, "interface", intf);
+
+        while (self.registers.flags.receive_fifo_empty != 0) {}
+        return self.registers.data.data;
+    }
+
+    fn putc2(intf: *Serial2, ch: u8) void {
+        const self = @fieldParentPtr(Pl011Uart, "interface", intf);
+
+        self.send(ch);
+    }
+
+    fn puts2(intf: *Serial2, buffer: []const u8) usize {
+        const self = @fieldParentPtr(Pl011Uart, "interface", intf);
+
+        for (buffer) |ch| {
+            self.send(ch);
+        }
+        return buffer.len;
+    }
+
+    fn hasc2(intf: *Serial2) bool {
+        const self = @fieldParentPtr(Pl011Uart, "interface", intf);
+
         return self.registers.flags.receive_fifo_empty == 0;
     }
 

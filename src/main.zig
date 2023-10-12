@@ -72,7 +72,7 @@ fn kernelInit() void {
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
     hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
 
-    frame_buffer_console.init(&hal.serial);
+    frame_buffer_console.init(hal.serial2);
     console_valid = true;
 
     board.init(&os.page_allocator);
