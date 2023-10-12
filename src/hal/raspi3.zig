@@ -70,7 +70,6 @@ pub fn init(alloc: *Allocator) !void {
 
     video_controller.init(&mailbox, hal.dma_controller);
     hal.video_controller = video_controller.controller();
-    hal.video_controller2 = video_controller.controller2();
 
     usb.init(peripheral_base + 0x980000, &hal.interrupt_controller, &soc_bus.bus_ranges, &power_controller);
     hal.usb = usb.usb();

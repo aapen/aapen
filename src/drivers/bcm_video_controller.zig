@@ -22,56 +22,19 @@ pub const BroadcomVideoController = struct {
 
     pub fn init(self: *BroadcomVideoController, mailbox: *BroadcomMailbox, dma: *DMAController) void {
         self.interface = .{
-            .allocFrameBuffer = allocFrameBuffer2,
+            .allocFrameBuffer = allocFrameBuffer,
         };
         self.mailbox = mailbox;
         self.dma = dma;
     }
 
-    pub fn controller(self: *BroadcomVideoController) hal.common.VideoController {
-        return hal.common.VideoController.init(self);
-    }
-
-    pub fn controller2(self: *BroadcomVideoController) *hal.interfaces.VideoController {
+    pub fn controller(self: *BroadcomVideoController) *hal.interfaces.VideoController {
         return &self.interface;
     }
 
-    pub fn allocFrameBuffer2(intf: *hal.interfaces.VideoController, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, default_palette: []const u32) void {
+    pub fn allocFrameBuffer(intf: *hal.interfaces.VideoController, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, default_palette: []const u32) void {
         const self = @fieldParentPtr(@This(), "interface", intf);
 
-        var phys = SizeMessage.physical(xres, yres);
-        var virt = SizeMessage.virtual(xres, yres);
-        var bpp = DepthMessage.init(depth);
-        var alloc = AllocateFrameBufferMessage.init();
-        var pitch = GetPitchMessage.init();
-        var palette = SetPaletteMessage.init(default_palette);
-        var overscan = SetOverscanMessage.init();
-        var messages = [_]Message{
-            phys.message(),
-            virt.message(),
-            bpp.message(),
-            overscan.message(),
-            alloc.message(),
-            pitch.message(),
-            palette.message(),
-        };
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
-
-        // TODO pass in translations from the BSP
-        var base_in_arm_address_space = alloc.get_base_address() & 0x3fffffff;
-        fb.base = @ptrFromInt(base_in_arm_address_space);
-        fb.buffer_size = alloc.get_buffer_size();
-        fb.pitch = pitch.get_pitch();
-        fb.xres = xres;
-        fb.yres = yres;
-        fb.bpp = bpp.get_bpp();
-        fb.range.fromSize(base_in_arm_address_space, alloc.get_buffer_size());
-        fb.dma = self.dma;
-        fb.dma_channel = self.dma.reserveChannel(self.dma) catch null;
-    }
-
-    pub fn allocFrameBuffer(self: *BroadcomVideoController, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, default_palette: []const u32) void {
         var phys = SizeMessage.physical(xres, yres);
         var virt = SizeMessage.virtual(xres, yres);
         var bpp = DepthMessage.init(depth);
