@@ -31,7 +31,7 @@ pub var allocator: *Allocator = undefined;
 pub var soc_bus = simple_bus.SimpleBus{};
 pub var local_interrupt_controller = interrupts.LocalInterruptController{};
 pub var gpio = bcm_gpio.BroadcomGpio{};
-pub var pl011_uart = pl011.Pl011Uart{ .irq = interrupts.mkid(2, 25) };
+pub var pl011_uart = pl011.Pl011Uart{};
 pub var mailbox = bcm_mailbox.BroadcomMailbox{};
 pub var peripheral_clock_controller = bcm_peripheral_clocks.PeripheralClockController{};
 pub var dma_controller = bcm_dma.BroadcomDMAController{};
@@ -55,7 +55,7 @@ pub fn init(alloc: *Allocator) !void {
 
     gpio.init(peripheral_base + 0x200000);
 
-    pl011_uart.init(peripheral_base + 0x201000, &hal.interrupt_controller, &gpio);
+    pl011_uart.init(peripheral_base + 0x201000, &gpio);
     hal.serial = pl011_uart.serial();
 
     mailbox.init(peripheral_base + 0xB880, &hal.interrupt_controller, &soc_bus.bus_ranges);

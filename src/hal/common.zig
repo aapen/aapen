@@ -168,7 +168,7 @@ pub const Timer = struct {
 pub const Serial = struct {
     ptr: *anyopaque,
     getcFn: *const fn (ptr: *anyopaque) u8,
-    putcFn: *const fn (ptr: *anyopaque, ch: u8) bool,
+    putcFn: *const fn (ptr: *anyopaque, ch: u8) void,
     putsFn: *const fn (ptr: *anyopaque, buf: []const u8) usize,
     hascFn: *const fn (ptr: *anyopaque) bool,
 
@@ -188,7 +188,7 @@ pub const Serial = struct {
                 return @call(.always_inline, ptr_info.Pointer.child.getc, .{self});
             }
 
-            fn putc(ptr: *anyopaque, ch: u8) bool {
+            fn putc(ptr: *anyopaque, ch: u8) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
                 return @call(.always_inline, ptr_info.Pointer.child.putc, .{ self, ch });
             }
@@ -217,7 +217,7 @@ pub const Serial = struct {
         return serial.getcFn(serial.ptr);
     }
 
-    pub fn putc(serial: *Serial, ch: u8) bool {
+    pub fn putc(serial: *Serial, ch: u8) void {
         return serial.putcFn(serial.ptr, ch);
     }
 
