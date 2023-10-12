@@ -97,7 +97,7 @@ fn kernelInit() void {
         hal.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    hal.usb.powerOn();
+    hal.usb2.powerOn(hal.usb2);
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});

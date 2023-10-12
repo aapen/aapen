@@ -109,6 +109,8 @@ pub fn init() void {
 // 		 snpsid);
 
 pub const UsbController = struct {
+    interface: hal.interfaces.USB = undefined,
+
     core_registers: *volatile CoreRegisters = undefined,
     intc: *hal.common.InterruptController = undefined,
     translations: *AddressTranslations = undefined,
@@ -121,6 +123,10 @@ pub const UsbController = struct {
         translations: *AddressTranslations,
         power_controller: *PowerController,
     ) void {
+        self.interface = .{
+            .powerOn = powerOn,
+            .powerOff = powerOff,
+        };
         self.core_registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
         self.translations = translations;
@@ -129,6 +135,20 @@ pub const UsbController = struct {
 
     pub fn usb(self: *UsbController) hal.common.USB {
         return hal.common.USB.init(self);
+    }
+
+    pub fn usb2(self: *UsbController) *hal.interfaces.USB {
+        return &self.interface;
+    }
+
+    fn powerOn(intf: *hal.interfaces.USB) void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+        self.power(true);
+    }
+
+    fn powerOff(intf: *hal.interfaces.USB) void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+        self.power(false);
     }
 
     pub fn power(self: *UsbController, on_off: bool) void {

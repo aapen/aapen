@@ -16,5 +16,8 @@ pub const DMAController = dma.DMAController;
 const serial = @import("interfaces/serial.zig");
 pub const Serial = serial.Serial;
 
+const usb = @import("interfaces/usb.zig");
+pub const USB = usb.USB;
+
 const video_controller = @import("interfaces/video_controller.zig");
 pub const VideoController = video_controller.VideoController;
