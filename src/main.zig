@@ -32,7 +32,7 @@ const mring_space_bytes = 1024 * 1024;
 export var mring_storage: [mring_space_bytes]u8 = undefined;
 pub var mring: debug.MessageBuffer = undefined;
 
-pub var board = hal.common.BoardInfo{};
+pub var board = hal.interfaces.BoardInfo{};
 pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
@@ -76,7 +76,7 @@ fn kernelInit() void {
     console_valid = true;
 
     board.init(&os.page_allocator);
-    hal.info_controller.inspect(&board);
+    hal.info_controller2.inspect(hal.info_controller2, &board);
 
     // hal.timer.schedule(200000, printOneDot, &.{});
 

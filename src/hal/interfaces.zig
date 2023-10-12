@@ -11,3 +11,7 @@ pub const DMARequest = dma.DMARequest;
 pub const DMAChannel = dma.DMAChannel;
 pub const DMAError = dma.DMAError;
 pub const DMAController = dma.DMAController;
+
+const board_info = @import("interfaces/board_info.zig");
+pub const BoardInfo = board_info.BoardInfo;
+pub const BoardInfoController = board_info.BoardInfoController;
