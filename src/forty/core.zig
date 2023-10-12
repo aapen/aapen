@@ -42,7 +42,7 @@ pub fn wordKeyMaybe(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
 
 /// -- n
 pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var ticks = hal.clock.ticks();
+    var ticks = hal.clock.ticks(hal.clock);
     try forth.stack.push(ticks);
     return 0;
 }
