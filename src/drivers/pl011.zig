@@ -250,20 +250,20 @@ pub const Pl011Uart = struct {
     }
 
     fn getc(intf: *Serial) u8 {
-        const self = @fieldParentPtr(Pl011Uart, "interface", intf);
+        const self = @fieldParentPtr(@This(), "interface", intf);
 
         while (self.registers.flags.receive_fifo_empty != 0) {}
         return self.registers.data.data;
     }
 
     fn putc(intf: *Serial, ch: u8) void {
-        const self = @fieldParentPtr(Pl011Uart, "interface", intf);
+        const self = @fieldParentPtr(@This(), "interface", intf);
 
         self.send(ch);
     }
 
     fn puts(intf: *Serial, buffer: []const u8) usize {
-        const self = @fieldParentPtr(Pl011Uart, "interface", intf);
+        const self = @fieldParentPtr(@This(), "interface", intf);
 
         for (buffer) |ch| {
             self.send(ch);
@@ -272,7 +272,7 @@ pub const Pl011Uart = struct {
     }
 
     fn hasc(intf: *Serial) bool {
-        const self = @fieldParentPtr(Pl011Uart, "interface", intf);
+        const self = @fieldParentPtr(@This(), "interface", intf);
 
         return self.registers.flags.receive_fifo_empty == 0;
     }
