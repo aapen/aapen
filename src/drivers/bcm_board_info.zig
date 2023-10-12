@@ -4,9 +4,8 @@ const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
 const hal = @import("../hal.zig");
-//const common = @import("../hal/common.zig");
-const BoardInfo = hal.common.BoardInfo;
-const BoardInfoController = hal.common.BoardInfoController;
+const BoardInfo = hal.interfaces.BoardInfo;
+const BoardInfoController = hal.interfaces.BoardInfoController;
 
 const memory = @import("../memory.zig");
 const Regions = memory.Regions;
@@ -21,50 +20,18 @@ pub const BroadcomBoardInfoController = struct {
 
     pub fn init(self: *BroadcomBoardInfoController, mailbox: *BroadcomMailbox) void {
         self.interface = .{
-            .inspect = inspect2,
+            .inspect = inspect,
         };
         self.mailbox = mailbox;
     }
 
-    pub fn controller(self: *BroadcomBoardInfoController) BoardInfoController {
-        return hal.common.BoardInfoController.init(self);
-    }
-
-    pub fn controller2(self: *BroadcomBoardInfoController) *hal.interfaces.BoardInfoController {
+    pub fn controller(self: *BroadcomBoardInfoController) *BoardInfoController {
         return &self.interface;
     }
 
-    pub fn inspect2(intf: *hal.interfaces.BoardInfoController, info: *hal.interfaces.BoardInfo) void {
+    pub fn inspect(intf: *BoardInfoController, info: *BoardInfo) void {
         const self = @fieldParentPtr(@This(), "interface", intf);
 
-        var arm_memory = GetMemoryRange.arm();
-        var vc_memory = GetMemoryRange.videocore();
-        var revision = GetInfo.boardRevision();
-        var mac_address = GetInfo.macAddress();
-        var serial = GetInfo.serialNumber();
-        var messages = [_]Message{
-            arm_memory.message(),
-            vc_memory.message(),
-            revision.message(),
-            mac_address.message(),
-            serial.message(),
-        };
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
-
-        arm_memory.copy(&self.arm_memory_range);
-        vc_memory.copy(&self.videocore_memory_range);
-
-        info.memory.regions.append(self.arm_memory_range) catch {};
-        info.memory.regions.append(self.videocore_memory_range) catch {};
-
-        info.device.mac_address = mac_address.value;
-        info.device.serial_number = serial.value;
-
-        self.decode_revision2(revision.value, info);
-    }
-
-    pub fn inspect(self: *BroadcomBoardInfoController, info: *BoardInfo) void {
         var arm_memory = GetMemoryRange.arm();
         var vc_memory = GetMemoryRange.videocore();
         var revision = GetInfo.boardRevision();
@@ -92,15 +59,9 @@ pub const BroadcomBoardInfoController = struct {
         self.decode_revision(revision.value, info);
     }
 
-    fn decode_revision(self: *BroadcomBoardInfoController, revision: u32, info: *hal.common.BoardInfo) void {
+    fn decode_revision(self: *BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
         if (revision & 0x800000 == 0x800000) {
             self.decode_revision_new_scheme(revision, info);
-        } else {}
-    }
-
-    fn decode_revision2(self: *BroadcomBoardInfoController, revision: u32, info: *hal.interfaces.BoardInfo) void {
-        if (revision & 0x800000 == 0x800000) {
-            self.decode_revision_new_scheme2(revision, info);
         } else {}
     }
 
@@ -130,24 +91,6 @@ pub const BroadcomBoardInfoController = struct {
         BoardType{ .name = "Compute Module 3+", .version = 3 },
         BoardType{ .name = "Model 4B", .version = 4 },
     };
-
-    fn decode_revision_new_scheme2(_: *BroadcomBoardInfoController, revision: u32, info: *hal.interfaces.BoardInfo) void {
-        // var warranty: u2 = (revision >> 24) & 0b11;
-        var memsize: u32 = (revision >> 20) & 0b111;
-        var manufacturer: u32 = (revision >> 16) & 0b1111;
-        var processor: u32 = (revision >> 12) & 0b1111;
-        var board: u32 = (revision >> 4) & 0b11111111;
-        var pcb_revision: u32 = revision & 0b1111;
-
-        info.model = hal.interfaces.BoardInfo.Model{
-            .name = if (board < board_types.len) board_types[board].name else "Unknown",
-            .version = if (board < board_types.len) board_types[board].version else null,
-            .pcb_revision = pcb_revision,
-            .memory = if (memsize < memory_sizes.len) memory_sizes[memsize] else 0,
-            .processor = if (processor < processor_names.len) processor_names[processor] else "Unknown",
-        };
-        info.device.manufacturer = if (manufacturer < manufacturer_names.len) manufacturer_names[manufacturer] else "Unknown";
-    }
 
     fn decode_revision_new_scheme(_: *BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
         // var warranty: u2 = (revision >> 24) & 0b11;

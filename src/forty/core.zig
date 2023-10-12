@@ -16,7 +16,7 @@ const Forth = forth_module.Forth;
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
 
-const BoardInfo = hal.common.BoardInfo;
+const BoardInfo = hal.interfaces.BoardInfo;
 
 /// a -- ()
 pub fn wordEmit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {

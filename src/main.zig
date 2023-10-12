@@ -76,7 +76,7 @@ fn kernelInit() void {
     console_valid = true;
 
     board.init(&os.page_allocator);
-    hal.info_controller2.inspect(hal.info_controller2, &board);
+    hal.info_controller.inspect(hal.info_controller, &board);
 
     // hal.timer.schedule(200000, printOneDot, &.{});
 
