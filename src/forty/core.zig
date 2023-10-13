@@ -20,9 +20,9 @@ const BoardInfo = hal.interfaces.BoardInfo;
 
 /// len *[]u8  --  <results>
 pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const len = try forth.stack.pop();
     const pStr: [*]u8 = try forth.popAs([*]u8);
-    const token = pStr[0..len];
+    const token = string.asSlice(pStr);
+    try forth.print("token: {s}\n", .{token});
     try forth.evalToken(token);
     return 0;
 }
