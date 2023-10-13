@@ -61,10 +61,10 @@ pub const BroadcomMailbox = struct {
     };
 
     registers: *volatile Registers = undefined,
-    intc: *hal.common.InterruptController = undefined,
+    intc: *hal.interfaces.InterruptController = undefined,
     translations: *AddressTranslations = undefined,
 
-    pub fn init(self: *BroadcomMailbox, base: u64, interrupt_controller: *hal.common.InterruptController, translations: *AddressTranslations) void {
+    pub fn init(self: *BroadcomMailbox, base: u64, interrupt_controller: *hal.interfaces.InterruptController, translations: *AddressTranslations) void {
         self.registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
         self.translations = translations;

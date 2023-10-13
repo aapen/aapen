@@ -3,15 +3,14 @@ const root = @import("root");
 const kprint = root.kprint;
 
 const hal = @import("../hal.zig");
+const InterruptController = hal.interfaces.InterruptController;
+const PowerController = hal.interfaces.PowerController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
 const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
-
-const bcm_power = @import("bcm_power.zig");
-const PowerController = bcm_power.PowerController;
 
 const mailbox = @import("bcm_mailbox.zig");
 const memory_map = @import("../hal/raspi3/memory_map.zig");
@@ -80,25 +79,6 @@ const CoreRegisters = extern struct {
     pcgcctl: u32 = 0,
 };
 
-const core_registers: *volatile CoreRegisters = @ptrFromInt(usb_dwc_base);
-
-// TODO initialize the clock
-// TODO initialize the phy interface
-pub fn init() void {
-    // Attempt to power up the USB
-    if (mailbox.powerOn(.usb_hcd)) |usb_power_result| {
-        kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
-    } else |err| {
-        kprint("\n{s:>20}: {any}\n", .{ "USB power error", err });
-    }
-
-    var id = core_registers.gsnpsid;
-    kprint("{s:>20}: {x}.{x:0>3}\n", .{ "USB Core release", (id >> 12 & 0xf), id & 0xfff });
-
-    var state = mailbox.isPowered(.usb_hcd) catch .failed;
-    kprint("{s:>14} power: {s}\n", .{ @tagName(.usb_hcd), @tagName(state) });
-}
-
 // snpsid = readl(&regs->gsnpsid);
 // dev_info(dev, "Core Release: %x.%03x\n",
 // 	 snpsid >> 12 & 0xf, snpsid & 0xfff);
@@ -109,37 +89,45 @@ pub fn init() void {
 // 		 snpsid);
 
 pub const UsbController = struct {
+    interface: hal.interfaces.USB = undefined,
+
     core_registers: *volatile CoreRegisters = undefined,
-    intc: *hal.common.InterruptController = undefined,
+    intc: *InterruptController = undefined,
     translations: *AddressTranslations = undefined,
     power_controller: *PowerController = undefined,
 
+    // TODO initialize the clock
+    // TODO initialize the phy interface
     pub fn init(
         self: *UsbController,
         base: u64,
-        interrupt_controller: *hal.common.InterruptController,
+        interrupt_controller: *InterruptController,
         translations: *AddressTranslations,
         power_controller: *PowerController,
     ) void {
+        self.interface = .{
+            .powerOn = powerOn,
+            .powerOff = powerOff,
+        };
         self.core_registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
         self.translations = translations;
         self.power_controller = power_controller;
     }
 
-    pub fn usb(self: *UsbController) hal.common.USB {
-        return hal.common.USB.init(self);
+    pub fn usb(self: *UsbController) *hal.interfaces.USB {
+        return &self.interface;
     }
 
-    pub fn power(self: *UsbController, on_off: bool) void {
-        if (on_off) {
-            if (self.power_controller.powerOn(.usb_hcd)) |usb_power_result| {
-                kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
-            } else |err| {
-                kprint("\n{s:>20}: {any}\n", .{ "USB power error", err });
-            }
-        } else {
-            kprint("Oops... not supported.\n", .{});
-        }
+    fn powerOn(intf: *hal.interfaces.USB) void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+        const usb_power_result = self.power_controller.powerOn(self.power_controller, 3);
+        kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
+    }
+
+    fn powerOff(intf: *hal.interfaces.USB) void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+        const usb_power_result = self.power_controller.powerOff(self.power_controller, 3);
+        kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     }
 };

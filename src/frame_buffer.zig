@@ -2,10 +2,9 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 const hal = @import("hal.zig");
-const common = hal.common;
-const DMAController = hal.common.DMAController;
-const DMAChannel = hal.common.DMAChannel;
-const DMARequest = hal.common.DMARequest;
+const DMAController = hal.interfaces.DMAController;
+const DMAChannel = hal.interfaces.DMAChannel;
+const DMARequest = hal.interfaces.DMARequest;
 
 const Region = @import("memory.zig").Region;
 

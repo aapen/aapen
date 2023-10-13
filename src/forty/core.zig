@@ -16,7 +16,7 @@ const Forth = forth_module.Forth;
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
 
-const BoardInfo = hal.common.BoardInfo;
+const BoardInfo = hal.interfaces.BoardInfo;
 
 /// len *[]u8  --  <results>
 pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
@@ -66,12 +66,12 @@ pub fn wordKeyMaybe(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
 
 /// -- n
 pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var ticks = hal.clock.ticks();
+    var ticks = hal.clock.ticks(hal.clock);
     try forth.stack.push(ticks);
     return 0;
 }
 
-var single_dma_request: hal.common.DMARequest = hal.common.DMARequest{};
+var single_dma_request: hal.interfaces.DMARequest = hal.interfaces.DMARequest{};
 
 /// stride len dest src --
 pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
@@ -79,10 +79,10 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     single_dma_request.destination = try forth.stack.pop();
     single_dma_request.length = try forth.stack.pop();
     single_dma_request.stride = try forth.stack.pop();
-    const channel = hal.dma_controller.reserveChannel() catch return ForthError.BadOperation;
-    hal.dma_controller.initiate(channel, &single_dma_request) catch return ForthError.BadOperation;
-    var success = hal.dma_controller.awaitChannel(channel);
-    hal.dma_controller.releaseChannel(channel);
+    const channel = hal.dma_controller.reserveChannel(hal.dma_controller) catch return ForthError.BadOperation;
+    hal.dma_controller.initiate(hal.dma_controller, channel, &single_dma_request) catch return ForthError.BadOperation;
+    var success = hal.dma_controller.awaitChannel(hal.dma_controller, channel);
+    hal.dma_controller.releaseChannel(hal.dma_controller, channel);
     try forth.stack.push(if (success) 1 else 0);
     return 0;
 }

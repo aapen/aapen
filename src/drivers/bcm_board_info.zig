@@ -3,9 +3,9 @@ const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
-const common = @import("../hal/common.zig");
-const BoardInfo = common.BoardInfo;
-const BoardInfoController = common.BoardInfoController;
+const hal = @import("../hal.zig");
+const BoardInfo = hal.interfaces.BoardInfo;
+const BoardInfoController = hal.interfaces.BoardInfoController;
 
 const memory = @import("../memory.zig");
 const Regions = memory.Regions;
@@ -15,17 +15,23 @@ pub const BroadcomBoardInfoController = struct {
     arm_memory_range: Region = Region{ .name = "ARM Memory" },
     videocore_memory_range: Region = Region{ .name = "Videocore Memory" },
 
+    interface: hal.interfaces.BoardInfoController = undefined,
     mailbox: *BroadcomMailbox = undefined,
 
     pub fn init(self: *BroadcomBoardInfoController, mailbox: *BroadcomMailbox) void {
+        self.interface = .{
+            .inspect = inspect,
+        };
         self.mailbox = mailbox;
     }
 
-    pub fn controller(self: *BroadcomBoardInfoController) BoardInfoController {
-        return common.BoardInfoController.init(self);
+    pub fn controller(self: *BroadcomBoardInfoController) *BoardInfoController {
+        return &self.interface;
     }
 
-    pub fn inspect(self: *BroadcomBoardInfoController, info: *BoardInfo) void {
+    pub fn inspect(intf: *BoardInfoController, info: *BoardInfo) void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+
         var arm_memory = GetMemoryRange.arm();
         var vc_memory = GetMemoryRange.videocore();
         var revision = GetInfo.boardRevision();

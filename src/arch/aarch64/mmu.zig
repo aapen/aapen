@@ -134,7 +134,7 @@ fn blockMappingCreate(page_middle_directory: u64, virtual_addr_start: u64, virtu
 
 /// Define an identity-mapped set of page tables
 fn pageTablesCreate() void {
-    const tables_start: [*]u8 = @ptrCast(&cortex_a.sections.__page_tables_start);
+    const tables_start: [*]u8 = @ptrCast(&cortex_a.Sections.__page_tables_start);
     @memset(tables_start[0..page_table_size], 0);
 
     var map_base: u64 = 0;

@@ -1,4 +1,8 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const FixedBufferAllocator = std.heap.FixedBufferAllocator;
+const RingBuffer = std.RingBuffer;
+
 const root = @import("root");
 const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
@@ -125,3 +129,27 @@ fn stackTraceDisplay(from_addr: u64) void {
 fn stackFrameDisplay(frame_number: usize, frame_pointer: usize) void {
     kprint("{d}\t0x{x:0>8}\n", .{ frame_number, frame_pointer });
 }
+
+// ------------------------------------------------------------------------------
+// Kernel message buffer
+// ------------------------------------------------------------------------------
+
+pub const MessageBuffer = struct {
+    const Self = @This();
+
+    ring: RingBuffer,
+
+    pub fn init(raw_space: []u8) Allocator.Error!Self {
+        var fba = FixedBufferAllocator.init(raw_space);
+        var allocator = fba.allocator();
+        var ring = try RingBuffer.init(allocator, raw_space.len);
+        return .{
+            .ring = ring,
+        };
+    }
+
+    pub fn append(message_buffer: *Self, msg: []const u8) void {
+        message_buffer.ring.writeSliceAssumeCapacity(msg);
+        message_buffer.ring.writeAssumeCapacity(@as(u8, 0));
+    }
+};

@@ -1,10 +1,7 @@
 const std = @import("std");
-const FixedBufferAllocator = std.heap.FixedBufferAllocator;
-const RingBuffer = std.RingBuffer;
 
 const hal = @import("../hal.zig");
-const InterruptController = hal.common.InterruptController;
-const IrqId = hal.common.IrqId;
+const Serial = hal.interfaces.Serial;
 
 const bcm_gpio = @import("bcm_gpio.zig");
 const BroadcomGpio = bcm_gpio.BroadcomGpio;
@@ -190,21 +187,18 @@ pub const Pl011Uart = struct {
         interrupt_clear: InterruptClearRegister, //0x44
     };
 
-    irq: IrqId,
-
     registers: *volatile Registers = undefined,
-    intc: *hal.common.InterruptController = undefined,
-    fba: FixedBufferAllocator = undefined,
-    buffer_space: [128]u8 = undefined,
-    read_buffer: RingBuffer = undefined,
-    write_buffer: RingBuffer = undefined,
+    interface: hal.interfaces.Serial = undefined,
 
-    pub fn init(self: *Pl011Uart, base: u64, interrupt_controller: *hal.common.InterruptController, gpio: *BroadcomGpio) void {
+    pub fn init(self: *Pl011Uart, base: u64, gpio: *BroadcomGpio) void {
         self.registers = @ptrFromInt(base);
-        self.intc = interrupt_controller;
-        self.fba = FixedBufferAllocator.init(&self.buffer_space);
-        self.read_buffer = RingBuffer.init(self.fba.allocator(), 64) catch unreachable;
-        self.write_buffer = RingBuffer.init(self.fba.allocator(), 64) catch unreachable;
+
+        self.interface = .{
+            .getc = getc,
+            .putc = putc,
+            .puts = puts,
+            .hasc = hasc,
+        };
 
         // Configure GPIO pins for serial I/O
         gpio.pins[14].enable();
@@ -241,167 +235,50 @@ pub const Pl011Uart = struct {
             .fifo_enable = .disable,
         };
 
-        // Enable receive interrupts. Transmit interrupts are enabled
-        // when data is written.
-        self.registers.interrupt_mask_set_clear.receive_interrupt_mask = .raised;
+        self.registers.interrupt_mask_set_clear = .{
+            .receive_interrupt_mask = .not_raised,
+            .transmit_interrupt_mask = .not_raised,
+        };
         self.registers.control = .{ .transmit_enable = .enable, .receive_enable = .enable };
 
         // Turn the UART on
         self.registers.control.uart_enable = .enable;
-
-        // Connect interrupts
-        self.intc.connect(self.irq, irqHandleThunk, self);
-        self.intc.enable(self.irq);
     }
 
-    pub fn serial(self: *Pl011Uart) hal.common.Serial {
-        return hal.common.Serial.init(self);
+    pub fn serial(self: *Pl011Uart) *Serial {
+        return &self.interface;
     }
 
-    pub fn getc(self: *Pl011Uart) u8 {
-        while (self.read_buffer.isEmpty()) {
-            // block
-            cpu.wfi();
-        }
+    fn getc(intf: *Serial) u8 {
+        const self = @fieldParentPtr(@This(), "interface", intf);
 
-        return self.read_buffer.read() orelse 0;
-    }
-
-    pub fn putc(self: *Pl011Uart, ch: u8) bool {
-        return self.send(ch);
-    }
-
-    pub fn puts(self: *Pl011Uart, buf: []const u8) usize {
-        return self.stringSend(buf);
-    }
-
-    pub fn hasc(self: *Pl011Uart) bool {
-        return !self.read_buffer.isEmpty();
-    }
-
-    inline fn xmitSpaceAvailable(self: *Pl011Uart) bool {
-        return (self.registers.flags.transmit_fifo_full == 0);
-    }
-
-    inline fn xmit(self: *Pl011Uart, ch: u8) void {
-        self.registers.data.data = ch;
-    }
-
-    inline fn recvByteAvailable(self: *Pl011Uart) bool {
-        return (self.registers.flags.receive_fifo_empty == 0);
-    }
-
-    inline fn recv(self: *Pl011Uart) u8 {
+        while (self.registers.flags.receive_fifo_empty != 0) {}
         return self.registers.data.data;
     }
 
-    pub fn irqHandle(self: *Pl011Uart, _: IrqId) void {
-        cpu.barriers.barrierMemoryRead();
-        defer cpu.barriers.barrierMemoryWrite();
+    fn putc(intf: *Serial, ch: u8) void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
 
-        var interrupts_raised = self.registers.masked_interrupt_status;
-
-        if (interrupts_raised.receive_masked_interrupt_status == .raised) {
-            var ch = self.recv();
-            self.read_buffer.write(ch) catch {
-                // TODO dropped incoming character due to full read buffer.
-            };
-        }
-
-        if (interrupts_raised.transmit_masked_interrupt_status == .raised) {
-            if (self.write_buffer.read()) |ch| {
-                self.xmit(ch);
-            }
-
-            if (self.write_buffer.isEmpty()) {
-                self.registers.interrupt_mask_set_clear.transmit_interrupt_mask = .not_raised;
-            }
-        }
+        self.send(ch);
     }
 
-    // ----------------------------------------------------------------------
-    // Buffered IO - interrupt-driven with ring buffer
-    // ----------------------------------------------------------------------
+    fn puts(intf: *Serial, buffer: []const u8) usize {
+        const self = @fieldParentPtr(@This(), "interface", intf);
 
-    inline fn xmitInterruptRaised(self: *Pl011Uart) bool {
-        return (self.registers.raw_interrupt_status.transmit_interrupt_status == .raised);
-    }
-
-    inline fn writeBufferSpaceAvailable(self: *Pl011Uart) usize {
-        return self.write_buffer.data.len - self.write_buffer.len();
-    }
-
-    pub fn stringSend(self: *Pl011Uart, str: []const u8) usize {
-        // mask interrupts so we don't get interrupted in the middle of this function.
-        cpu.exceptions.irqDisable();
-        defer cpu.exceptions.irqEnable();
-
-        // enable transmit interrupt (even if it already was)
-        self.registers.interrupt_mask_set_clear.transmit_interrupt_mask = .raised;
-
-        var rest = str;
-        var bytes_sent: usize = 0;
-
-        // if ready to send and no interrupt raised
-        if (self.xmitSpaceAvailable() and !self.xmitInterruptRaised()) {
-            // take first ch from string, write it to data register
-            // when this ch is done sending, pl011 will raise a
-            // UARTTXINTR. this is the way to kick-start
-            // interrupt-driven sending.
-            var ch = str[0];
-            rest = str[1..];
-            self.xmit(ch);
-            bytes_sent += 1;
+        for (buffer) |ch| {
+            self.send(ch);
         }
-
-        // TODO Do I need a mutex around this? The interrupt handler
-        // could read from this buffer even while we are adding to it.
-
-        // find out how much space remains in the write buffer
-        var space_available_to_write = self.writeBufferSpaceAvailable();
-        var bytes_to_write = @min(space_available_to_write, rest.len);
-
-        // enqueue rest of str, these will be send from the interrupt
-        // handler
-        if (self.write_buffer.writeSlice(rest[0..bytes_to_write])) |_| {
-            return bytes_sent + bytes_to_write;
-        } else |err| {
-            switch (err) {
-                RingBuffer.Error.Full => return bytes_sent,
-            }
-        }
+        return buffer.len;
     }
 
-    pub fn send(self: *Pl011Uart, ch: u8) bool {
-        // mask interrupts so we don't get interrupted in the middle of this function.
-        cpu.exceptions.irqDisable();
-        defer cpu.exceptions.irqEnable();
+    fn hasc(intf: *Serial) bool {
+        const self = @fieldParentPtr(@This(), "interface", intf);
 
-        // if ready to send and no interrupt raised
-        var interrupt_is_raised = (self.registers.raw_interrupt_status.transmit_interrupt_status == .raised);
-
-        if (self.xmitSpaceAvailable() and !interrupt_is_raised) {
-            // when this ch is done sending, will raise a UARTTXINTR
-            self.xmit(ch);
-            return true;
-        } else {
-            // enable transmit interrupt (even if it already was)
-            self.registers.interrupt_mask_set_clear.transmit_interrupt_mask = .raised;
-            // something is already sending, enqueue this for when it finishes
-            if (self.write_buffer.write(ch)) {
-                return true;
-            } else |_| {
-                return false;
-            }
-        }
+        return self.registers.flags.receive_fifo_empty == 0;
     }
 
-    pub fn receive(self: *Pl011Uart) u8 {
-        _ = self;
+    fn send(self: *Pl011Uart, ch: u8) void {
+        while (self.registers.flags.transmit_fifo_full != 0) {}
+        self.registers.data.data = ch;
     }
 };
-
-pub fn irqHandleThunk(id: IrqId, context: ?*anyopaque) void {
-    var uart: *Pl011Uart = @ptrCast(@alignCast(context));
-    uart.irqHandle(id);
-}

@@ -67,7 +67,11 @@
         bl      bssInit
         mov     x0, x19                       // Restore stack top as arg
 
-        // Jump to Zig code, with x0 (stack top) as a function argument
+        // Jump to Zig code, with x0 (stack top) as a function
+        // argument
+        movz    x29, #0
+        movz    x30, #0
+
         b       _start_zig
 
         // unreachable

@@ -86,7 +86,6 @@ finish
   
 : sb-append (ch sb-addr -- )
   dup rot swap
-  ?stack
   sb-poke-char
   sb-inc-count
 ;

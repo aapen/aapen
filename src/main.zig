@@ -26,21 +26,33 @@ var os = Freestanding{
     .page_allocator = undefined,
 };
 
-pub var board = hal.common.BoardInfo{};
+// mring is used for debugging low level issues (like when the serial
+// port isn't working.)
+const mring_space_bytes = 1024 * 1024;
+export var mring_storage: [mring_space_bytes]u8 = undefined;
+pub var mring: debug.MessageBuffer = undefined;
+
+pub var board = hal.interfaces.BoardInfo{};
 pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
 pub var interpreter: Forth = Forth{};
-pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{};
+pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
+    .sp = undefined,
+    .pc = undefined,
+    .fp = undefined,
+    .lr = undefined,
+};
 
 pub var uart_valid = false;
 pub var console_valid = false;
 
 fn kernelInit() void {
-    global_unwind_point = .{};
-
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
-    arch.cpu.mmuInit();
+    arch.cpu.mmu.init();
+
+    mring = debug.MessageBuffer.init(&mring_storage) catch unreachable;
+    mring.append("mring init");
 
     kernel_heap.init(raspi3.device_start - 1);
     os.page_allocator = kernel_heap.allocator();
@@ -52,19 +64,19 @@ fn kernelInit() void {
     };
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
-    arch.cpu.exceptions.init(hal.irq_thunk);
+    arch.cpu.exceptions.init();
 
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     uart_valid = true;
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
-    hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
+    hal.video_controller.allocFrameBuffer(hal.video_controller, &fb, 1024, 768, 8, &frame_buffer.default_palette);
 
-    frame_buffer_console.init(&hal.serial);
+    frame_buffer_console.init(hal.serial);
     console_valid = true;
 
     board.init(&os.page_allocator);
-    hal.info_controller.inspect(&board);
+    hal.info_controller.inspect(hal.info_controller, &board);
 
     // hal.timer.schedule(200000, printOneDot, &.{});
 
@@ -85,7 +97,7 @@ fn kernelInit() void {
         hal.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    hal.usb.powerOn();
+    hal.usb.powerOn(hal.usb);
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});
@@ -203,9 +215,6 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 
     unreachable;
 }
-
-// TODO: re-enable this when
-// https://github.com/ziglang/zig/issues/16327 is fixed.
 
 const StackTrace = std.builtin.StackTrace;
 

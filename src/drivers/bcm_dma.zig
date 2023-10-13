@@ -1,14 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const root = @import("root");
-const kprint = root.kprint;
-
 const hal = @import("../hal.zig");
-const InterruptController = hal.common.InterruptController;
-const DMAController = hal.common.DMAController;
-const DMAChannel = hal.common.DMAChannel;
-const DMARequest = hal.common.DMARequest;
+const InterruptController = hal.interfaces.InterruptController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -104,6 +98,7 @@ pub const BroadcomDMAController = struct {
         registers: *volatile ChannelRegisters,
     };
 
+    interface: hal.interfaces.DMAController = undefined,
     allocator: *Allocator = undefined,
     register_base: u64 = undefined,
     dma_translations: *AddressTranslations = undefined,
@@ -113,6 +108,13 @@ pub const BroadcomDMAController = struct {
     in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
 
     pub fn init(self: *BroadcomDMAController, allocator: *Allocator, base: u64, interrupt_controller: *InterruptController, dma_translations: *AddressTranslations) void {
+        self.interface = .{
+            .reserveChannel = reserveChannel,
+            .initiate = initiate,
+            .awaitChannel = awaitChannel,
+            .releaseChannel = releaseChannel,
+        };
+
         self.allocator = allocator;
         self.dma_translations = dma_translations;
         self.register_base = base;
@@ -121,8 +123,8 @@ pub const BroadcomDMAController = struct {
         self.intc = interrupt_controller;
     }
 
-    pub fn dma(self: *BroadcomDMAController) hal.common.DMAController {
-        return hal.common.DMAController.init(self);
+    pub fn dma(self: *BroadcomDMAController) *hal.interfaces.DMAController {
+        return &self.interface;
     }
 
     fn channelClaimUnused(self: *BroadcomDMAController) !ChannelId {
@@ -132,14 +134,16 @@ pub const BroadcomDMAController = struct {
                 return @as(ChannelId, @intCast(i));
             }
         }
-        return hal.common.DMAError.NoAvailableChannel;
+        return hal.interfaces.DMAError.NoAvailableChannel;
     }
 
     fn channelRegisters(self: *BroadcomDMAController, channel_id: ChannelId) *volatile ChannelRegisters {
         return @ptrFromInt(self.register_base + (0x100 * @as(usize, channel_id)));
     }
 
-    pub fn reserveChannel(self: *BroadcomDMAController) !DMAChannel {
+    fn reserveChannel(intf: *hal.interfaces.DMAController) hal.interfaces.DMAError!hal.interfaces.DMAChannel {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+
         var channel_id = try self.channelClaimUnused();
         var context = try self.allocator.create(ChannelContext);
         var channel_registers = self.channelRegisters(channel_id);
@@ -158,11 +162,13 @@ pub const BroadcomDMAController = struct {
         channel_registers.control.reset = 1;
         while (channel_registers.control.reset == 1) {}
 
-        return DMAChannel{ .context = context };
+        return hal.interfaces.DMAChannel{ .context = context };
     }
 
     // TODO: after dma completes, free the control block
-    pub fn initiate(self: *BroadcomDMAController, channel: DMAChannel, request: *DMARequest) hal.common.DMAError!void {
+    pub fn initiate(intf: *hal.interfaces.DMAController, channel: hal.interfaces.DMAChannel, request: *hal.interfaces.DMARequest) hal.interfaces.DMAError!void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+
         const control_block = try self.allocator.create(BroadcomDMAControlBlock);
         const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
         var channel_registers = context.registers;
@@ -194,7 +200,10 @@ pub const BroadcomDMAController = struct {
 
     /// blocks until DMA completes. returns true on success, false if
     /// an error happened
-    pub fn awaitChannel(_: *BroadcomDMAController, channel: DMAChannel) bool {
+    fn awaitChannel(intf: *hal.interfaces.DMAController, channel: hal.interfaces.DMAChannel) bool {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+        _ = self;
+
         const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
         const channel_registers = context.registers;
 
@@ -203,7 +212,8 @@ pub const BroadcomDMAController = struct {
         return channel_registers.control.dma_error == 0;
     }
 
-    pub fn releaseChannel(self: *BroadcomDMAController, channel: DMAChannel) void {
+    fn releaseChannel(intf: *hal.interfaces.DMAController, channel: hal.interfaces.DMAChannel) void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
         const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
         self.in_use[context.id] = false;
     }
