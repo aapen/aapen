@@ -136,10 +136,10 @@ pub fn defineInterop(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("invoke-r", "addr -- result : invoke a no args function", &wordInvokeUR, 0);
     _ = try forth.definePrimitiveDesc("invoke-ur", "n addr -- result : invoke a 1 arg function", &wordInvokeUR, 0);
     _ = try forth.definePrimitiveDesc("invoke-uur", "n n addr -- result : invoke a 2 arg function", &wordInvokeUUR, 0);
-    _ = try forth.definePrimitiveDesc("invoke-uuur", "n n n addr -- result : invoke a 2 arg function", &wordInvokeUUUR, 0);
+    _ = try forth.definePrimitiveDesc("invoke-uuur", "n n n addr -- result : invoke a 3 arg function", &wordInvokeUUUR, 0);
 
-    _ = try forth.definePrimitiveDesc("invoke", "n addr --  : invoke a 0 arg function, void", &wordInvoke, 0);
+    _ = try forth.definePrimitiveDesc("invoke", "addr --  : invoke a 0 arg function, void", &wordInvoke, 0);
     _ = try forth.definePrimitiveDesc("invoke-u", "n addr --  : invoke a 1 arg function, void", &wordInvokeU, 0);
-    _ = try forth.definePrimitiveDesc("invoke-uu", "n addr --  : invoke a 2 arg function, void", &wordInvokeUU, 0);
-    _ = try forth.definePrimitiveDesc("invoke-uuu", "n addr --  : invoke a 3 arg function, void", &wordInvokeUUU, 0);
+    _ = try forth.definePrimitiveDesc("invoke-uu", "n n addr --  : invoke a 2 arg function, void", &wordInvokeUU, 0);
+    _ = try forth.definePrimitiveDesc("invoke-uuu", "n n n addr --  : invoke a 3 arg function, void", &wordInvokeUUU, 0);
 }

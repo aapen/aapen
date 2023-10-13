@@ -71,18 +71,23 @@ pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
-var single_dma_request: hal.interfaces.DMARequest = hal.interfaces.DMARequest{};
-
-/// stride len dest src --
+/// src dest len stride --
 pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    single_dma_request.source = try forth.stack.pop();
-    single_dma_request.destination = try forth.stack.pop();
-    single_dma_request.length = try forth.stack.pop();
-    single_dma_request.stride = try forth.stack.pop();
-    const channel = hal.dma_controller.reserveChannel(hal.dma_controller) catch return ForthError.BadOperation;
-    hal.dma_controller.initiate(hal.dma_controller, channel, &single_dma_request) catch return ForthError.BadOperation;
-    var success = hal.dma_controller.awaitChannel(hal.dma_controller, channel);
-    hal.dma_controller.releaseChannel(hal.dma_controller, channel);
+    const dmac = hal.dma_controller;
+    const channel = dmac.reserveChannel(dmac) catch return ForthError.BadOperation;
+    defer dmac.releaseChannel(dmac, channel);
+
+    var request = dmac.createRequest(dmac) catch return ForthError.OutOfMemory;
+    defer dmac.destroyRequest(dmac, request);
+
+    request.stride = try forth.stack.pop();
+    request.length = try forth.stack.pop();
+    request.destination = try forth.stack.pop();
+    request.source = try forth.stack.pop();
+
+    dmac.initiate(dmac, channel, request) catch return ForthError.BadOperation;
+    var success = dmac.awaitChannel(dmac, channel);
+
     try forth.stack.push(if (success) 1 else 0);
     return 0;
 }
@@ -476,7 +481,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, 0);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, 0);
     _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, 0);
-    _ = try forth.definePrimitiveDesc("dma", "stride len dest src -- : Perform a DMA", &wordDma, 0);
+    _ = try forth.definePrimitiveDesc("dma", "src dest len stride -- : Perform a DMA", &wordDma, 0);
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, 0);
 
     // Basic Forth words.
