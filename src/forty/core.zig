@@ -82,13 +82,25 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
     request.stride = try forth.stack.pop();
     request.length = try forth.stack.pop();
-    request.destination = try forth.stack.pop();
-    request.source = try forth.stack.pop();
+    request.destination = try forth.popAs(u32);
+    request.source = try forth.popAs(u32);
 
     dmac.initiate(dmac, channel, request) catch return ForthError.BadOperation;
     var success = dmac.awaitChannel(dmac, channel);
 
     try forth.stack.push(if (success) 1 else 0);
+    return 0;
+}
+
+/// l t r b c --
+pub fn wordFill(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    var color = try forth.stack.pop();
+    var bottom = try forth.stack.pop();
+    var right = try forth.stack.pop();
+    var top = try forth.stack.pop();
+    var left = try forth.stack.pop();
+
+    forth.console.fb.fill(left, top, right, bottom, @truncate(color & 0xff)) catch return ForthError.BadOperation;
     return 0;
 }
 
@@ -515,6 +527,8 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineInternalVariable("screenh", &forth.console.height);
     try forth.defineInternalVariable("cursorx", &forth.console.xpos);
     try forth.defineInternalVariable("cursory", &forth.console.ypos);
+    _ = try forth.definePrimitiveDesc("dma", "src dest len stride -- : Perform a DMA", &wordDma, 0);
+    _ = try forth.definePrimitiveDesc("fill", "l t r b c -- : fill rectangle with color", &wordFill, 0);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, 0);
@@ -524,7 +538,6 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, 0);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, 0);
     _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, 0);
-    _ = try forth.definePrimitiveDesc("dma", "src dest len stride -- : Perform a DMA", &wordDma, 0);
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, 0);
 
     // Basic Forth words.

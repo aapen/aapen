@@ -227,9 +227,9 @@ pub const BroadcomDMAController = struct {
         control_block.* = .{
             .transfer_information = TransferInformation{
                 .source_width = 1,
-                .source_increment = 1,
+                .source_increment = if (request.source_increment) 1 else 0,
                 .destination_width = 1,
-                .destination_increment = 1,
+                .destination_increment = if (request.destination_increment) 1 else 0,
                 .two_d_mode = mode_2d,
             },
 

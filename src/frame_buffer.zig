@@ -50,22 +50,11 @@ pub const FrameBuffer = struct {
     pub const COLOR_BACKGROUND: u8 = 0x00;
 
     pub fn clear(self: *FrameBuffer) void {
-        for (0..self.buffer_size) |i| {
-            self.base[i] = 0;
-        }
+        self.fill(0, 0, self.xres, self.yres, COLOR_BACKGROUND) catch {};
     }
 
     pub fn clearRegion(self: *FrameBuffer, x: usize, y: usize, w: usize, h: usize) void {
-        var line_stride = self.pitch;
-        var fbidx = x + (y * line_stride);
-        var line_step = line_stride - w;
-        for (0..h) |_| {
-            for (0..w) |_| {
-                self.base[fbidx] = COLOR_BACKGROUND;
-                fbidx += 1;
-            }
-            fbidx += line_step;
-        }
+        self.fill(x, y, x + w, y + h, COLOR_BACKGROUND) catch {};
     }
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
@@ -124,6 +113,52 @@ pub const FrameBuffer = struct {
             };
             fb.dma.initiate(ch, &req) catch {};
             _ = fb.dma.awaitChannel(ch);
+        }
+    }
+
+    inline fn clamp(comptime T: type, min: T, val: T, max: T) T {
+        return @max(min, @min(val, max));
+    }
+
+    pub fn fill(fb: *FrameBuffer, left: usize, top: usize, right: usize, bottom: usize, color: u8) !void {
+        var c: @Vector(16, u8) = @splat(color);
+
+        var l = clamp(usize, 0, left, fb.xres);
+        var r = clamp(usize, 0, right, fb.xres);
+        var t = clamp(usize, 0, top, fb.yres);
+        var b = clamp(usize, 0, bottom, fb.yres);
+
+        if (fb.dma_channel) |ch| {
+            const fb_base: usize = @intFromPtr(fb.base);
+            const fb_pitch = fb.pitch;
+
+            const src = @intFromPtr(&c);
+            const src_stride = 0;
+
+            const dest = fb_base + (t * fb_pitch) + l;
+            const dest_stride = fb.xres - r + l;
+
+            const xfer_y_len = b - t;
+            const xfer_x_len = r - l;
+
+            const xfer_count = if (dest_stride > 0)
+                ((xfer_y_len << 16) + xfer_x_len)
+            else
+                ((b - t) * fb.xres);
+
+            var req = try fb.dma.createRequest(fb.dma);
+            defer fb.dma.destroyRequest(fb.dma, req);
+
+            req.* = .{
+                .source = @truncate(src),
+                .source_increment = false,
+                .destination = @truncate(dest),
+                .destination_increment = true,
+                .length = xfer_count,
+                .stride = (dest_stride << 16) | src_stride,
+            };
+            fb.dma.initiate(fb.dma, ch, req) catch {};
+            _ = fb.dma.awaitChannel(fb.dma, ch);
         }
     }
 };

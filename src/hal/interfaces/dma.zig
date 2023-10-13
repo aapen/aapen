@@ -1,6 +1,8 @@
 pub const DMARequest = struct {
-    source: u64 = 0,
-    destination: u64 = 0,
+    source: u32 = 0,
+    source_increment: bool = true,
+    destination: u32 = 0,
+    destination_increment: bool = true,
     length: usize = 0,
     stride: usize = 0,
 };
