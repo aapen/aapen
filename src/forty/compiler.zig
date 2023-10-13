@@ -48,19 +48,20 @@ inline fn wordOffset(a: anytype, b: anytype) i64 {
 }
 
 pub fn pushBodyValue(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!i64 {
-    var body = header.bodyOfType([*]u8);
+    var body = header.bodyOfType([*]u64);
     try forth.stack.push(body[0]);
     return 0;
 }
 
 pub fn wordLet(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const iName = try forth.stack.pop();
+    const pName = try forth.popAs([*:0]u8);
     const value = try forth.stack.pop();
 
-    const name: [*:0]u8 = @ptrFromInt(iName);
-    const len = string.strlen(name);
+    const name = string.asSlice(pName);
 
-    _ = try forth.create(name[0..len], "A constant", &pushBodyValue, 0);
+    try forth.print("let: name: {s} value {}\n", .{ name, value });
+
+    _ = try forth.create(name, "A constant", &pushBodyValue, 0);
     forth.addNumber(value);
     forth.complete();
     return 0;
@@ -287,7 +288,7 @@ pub fn defineCompiler(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("}", " -- : Turn compile mode back on", &wordRBrace, 1);
     _ = try forth.definePrimitiveDesc("create", " -- :Start a new definition", &wordCreate, 0);
     _ = try forth.definePrimitiveDesc("finish", " -- :Complete a new definition", &wordFinish, 0);
-    _ = try forth.definePrimitiveDesc("let", " n sAddr - :Assign a new variable", &wordLet, 0);
+    _ = try forth.definePrimitiveDesc("let", "v sAddr - :Assign a new variable", &wordLet, 0);
     _ = try forth.definePrimitiveDesc(",", " n -- :Allocate a word and store n in it.", &wordComma, 0);
     _ = try forth.definePrimitiveDesc("s,", " n -- :Add a string to memory.", &wordSComma, 0);
     _ = try forth.definePrimitiveDesc("allot", " n -- :Allocate n words.", &wordAllot, 0);

@@ -343,6 +343,49 @@ pub fn wordNot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     }
     return 0;
 }
+
+/// b b -- b
+pub fn wordOr(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const a = try forth.stack.pop();
+    const b = try forth.stack.pop();
+    if (a != 0) {
+        try forth.stack.push(a);
+    } else if (b != 0) {
+        try forth.stack.push(b);
+    } else {
+        try forth.stack.push(0);
+    }
+    return 0;
+}
+
+/// b b -- b
+pub fn wordXor(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const a = try forth.stack.pop();
+    const b = try forth.stack.pop();
+    if (a != 0 and b != 0) {
+        try forth.stack.push(0);
+    } else if (a != 0) {
+        try forth.stack.push(a);
+    } else if (b != 0) {
+        try forth.stack.push(b);
+    } else {
+        try forth.stack.push(0);
+    }
+    return 0;
+}
+
+/// b b -- b
+pub fn wordAnd(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const a = try forth.stack.pop();
+    const b = try forth.stack.pop();
+    if (a == 0 or b == 0) {
+        try forth.stack.push(0);
+    } else {
+        try forth.stack.push(b);
+    }
+    return 0;
+}
+
 /// addr -- u8
 pub fn wordLoadU8(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return wordLoad(u8, forth, body, offset, header);
@@ -512,6 +555,9 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("%", "n n -- n :u64 modulo", &wordMod, 0);
     _ = try forth.definePrimitiveDesc("=", "n n -- n :u64 equality test", &wordEqualU64, 0);
     _ = try forth.definePrimitiveDesc("not", "n -- n :u64 not", &wordNot, 0);
+    _ = try forth.definePrimitiveDesc("or", "n -- n :u64 or", &wordOr, 0);
+    _ = try forth.definePrimitiveDesc("xor", "n -- n :u64 xor", &wordXor, 0);
+    _ = try forth.definePrimitiveDesc("and", "n -- n :u64 and", &wordAnd, 0);
     _ = try forth.definePrimitiveDesc("<", "n n -- n :u64 less-than test", &wordLessThanU64, 0);
     _ = try forth.definePrimitiveDesc("<=", "n n -- n :u64 less-than or equal test", &wordLessThanEqualU64, 0);
     _ = try forth.definePrimitiveDesc(">", "n n -- n :u64 greater-than test", &wordGreaterThanU64, 0);
@@ -526,5 +572,5 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("@w", "addr -- : Load a 32 bit unsigned word", &wordLoadU32, 0);
     _ = try forth.definePrimitive("wbe", &wordByteExchangeU32, 0);
 
-    _ = try forth.definePrimitive("set-mem", &wordSetMemory, 0);
+    _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, 0);
 }

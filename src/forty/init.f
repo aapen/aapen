@@ -58,19 +58,23 @@ finish
 
 : word-data-len (pWord - n : Return the number of data bytes associated with word)
   word-len
-  header.*size -
+  header.*len -
+;
+
+: word-address (p-data -- p-word : Given a word data ptr, return word ptr)
+  header.*len - 
 ;
 
 (String buffer)
 
-: sb-make (--)
+: sb-create (pName -- : Create a new string buffer with the name)
   create
     0 ,
     16 allot
   finish
 ;
 
-: sb-inc-count (sb-addr --)
+: sb-inc-count (sb-addr -- : Increment the sb char count.)
   dup
   @
   inc
@@ -78,24 +82,84 @@ finish
   !
 ;
 
-: sb-poke-char (ch sb-addr --)
+: sb-poke-char (ch sb-addr -- : Add a character at the current position.)
   dup
   @  word + +
   !b
 ;
   
-: sb-append (ch sb-addr -- )
+: sb-append (ch sb-addr --  : Append a new char onto the buffer.)
   dup rot swap
   sb-poke-char
   sb-inc-count
 ;
 
-: sb-clear (sb-word -- )
+: sb-string (sb-addr -- str : Push the address of the string in the sb)
+  word +
+;
+
+: sb-clear (sb-word --  : Clear this buffer)
   0 swap !
 ;
 
+(Character predicates)
+
 
 ( Testing... )
+
+32 :char-space let
+13 :char-cr    let
+10 :char-nl    let
+
+: whitespace? (ch -- b)
+  dup dup
+  char-space = rot
+  char-cr    = rot
+  char-nl    = rot
+  or or
+;
+
+: digit? (ch -- b)
+  dup
+  \0 >=
+  swap
+  \9 <=
+  and
+;
+
+: dquote? (ch -- b)
+  \" =
+;
+
+(Repl)
+
+: read-ch ( -- ch : read with echo)
+  key
+  dup emit
+;
+
+
+: read-token (sb-addr --)
+  dup sb-clear
+  read-ch
+  while
+    dup whitespace? not
+  do
+    over sb-append
+    read-ch
+  done
+  drop
+  dup 0 swap sb-append
+;
+
+:input-buffer sb-create
+
+: read-eval ( -- <results> : read one word, evaluate it)
+  input-buffer read-token 
+  sb-string eval
+;
+
+(Assertions)
 
 : assert ( b desc -- if b is not true )
   "Assert: " s.

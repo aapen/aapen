@@ -243,7 +243,7 @@ pub const Forth = struct {
     pub fn defineStruct(this: *Forth, comptime name: []const u8, comptime It: type) !void {
         switch (@typeInfo(It)) {
             .Struct => |struct_info| {
-                try this.defineConstant(name ++ ".*size", @sizeOf(It));
+                try this.defineConstant(name ++ ".*len", @sizeOf(It));
                 inline for (struct_info.fields) |field| {
                     try this.defineConstant(name ++ "." ++ field.name, @offsetOf(It, field.name));
                 }
