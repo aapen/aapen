@@ -91,13 +91,8 @@ finish
   sb-inc-count
 ;
 
-: sb-clear ('sb-word -- )
-  0
-  swap dup         (0 waddr waddr)
-  header.*size +   (0 waddr data-addr)
-  swap             (0 data-addr waddr)
-  word-data-len    (0 data-addr data-len)
-  ?stack
+: sb-clear (sb-word -- )
+  0 swap !
 ;
 
 
