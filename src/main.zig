@@ -222,9 +222,9 @@ pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn
     @setCold(true);
 
     if (return_addr) |ret| {
-        kerror(@src(), "[{x:0>8}] {s}", .{ ret, msg });
+        kerror(@src(), "[{x:0>8}] {s}\n", .{ ret, msg });
     } else {
-        kerror(@src(), "[unknown] {s}", .{msg});
+        kerror(@src(), "[unknown] {s}\n", .{msg});
     }
 
     if (stack) |stack_trace| {
