@@ -39,10 +39,60 @@ F
 : words ( n -- n : Number words -> number bytes ) word * ;
 : aligned ( c-addr – a-addr  : Align the address.) word 1 - + word / word * ;
 
-create [[
+:[[ create 
 finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
+
+(Utilities)
+
+: inc 1 + ;
+: dec 1 - ;
+
+: inc! dup @ inc swap ! ;
+: dec! dup @ dec swap ! ;
+
+: word-len (word-addr -- len)
+  header.len + @
+;
+
+: word-data-len (pWord - n : Return the number of data bytes associated with word)
+  word-len
+  header.*size -
+;
+
+(String buffer)
+
+: sb-make (--)
+  create
+    0 ,
+    16 allot
+  finish
+;
+
+: sb-inc-count (sb-addr --)
+  dup
+  @
+  inc
+  swap
+  !
+;
+
+: sb-poke-char (ch sb-addr --)
+  dup
+  @  word + +
+  !b
+;
+  
+: sb-append (ch sb-addr -- )
+  dup rot swap
+  sb-poke-char
+  sb-inc-count
+;
+
+: sb-clear (sb-word -- )
+  0 swap !
+;
 
 
 ( Testing... )
@@ -69,7 +119,7 @@ finish
   drop
 ;
 
-create by-hand (test word)
+:by-hand create
   '*push-u64 ,
   900 ,
   '*push-u64 ,

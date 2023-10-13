@@ -27,8 +27,6 @@ const Header = memory_module.Header;
 /// addr len --
 pub fn wordDump(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const len = try forth.stack.pop();
-    //const word_len = len / @sizeOf(u64);
-
     const iAddr = try forth.stack.pop();
     const addr: [*]u8 = @ptrFromInt(iAddr);
 

@@ -78,6 +78,7 @@ pub const Forth = struct {
         this.jump = try this.definePrimitive("*jump", &wordJump, 0);
         this.jumpIfNot = try this.definePrimitive("*jump-if-not", &wordJumpIfNot, 0);
 
+        _ = try this.defineBuffer("cmd-buffer", 20);
         try this.defineConstant("inner", @intFromPtr(&inner));
         try this.defineConstant("*stop", 0);
         try this.defineConstant("forth", @intFromPtr(this));
@@ -107,14 +108,43 @@ pub const Forth = struct {
 
     pub inline fn popAs(this: *Forth, comptime T: type) !T {
         const v = try this.stack.pop();
-        const casted_v: T = @bitCast(v);
-        return casted_v;
+        switch (@typeInfo(T)) {
+            .Int => {
+                const tSize = @sizeOf(T);
+                if (tSize >= @sizeOf(i64)) {
+                    const casted_v: T = @bitCast(v);
+                    return casted_v;
+                } else {
+                    const trunc_v: T = @intCast(v);
+                    return trunc_v;
+                }
+            },
+            .Pointer => {
+                const casted_p: T = @ptrFromInt(v);
+                return casted_p;
+            },
+            else => {
+                @compileError("Expected an int or pointer, found '" ++ @typeName(T) ++ "'");
+            },
+        }
     }
 
     // TBD handle pointers...
     pub inline fn pushAny(this: *Forth, v: anytype) !void {
-        const v_u64: u64 = @bitCast(v);
-        try this.stack.push(v_u64);
+        const T = @TypeOf(v);
+        switch (@typeInfo(T)) {
+            .Int => {
+                const v_u64: u64 = @bitCast(v);
+                try this.stack.push(v_u64);
+            },
+            .Pointer => {
+                const v_u64: u64 = @intFromPtr(v);
+                try this.stack.push(v_u64);
+            },
+            else => {
+                @compileError("Expected an int or pointer, found '" ++ @typeName(T) ++ "'");
+            },
+        }
     }
 
     // Reset the state of the interpreter, probably due to an error.
@@ -185,6 +215,21 @@ pub const Forth = struct {
         return header;
     }
 
+    // Push the address of the word body onto the stack.
+    pub fn pushBodyAddress(self: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!i64 {
+        var body = header.bodyOfType([*]u8);
+        try self.stack.push(@intFromPtr(body));
+        return 0;
+    }
+
+    // Define a primitive w/o a description.
+    pub fn defineBuffer(this: *Forth, name: []const u8, lenInWords: u64) !*Header {
+        const header = try this.startWord(name, "A buffer", &pushBodyAddress, 0);
+        _ = this.allocate(lenInWords, @alignOf(u64));
+        try this.completeWord();
+        return header;
+    }
+
     // Define a constant with a single u64 value. What we really end up with
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
@@ -198,6 +243,7 @@ pub const Forth = struct {
     pub fn defineStruct(this: *Forth, comptime name: []const u8, comptime It: type) !void {
         switch (@typeInfo(It)) {
             .Struct => |struct_info| {
+                try this.defineConstant(name ++ ".*size", @sizeOf(It));
                 inline for (struct_info.fields) |field| {
                     try this.defineConstant(name ++ "." ++ field.name, @offsetOf(It, field.name));
                 }
@@ -349,7 +395,7 @@ pub const Forth = struct {
             try this.evalHeader(h);
         } else if (token[0] == '\'') {
             try this.evalQuoted(token);
-        } else if (token[0] == '"') {
+        } else if (token[0] == '"' or token[0] == ':') {
             try this.evalString(token);
         } else if (token[0] != '(') {
             var v: u64 = try parser.parseNumber(token, this.ibase);

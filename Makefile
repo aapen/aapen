@@ -51,7 +51,6 @@ $(KERNEL): $(SRCS)
 
 kernel: $(KERNEL)
 
-
 test:
 	$(ZIG) test $(TEST_SRC)
 
