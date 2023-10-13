@@ -9,16 +9,12 @@ const ForthError = errors.ForthError;
 
 const string = @import("string.zig");
 const parser = @import("parser.zig");
-//const memory = @import("memory.zig");
 
 const forth_module = @import("forth.zig");
 const Forth = forth_module.Forth;
 
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
-
-const os_memory = @import("../memory/region.zig");
-const os_main = @import("../main.zig");
 
 const BoardInfo = hal.common.BoardInfo;
 
@@ -88,6 +84,12 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var success = hal.dma_controller.awaitChannel(channel);
     hal.dma_controller.releaseChannel(channel);
     try forth.stack.push(if (success) 1 else 0);
+    return 0;
+}
+
+/// --
+pub fn wordReset(_: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    asm volatile ("brk 0x07c5");
     return 0;
 }
 
@@ -454,7 +456,6 @@ pub fn defineCore(forth: *Forth) !void {
     // Expose internal values to forty.
 
     try forth.defineConstant("word", @sizeOf(u64));
-    //try forth.defineStruct("region", os_memory.Region);
     try forth.defineStruct("board", BoardInfo);
     try forth.defineStruct("board.model", BoardInfo.Model);
     try forth.defineStruct("board.device", BoardInfo.Device);
@@ -476,6 +477,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, 0);
     _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, 0);
     _ = try forth.definePrimitiveDesc("dma", "stride len dest src -- : Perform a DMA", &wordDma, 0);
+    _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, 0);
 
     // Basic Forth words.
     _ = try forth.definePrimitiveDesc("eval", "len pStr -- <Results>", &wordEval, 0);

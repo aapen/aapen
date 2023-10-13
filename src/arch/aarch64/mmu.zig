@@ -1,3 +1,5 @@
+const cortex_a = @import("../cortex-a.zig");
+
 pub const memory_map = @import("../../hal/raspi3/memory_map.zig");
 
 // Assumptions
@@ -21,13 +23,14 @@ pub const block_size: u64 = 0x40000000;
 pub const device_start: u64 = memory_map.device_start;
 
 // These are choices about memory protection
+// These must match the value written to MAIR_EL1 in mmu.S
 pub const mair_device_ng_nr_ne: u8 = 0x0;
 pub const mair_device_ng_nr_ne_index: u2 = 0;
 
 pub const mair_normal_nc: u8 = 0x44;
-pub const mair_normal_nc_INDEX: u2 = 1;
+pub const mair_normal_nc_index: u2 = 1;
 
-pub const mair_value: u64 = (mair_normal_nc << (8 * mair_normal_nc_INDEX)) | (mair_device_ng_nr_ne << (8 * mair_device_ng_nr_ne_index));
+//pub const mair_value: u64 = (mair_normal_nc << (8 * mair_normal_nc_index)) | (mair_device_ng_nr_ne << (8 * mair_device_ng_nr_ne_index));
 
 pub const table_descriptor_valid: u64 = (1 << 0);
 pub const table_descriptor_is_table: u64 = (1 << 1);
@@ -36,8 +39,8 @@ pub const table_descriptor_kernel_perms: u64 = (1 << 54);
 pub const table_descriptor_inner_shareable: u64 = (3 << 8);
 
 pub const kernel_table_flags: u64 = (table_descriptor_is_table | table_descriptor_valid);
-pub const kernel_block_flags: u64 = (table_descriptor_access | table_descriptor_inner_shareable | table_descriptor_kernel_perms | (@as(u8, mair_normal_nc_INDEX) << 2) | table_descriptor_valid);
-pub const device_block_flags: u64 = (table_descriptor_access | table_descriptor_inner_shareable | table_descriptor_kernel_perms | (@as(u8, mair_device_ng_nr_ne_index) << 2) | table_descriptor_valid);
+pub const kernel_block_flags: u64 = (table_descriptor_access | table_descriptor_inner_shareable | table_descriptor_kernel_perms | (@as(u8, mair_normal_nc_index) << 2) | table_descriptor_valid);
+pub const device_block_flags: u64 = (table_descriptor_access | table_descriptor_kernel_perms | (@as(u8, mair_device_ng_nr_ne_index) << 2) | table_descriptor_valid);
 
 // AArch64 address translation
 // Assumes 4KB translation granule
@@ -88,9 +91,9 @@ pub fn init() void {
     mmu_on();
 }
 
-extern const __page_tables_start: u64;
+//extern const __page_tables_start: u64;
 
-extern fn memzero(begin: u64, end_exclusive: u64) void;
+//extern fn memzero(begin: u64, end_exclusive: u64) void;
 
 fn tableEntryCreate(table: u64, next_level_table: u64, virtual_address: u64, chosen_table_shift: u6, flags: u64) void {
     var table_index = virtual_address >> chosen_table_shift;
@@ -108,6 +111,8 @@ fn blockMappingCreate(page_middle_directory: u64, virtual_addr_start: u64, virtu
     vend -= 1;
     vend &= (entries_per_table - 1);
 
+    // zero out the bottom `section_shift` bits of the address, to
+    // turn it into a table entry
     var pa = phys_addr_start >> section_shift;
     pa <<= section_shift;
 
@@ -127,19 +132,13 @@ fn blockMappingCreate(page_middle_directory: u64, virtual_addr_start: u64, virtu
     }
 }
 
-fn pageTablesStart() u64 {
-    // the symbol is provided by the linker script
-    return @intFromPtr(&__page_tables_start);
-}
-
 /// Define an identity-mapped set of page tables
 fn pageTablesCreate() void {
-    var tables = pageTablesStart();
-
-    memzero(tables, tables + page_table_size);
+    const tables_start: [*]u8 = @ptrCast(&cortex_a.sections.__page_tables_start);
+    @memset(tables_start[0..page_table_size], 0);
 
     var map_base: u64 = 0;
-    var table: u64 = tables;
+    var table: u64 = @intFromPtr(tables_start);
     var next_level_table: u64 = table + page_size;
 
     // Level 0

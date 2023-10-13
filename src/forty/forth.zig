@@ -58,6 +58,11 @@ pub const Forth = struct {
     words: ForthTokenIterator = undefined,
 
     pub fn init(this: *Forth, a: Allocator, c: *fbcons.FrameBufferConsole) !void {
+        this.ibase = 10;
+        this.obase = 10;
+        this.debug = 0;
+        this.lastWord = null;
+        this.newWord = null;
         this.allocator = a;
         this.arena_allocator = ArenaAllocator.init(a);
         this.temp_allocator = this.arena_allocator.allocator();
@@ -506,7 +511,7 @@ pub const Forth = struct {
 
     pub fn emit(this: *Forth, ch: u8) !void {
         this.console.emit(ch);
-        try hal.serial_writer.print("{c}", .{ch});
+        try hal.serial_writer.writeByte(ch);
     }
 
     pub fn writer(this: *Forth) fbcons.FrameBufferConsole.Writer {

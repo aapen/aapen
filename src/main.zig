@@ -31,11 +31,14 @@ pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
 pub var interpreter: Forth = Forth{};
+pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{};
 
 pub var uart_valid = false;
 pub var console_valid = false;
 
 fn kernelInit() void {
+    global_unwind_point = .{};
+
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmuInit();
 
@@ -44,8 +47,8 @@ fn kernelInit() void {
 
     devicetree.init();
 
-    hal.detect.detectAndInit(devicetree.root_node, &os.page_allocator) catch {
-        hal.serial.puts("Early init error. Cannot proceed.");
+    hal.init(devicetree.root_node, &os.page_allocator) catch {
+        hal.serial_writer.print("Early init error. Cannot proceed.", .{}) catch {};
     };
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
@@ -97,8 +100,8 @@ fn kernelInit() void {
     supplyAddress("board", @intFromPtr(&board));
     supplyUsize("fbsize", fb.buffer_size);
 
-    arch.cpu.exceptions.markUnwindPoint(&arch.cpu.exceptions.global_unwind_point);
-    arch.cpu.exceptions.global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
+    arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
+    global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available, exception recovery available
@@ -143,12 +146,6 @@ fn diagnostics() !void {
     }
     try kernel_heap.range.print();
     try fb.range.print();
-}
-
-export fn _soft_reset() noreturn {
-    kernelInit();
-
-    unreachable;
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
@@ -210,14 +207,31 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
 // TODO: re-enable this when
 // https://github.com/ziglang/zig/issues/16327 is fixed.
 
-// pub fn panic(msg: []const u8, stack: ?*std.builtin.StackTrace, return_addr: ?usize) noreturn {
-//     _ = stack;
-//     _ = return_addr;
+const StackTrace = std.builtin.StackTrace;
 
-//     kerror(@src(), msg, .{});
-//     while (true) {
-//         arch.cpu.wfe();
-//     }
+pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn {
+    @setCold(true);
 
-//     unreachable;
-// }
+    if (return_addr) |ret| {
+        kerror(@src(), "[{x:0>8}] {s}", .{ ret, msg });
+    } else {
+        kerror(@src(), "[unknown] {s}", .{msg});
+    }
+
+    if (stack) |stack_trace| {
+        for (stack_trace.instruction_addresses, 0..) |addr, i| {
+            kprint("{d}: {x:0>8}\n", .{ i, addr });
+        }
+    }
+
+    @breakpoint();
+
+    unreachable;
+}
+
+// The assembly portion of soft reset (does the stack magic)
+pub extern fn _soft_reset(resume_address: u64) noreturn;
+
+pub fn resetSoft() noreturn {
+    _soft_reset(@intFromPtr(&kernelInit));
+}

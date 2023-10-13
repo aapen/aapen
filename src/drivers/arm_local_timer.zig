@@ -2,6 +2,8 @@ const hal = @import("../hal.zig");
 const InterruptController = hal.common.InterruptController;
 const IrqId = hal.common.IrqId;
 
+const interrupts = @import("arm_local_interrupt_controller.zig");
+
 /// Returns a number of ticks to schedule the next invocation. A zero
 /// return means don't schedule.
 //pub const TimerCallbackFn = *const fn (timer: *Timer, context: ?*anyopaque) u32;
@@ -69,14 +71,15 @@ pub const Timer = struct {
         timer_base: u64,
         intc: *InterruptController,
         timer_id: u2,
+        irq: IrqId,
     ) void {
-        self.match_reset = @as(u4, 1) << timer_id;
+        self.timer_id = timer_id;
+        self.irq = irq;
+        self.match_reset = @as(u4, 1) << self.timer_id;
         self.control = @ptrFromInt(timer_base);
-        self.compare = @ptrFromInt(timer_base + 0x0c + (@as(u64, timer_id) * 4));
+        self.compare = @ptrFromInt(timer_base + 0x0c + (@as(u64, self.timer_id) * 4));
         self.next_callback = null_callback;
-        self.irq = IrqId{ 1, timer_id };
         self.intc = intc;
-
         self.intc.connect(self.irq, timerIrqHandle, self);
     }
 
@@ -138,8 +141,8 @@ pub var timers: [4]Timer = undefined;
 pub fn init(system_timer_base: u64, intc: *InterruptController) void {
     // TODO externalize this constant
     counter.init(system_timer_base);
-    inline for (0..3) |i| {
-        timers[i].init(system_timer_base, intc, i);
+    inline for (0..3) |timer_id| {
+        timers[timer_id].init(system_timer_base, intc, timer_id, interrupts.mkid(1, 0));
     }
 }
 

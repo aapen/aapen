@@ -53,7 +53,10 @@ Currently supports Raspberry Pi 3b only.
 
 ### One-time host setup for cross-compilation
 
-Install a recent Zig build (as of June 2023, we are using nightly builds in the 0.11 series) from https://ziglang.org/download/.
+We are currently using Zig build: 0.12.0-dev.494+a8d2ed806
+
+- Linux download: https://ziglang.org/builds/zig-linux-x86_64-0.12.0-dev.494+a8d2ed806.tar.xz
+- Mac download: https://ziglang.org/builds/zig-macos-aarch64-0.12.0-dev.494+a8d2ed806.tar.xz
 
 ### One-time project setup for firmware
 

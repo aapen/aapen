@@ -1,5 +1,6 @@
 const root = @import("root");
 const debug = @import("../../debug.zig");
+const devicetree = @import("../../devicetree.zig");
 const cpu = @import("../../architecture.zig").cpu;
 const hal = @import("../../hal.zig");
 const registers = @import("registers.zig");
@@ -14,8 +15,6 @@ pub const UnwindPoint = struct {
     lr: u64 = undefined,
 };
 
-pub var global_unwind_point = UnwindPoint{};
-
 pub extern fn markUnwindPoint(point: *UnwindPoint) void;
 
 const IrqHandler = *const fn (context: *const ExceptionContext) void;
@@ -27,7 +26,8 @@ pub fn init(handler: IrqHandler) void {
 }
 
 /// Context passed in to every exception handler.
-/// This is created by the KERNEL_ENTRY macro in `exceptions.s`
+/// This is created by the KERNEL_ENTRY macro in `exceptions.s` and it
+/// is stored on the stack.
 pub const ExceptionContext = struct {
     /// General purpose registers' stored state
     gpr: [30]u64,
@@ -44,6 +44,9 @@ pub const ExceptionContext = struct {
 
     /// Exception Syndrome Register
     esr: Esr,
+
+    /// Override the actual stack with this stack pointer on return
+    force_sp: u64,
 };
 
 // TODO Seems odd to have a dependency from the CPU-specific module to
@@ -59,17 +62,31 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
             // Could we get the panic string and arguments from the
             // stack?
             debug.panicDisplay(context.elr);
-            if (global_unwind_point.sp != undefined) {
-                context.elr = global_unwind_point.pc;
-                context.lr = global_unwind_point.sp;
-                context.gpr[29] = global_unwind_point.fp;
+            var unwind = unwindPointLocate(context);
+            if (unwind.sp != undefined) {
+                context.elr = unwind.pc;
+                context.force_sp = unwind.sp;
+                context.lr = unwind.lr;
+                context.gpr[29] = unwind.fp;
             }
+        } else if (breakpoint_number == soft_reset_breakpoint) {
+            root.resetSoft();
+
+            // Adjust ELR to resume execution _after_ the breakpoint instruction
+            context.elr += 4;
         } else {
             debug.unknownBreakpointDisplay(context.elr, breakpoint_number);
+
+            // Adjust ELR to resume execution _after_ the breakpoint instruction
+            context.elr += 4;
         }
     } else {
         debug.unhandledExceptionDisplay(context.elr, entry_type, @as(u64, @bitCast(context.esr)), context.esr.ec);
     }
+}
+
+fn unwindPointLocate(_: *ExceptionContext) *UnwindPoint {
+    return &root.global_unwind_point;
 }
 
 var irq_handler: ?IrqHandler = null;
@@ -86,4 +103,11 @@ pub fn irqDisable() void {
 
 pub fn irqEnable() void {
     asm volatile ("msr daifclr, #2");
+}
+
+// This is an arbitrary, but unique, number
+const soft_reset_breakpoint = 0x7c5;
+
+pub fn triggerSoftReset() void {
+    asm volatile ("brk 0x7c5");
 }

@@ -3,7 +3,7 @@
         .section .text.util
         
 // ----------------------------------------------------------------------
-// fn spin_delay()
+// fn spinDelay()
 //
 // Loop for (roughly) a number of CPU cycles
 //
@@ -14,29 +14,41 @@
 // ----------------------------------------------------------------------
 
         ENTRY(spinDelay)
-        subs x0, x0, #1
-        bne  spinDelay
+        subs    x0, x0, #1
+        bne     spinDelay
         ret
         END(spinDelay)
 
 // ----------------------------------------------------------------------
-// fn memzero()
+// fn soft_reset()
 //
-// Alignment: x0 must be 8-byte aligned. x1 must be 8-byte aligned.
+// Jump back to an entry point, resetting the call stack. Note that this
+// does not change EL.
+//
+// Alignment:
 //
 // Arguments:
-//      x0 - low address (inclusive)
-//      x1 - high address (exclusive)
+//      x0 - target fn address
 // Returns: none
-// Clobbers: x0
+// Clobbers: x1, x3, x8
 // ----------------------------------------------------------------------
 
-        ENTRY(memzero)
-        cmp x0, x1                      // Has x0 reached x1?
-        b.eq 1f                         // If so, we're done
-        stp xzr, xzr, [x0], #16         // Otherwise, store 16 bits of zeros and
-                                        // post-increment x0 by 16
-        b memzero                       // Repeat until done
-1:
-        ret
-        END(memzero)
+        ENTRY(_soft_reset)
+        // Reset the stack
+        LDR_REL(x1, __boot_core_stack_end_exclusive)
+        mov     sp, x1
+
+        // Turn off the MMU
+        bl      mmu_off
+
+        // Re-zero the BSS (but save x0 first since it gets clobbered)
+        mov     x19, x0
+        bl      bssInit
+        mov     x0, x19
+
+        // Reset the call frames
+        mov     x29, xzr
+        mov     x30, xzr
+
+        br      x0
+        END(soft_reset)

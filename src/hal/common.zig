@@ -15,7 +15,10 @@ const Region = memory.Region;
 // Generic Interrupt Controller
 // ----------------------------------------------------------------------
 
-pub const IrqId = struct { u2, u5 };
+pub const IrqId = struct {
+    index: usize = undefined,
+};
+
 pub const IrqHandlerFn = *const fn (irq_id: IrqId, context: ?*anyopaque) void;
 pub const IrqThunk = *const fn (context: *const arch.cpu.exceptions.ExceptionContext) void;
 
@@ -39,22 +42,22 @@ pub const InterruptController = struct {
         const generic = struct {
             fn connect(ptr: *anyopaque, id: IrqId, handler: IrqHandlerFn, context: *anyopaque) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.connect, .{ self, id, handler, context });
+                @call(.auto, ptr_info.Pointer.child.connect, .{ self, id, handler, context });
             }
 
             fn disconnect(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.disconnect, .{ self, id });
+                @call(.auto, ptr_info.Pointer.child.disconnect, .{ self, id });
             }
 
             fn enable(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.enable, .{ self, id });
+                @call(.auto, ptr_info.Pointer.child.enable, .{ self, id });
             }
 
             fn disable(ptr: *anyopaque, id: IrqId) void {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
-                @call(.always_inline, ptr_info.Pointer.child.disable, .{ self, id });
+                @call(.auto, ptr_info.Pointer.child.disable, .{ self, id });
             }
         };
 
@@ -165,8 +168,8 @@ pub const Timer = struct {
 pub const Serial = struct {
     ptr: *anyopaque,
     getcFn: *const fn (ptr: *anyopaque) u8,
-    putcFn: *const fn (ptr: *anyopaque, ch: u8) void,
-    putsFn: *const fn (ptr: *anyopaque, buf: []const u8) void,
+    putcFn: *const fn (ptr: *anyopaque, ch: u8) bool,
+    putsFn: *const fn (ptr: *anyopaque, buf: []const u8) usize,
     hascFn: *const fn (ptr: *anyopaque) bool,
 
     pub fn init(
@@ -185,12 +188,12 @@ pub const Serial = struct {
                 return @call(.always_inline, ptr_info.Pointer.child.getc, .{self});
             }
 
-            fn putc(ptr: *anyopaque, ch: u8) void {
+            fn putc(ptr: *anyopaque, ch: u8) bool {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
                 return @call(.always_inline, ptr_info.Pointer.child.putc, .{ self, ch });
             }
 
-            fn puts(ptr: *anyopaque, buf: []const u8) void {
+            fn puts(ptr: *anyopaque, buf: []const u8) usize {
                 const self: Ptr = @ptrCast(@alignCast(ptr));
                 return @call(.always_inline, ptr_info.Pointer.child.puts, .{ self, buf });
             }
@@ -214,12 +217,12 @@ pub const Serial = struct {
         return serial.getcFn(serial.ptr);
     }
 
-    pub fn putc(serial: *Serial, ch: u8) void {
-        serial.putcFn(serial.ptr, ch);
+    pub fn putc(serial: *Serial, ch: u8) bool {
+        return serial.putcFn(serial.ptr, ch);
     }
 
-    pub fn puts(serial: *Serial, buffer: []const u8) void {
-        serial.putsFn(serial.ptr, buffer);
+    pub fn puts(serial: *Serial, buffer: []const u8) usize {
+        return serial.putsFn(serial.ptr, buffer);
     }
 
     pub fn hasc(serial: *Serial) bool {

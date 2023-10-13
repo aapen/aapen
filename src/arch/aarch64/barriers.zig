@@ -34,6 +34,14 @@ pub inline fn barrierMemoryDevice() void {
     dsb(BarrierType.SY);
 }
 
+pub inline fn barrierMemoryWrite() void {
+    dsb(BarrierType.ST);
+}
+
+pub inline fn barrierMemoryRead() void {
+    dsb(BarrierType.LD);
+}
+
 pub inline fn barrierInstruction() void {
     isb();
 }

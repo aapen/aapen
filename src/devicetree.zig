@@ -2,6 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const AutoHashMap = std.AutoHashMap;
+const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const StringHashMap = std.StringHashMap;
 
 const memory = @import("memory.zig");
@@ -21,12 +22,14 @@ pub extern var __fdt_address: usize;
 // RAM)
 const parse_buffer_len = 256 * 1024;
 var device_tree_parsed_buffer: [parse_buffer_len]u8 = undefined;
-var fba = std.heap.FixedBufferAllocator.init(device_tree_parsed_buffer[0..parse_buffer_len]);
+var fba: FixedBufferAllocator = undefined;
 
 pub var global_devicetree = Fdt{};
 pub var root_node: *Fdt.Node = undefined;
 
 pub fn init() void {
+    fba = FixedBufferAllocator.init(device_tree_parsed_buffer[0..parse_buffer_len]);
+
     global_devicetree.init(fba.allocator()) catch |err| {
         root.kerror(@src(), "Unable to initialize device tree. Things are likely to break: {any}\n", .{err});
     };

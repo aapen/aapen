@@ -9,9 +9,9 @@
 
         EC_VALUE_SVC64                  = 0x15
         EC_VALUE_BKPT                   = 0x3C
-        // kernel entry frame = 17 pairs of 64 bit registers, plus a
+        // kernel entry frame = 18 pairs of 64 bit registers, plus a
         // new invocation frame
-        KERNEL_ENTRY_FRAME_SIZE         = 0x130
+        KERNEL_ENTRY_FRAME_SIZE         = 19 * 2 * 8
 
         SYNCHRONOUS_INVALID_EL1T        = 0b0000
         IRQ_INVALID_EL1T                = 0b0001
@@ -59,25 +59,26 @@
         // build invocation frame on stack
         // save frame pointer (x29) and link register (x30), then
         // update the frame pointer
-        stp     x29, x30, [sp, #-KERNEL_ENTRY_FRAME_SIZE]!
-        mov     x29, sp
+        sub     sp,  sp,  #KERNEL_ENTRY_FRAME_SIZE
+        stp     x29, x30, [sp, #KERNEL_ENTRY_FRAME_SIZE - 16]
+        add     x29, sp,  #KERNEL_ENTRY_FRAME_SIZE - 16
 
         // store all general purpose registers on the stack
-        stp	x0,  x1,  [sp, #16 * 1]
-	stp	x2,  x3,  [sp, #16 * 2]
-	stp	x4,  x5,  [sp, #16 * 3]
-	stp	x6,  x7,  [sp, #16 * 4]
-	stp	x8,  x9,  [sp, #16 * 5]
-	stp	x10, x11, [sp, #16 * 6]
-	stp	x12, x13, [sp, #16 * 7]
-	stp	x14, x15, [sp, #16 * 8]
-	stp	x16, x17, [sp, #16 * 9]
-	stp	x18, x19, [sp, #16 * 10]
-	stp	x20, x21, [sp, #16 * 11]
-	stp	x22, x23, [sp, #16 * 12]
-	stp	x24, x25, [sp, #16 * 13]
-	stp	x26, x27, [sp, #16 * 14]
-	stp	x28, x29, [sp, #16 * 15]
+        stp	x0,  x1,  [sp, #16 * 0]
+	stp	x2,  x3,  [sp, #16 * 1]
+	stp	x4,  x5,  [sp, #16 * 2]
+	stp	x6,  x7,  [sp, #16 * 3]
+	stp	x8,  x9,  [sp, #16 * 4]
+	stp	x10, x11, [sp, #16 * 5]
+	stp	x12, x13, [sp, #16 * 6]
+	stp	x14, x15, [sp, #16 * 7]
+	stp	x16, x17, [sp, #16 * 8]
+	stp	x18, x19, [sp, #16 * 9]
+	stp	x20, x21, [sp, #16 * 10]
+	stp	x22, x23, [sp, #16 * 11]
+	stp	x24, x25, [sp, #16 * 12]
+	stp	x26, x27, [sp, #16 * 13]
+	stp	x28, x29, [sp, #16 * 14]
 
         // Also get the exception info: link register, saved program
         // status, and exception syndrome
@@ -85,42 +86,56 @@
         mrs     x2, spsr_el1
         mrs     x3, esr_el1
 
-	stp	lr,  x1,  [sp, #16 * 16]
-        stp     x2,  x3,  [sp, #16 * 17]
+	stp	lr,  x1,  [sp, #16 * 15]
+        stp     x2,  x3,  [sp, #16 * 16]
+        str     xzr,      [sp, #16 * 17]
 
         // x0 will be the first parameter to the handler function
-        // it should point to the context structure that starts just
-        // _above_ the saved frame pointer and link register
-        add     x0,  sp, #16
+        // it should point to the context structure that starts at SP
+        // and extends upward
+        mov     x0, sp
         .endm
 
         // Restore registers on exit from kernel space
         .macro KERNEL_EXIT
 
-        ldp     x19, xzr, [sp, #16 * 17]
-        ldp     lr,  x20, [sp, #16 * 16]
+        ldp     x19, xzr, [sp, #16 * 16]
+        ldp     lr,  x20, [sp, #16 * 15]
 
         msr     spsr_el1, x19
         msr     elr_el1,  x20
 
-        ldp	x0,  x1,  [sp, #16 * 1]
-	ldp	x2,  x3,  [sp, #16 * 2]
-	ldp	x4,  x5,  [sp, #16 * 3]
-	ldp	x6,  x7,  [sp, #16 * 4]
-	ldp	x8,  x9,  [sp, #16 * 5]
-	ldp	x10, x11, [sp, #16 * 6]
-	ldp	x12, x13, [sp, #16 * 7]
-	ldp	x14, x15, [sp, #16 * 8]
-	ldp	x16, x17, [sp, #16 * 9]
-	ldp	x18, x19, [sp, #16 * 10]
-	ldp	x20, x21, [sp, #16 * 11]
-	ldp	x22, x23, [sp, #16 * 12]
-	ldp	x24, x25, [sp, #16 * 13]
-	ldp	x26, x27, [sp, #16 * 14]
-	ldp	x28, x29, [sp, #16 * 15]
+        ldp	x0,  x1,  [sp, #16 * 0]
+	ldp	x2,  x3,  [sp, #16 * 1]
+	ldp	x4,  x5,  [sp, #16 * 2]
+	ldp	x6,  x7,  [sp, #16 * 3]
+	ldp	x8,  x9,  [sp, #16 * 4]
+	ldp	x10, x11, [sp, #16 * 5]
+	ldp	x12, x13, [sp, #16 * 6]
+	ldp	x14, x15, [sp, #16 * 7]
+	ldp	x16, x17, [sp, #16 * 8]
+	ldp	x18, x19, [sp, #16 * 9]
+	ldp	x20, x21, [sp, #16 * 10]
+	ldp	x22, x23, [sp, #16 * 11]
+	ldp	x24, x25, [sp, #16 * 12]
+	ldp	x26, x27, [sp, #16 * 13]
+	ldp	x28, x29, [sp, #16 * 14]
 
+        // if we have an override stack pointer in the context
+        // the application wants to throw away the current stack
+        // we can temporarily use x30 for the value since it will be
+        // overwritten by the processor when we do the eret
+        //
+        // note that the frame pointer (x29) must have been set correctly by the
+        // exception handler
+        ldr     x30,      [sp, #16 * 17]
+        cbz     x30, 2f
+        mov     sp,  x30
+        eret
+
+2:
         // restore frame pointer and link register
-        ldp     x29, x30, [sp]
+        ldp     x29, x30, [sp, #KERNEL_ENTRY_FRAME_SIZE - 16]
 	add	sp,  sp,  #KERNEL_ENTRY_FRAME_SIZE
 	eret
         .endm
