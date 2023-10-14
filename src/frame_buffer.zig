@@ -191,92 +191,51 @@ pub const FrameBuffer = struct {
             fb.lineHorizontal(y_start, x_start, x_end, color);
         } else {
             // full Bresenham
-            const dx: i64 = @bitCast(@subWithOverflow(x_end, x_start)[0]);
-            var dy: i64 = @bitCast(@subWithOverflow(y_end, y_start)[0]);
+            var ix0: isize = @bitCast(x_start);
+            var ix1: isize = @bitCast(x_end);
+            var iy0: isize = @bitCast(y_start);
+            var iy1: isize = @bitCast(y_end);
 
-            if (abs(i64, dx) > abs(i64, dy)) {
-                if (x_end < x_start) {
-                    x_start = x1;
-                    x_end = x0;
-                    y_start = y1;
-                    y_end = y0;
+            var steep = abs(isize, iy1 - iy0) > abs(isize, ix1 - ix0);
+
+            if (steep) {
+                var t = ix0;
+                ix0 = iy0;
+                iy0 = ix0;
+
+                t = ix1;
+                ix1 = iy1;
+                iy1 = t;
+            }
+
+            if (ix0 > ix1) {
+                var t = ix0;
+                ix0 = ix1;
+                ix1 = t;
+
+                t = iy0;
+                iy0 = iy1;
+                iy1 = t;
+            }
+
+            var dx = ix1 - ix0;
+            var dy = abs(isize, iy1 - iy0);
+            var err: isize = 0;
+            var ystep: isize = if (iy0 < iy1) 1 else -1;
+            var y_cur = iy0;
+            var x_cur = ix0;
+            while (x_cur <= ix1) {
+                if (steep) {
+                    fb.base[@as(usize, @intCast(y_cur)) + @as(usize, @intCast(x_cur)) * fb.pitch] = color;
+                } else {
+                    fb.base[@as(usize, @intCast(x_cur)) + @as(usize, @intCast(y_cur)) * fb.pitch] = color;
                 }
-
-                var step_add = true;
-                const y_step = fb.pitch;
-                if (dy < 0) {
-                    step_add = false;
-                    dy = -dy;
+                err += dy;
+                if (2 * err >= dx) {
+                    y_cur += ystep;
+                    err -= dx;
                 }
-
-                var delta: i64 = 2 * dy - dx;
-                var err: i64 = 2 * dy;
-                var err_decrement: i64 = 2 * (dy - dx);
-
-                var x = x_start;
-                var y = y_start;
-                var pixel: [*]u8 = fb.base;
-                //                const y_step = fb.pitch;
-                const x_step = 1;
-                pixel += y * fb.pitch + x;
-                for (x_start..x_end) |_| {
-                    pixel[0] = color;
-                    pixel += x_step;
-                    if (delta <= 0) {
-                        delta += err;
-                    } else {
-                        delta += err_decrement;
-
-                        // TODO Zig can add or subtract a usize to a pointer but
-                        // cannot add an isize?
-                        if (step_add) {
-                            pixel += y_step;
-                        } else {
-                            pixel -= y_step;
-                        }
-                    }
-                }
-            } else {
-                if (y_end < y_start) {
-                    x_start = x1;
-                    x_end = x0;
-                    y_start = y1;
-                    y_end = y0;
-                }
-
-                var step_add = true;
-                const x_step = 1;
-
-                if (dy < 0) {
-                    step_add = false;
-                    dy = -dy;
-                }
-
-                var delta: i64 = 2 * dx - dy;
-                var err: i64 = 2 * dx;
-                var err_decrement: i64 = 2 * (dx - dy);
-
-                var x = x_start;
-                var y = y_start;
-                var pixel: [*]u8 = fb.base;
-                const y_step = fb.pitch;
-
-                pixel += y * y_step + x;
-                for (y_start..y_end) |_| {
-                    pixel[0] = color;
-                    pixel += y_step;
-                    if (delta <= 0) {
-                        delta += err;
-                    } else {
-                        delta += err_decrement;
-
-                        if (step_add) {
-                            pixel += x_step;
-                        } else {
-                            pixel -= x_step;
-                        }
-                    }
-                }
+                x_cur += 1;
             }
         }
     }
