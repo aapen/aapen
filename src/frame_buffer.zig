@@ -22,6 +22,10 @@ pub const default_palette = [_]u32{
 };
 
 pub const FrameBuffer = struct {
+    pub const Error = error{
+        OutOfBounds,
+    };
+
     dma: *DMAController = undefined,
     dma_channel: ?DMAChannel = undefined,
     base: [*]u8 = undefined,
@@ -120,6 +124,17 @@ pub const FrameBuffer = struct {
         return @max(min, @min(val, max));
     }
 
+    inline fn boundsCheck(comptime T: type, min: T, val: T, max: T) !T {
+        if (val < min or val > max) {
+            return Error.OutOfBounds;
+        }
+        return val;
+    }
+
+    inline fn abs(comptime T: type, val: T) T {
+        return if (val > 0) val else -val;
+    }
+
     pub fn fill(fb: *FrameBuffer, left: usize, top: usize, right: usize, bottom: usize, color: u8) !void {
         var c: @Vector(16, u8) = @splat(color);
 
@@ -159,6 +174,152 @@ pub const FrameBuffer = struct {
             };
             fb.dma.initiate(fb.dma, ch, req) catch {};
             _ = fb.dma.awaitChannel(fb.dma, ch);
+        }
+    }
+
+    pub fn line(fb: *FrameBuffer, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) !void {
+        var x_start = try boundsCheck(usize, 0, x0, fb.xres);
+        var y_start = try boundsCheck(usize, 0, y0, fb.yres);
+        var x_end = try boundsCheck(usize, 0, x1, fb.xres);
+        var y_end = try boundsCheck(usize, 0, y1, fb.yres);
+
+        if (x_start == x_end) {
+            // special case for vertical lines (infinite slope!)
+            fb.lineVertical(x_start, y_start, y_end, color);
+        } else if (y_start == y_end) {
+            // special case for horizontal lines (very fast)
+            fb.lineHorizontal(y_start, x_start, x_end, color);
+        } else {
+            // full Bresenham
+            const dx: i64 = @bitCast(@subWithOverflow(x_end, x_start)[0]);
+            var dy: i64 = @bitCast(@subWithOverflow(y_end, y_start)[0]);
+
+            if (abs(i64, dx) > abs(i64, dy)) {
+                if (x_end < x_start) {
+                    x_start = x1;
+                    x_end = x0;
+                    y_start = y1;
+                    y_end = y0;
+                }
+
+                var step_add = true;
+                const y_step = fb.pitch;
+                if (dy < 0) {
+                    step_add = false;
+                    dy = -dy;
+                }
+
+                var delta: i64 = 2 * dy - dx;
+                var err: i64 = 2 * dy;
+                var err_decrement: i64 = 2 * (dy - dx);
+
+                var x = x_start;
+                var y = y_start;
+                var pixel: [*]u8 = fb.base;
+                //                const y_step = fb.pitch;
+                const x_step = 1;
+                pixel += y * fb.pitch + x;
+                for (x_start..x_end) |_| {
+                    pixel[0] = color;
+                    pixel += x_step;
+                    if (delta <= 0) {
+                        delta += err;
+                    } else {
+                        delta += err_decrement;
+
+                        // TODO Zig can add or subtract a usize to a pointer but
+                        // cannot add an isize?
+                        if (step_add) {
+                            pixel += y_step;
+                        } else {
+                            pixel -= y_step;
+                        }
+                    }
+                }
+            } else {
+                if (y_end < y_start) {
+                    x_start = x1;
+                    x_end = x0;
+                    y_start = y1;
+                    y_end = y0;
+                }
+
+                var step_add = true;
+                const x_step = 1;
+
+                if (dy < 0) {
+                    step_add = false;
+                    dy = -dy;
+                }
+
+                var delta: i64 = 2 * dx - dy;
+                var err: i64 = 2 * dx;
+                var err_decrement: i64 = 2 * (dx - dy);
+
+                var x = x_start;
+                var y = y_start;
+                var pixel: [*]u8 = fb.base;
+                const y_step = fb.pitch;
+
+                pixel += y * y_step + x;
+                for (y_start..y_end) |_| {
+                    pixel[0] = color;
+                    pixel += y_step;
+                    if (delta <= 0) {
+                        delta += err;
+                    } else {
+                        delta += err_decrement;
+
+                        if (step_add) {
+                            pixel += x_step;
+                        } else {
+                            pixel -= x_step;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn lineHorizontal(fb: *FrameBuffer, y: usize, x0: usize, x1: usize, color: u8) void {
+        var start: usize = 0;
+        var end: usize = 0;
+        if (x0 > x1) {
+            start = x1;
+            end = x0;
+        } else {
+            start = x0;
+            end = x1;
+        }
+
+        var pixel: [*]u8 = fb.base;
+        pixel += y * fb.pitch + start;
+        pixel[0] = color;
+        for (start..end) |_| {
+            pixel += 1;
+            pixel[0] = color;
+        }
+    }
+
+    fn lineVertical(fb: *FrameBuffer, x: usize, y0: usize, y1: usize, color: u8) void {
+        var start: usize = 0;
+        var end: usize = 0;
+
+        if (y0 > y1) {
+            start = y1;
+            end = y0;
+        } else {
+            start = y0;
+            end = y1;
+        }
+
+        var step = fb.pitch;
+        var pixel: [*]u8 = fb.base;
+        pixel += start * step + x;
+        pixel[0] = color;
+        for (start..end) |_| {
+            pixel += step;
+            pixel[0] = color;
         }
     }
 };
