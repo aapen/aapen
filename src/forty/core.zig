@@ -564,10 +564,6 @@ pub fn defineCore(forth: *Forth) !void {
 
     // Display.
 
-    try forth.defineInternalVariable("screenw", &forth.console.width);
-    try forth.defineInternalVariable("screenh", &forth.console.height);
-    try forth.defineInternalVariable("cursorx", &forth.console.xpos);
-    try forth.defineInternalVariable("cursory", &forth.console.ypos);
     _ = try forth.definePrimitiveDesc("dma", "src dest len stride -- : Perform a DMA", &wordDma, 0);
     _ = try forth.definePrimitiveDesc("blit", "sx sy w h dx dy -- : Copy a screen rect", &wordBlit, 0);
     _ = try forth.definePrimitiveDesc("fill", "l t r b c -- : fill rectangle with color", &wordFill, 0);
