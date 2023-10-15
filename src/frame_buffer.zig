@@ -22,6 +22,10 @@ pub const default_palette = [_]u32{
 };
 
 pub const FrameBuffer = struct {
+    // These are palette indices
+    pub const COLOR_FOREGROUND: u8 = 0x02;
+    pub const COLOR_BACKGROUND: u8 = 0x00;
+
     pub const Error = error{
         OutOfBounds,
     };
@@ -35,6 +39,8 @@ pub const FrameBuffer = struct {
     yres: usize = undefined,
     bpp: u32 = undefined,
     range: Region = Region{ .name = "Frame Buffer" },
+    fg: u8 = COLOR_FOREGROUND,
+    bg: u8 = COLOR_BACKGROUND,
 
     pub fn drawPixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {
         if (x < 0) return;
@@ -49,16 +55,12 @@ pub const FrameBuffer = struct {
         self.base[x + (y * self.pitch)] = color;
     }
 
-    // These are palette indices
-    pub const COLOR_FOREGROUND: u8 = 0x02;
-    pub const COLOR_BACKGROUND: u8 = 0x00;
-
     pub fn clear(self: *FrameBuffer) void {
-        self.fill(0, 0, self.xres, self.yres, COLOR_BACKGROUND) catch {};
+        self.fill(0, 0, self.xres, self.yres, self.bg) catch {};
     }
 
     pub fn clearRegion(self: *FrameBuffer, x: usize, y: usize, w: usize, h: usize) void {
-        self.fill(x, y, x + w, y + h, COLOR_BACKGROUND) catch {};
+        self.fill(x, y, x + w, y + h, self.bg) catch {};
     }
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
@@ -73,7 +75,7 @@ pub const FrameBuffer = struct {
         for (0..16) |_| {
             var charbits: u8 = character_rom[romidx];
             for (0..8) |_| {
-                self.base[fbidx] = if ((charbits & 0x80) != 0) COLOR_FOREGROUND else COLOR_BACKGROUND;
+                self.base[fbidx] = if ((charbits & 0x80) != 0) self.fg else self.bg;
                 fbidx += 1;
                 charbits <<= 1;
             }

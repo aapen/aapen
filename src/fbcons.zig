@@ -79,11 +79,11 @@ pub const FrameBufferConsole = struct {
     }
 
     fn eraseCursor(self: *FrameBufferConsole) void {
-        self.underbar(FrameBuffer.COLOR_BACKGROUND);
+        self.underbar(self.fb.bg);
     }
 
     fn drawCursor(self: *FrameBufferConsole) void {
-        self.underbar(FrameBuffer.COLOR_FOREGROUND);
+        self.underbar(self.fb.fg);
     }
 
     fn backspace(self: *FrameBufferConsole) void {

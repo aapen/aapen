@@ -2,7 +2,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const hal = @import("../hal.zig");
+
+const frame_buffer = @import("../frame_buffer.zig");
+const FrameBuffer = frame_buffer.FrameBuffer;
+
 const fbcons = @import("../fbcons.zig");
+const FrameBufferConsole = fbcons.FrameBufferConsole;
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -553,6 +558,9 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("board.model", BoardInfo.Model);
     try forth.defineStruct("board.device", BoardInfo.Device);
     try forth.defineStruct("board.memory", BoardInfo.Memory);
+
+    try forth.defineStruct("fbcons", FrameBufferConsole);
+    try forth.defineStruct("fb", FrameBuffer);
 
     // Display.
 

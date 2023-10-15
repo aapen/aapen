@@ -103,14 +103,9 @@ fn kernelInit() void {
         kerror(@src(), "Forth init: {any}\n", .{err});
     };
 
-    interpreter.defineStruct("fbcons", fbcons.FrameBufferConsole) catch |err| {
-        kerror(@src(), "Forth defineStruct: {any}\n", .{err});
-    };
-
     supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
-    supplyAddress("fb", @intFromPtr(fb.base));
+    supplyAddress("fb", @intFromPtr(&fb));
     supplyAddress("board", @intFromPtr(&board));
-    supplyUsize("fbsize", fb.buffer_size);
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
