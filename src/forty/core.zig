@@ -128,6 +128,15 @@ pub fn wordLine(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
+/// str x y --
+pub fn wordText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    var y = try forth.stack.pop();
+    var x = try forth.stack.pop();
+    var str = try forth.popAs([*:0]u8);
+    forth.console.fb.drawString(str, x, y);
+    return 0;
+}
+
 /// --
 pub fn wordReset(_: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     asm volatile ("brk 0x07c5");
@@ -555,6 +564,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("blit", "sx sy w h dx dy -- : Copy a screen rect", &wordBlit, 0);
     _ = try forth.definePrimitiveDesc("fill", "l t r b c -- : fill rectangle with color", &wordFill, 0);
     _ = try forth.definePrimitiveDesc("line", "x0 y0 x1 y1 c -- : draw line with color", &wordLine, 0);
+    _ = try forth.definePrimitiveDesc("text", "s x y -- : draw string at position", &wordText, 0);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, 0);

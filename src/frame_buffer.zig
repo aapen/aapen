@@ -83,6 +83,16 @@ pub const FrameBuffer = struct {
         }
     }
 
+    pub fn drawString(self: *FrameBuffer, str: [*:0]u8, x_start: usize, y_start: usize) void {
+        var x = x_start;
+        var y = y_start;
+        var i: usize = 0;
+        while (str[i] != 0) : (i += 1) {
+            self.drawChar(x, y, str[i]);
+            x += 8;
+        }
+    }
+
     pub fn eraseChar(self: *FrameBuffer, x: usize, y: usize) void {
         var line_stride = self.pitch;
         var fbidx = x + (y * line_stride);
