@@ -175,10 +175,20 @@ pub const FrameBufferConsole = struct {
     }
 
     pub fn putc(self: *FrameBufferConsole, ch: u8) void {
-        if (ch == '\n') {
-            _ = self.serial.putc(self.serial, '\r');
+        switch (ch) {
+            '\n' => {
+                _ = self.serial.putc(self.serial, '\r');
+                _ = self.serial.putc(self.serial, '\n');
+            },
+            0x7f => {
+                _ = self.serial.putc(self.serial, 0x08);
+                _ = self.serial.putc(self.serial, ' ');
+                _ = self.serial.putc(self.serial, 0x08);
+            },
+            else => {
+                _ = self.serial.putc(self.serial, ch);
+            },
         }
-        _ = self.serial.putc(self.serial, ch);
         self.emit(ch);
     }
 
