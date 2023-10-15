@@ -59,8 +59,6 @@ pub fn wordLet(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
     const name = string.asSlice(pName);
 
-    try forth.print("let: name: {s} value {}\n", .{ name, value });
-
     _ = try forth.create(name, "A constant", &pushBodyValue, 0);
     forth.addNumber(value);
     forth.complete();

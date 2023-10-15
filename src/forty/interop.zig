@@ -56,6 +56,43 @@ inline fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth
                 func(arg1, arg2, arg3);
             }
         },
+        4 => {
+            const arg1 = try forth.stack.pop();
+            const arg2 = try forth.stack.pop();
+            const arg3 = try forth.stack.pop();
+            const arg4 = try forth.stack.pop();
+            if (pushResult) {
+                result = func(arg1, arg2, arg3, arg4);
+            } else {
+                func(arg1, arg2, arg3, arg4);
+            }
+        },
+        5 => {
+            const arg1 = try forth.stack.pop();
+            const arg2 = try forth.stack.pop();
+            const arg3 = try forth.stack.pop();
+            const arg4 = try forth.stack.pop();
+            const arg5 = try forth.stack.pop();
+            if (pushResult) {
+                result = func(arg1, arg2, arg3, arg4, arg5);
+            } else {
+                func(arg1, arg2, arg3, arg4, arg5);
+            }
+        },
+        6 => {
+            const arg1 = try forth.stack.pop();
+            const arg2 = try forth.stack.pop();
+            const arg3 = try forth.stack.pop();
+            const arg4 = try forth.stack.pop();
+            const arg5 = try forth.stack.pop();
+            const arg6 = try forth.stack.pop();
+            if (pushResult) {
+                result = func(arg1, arg2, arg3, arg4, arg5, arg6);
+            } else {
+                func(arg1, arg2, arg3, arg4, arg5, arg6);
+            }
+        },
+
         else => {
             try forth.print("Can't handle a function of {} args {x}\n", .{ nParams, func });
             return ForthError.BadOperation;
@@ -69,43 +106,73 @@ inline fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth
 }
 
 /// fAddr -- : Call a no args function, no return value.
-pub fn wordInvoke(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+pub fn wordInvoke0(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return invokeF(*const fn () void, false, forth, body, offset, header);
 }
 
 /// fAddr -- : Call a 1 arg function, no return value.
-pub fn wordInvokeU(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+pub fn wordInvoke1(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return invokeF(*const fn (u64) void, false, forth, body, offset, header);
 }
 
 /// fAddr -- : Call a 2 arg function, no return value.
-pub fn wordInvokeUU(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+pub fn wordInvoke2(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return invokeF(*const fn (u64, u64) void, false, forth, body, offset, header);
 }
 
 /// fAddr -- : Call a 3 arg function, no return value.
-pub fn wordInvokeUUU(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+pub fn wordInvoke3(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return invokeF(*const fn (u64, u64, u64) void, false, forth, body, offset, header);
 }
 
+/// fAddr -- : Call a 4 arg function, no return value.
+pub fn wordInvoke4(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+    return invokeF(*const fn (u64, u64, u64, u64) void, false, forth, body, offset, header);
+}
+
+/// fAddr -- : Call a 5 arg function, no return value.
+pub fn wordInvoke5(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+    return invokeF(*const fn (u64, u64, u64, u64, u64) void, false, forth, body, offset, header);
+}
+
+/// fAddr -- : Call a 6 arg function, no return value.
+pub fn wordInvoke6(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+    return invokeF(*const fn (u64, u64, u64, u64, u64, u64) void, false, forth, body, offset, header);
+}
+
 /// fAddr -- result : Call a no args function, push return value.
-pub fn wordInvokeR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+pub fn wordInvoke0R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return invokeF(*const fn () u64, true, forth, body, offset, header);
 }
 
 /// u64 fAddr -- result : Call a 1 argument function, push return value.
-pub fn wordInvokeUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+pub fn wordInvoke1R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return invokeF(*const fn (a: u64) u64, true, forth, body, offset, header);
 }
 
 /// u64 u64 fAddr -- result : Call a 2 argument function, push return value.
-pub fn wordInvokeUUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+pub fn wordInvoke2R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return invokeF(*const fn (a: u64, b: u64) u64, true, forth, body, offset, header);
 }
 
 /// u64 u64 u64 fAddr -- result : Call a 3 argument function, push return value.
-pub fn wordInvokeUUUR(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+pub fn wordInvoke3R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
     return invokeF(*const fn (a: u64, b: u64, c: u64) u64, true, forth, body, offset, header);
+}
+
+/// fAddr -- : Call a 4 arg function, no return value.
+pub fn wordInvoke4R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+    return invokeF(*const fn (u64, u64, u64, u64) u64, true, forth, body, offset, header);
+}
+
+/// fAddr -- : Call a 5 arg function, no return value.
+pub fn wordInvoke5R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+    return invokeF(*const fn (u64, u64, u64, u64, u64) u64, true, forth, body, offset, header);
+}
+
+/// fAddr -- : Call a 6 arg function, no return value.
+pub fn wordInvoke6R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
+    return invokeF(*const fn (u64, u64, u64, u64, u64, u64) u64, true, forth, body, offset, header);
 }
 
 fn double_u64(a: u64) u64 {
@@ -120,7 +187,19 @@ fn add_3(a: u64, b: u64, c: u64) u64 {
     return a + b + c;
 }
 
-fn print_msg(f: u64) void {
+fn add_4(a: u64, b: u64, c: u64, d: u64) u64 {
+    return a + b + c + d;
+}
+
+fn add_5(a: u64, b: u64, c: u64, d: u64, e: u64) u64 {
+    return a + b + c + d + e;
+}
+
+fn add_6(a: u64, b: u64, c: u64, d: u64, e: u64, f: u64) u64 {
+    return a + b + c + d + e + f;
+}
+
+fn print_msg(f: u64) !void {
     var forth: *Forth = @ptrFromInt(f);
     try forth.print("A message!\n", .{});
 }
@@ -130,16 +209,25 @@ pub fn defineInterop(forth: *Forth) !void {
     try forth.defineConstant("double-u64", @intFromPtr(&double_u64));
     try forth.defineConstant("add-u64", @intFromPtr(&add_u64));
     try forth.defineConstant("add-3", @intFromPtr(&add_3));
+    try forth.defineConstant("add-4", @intFromPtr(&add_4));
+    try forth.defineConstant("add-5", @intFromPtr(&add_5));
+    try forth.defineConstant("add-6", @intFromPtr(&add_6));
     try forth.defineConstant("print-msg", @intFromPtr(&print_msg));
 
     // Variations on invoke.
-    _ = try forth.definePrimitiveDesc("invoke-r", "addr -- result : invoke a no args function", &wordInvokeUR, 0);
-    _ = try forth.definePrimitiveDesc("invoke-ur", "n addr -- result : invoke a 1 arg function", &wordInvokeUR, 0);
-    _ = try forth.definePrimitiveDesc("invoke-uur", "n n addr -- result : invoke a 2 arg function", &wordInvokeUUR, 0);
-    _ = try forth.definePrimitiveDesc("invoke-uuur", "n n n addr -- result : invoke a 3 arg function", &wordInvokeUUUR, 0);
+    _ = try forth.definePrimitiveDesc("invoke-0r", "addr -- result : invoke a 0 arg fn, push return", &wordInvoke0R, 0);
+    _ = try forth.definePrimitiveDesc("invoke-1r", "n addr -- result : invoke a 1 arg fn, push return", &wordInvoke1R, 0);
+    _ = try forth.definePrimitiveDesc("invoke-2r", "n n addr -- result : invoke a 2 arg fn, push return", &wordInvoke2R, 0);
+    _ = try forth.definePrimitiveDesc("invoke-3r", "n n n addr -- result : invoke a 3 arg fn, push return", &wordInvoke3R, 0);
+    _ = try forth.definePrimitiveDesc("invoke-4r", "n n n addr -- result : invoke a 4 arg fn, push return", &wordInvoke4R, 0);
+    _ = try forth.definePrimitiveDesc("invoke-5r", "n n n addr -- result : invoke a 5 arg fn, push return", &wordInvoke5R, 0);
+    _ = try forth.definePrimitiveDesc("invoke-6r", "n n n addr -- result : invoke a 6 arg fn, push return", &wordInvoke6R, 0);
 
-    _ = try forth.definePrimitiveDesc("invoke", "addr --  : invoke a 0 arg function, void", &wordInvoke, 0);
-    _ = try forth.definePrimitiveDesc("invoke-u", "n addr --  : invoke a 1 arg function, void", &wordInvokeU, 0);
-    _ = try forth.definePrimitiveDesc("invoke-uu", "n n addr --  : invoke a 2 arg function, void", &wordInvokeUU, 0);
-    _ = try forth.definePrimitiveDesc("invoke-uuu", "n n n addr --  : invoke a 3 arg function, void", &wordInvokeUUU, 0);
+    _ = try forth.definePrimitiveDesc("invoke-0", "addr --  : invoke a 0 arg void fn", &wordInvoke0, 0);
+    _ = try forth.definePrimitiveDesc("invoke-1", "n addr --  : invoke a 1 arg void fn", &wordInvoke1, 0);
+    _ = try forth.definePrimitiveDesc("invoke-2", "n n addr --  : invoke a 2 arg void fn", &wordInvoke2, 0);
+    _ = try forth.definePrimitiveDesc("invoke-3", "n n n addr --  : invoke a 3 arg void fn", &wordInvoke3, 0);
+    _ = try forth.definePrimitiveDesc("invoke-4", "n n n addr --  : invoke a 4 arg void fn", &wordInvoke4, 0);
+    _ = try forth.definePrimitiveDesc("invoke-5", "n n n addr --  : invoke a 5 arg void fn", &wordInvoke5, 0);
+    _ = try forth.definePrimitiveDesc("invoke-6", "n n n addr --  : invoke a 6 arg void fn", &wordInvoke6, 0);
 }
