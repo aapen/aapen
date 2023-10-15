@@ -34,6 +34,8 @@ pub const WordFunction = *const fn (forth: *Forth, body: [*]u64, offset: u64, he
 const parser = @import("parser.zig");
 const ForthTokenIterator = parser.ForthTokenIterator;
 
+const MemSize = 16_777_215;
+
 pub const Forth = struct {
     allocator: Allocator = undefined,
     arena_allocator: ArenaAllocator = undefined,
@@ -69,7 +71,7 @@ pub const Forth = struct {
         this.console = c;
         this.stack = DataStack.init(&a);
         this.rstack = ReturnStack.init(&a);
-        this.buffer = try a.alloc(u8, 20000); // TBD make size a parameter.
+        this.buffer = try a.alloc(u8, MemSize); // TBD make size a parameter.
         this.memory = Memory.init(this.buffer.ptr, this.buffer.len);
         this.line_buffer = try a.create(string.LineBuffer);
 
