@@ -22,6 +22,10 @@ pub const default_palette = [_]u32{
 };
 
 pub const FrameBuffer = struct {
+    pub const Error = error{
+        OutOfBounds,
+    };
+
     dma: *DMAController = undefined,
     dma_channel: ?DMAChannel = undefined,
     base: [*]u8 = undefined,
@@ -120,6 +124,17 @@ pub const FrameBuffer = struct {
         return @max(min, @min(val, max));
     }
 
+    inline fn boundsCheck(comptime T: type, min: T, val: T, max: T) !T {
+        if (val < min or val > max) {
+            return Error.OutOfBounds;
+        }
+        return val;
+    }
+
+    inline fn abs(comptime T: type, val: T) T {
+        return if (val > 0) val else -val;
+    }
+
     pub fn fill(fb: *FrameBuffer, left: usize, top: usize, right: usize, bottom: usize, color: u8) !void {
         var c: @Vector(16, u8) = @splat(color);
 
@@ -159,6 +174,111 @@ pub const FrameBuffer = struct {
             };
             fb.dma.initiate(fb.dma, ch, req) catch {};
             _ = fb.dma.awaitChannel(fb.dma, ch);
+        }
+    }
+
+    pub fn line(fb: *FrameBuffer, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) !void {
+        var x_start = try boundsCheck(usize, 0, x0, fb.xres);
+        var y_start = try boundsCheck(usize, 0, y0, fb.yres);
+        var x_end = try boundsCheck(usize, 0, x1, fb.xres);
+        var y_end = try boundsCheck(usize, 0, y1, fb.yres);
+
+        if (x_start == x_end) {
+            // special case for vertical lines (infinite slope!)
+            fb.lineVertical(x_start, y_start, y_end, color);
+        } else if (y_start == y_end) {
+            // special case for horizontal lines (very fast)
+            fb.lineHorizontal(y_start, x_start, x_end, color);
+        } else {
+            // full Bresenham
+            var ix0: isize = @bitCast(x_start);
+            var ix1: isize = @bitCast(x_end);
+            var iy0: isize = @bitCast(y_start);
+            var iy1: isize = @bitCast(y_end);
+
+            var steep = abs(isize, iy1 - iy0) > abs(isize, ix1 - ix0);
+
+            if (steep) {
+                var t = ix0;
+                ix0 = iy0;
+                iy0 = ix0;
+
+                t = ix1;
+                ix1 = iy1;
+                iy1 = t;
+            }
+
+            if (ix0 > ix1) {
+                var t = ix0;
+                ix0 = ix1;
+                ix1 = t;
+
+                t = iy0;
+                iy0 = iy1;
+                iy1 = t;
+            }
+
+            var dx = ix1 - ix0;
+            var dy = abs(isize, iy1 - iy0);
+            var err: isize = 0;
+            var ystep: isize = if (iy0 < iy1) 1 else -1;
+            var y_cur = iy0;
+            var x_cur = ix0;
+            while (x_cur <= ix1) {
+                if (steep) {
+                    fb.base[@as(usize, @intCast(y_cur)) + @as(usize, @intCast(x_cur)) * fb.pitch] = color;
+                } else {
+                    fb.base[@as(usize, @intCast(x_cur)) + @as(usize, @intCast(y_cur)) * fb.pitch] = color;
+                }
+                err += dy;
+                if (2 * err >= dx) {
+                    y_cur += ystep;
+                    err -= dx;
+                }
+                x_cur += 1;
+            }
+        }
+    }
+
+    fn lineHorizontal(fb: *FrameBuffer, y: usize, x0: usize, x1: usize, color: u8) void {
+        var start: usize = 0;
+        var end: usize = 0;
+        if (x0 > x1) {
+            start = x1;
+            end = x0;
+        } else {
+            start = x0;
+            end = x1;
+        }
+
+        var pixel: [*]u8 = fb.base;
+        pixel += y * fb.pitch + start;
+        pixel[0] = color;
+        for (start..end) |_| {
+            pixel += 1;
+            pixel[0] = color;
+        }
+    }
+
+    fn lineVertical(fb: *FrameBuffer, x: usize, y0: usize, y1: usize, color: u8) void {
+        var start: usize = 0;
+        var end: usize = 0;
+
+        if (y0 > y1) {
+            start = y1;
+            end = y0;
+        } else {
+            start = y0;
+            end = y1;
+        }
+
+        var step = fb.pitch;
+        var pixel: [*]u8 = fb.base;
+        pixel += start * step + x;
+        pixel[0] = color;
+        for (start..end) |_| {
+            pixel += step;
+            pixel[0] = color;
         }
     }
 };
