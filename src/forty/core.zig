@@ -561,6 +561,7 @@ pub fn defineCore(forth: *Forth) !void {
 
     try forth.defineStruct("fbcons", FrameBufferConsole);
     try forth.defineStruct("fb", FrameBuffer);
+    try forth.defineStruct("fb.vtable", FrameBuffer.VTable);
 
     // Display.
 

@@ -22,6 +22,11 @@ pub const default_palette = [_]u32{
 };
 
 pub const FrameBuffer = struct {
+    //    pub const Self = @This();
+    pub const VTable = struct {
+        line: *const fn (fb: *FrameBuffer, x0: usize, y0: usize, x1: usize, x2: usize, color: usize) Error!void,
+    };
+
     // These are palette indices
     pub const COLOR_FOREGROUND: u8 = 0x02;
     pub const COLOR_BACKGROUND: u8 = 0x00;
@@ -41,6 +46,7 @@ pub const FrameBuffer = struct {
     range: Region = Region{ .name = "Frame Buffer" },
     fg: u8 = COLOR_FOREGROUND,
     bg: u8 = COLOR_BACKGROUND,
+    vtable: VTable = .{ .line = line },
 
     pub fn drawPixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {
         if (x < 0) return;
