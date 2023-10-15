@@ -92,6 +92,18 @@ pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
+/// sx sy w h dx dy --
+pub fn wordBlit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    var dy = try forth.stack.pop();
+    var dx = try forth.stack.pop();
+    var h = try forth.stack.pop();
+    var w = try forth.stack.pop();
+    var sy = try forth.stack.pop();
+    var sx = try forth.stack.pop();
+    forth.console.fb.blit(sx, sy, w, h, dx, dy);
+    return 0;
+}
+
 /// l t r b c --
 pub fn wordFill(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var color = try forth.stack.pop();
@@ -540,6 +552,7 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineInternalVariable("cursorx", &forth.console.xpos);
     try forth.defineInternalVariable("cursory", &forth.console.ypos);
     _ = try forth.definePrimitiveDesc("dma", "src dest len stride -- : Perform a DMA", &wordDma, 0);
+    _ = try forth.definePrimitiveDesc("blit", "sx sy w h dx dy -- : Copy a screen rect", &wordBlit, 0);
     _ = try forth.definePrimitiveDesc("fill", "l t r b c -- : fill rectangle with color", &wordFill, 0);
     _ = try forth.definePrimitiveDesc("line", "x0 y0 x1 y1 c -- : draw line with color", &wordLine, 0);
 

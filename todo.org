@@ -75,21 +75,17 @@ Stage 2 (the chainboot) downloaded automatically by minipush.rb
 Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 ** CANCELED Use Python and the Python binding to libfdt to parse .dtb files?                                :CANCELED:
 Not needed, we're parsing the real thing.
-* Milestone: Run a kernel
+* DONE Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware*
 ** DONE Prepare for "real" operating mode
 - [X] Set up interrupt handler tables, point everything to a "panic" that dumps state on UART
 - [X] Transition from EL2 to EL1
-<<<<<<< HEAD
-- [ ] copy kernel to high memory
-=======
->>>>>>> 2c172d5 (Some notes to self)
 - [X] Set up translation tables
 - [X] Reserve the device pages, mark them in TT properly
 - [X] Mark kernel text pages as RX, kernel data (GOT, stack, BSS) as RW/NX
 ** DONE Perform "Hello world" on RPi4 hardware
-* Milestone: Interact
+* DONE Milestone: Interact
 ** DONE Read from UART on RPi3 under QEMU
 Read and echo characters.
 Polling is fine.
@@ -103,10 +99,10 @@ This will actually be the host machine's keyboard in a terminal, proxied to the 
 - [X] Read and echo characters.
 - [X] Use UART interrupts, don't spinloop
 ** DONE Switch to using interrupts instead of polling
-* Milestone: Get Ziggy
+* DONE Milestone: Get Ziggy
 ** DONE Replace C stubs with equivalent Zig
 ** DONE Use Zig cross-compilation instead of crosstools
-* Milestone: Set Forth
+* DONE Milestone: Set Forth
 ** DONE Read basic words
 Stack ops:
 - [X] swap
@@ -143,16 +139,9 @@ Memory:
 - [X] !i
 - [X] @i
 
-* Milestone: Monitor it
+* DONE Milestone: Monitor it
 ** DONE Read commands from input
-Command line looks like:
-
-~! 00000000 ffffffff~ - write a 32 bit words at the address
-~? 00000000 xx~ - display xx words of memory starting at the address
-
-All other starting characters are ignored.
-
-* Milestone: Show the World
+* DONE Milestone: Show the World
 ** DONE Create interface for "mailbox" from CPU to GPU
 ** DONE Create a "character ROM" for displaying text
 ** DONE Display a text cursor
@@ -173,8 +162,15 @@ All other starting characters are ignored.
 ** TODO Read from USB on RPi4 hardware
 ** TODO Read from USB keyboard on RPi 400
 * Milestone: Better video performance
-** TODO Enable DMA for video blitting
+** DONE Enable DMA for video blitting
 ** TODO Scroll the window instead of wrapping
+* Milestone: Interact with the graphics
+** TODO select-screen ( n — ) switch to the nth frame buffer screen
+** DONE blit (sx sy xh hw dx dy --) copy a rectangle from one part of the screen to another
+** DONE fill (l t r b color  --) fill a rectangle
+** DONE line (x y x y color --) draw a line
+** TODO text (str x y —) draw text at the given location
+** TODO some palette defining or selecting words?
 * Other references
 ** Understanding the ARM ecosystem
 https://www.youtube.com/watch?v=NNol7fRGo2E

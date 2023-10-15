@@ -98,25 +98,30 @@ pub const FrameBuffer = struct {
     }
 
     pub fn blit(fb: *FrameBuffer, src_x: usize, src_y: usize, src_w: usize, src_h: usize, dest_x: usize, dest_y: usize) void {
+        var sx = clamp(usize, 0, src_x, fb.xres);
+        var sy = clamp(usize, 0, src_y, fb.yres);
+        var w = clamp(usize, 0, src_w, fb.xres);
+        var h = clamp(usize, 0, src_h, fb.yres);
+        var dx = clamp(usize, 0, dest_x, fb.xres);
+        var dy = clamp(usize, 0, dest_y, fb.yres);
+
         if (fb.dma_channel) |ch| {
-            // TODO: probably ought to clip some of these values to
-            // make sure they're all inside the framebuffer!
             const fb_base: usize = @intFromPtr(fb.base);
             const fb_pitch = fb.pitch;
-            const stride_2d = fb.xres - src_w;
-            const xfer_y_len = src_h;
-            const xfer_x_len = src_w;
+            const stride_2d = fb.xres - w;
+            const xfer_y_len = h;
+            const xfer_x_len = w;
 
-            const len = if (stride_2d > 0) ((xfer_y_len << 16) + xfer_x_len) else (src_h * fb.xres);
+            const len = if (stride_2d > 0) ((xfer_y_len << 16) + xfer_x_len) else (h * fb.xres);
 
             var req = DMARequest{
-                .source = fb_base + (src_y * fb_pitch) + src_x,
-                .destination = fb_base + (dest_y * fb_pitch) + dest_x,
+                .source = @truncate(fb_base + (sy * fb_pitch) + sx),
+                .destination = @truncate(fb_base + (dy * fb_pitch) + dx),
                 .length = len,
                 .stride = (stride_2d << 16) | stride_2d,
             };
-            fb.dma.initiate(ch, &req) catch {};
-            _ = fb.dma.awaitChannel(ch);
+            fb.dma.initiate(fb.dma, ch, &req) catch {};
+            _ = fb.dma.awaitChannel(fb.dma, ch);
         }
     }
 

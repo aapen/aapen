@@ -63,19 +63,15 @@ pub const FrameBufferConsole = struct {
     }
 
     fn nextScreen(self: *FrameBufferConsole) void {
-        // self.fb.blit(0, 16, self.fb.xres, self.fb.yres - 16, 0, 0);
-        // self.fb.clearRegion(0, self.fb.yres - 16, self.fb.xres, 16);
+        self.fb.blit(0, 16, self.fb.xres, self.fb.yres - 16, 0, 0);
 
         self.xpos = 0;
-        self.ypos = 0;
-        // self.ypos = self.height - 1;
+        self.ypos = self.height - 1;
     }
 
     fn underbar(self: *FrameBufferConsole, color: u8) void {
-        var x: u64 = self.xpos;
-        x *= 8;
-        var y: u64 = self.ypos + 1;
-        y *= 16;
+        var x: u64 = self.xpos * 8;
+        var y: u64 = self.ypos * 16 + 15;
 
         for (0..8) |i| {
             self.fb.drawPixel(x + i, y, color);
