@@ -159,6 +159,73 @@ finish
   sb-string eval
 ;
 
+
+(System status)
+
+"status" s. cr
+
+: mem-manager (-- addr : Push the address of the memory struct)
+  forth forth.memory + 
+;
+
+: mem-total ( -- n : Push total number of bytes avail.)
+  mem-manager memory.length + @w
+;
+
+: mem-used ( -- n : Push number of bytes of memory currently used)
+  mem-manager memory.current + @
+  mem-manager memory.p + @
+  -
+;
+
+: mem-available ( -- n : Push number bytes of memory currently available)
+  mem-total mem-used -
+;
+
+"colors" s. cr
+(Colors)
+
+: set-fg (fg bg -- : Set the text bg color)
+  fb fb.fg + !b
+;
+
+: set-bg (fg bg -- : Set the text fg color)
+  fb fb.bg + !b
+;
+
+: set-colors (fg bg -- : Set the text colors)
+  set-bg
+  set-fg
+;
+
+ 0 :black       let
+ 1 :white       let
+ 2 :red         let
+ 3 :cyan        let
+ 4 :violet      let
+ 5 :green       let
+ 6 :blue        let
+ 7 :yellow      let
+ 8 :orange      let
+ 9 :brown       let
+10 :light-red   let
+11 :dark-grey   let
+12 :grey        let
+13 :light-green let
+14 :light-blue  let
+15 :light-grey  let
+
+: c64-colors 
+  light-blue blue set-colors 
+;
+
+: default-colors 
+  white black set-colors 
+;
+
+
+"asserts" s. cr
+
 (Assertions)
 
 : assert ( b desc -- if b is not true )
@@ -231,6 +298,10 @@ finish
   'hello header.name + @ "hello" s= "Struct offsets" assert
 ;
 
+(Retro startup!)
+
+c64-colors cls
+
 : test-all
   "Self test..." s. cr
   test-if
@@ -243,3 +314,12 @@ finish
 ;
 
 test-all
+
+cr cr cr
+"************* Nygard/Olsen Forth V40 **************" s. cr
+mem-total 1000 / . "K RAM SYSTEM " s. 
+mem-available . " FORTH BYTES FREE" s. cr
+"READY" s. cr
+cr cr
+
+default-colors

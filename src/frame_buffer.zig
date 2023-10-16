@@ -12,18 +12,26 @@ const character_rom = @embedFile("data/character_rom.bin");
 
 pub const default_palette = [_]u32{
     0x00000000,
-    0xFFBB5500,
-    0xFFFFFFFF,
-    0xFFFF0000,
-    0xFF00FF00,
-    0xFF0000FF,
-    0x55555555,
-    0xCCCCCCCC,
+    0x00ffffff,
+    0x00000088,
+    0x00eeffaa,
+    0x00cc44cc,
+    0x0055cc00,
+    0x00e44140,
+    0x0077eeee,
+    0x005588dd,
+    0x00004466,
+    0x007777ff,
+    0x00333333,
+    0x00777777,
+    0x0066ffaa,
+    0x00f3afaf,
+    0x00bbbbbb,
 };
 
 pub const FrameBuffer = struct {
     // These are palette indices
-    pub const COLOR_FOREGROUND: u8 = 0x02;
+    pub const COLOR_FOREGROUND: u8 = 0x01;
     pub const COLOR_BACKGROUND: u8 = 0x00;
 
     pub const Error = error{
