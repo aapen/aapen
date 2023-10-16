@@ -60,7 +60,7 @@ pub fn wordLet(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const name = string.asSlice(pName);
 
     _ = try forth.create(name, "A constant", &pushBodyValue, false);
-    forth.addNumber(value);
+    try forth.addNumber(value);
     forth.complete();
     return 0;
 }
@@ -89,7 +89,7 @@ pub fn wordFinish(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 // Should be between a create/finish pair, but this is not checked.
 pub fn wordComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const value = try forth.stack.pop();
-    forth.addNumber(value);
+    try forth.addNumber(value);
     return 0;
 }
 
@@ -98,7 +98,7 @@ pub fn wordComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordSComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const value = try forth.stack.pop();
     const s: [*:0]const u8 = @ptrFromInt(value);
-    forth.addString(s[0..string.strlen(s)]);
+    try forth.addString(s[0..string.strlen(s)]);
     return 0;
 }
 
@@ -106,7 +106,7 @@ pub fn wordSComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 // of a create/finish pair, but this is not checked.
 pub fn wordAllot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const n = try forth.stack.pop();
-    _ = forth.allocate(@alignOf(u64), n * @sizeOf(u64));
+    _ = try forth.allocate(@alignOf(u64), n * @sizeOf(u64));
     return 0;
 }
 
@@ -145,7 +145,7 @@ pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 // Complete a secondary word.
 pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
-    forth.addStop();
+    try forth.addStop();
     try forth.completeWord();
     return 0;
 }
@@ -155,9 +155,9 @@ pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 // and pushes the address of the target address onto the rstack.
 pub fn wordIf(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
-    forth.addCall(forth.jumpIfNot);
+    try forth.addCall(forth.jumpIfNot);
     try forth.rstack.push(@intFromPtr(forth.current()));
-    forth.addNumber(InvalidOffset);
+    try forth.addNumber(InvalidOffset);
     return 0;
 }
 
@@ -174,9 +174,9 @@ pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     // Add the else jump instruction and push its address onto the stack
     // to be filled in later by endif.
 
-    forth.addCall(forth.jump);
+    try forth.addCall(forth.jump);
     try forth.rstack.push(@intFromPtr(forth.current()));
-    forth.addNumber(InvalidOffset);
+    try forth.addNumber(InvalidOffset);
 
     // Back fill the jump address for the If.
 
@@ -218,9 +218,9 @@ pub fn wordWhile(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 // and pushes the address of the target address onto the rstack.
 pub fn wordDo(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
-    forth.addCall(forth.jumpIfNot);
+    try forth.addCall(forth.jumpIfNot);
     try forth.rstack.push(@intFromPtr(forth.current()));
-    forth.addNumber(InvalidOffset);
+    try forth.addNumber(InvalidOffset);
     return 0;
 }
 
@@ -237,10 +237,10 @@ pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
     // Add jump to begining of the loop instruction.
 
-    forth.addCall(forth.jump);
+    try forth.addCall(forth.jump);
     var current_p = memory.alignByType(forth.current(), u64);
     const while_offset = wordOffset(while_p, current_p) + 1;
-    forth.addNumber(@bitCast(while_offset));
+    try forth.addNumber(@bitCast(while_offset));
 
     // Fill in the conditional jump target that exits the loop.
     current_p = memory.alignByType(forth.current(), u64);

@@ -227,7 +227,7 @@ pub const Forth = struct {
     // Define a primitive w/o a description.
     pub fn defineBuffer(this: *Forth, name: []const u8, lenInWords: u64) !*Header {
         const header = try this.startWord(name, "A buffer", &pushBodyAddress, false);
-        _ = this.allocate(lenInWords, @alignOf(u64));
+        _ = try this.allocate(@alignOf(u64), lenInWords);
         try this.completeWord();
         return header;
     }
@@ -236,9 +236,9 @@ pub const Forth = struct {
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
         _ = try this.startWord(name, "A constant", &inner, false);
-        this.addCall(this.pushU64);
-        this.addNumber(v);
-        this.addStop();
+        try this.addCall(this.pushU64);
+        try this.addNumber(v);
+        try this.addStop();
         try this.completeWord();
     }
 
@@ -298,7 +298,7 @@ pub const Forth = struct {
         var owned_name = try std.mem.Allocator.dupeZ(this.allocator, u8, name);
         var owned_desc = try std.mem.Allocator.dupeZ(this.allocator, u8, desc);
         const entry: Header = Header.init(owned_name, owned_desc, f, immediate, this.lastWord);
-        this.newWord = this.addScalar(Header, entry);
+        this.newWord = try this.addScalar(Header, entry);
         return this.newWord.?;
     }
 
@@ -313,7 +313,7 @@ pub const Forth = struct {
     // Allocate some memory, starting on the given alignment.
     // Return a pointer to the start of the memory.
     // Intended for use between create and complete.
-    pub fn allocate(this: *Forth, alignment: usize, n: usize) [*]u8 {
+    pub fn allocate(this: *Forth, alignment: usize, n: usize) ![*]u8 {
         return this.memory.allocate(alignment, n);
     }
 
@@ -414,8 +414,8 @@ pub const Forth = struct {
         const i: u64 = @intFromPtr(header);
 
         if (this.compiling != 0) {
-            this.addCall(this.pushU64);
-            this.addNumber(i);
+            try this.addCall(this.pushU64);
+            try this.addNumber(i);
         } else {
             try this.stack.push(i);
         }
@@ -425,8 +425,8 @@ pub const Forth = struct {
     // If we are not compiling, just push the numnber onto the stack.
     fn evalNumber(this: *Forth, i: u64) !void {
         if (this.compiling != 0) {
-            this.addCall(this.pushU64);
-            this.addNumber(i);
+            try this.addCall(this.pushU64);
+            try this.addNumber(i);
         } else {
             try this.stack.push(i);
         }
@@ -438,8 +438,8 @@ pub const Forth = struct {
     fn evalString(this: *Forth, token: []const u8) !void {
         const s = try parser.parseString(token);
         if (this.compiling != 0) {
-            this.addCall(this.pushString);
-            this.addString(s);
+            try this.addCall(this.pushString);
+            try this.addString(s);
         } else {
             const allocated_s = try this.temp_allocator.dupeZ(u8, s);
             try this.stack.push(@intFromPtr(allocated_s.ptr));
@@ -454,7 +454,7 @@ pub const Forth = struct {
             var fake_body: [1]u64 = .{0};
             _ = try header.func(this, &fake_body, 0, header);
         } else {
-            this.addCall(header);
+            try this.addCall(header);
         }
     }
 
@@ -464,40 +464,40 @@ pub const Forth = struct {
     }
 
     // Copy a u64 number into memory.
-    pub inline fn addNumber(this: *Forth, v: u64) void {
-        _ = this.memory.addBytes(@constCast(@ptrCast(&v)), @alignOf(u64), @sizeOf(u64));
+    pub inline fn addNumber(this: *Forth, v: u64) !void {
+        _ = try this.memory.addBytes(@constCast(@ptrCast(&v)), @alignOf(u64), @sizeOf(u64));
     }
 
     // Add a stop command to memory.
-    pub inline fn addStop(this: *Forth) void {
-        this.addNumber(0);
+    pub inline fn addStop(this: *Forth) !void {
+        try this.addNumber(0);
     }
 
     // Copy a call to a word into memory.
-    pub inline fn addCall(this: *Forth, header: *Header) void {
-        this.addNumber(@intFromPtr(header));
+    pub inline fn addCall(this: *Forth, header: *Header) !void {
+        try this.addNumber(@intFromPtr(header));
     }
 
     // Copy the value s of type T into memory, aligning it correctly.
     // Returns a pointer to the beginning of the newly copied value.
-    pub fn addScalar(this: *Forth, comptime T: type, s: T) *T {
-        const p = this.memory.addBytes(@alignCast(@constCast(@ptrCast(&s))), @alignOf(T), @sizeOf(T));
+    pub fn addScalar(this: *Forth, comptime T: type, s: T) !*T {
+        const p = try this.memory.addBytes(@alignCast(@constCast(@ptrCast(&s))), @alignOf(T), @sizeOf(T));
         return @alignCast(@ptrCast(p));
     }
 
     // Copy n bytes with the given alignment into memory.
-    pub fn addBytes(this: *Forth, src: [*]const u8, alignment: usize, n: usize) void {
-        _ = this.memory.addBytes(@constCast(src), alignment, n);
+    pub fn addBytes(this: *Forth, src: [*]const u8, alignment: usize, n: usize) !void {
+        _ = try this.memory.addBytes(@constCast(src), alignment, n);
     }
 
     // Add a string to memory, move the current pointer.
     // Note that a string is stored as u64 count of the number of words
     // (including the count) followed by the zero terminated string.
-    pub fn addString(this: *Forth, s: []const u8) void {
+    pub fn addString(this: *Forth, s: []const u8) !void {
         const str_len_words = (s.len + @sizeOf(u64) - 1 + 1) / @sizeOf(u64);
-        this.addNumber(str_len_words);
-        this.addBytes(s.ptr, @alignOf(u8), s.len);
-        _ = this.addScalar(u8, 0);
+        try this.addNumber(str_len_words);
+        try this.addBytes(s.ptr, @alignOf(u8), s.len);
+        _ = try this.addScalar(u8, 0);
     }
 
     // Print stuff out only if debug is non-zero.
