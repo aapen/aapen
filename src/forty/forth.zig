@@ -75,10 +75,10 @@ pub const Forth = struct {
         this.memory = Memory.init(this.buffer.ptr, this.buffer.len);
         this.line_buffer = try a.create(string.LineBuffer);
 
-        this.pushString = try this.definePrimitive("*push-string", &wordPushString, 0);
-        this.pushU64 = try this.definePrimitive("*push-u64", &wordPushU64, 0);
-        this.jump = try this.definePrimitive("*jump", &wordJump, 0);
-        this.jumpIfNot = try this.definePrimitive("*jump-if-not", &wordJumpIfNot, 0);
+        this.pushString = try this.definePrimitive("*push-string", &wordPushString, false);
+        this.pushU64 = try this.definePrimitive("*push-u64", &wordPushU64, false);
+        this.jump = try this.definePrimitive("*jump", &wordJump, false);
+        this.jumpIfNot = try this.definePrimitive("*jump-if-not", &wordJumpIfNot, false);
 
         _ = try this.defineBuffer("cmd-buffer", 20);
         try this.defineConstant("inner", @intFromPtr(&inner));
@@ -204,14 +204,14 @@ pub const Forth = struct {
     }
 
     // Define a primitive (i.e. a word backed up by a zig function).
-    pub fn definePrimitiveDesc(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immed: u64) !*Header {
+    pub fn definePrimitiveDesc(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immed: bool) !*Header {
         const header = try this.startWord(name, desc, f, immed);
         try this.completeWord();
         return header;
     }
 
     // Define a primitive w/o a description.
-    pub fn definePrimitive(this: *Forth, name: []const u8, f: WordFunction, immed: u64) !*Header {
+    pub fn definePrimitive(this: *Forth, name: []const u8, f: WordFunction, immed: bool) !*Header {
         const header = try this.startWord(name, "A prim", f, immed);
         try this.completeWord();
         return header;
@@ -226,7 +226,7 @@ pub const Forth = struct {
 
     // Define a primitive w/o a description.
     pub fn defineBuffer(this: *Forth, name: []const u8, lenInWords: u64) !*Header {
-        const header = try this.startWord(name, "A buffer", &pushBodyAddress, 0);
+        const header = try this.startWord(name, "A buffer", &pushBodyAddress, false);
         _ = this.allocate(lenInWords, @alignOf(u64));
         try this.completeWord();
         return header;
@@ -235,7 +235,7 @@ pub const Forth = struct {
     // Define a constant with a single u64 value. What we really end up with
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
-        _ = try this.startWord(name, "A constant", &inner, 0);
+        _ = try this.startWord(name, "A constant", &inner, false);
         this.addCall(this.pushU64);
         this.addNumber(v);
         this.addStop();
@@ -294,7 +294,7 @@ pub const Forth = struct {
 
     // Start a new dictionary entry in the interpreter. Dictionary searches will not find
     // the new word until completeWord is called.
-    pub fn create(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: u64) !*Header {
+    pub fn create(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
         var owned_name = try std.mem.Allocator.dupeZ(this.allocator, u8, name);
         var owned_desc = try std.mem.Allocator.dupeZ(this.allocator, u8, desc);
         const entry: Header = Header.init(owned_name, owned_desc, f, immediate, this.lastWord);
@@ -304,7 +304,8 @@ pub const Forth = struct {
 
     // Finish out the new dictionary entry and add it to the dictionary.
     pub fn complete(this: *Forth) void {
-        this.newWord.?.len = @intFromPtr(this.memory.current) - @intFromPtr(this.newWord);
+        const wordLength = @intFromPtr(this.memory.current) - @intFromPtr(this.newWord);
+        this.newWord.?.len = @intCast(wordLength);
         this.lastWord = this.newWord;
         this.newWord = null;
     }
@@ -318,7 +319,7 @@ pub const Forth = struct {
 
     // Start a new word in the interpreter. Dictionary searches will not find
     // the new word until completeWord is called.
-    pub fn startWord(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: u64) !*Header {
+    pub fn startWord(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
         try this.assertNotCompiling();
         const newWord = try this.create(name, desc, f, immediate);
         this.compiling = 1;
@@ -449,7 +450,7 @@ pub const Forth = struct {
     // Otherwise, if we are compiling, compile a call to the header.
     // Otherwise just execute it.
     fn evalHeader(this: *Forth, header: *Header) !void {
-        if ((this.compiling == 0) or (header.immediate != 0)) {
+        if ((this.compiling == 0) or header.immediate) {
             var fake_body: [1]u64 = .{0};
             _ = try header.func(this, &fake_body, 0, header);
         } else {

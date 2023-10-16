@@ -565,66 +565,66 @@ pub fn defineCore(forth: *Forth) !void {
 
     // Display.
 
-    _ = try forth.definePrimitiveDesc("dma", "src dest len stride -- : Perform a DMA", &wordDma, 0);
-    _ = try forth.definePrimitiveDesc("blit", "sx sy w h dx dy -- : Copy a screen rect", &wordBlit, 0);
-    _ = try forth.definePrimitiveDesc("fill", "l t r b c -- : fill rectangle with color", &wordFill, 0);
-    _ = try forth.definePrimitiveDesc("line", "x0 y0 x1 y1 c -- : draw line with color", &wordLine, 0);
-    _ = try forth.definePrimitiveDesc("text", "s x y -- : draw string at position", &wordText, 0);
+    _ = try forth.definePrimitiveDesc("dma", "src dest len stride -- : Perform a DMA", &wordDma, false);
+    _ = try forth.definePrimitiveDesc("blit", "sx sy w h dx dy -- : Copy a screen rect", &wordBlit, false);
+    _ = try forth.definePrimitiveDesc("fill", "l t r b c -- : fill rectangle with color", &wordFill, false);
+    _ = try forth.definePrimitiveDesc("line", "x0 y0 x1 y1 c -- : draw line with color", &wordLine, false);
+    _ = try forth.definePrimitiveDesc("text", "s x y -- : draw string at position", &wordText, false);
 
     // IO
-    _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, 0);
-    _ = try forth.definePrimitiveDesc("cr", " -- :Emit a newline", &wordCr, 0);
-    _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, 0);
-    _ = try forth.definePrimitiveDesc("cls", " -- :Clear the screen", &wordClearScreen, 0);
-    _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, 0);
-    _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, 0);
-    _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, 0);
-    _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, 0);
+    _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);
+    _ = try forth.definePrimitiveDesc("cr", " -- :Emit a newline", &wordCr, false);
+    _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
+    _ = try forth.definePrimitiveDesc("cls", " -- :Clear the screen", &wordClearScreen, false);
+    _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
+    _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
+    _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, false);
+    _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
 
     // Basic Forth words.
-    _ = try forth.definePrimitiveDesc("eval", "len pStr -- <Results>", &wordEval, 0);
-    _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, 0);
-    _ = try forth.definePrimitiveDesc("2swap", " w1 w2 w3 w4 -- w3 w4 w1 w2 ", &word2Swap, 0);
-    _ = try forth.definePrimitiveDesc("dup", "w -- w w", &wordDup, 0);
-    _ = try forth.definePrimitiveDesc("2dup", "w1 w2 -- w1 w2 w1 w2", &word2Dup, 0);
-    _ = try forth.definePrimitiveDesc("clear", "<anything> --", &wordClear, 0);
-    _ = try forth.definePrimitiveDesc("drop", "w --", &wordDrop, 0);
-    _ = try forth.definePrimitiveDesc("2drop", "w w --", &word2Drop, 0);
-    _ = try forth.definePrimitiveDesc("rot", "w1 w2 w3 -- w2 w3 w1", &wordRot, 0);
-    _ = try forth.definePrimitiveDesc("2rot", "w1 w2 w3 w4 w5 w6 -- w3 w4 w5 w6 w1 w2", &word2Rot, 0);
-    _ = try forth.definePrimitiveDesc("over", "w1 w2 -- w1 w2 w1", &wordOver, 0);
-    _ = try forth.definePrimitiveDesc("2over", ", w1 w2 w3 w4 -- w1 w2 w3 w4 w1 w2", &word2Over, 0);
+    _ = try forth.definePrimitiveDesc("eval", "len pStr -- <Results>", &wordEval, false);
+    _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, false);
+    _ = try forth.definePrimitiveDesc("2swap", " w1 w2 w3 w4 -- w3 w4 w1 w2 ", &word2Swap, false);
+    _ = try forth.definePrimitiveDesc("dup", "w -- w w", &wordDup, false);
+    _ = try forth.definePrimitiveDesc("2dup", "w1 w2 -- w1 w2 w1 w2", &word2Dup, false);
+    _ = try forth.definePrimitiveDesc("clear", "<anything> --", &wordClear, false);
+    _ = try forth.definePrimitiveDesc("drop", "w --", &wordDrop, false);
+    _ = try forth.definePrimitiveDesc("2drop", "w w --", &word2Drop, false);
+    _ = try forth.definePrimitiveDesc("rot", "w1 w2 w3 -- w2 w3 w1", &wordRot, false);
+    _ = try forth.definePrimitiveDesc("2rot", "w1 w2 w3 w4 w5 w6 -- w3 w4 w5 w6 w1 w2", &word2Rot, false);
+    _ = try forth.definePrimitiveDesc("over", "w1 w2 -- w1 w2 w1", &wordOver, false);
+    _ = try forth.definePrimitiveDesc("2over", ", w1 w2 w3 w4 -- w1 w2 w3 w4 w1 w2", &word2Over, false);
 
-    _ = try forth.definePrimitiveDesc("+.", "n -- :print tos as i64 in current obase", &wordSignedDot, 0);
-    _ = try forth.definePrimitiveDesc("+#.", "n -- :print tos as i64 in current obase", &wordSDecimalDot, 0);
-    _ = try forth.definePrimitiveDesc(".", "n -- :print tos as u64 in current obase", &wordDot, 0);
-    _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, 0);
-    _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, 0);
-    _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, 0);
-    _ = try forth.definePrimitiveDesc("s=", "s s -- b :string contents equality", &wordSEqual, 0);
-    _ = try forth.definePrimitiveDesc("+", "n n -- n :u64 addition", &wordAdd, 0);
-    _ = try forth.definePrimitiveDesc("-", "n n -- n :u64 subtraction", &wordSub, 0);
-    _ = try forth.definePrimitiveDesc("*", "n n -- n :u64 multiplication", &wordMul, 0);
-    _ = try forth.definePrimitiveDesc("/", "n n -- n :u64 division", &wordDiv, 0);
-    _ = try forth.definePrimitiveDesc("%", "n n -- n :u64 modulo", &wordMod, 0);
-    _ = try forth.definePrimitiveDesc("=", "n n -- n :u64 equality test", &wordEqualU64, 0);
-    _ = try forth.definePrimitiveDesc("not", "n -- n :u64 not", &wordNot, 0);
-    _ = try forth.definePrimitiveDesc("or", "n -- n :u64 or", &wordOr, 0);
-    _ = try forth.definePrimitiveDesc("xor", "n -- n :u64 xor", &wordXor, 0);
-    _ = try forth.definePrimitiveDesc("and", "n -- n :u64 and", &wordAnd, 0);
-    _ = try forth.definePrimitiveDesc("<", "n n -- n :u64 less-than test", &wordLessThanU64, 0);
-    _ = try forth.definePrimitiveDesc("<=", "n n -- n :u64 less-than or equal test", &wordLessThanEqualU64, 0);
-    _ = try forth.definePrimitiveDesc(">", "n n -- n :u64 greater-than test", &wordGreaterThanU64, 0);
-    _ = try forth.definePrimitiveDesc(">=", "n n -- n :u64 greater-than or equal test", &wordGreaterThanEqualU64, 0);
+    _ = try forth.definePrimitiveDesc("+.", "n -- :print tos as i64 in current obase", &wordSignedDot, false);
+    _ = try forth.definePrimitiveDesc("+#.", "n -- :print tos as i64 in current obase", &wordSDecimalDot, false);
+    _ = try forth.definePrimitiveDesc(".", "n -- :print tos as u64 in current obase", &wordDot, false);
+    _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, false);
+    _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, false);
+    _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, false);
+    _ = try forth.definePrimitiveDesc("s=", "s s -- b :string contents equality", &wordSEqual, false);
+    _ = try forth.definePrimitiveDesc("+", "n n -- n :u64 addition", &wordAdd, false);
+    _ = try forth.definePrimitiveDesc("-", "n n -- n :u64 subtraction", &wordSub, false);
+    _ = try forth.definePrimitiveDesc("*", "n n -- n :u64 multiplication", &wordMul, false);
+    _ = try forth.definePrimitiveDesc("/", "n n -- n :u64 division", &wordDiv, false);
+    _ = try forth.definePrimitiveDesc("%", "n n -- n :u64 modulo", &wordMod, false);
+    _ = try forth.definePrimitiveDesc("=", "n n -- n :u64 equality test", &wordEqualU64, false);
+    _ = try forth.definePrimitiveDesc("not", "n -- n :u64 not", &wordNot, false);
+    _ = try forth.definePrimitiveDesc("or", "n -- n :u64 or", &wordOr, false);
+    _ = try forth.definePrimitiveDesc("xor", "n -- n :u64 xor", &wordXor, false);
+    _ = try forth.definePrimitiveDesc("and", "n -- n :u64 and", &wordAnd, false);
+    _ = try forth.definePrimitiveDesc("<", "n n -- n :u64 less-than test", &wordLessThanU64, false);
+    _ = try forth.definePrimitiveDesc("<=", "n n -- n :u64 less-than or equal test", &wordLessThanEqualU64, false);
+    _ = try forth.definePrimitiveDesc(">", "n n -- n :u64 greater-than test", &wordGreaterThanU64, false);
+    _ = try forth.definePrimitiveDesc(">=", "n n -- n :u64 greater-than or equal test", &wordGreaterThanEqualU64, false);
 
-    _ = try forth.definePrimitiveDesc("!", "w addr -- : Store a 64 bit unsigned word.", &wordStoreU64, 0);
-    _ = try forth.definePrimitiveDesc("@", "addr - w : Load a 64 bit unsigned word.", &wordLoadU64, 0);
-    _ = try forth.definePrimitive("be", &wordByteExchangeU64, 0);
-    _ = try forth.definePrimitiveDesc("!b", "b addr -- : Store a byte.", &wordStoreU8, 0);
-    _ = try forth.definePrimitiveDesc("@b", "addr -- b : Load a byte.", &wordLoadU8, 0);
-    _ = try forth.definePrimitiveDesc("!w", "w addr -- : Store a 32 unsigned bit word.", &wordStoreU32, 0);
-    _ = try forth.definePrimitiveDesc("@w", "addr -- : Load a 32 bit unsigned word", &wordLoadU32, 0);
-    _ = try forth.definePrimitive("wbe", &wordByteExchangeU32, 0);
+    _ = try forth.definePrimitiveDesc("!", "w addr -- : Store a 64 bit unsigned word.", &wordStoreU64, false);
+    _ = try forth.definePrimitiveDesc("@", "addr - w : Load a 64 bit unsigned word.", &wordLoadU64, false);
+    _ = try forth.definePrimitive("be", &wordByteExchangeU64, false);
+    _ = try forth.definePrimitiveDesc("!b", "b addr -- : Store a byte.", &wordStoreU8, false);
+    _ = try forth.definePrimitiveDesc("@b", "addr -- b : Load a byte.", &wordLoadU8, false);
+    _ = try forth.definePrimitiveDesc("!w", "w addr -- : Store a 32 unsigned bit word.", &wordStoreU32, false);
+    _ = try forth.definePrimitiveDesc("@w", "addr -- : Load a 32 bit unsigned word", &wordLoadU32, false);
+    _ = try forth.definePrimitive("wbe", &wordByteExchangeU32, false);
 
-    _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, 0);
+    _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, false);
 }

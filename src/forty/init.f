@@ -162,7 +162,6 @@ finish
 
 (System status)
 
-"status" s. cr
 
 : mem-manager (-- addr : Push the address of the memory struct)
   forth forth.memory + 
@@ -182,7 +181,6 @@ finish
   mem-total mem-used -
 ;
 
-"colors" s. cr
 (Colors)
 
 : set-fg (fg bg -- : Set the text bg color)
@@ -222,9 +220,6 @@ finish
 : default-colors 
   white black set-colors 
 ;
-
-
-"asserts" s. cr
 
 (Assertions)
 

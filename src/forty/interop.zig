@@ -215,19 +215,19 @@ pub fn defineInterop(forth: *Forth) !void {
     try forth.defineConstant("print-msg", @intFromPtr(&print_msg));
 
     // Variations on invoke.
-    _ = try forth.definePrimitiveDesc("invoke-0r", "addr -- result : invoke a 0 arg fn, push return", &wordInvoke0R, 0);
-    _ = try forth.definePrimitiveDesc("invoke-1r", "n addr -- result : invoke a 1 arg fn, push return", &wordInvoke1R, 0);
-    _ = try forth.definePrimitiveDesc("invoke-2r", "n n addr -- result : invoke a 2 arg fn, push return", &wordInvoke2R, 0);
-    _ = try forth.definePrimitiveDesc("invoke-3r", "n n n addr -- result : invoke a 3 arg fn, push return", &wordInvoke3R, 0);
-    _ = try forth.definePrimitiveDesc("invoke-4r", "n n n addr -- result : invoke a 4 arg fn, push return", &wordInvoke4R, 0);
-    _ = try forth.definePrimitiveDesc("invoke-5r", "n n n addr -- result : invoke a 5 arg fn, push return", &wordInvoke5R, 0);
-    _ = try forth.definePrimitiveDesc("invoke-6r", "n n n addr -- result : invoke a 6 arg fn, push return", &wordInvoke6R, 0);
+    _ = try forth.definePrimitiveDesc("invoke-0r", "addr -- result : invoke a 0 arg fn, push return", &wordInvoke0R, false);
+    _ = try forth.definePrimitiveDesc("invoke-1r", "n addr -- result : invoke a 1 arg fn, push return", &wordInvoke1R, false);
+    _ = try forth.definePrimitiveDesc("invoke-2r", "n n addr -- result : invoke a 2 arg fn, push return", &wordInvoke2R, false);
+    _ = try forth.definePrimitiveDesc("invoke-3r", "n n n addr -- result : invoke a 3 arg fn, push return", &wordInvoke3R, false);
+    _ = try forth.definePrimitiveDesc("invoke-4r", "n n n addr -- result : invoke a 4 arg fn, push return", &wordInvoke4R, false);
+    _ = try forth.definePrimitiveDesc("invoke-5r", "n n n addr -- result : invoke a 5 arg fn, push return", &wordInvoke5R, false);
+    _ = try forth.definePrimitiveDesc("invoke-6r", "n n n addr -- result : invoke a 6 arg fn, push return", &wordInvoke6R, false);
 
-    _ = try forth.definePrimitiveDesc("invoke-0", "addr --  : invoke a 0 arg void fn", &wordInvoke0, 0);
-    _ = try forth.definePrimitiveDesc("invoke-1", "n addr --  : invoke a 1 arg void fn", &wordInvoke1, 0);
-    _ = try forth.definePrimitiveDesc("invoke-2", "n n addr --  : invoke a 2 arg void fn", &wordInvoke2, 0);
-    _ = try forth.definePrimitiveDesc("invoke-3", "n n n addr --  : invoke a 3 arg void fn", &wordInvoke3, 0);
-    _ = try forth.definePrimitiveDesc("invoke-4", "n n n addr --  : invoke a 4 arg void fn", &wordInvoke4, 0);
-    _ = try forth.definePrimitiveDesc("invoke-5", "n n n addr --  : invoke a 5 arg void fn", &wordInvoke5, 0);
-    _ = try forth.definePrimitiveDesc("invoke-6", "n n n addr --  : invoke a 6 arg void fn", &wordInvoke6, 0);
+    _ = try forth.definePrimitiveDesc("invoke-0", "addr --  : invoke a 0 arg void fn", &wordInvoke0, false);
+    _ = try forth.definePrimitiveDesc("invoke-1", "n addr --  : invoke a 1 arg void fn", &wordInvoke1, false);
+    _ = try forth.definePrimitiveDesc("invoke-2", "n n addr --  : invoke a 2 arg void fn", &wordInvoke2, false);
+    _ = try forth.definePrimitiveDesc("invoke-3", "n n n addr --  : invoke a 3 arg void fn", &wordInvoke3, false);
+    _ = try forth.definePrimitiveDesc("invoke-4", "n n n addr --  : invoke a 4 arg void fn", &wordInvoke4, false);
+    _ = try forth.definePrimitiveDesc("invoke-5", "n n n addr --  : invoke a 5 arg void fn", &wordInvoke5, false);
+    _ = try forth.definePrimitiveDesc("invoke-6", "n n n addr --  : invoke a 6 arg void fn", &wordInvoke6, false);
 }

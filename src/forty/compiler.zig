@@ -59,7 +59,7 @@ pub fn wordLet(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
     const name = string.asSlice(pName);
 
-    _ = try forth.create(name, "A constant", &pushBodyValue, 0);
+    _ = try forth.create(name, "A constant", &pushBodyValue, false);
     forth.addNumber(value);
     forth.complete();
     return 0;
@@ -74,7 +74,7 @@ pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var lName = string.strlen(pName);
     var name = pName[0..lName];
 
-    _ = try forth.create(name, "", Forth.pushBodyAddress, 0);
+    _ = try forth.create(name, "", Forth.pushBodyAddress, false);
     return 0;
 }
 
@@ -138,7 +138,7 @@ pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
             desc = try parser.parseComment(t);
         }
     }
-    _ = try forth.startWord(name, desc, Forth.inner, 0);
+    _ = try forth.startWord(name, desc, Forth.inner, false);
     return 0;
 }
 
@@ -273,29 +273,29 @@ pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn defineCompiler(forth: *Forth) !void {
     // Return stack.
 
-    _ = try forth.definePrimitiveDesc("->rstack", " n -- : Push the TOS onto the rstack", &wordToRStack, 0);
-    _ = try forth.definePrimitiveDesc("<-rstack", " -- n : Pop the rstack and push value onto data stack", &wordFromRStack, 0);
-    _ = try forth.definePrimitiveDesc("rstack", " -- :Print the return stack.", &wordRStack, 0);
+    _ = try forth.definePrimitiveDesc("->rstack", " n -- : Push the TOS onto the rstack", &wordToRStack, false);
+    _ = try forth.definePrimitiveDesc("<-rstack", " -- n : Pop the rstack and push value onto data stack", &wordFromRStack, false);
+    _ = try forth.definePrimitiveDesc("rstack", " -- :Print the return stack.", &wordRStack, false);
 
     // Secondary definition words.
 
-    _ = try forth.definePrimitiveDesc(":", " -- :Start a new word definition", &wordColon, 0);
-    _ = try forth.definePrimitiveDesc(";", " -- :Complete a new word definition", &wordSemi, 1);
+    _ = try forth.definePrimitiveDesc(":", " -- :Start a new word definition", &wordColon, false);
+    _ = try forth.definePrimitiveDesc(";", " -- :Complete a new word definition", &wordSemi, true);
 
-    _ = try forth.definePrimitiveDesc("{", " -- : Temp turn off compile mode.", &wordLBrace, 1);
-    _ = try forth.definePrimitiveDesc("}", " -- : Turn compile mode back on", &wordRBrace, 1);
-    _ = try forth.definePrimitiveDesc("create", " -- :Start a new definition", &wordCreate, 0);
-    _ = try forth.definePrimitiveDesc("finish", " -- :Complete a new definition", &wordFinish, 0);
-    _ = try forth.definePrimitiveDesc("let", "v sAddr - :Assign a new variable", &wordLet, 0);
-    _ = try forth.definePrimitiveDesc(",", " n -- :Allocate a word and store n in it.", &wordComma, 0);
-    _ = try forth.definePrimitiveDesc("s,", " n -- :Add a string to memory.", &wordSComma, 0);
-    _ = try forth.definePrimitiveDesc("allot", " n -- :Allocate n words.", &wordAllot, 0);
+    _ = try forth.definePrimitiveDesc("{", " -- : Temp turn off compile mode.", &wordLBrace, true);
+    _ = try forth.definePrimitiveDesc("}", " -- : Turn compile mode back on", &wordRBrace, true);
+    _ = try forth.definePrimitiveDesc("create", " -- :Start a new definition", &wordCreate, false);
+    _ = try forth.definePrimitiveDesc("finish", " -- :Complete a new definition", &wordFinish, false);
+    _ = try forth.definePrimitiveDesc("let", "v sAddr - :Assign a new variable", &wordLet, false);
+    _ = try forth.definePrimitiveDesc(",", " n -- :Allocate a word and store n in it.", &wordComma, false);
+    _ = try forth.definePrimitiveDesc("s,", " n -- :Add a string to memory.", &wordSComma, false);
+    _ = try forth.definePrimitiveDesc("allot", " n -- :Allocate n words.", &wordAllot, false);
 
-    _ = try forth.definePrimitiveDesc("if", " -- :If statement", &wordIf, 1);
-    _ = try forth.definePrimitiveDesc("else", " -- :Part of if/else/endif", &wordElse, 1);
-    _ = try forth.definePrimitiveDesc("endif", " -- :Part of if/else/endif", &wordEndif, 1);
+    _ = try forth.definePrimitiveDesc("if", " -- :If statement", &wordIf, true);
+    _ = try forth.definePrimitiveDesc("else", " -- :Part of if/else/endif", &wordElse, true);
+    _ = try forth.definePrimitiveDesc("endif", " -- :Part of if/else/endif", &wordEndif, true);
 
-    _ = try forth.definePrimitiveDesc("while", " -- :Compile the head of a while loop.", &wordWhile, 1);
-    _ = try forth.definePrimitiveDesc("do", " -- :Compile the condition part of a while loop.", &wordDo, 1);
-    _ = try forth.definePrimitiveDesc("done", " -- :Compile the end of a while loop.", &wordDone, 1);
+    _ = try forth.definePrimitiveDesc("while", " -- :Compile the head of a while loop.", &wordWhile, true);
+    _ = try forth.definePrimitiveDesc("do", " -- :Compile the condition part of a while loop.", &wordDo, true);
+    _ = try forth.definePrimitiveDesc("done", " -- :Compile the end of a while loop.", &wordDone, true);
 }

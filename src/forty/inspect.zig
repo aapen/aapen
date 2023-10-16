@@ -75,7 +75,7 @@ fn listDictionary(forth: *Forth, pat: []const u8) ForthError!void {
     var i: usize = 0;
     while (e) |entry| {
         if (std.mem.startsWith(u8, entry.name, pat)) {
-            const immed = if (entry.immediate == 0) " " else "^";
+            const immed = if (entry.immediate) "^" else " ";
             i += 1;
             var sep: u8 = if ((i % 4) == 0) '\n' else '\t';
             try forth.print("{s} {s: <25}{c}", .{ immed, entry.name, sep });
@@ -133,12 +133,12 @@ pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
 }
 
 pub fn defineInspect(forth: *Forth) !void {
-    _ = try forth.definePrimitiveDesc("dump", "addr len -- : Dump an arbitrary area of memory", &wordDump, 0);
+    _ = try forth.definePrimitiveDesc("dump", "addr len -- : Dump an arbitrary area of memory", &wordDump, false);
 
-    _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, 0);
-    _ = try forth.definePrimitiveDesc("?", " -- :Print description of word.", &wordDesc, 0);
-    _ = try forth.definePrimitiveDesc("??", " -- :Print the dictionary.", &wordDictionary, 0);
-    _ = try forth.definePrimitiveDesc("???", " -- :Print dictionary words that begin with...", &wordDictionaryFilter, 0);
+    _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, false);
+    _ = try forth.definePrimitiveDesc("?", " -- :Print description of word.", &wordDesc, false);
+    _ = try forth.definePrimitiveDesc("??", " -- :Print the dictionary.", &wordDictionary, false);
+    _ = try forth.definePrimitiveDesc("???", " -- :Print dictionary words that begin with...", &wordDictionaryFilter, false);
 
-    _ = try forth.definePrimitiveDesc("?word", " -- :Print details of word.", &wordDumpWord, 0);
+    _ = try forth.definePrimitiveDesc("?word", " -- :Print details of word.", &wordDumpWord, false);
 }

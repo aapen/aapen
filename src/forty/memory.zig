@@ -9,14 +9,14 @@ const WordFunction = @import("forth.zig").WordFunction;
 pub const WordNameLen = 20;
 
 pub const Header = struct {
-    name: []const u8 = undefined,
     func: WordFunction = undefined,
+    name: []const u8 = undefined,
     desc: []const u8 = undefined,
-    immediate: u64 = 0,
     previous: ?*Header = null,
-    len: u64 = 0,
+    len: u32 = 0,
+    immediate: bool = false,
 
-    pub fn init(name: []const u8, desc: []const u8, func: WordFunction, immediate: u64, previous: ?*Header) Header {
+    pub fn init(name: []const u8, desc: []const u8, func: WordFunction, immediate: bool, previous: ?*Header) Header {
         var this = Header{
             .name = name,
             .func = func,
