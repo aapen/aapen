@@ -24,7 +24,7 @@ pub const default_palette = [_]u32{
 pub const FrameBuffer = struct {
     //    pub const Self = @This();
     pub const VTable = struct {
-        line: *const fn (fb: *FrameBuffer, x0: usize, y0: usize, x1: usize, x2: usize, color: usize) Error!void,
+        line: *const fn (fb: *FrameBuffer, x0: usize, y0: usize, x1: usize, x2: usize, color: u8) Error!void,
     };
 
     // These are palette indices
