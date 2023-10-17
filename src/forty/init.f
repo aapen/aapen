@@ -221,6 +221,7 @@ finish
   white black set-colors 
 ;
 
+
 (Assertions)
 
 : assert ( b desc -- if b is not true )
@@ -316,5 +317,3 @@ mem-total 1024 / . "K RAM SYSTEM " s.
 mem-available . " FORTH BYTES FREE" s. cr
 "READY" s. cr
 cr cr
-
-default-colors
