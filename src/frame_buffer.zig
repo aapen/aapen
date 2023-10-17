@@ -36,8 +36,8 @@ pub const FrameBuffer = struct {
     };
 
     // These are palette indices
-    pub const COLOR_FOREGROUND: u8 = 0x01;
-    pub const COLOR_BACKGROUND: u8 = 0x00;
+    pub const DEFAULT_FOREGROUND: u8 = 0x01;
+    pub const DEFAULT_BACKGROUND: u8 = 0x00;
 
     pub const Error = error{
         OutOfBounds,
@@ -52,8 +52,8 @@ pub const FrameBuffer = struct {
     yres: usize = undefined,
     bpp: u32 = undefined,
     range: Region = Region{ .name = "Frame Buffer" },
-    fg: u8 = COLOR_FOREGROUND,
-    bg: u8 = COLOR_BACKGROUND,
+    fg: u8 = DEFAULT_FOREGROUND,
+    bg: u8 = DEFAULT_BACKGROUND,
     vtable: VTable = .{ .line = line },
 
     pub fn drawPixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {
