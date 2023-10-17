@@ -115,7 +115,7 @@ pub const FrameBuffer = struct {
 
         for (0..16) |_| {
             for (0..8) |_| {
-                self.base[fbidx] = COLOR_BACKGROUND;
+                self.base[fbidx] = self.bg;
                 fbidx += 1;
             }
             fbidx -= 8;
