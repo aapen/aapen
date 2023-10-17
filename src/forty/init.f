@@ -221,6 +221,34 @@ finish
   white black set-colors 
 ;
 
+(Screen editing)
+
+: screen-width  fbcons fbcons.width  + @ ;
+: screen-height fbcons fbcons.height + @ ;
+
+:screen create
+   screen-width  ,
+   screen-height ,
+   screen-width screen-height * ballot
+finish
+
+0           :screen.w  let
+word        :screen.h let
+word word + :screen.contents let
+
+: screen-clear
+  char-space
+  screen screen.contents +
+  screen screen.w + @
+  screen screen.h + @
+  * 
+  set-mem
+;
+
+: screen-sync
+  
+;
+
 
 (Assertions)
 
@@ -313,7 +341,6 @@ test-all
 
 cr cr cr
 "************* Nygard/Olsen Forth V40 **************" s. cr
-mem-total 1024 / . "K RAM SYSTEM " s. 
-mem-available . " FORTH BYTES FREE" s. cr
+mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 "READY" s. cr
 cr cr

@@ -110,6 +110,14 @@ pub fn wordAllot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
+// Allocate n *Bytes* in the dictionary. Should be in the middle
+// of a create/finish pair, but this is not checked.
+pub fn wordBallot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const n = try forth.stack.pop();
+    _ = try forth.allocate(@alignOf(u8), n);
+    return 0;
+}
+
 // Temporarily turn compile mode off.
 pub fn wordLBrace(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
@@ -290,6 +298,7 @@ pub fn defineCompiler(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc(",", " n -- :Allocate a word and store n in it.", &wordComma, false);
     _ = try forth.definePrimitiveDesc("s,", " n -- :Add a string to memory.", &wordSComma, false);
     _ = try forth.definePrimitiveDesc("allot", " n -- :Allocate n words.", &wordAllot, false);
+    _ = try forth.definePrimitiveDesc("ballot", " n -- :Allocate n bytes.", &wordBallot, false);
 
     _ = try forth.definePrimitiveDesc("if", " -- :If statement", &wordIf, true);
     _ = try forth.definePrimitiveDesc("else", " -- :Part of if/else/endif", &wordElse, true);

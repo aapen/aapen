@@ -40,7 +40,7 @@ pub fn wordSetMemory(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i6
 
     var offset: usize = 0;
     while (offset < len) {
-        try forth.print("setting {*} to {}\n", .{ addr + offset, value });
+        //try forth.print("setting {*} to {}\n", .{ addr + offset, value });
         addr[offset] = value;
         offset += 1;
     }

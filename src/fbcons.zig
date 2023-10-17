@@ -97,6 +97,13 @@ pub const FrameBufferConsole = struct {
         return ch >= 32;
     }
 
+    pub fn drawChar(self: *FrameBufferConsole, ch: u8) void {
+        if (isPrintable(ch)) {
+            self.fb.drawChar(self.xpos * 8, self.ypos * 16, ch);
+            self.next();
+        }
+    }
+
     pub fn emit(self: *FrameBufferConsole, ch: u8) void {
         self.eraseCursor();
         defer self.drawCursor();
