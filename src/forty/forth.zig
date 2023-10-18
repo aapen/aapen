@@ -53,6 +53,12 @@ pub const Forth = struct {
     newWord: ?*Header = null,
     pushU64: *Header = undefined,
     pushString: *Header = undefined,
+    drop: *Header = undefined,
+    rDrop: *Header = undefined,
+    toRStack: *Header = undefined,
+    toDStack: *Header = undefined,
+    jumpIfRLE: *Header = undefined,
+    incRStack: *Header = undefined,
     jump: *Header = undefined,
     jumpIfNot: *Header = undefined,
     compiling: u64 = 0,
@@ -79,6 +85,12 @@ pub const Forth = struct {
         this.pushU64 = try this.definePrimitive("*push-u64", &wordPushU64, false);
         this.jump = try this.definePrimitive("*jump", &wordJump, false);
         this.jumpIfNot = try this.definePrimitive("*jump-if-not", &wordJumpIfNot, false);
+        this.drop = try this.definePrimitiveDesc("drop", " n -- : Drop the top stack value", &wordDrop, false);
+        this.rDrop = try this.definePrimitiveDesc("rdrop", " n -- : Drop the top rstack value", &wordRDrop, false);
+        this.toRStack = try this.definePrimitiveDesc("->rstack", " n -- : Push the data TOS onto the rstack, doen't pop stack.", &wordToRStack, false);
+        this.toDStack = try this.definePrimitiveDesc("->stack", " -- n : Copies the rstack TOS onto the data stack, doesn't pop rstack", &wordToDStack, false);
+        this.jumpIfRLE = try this.definePrimitive("*jump-if-rle", &wordJumpIfRLE, false);
+        this.incRStack = try this.definePrimitive("rstack-inc", &wordIncRStack, false);
 
         _ = try this.defineBuffer("cmd-buffer", 20);
         try this.defineConstant("inner", @intFromPtr(&inner));
@@ -386,6 +398,52 @@ pub const Forth = struct {
         } else {
             return 1;
         }
+    }
+
+    // This is the word that does a conditional jump if the top of the rstack
+    // is <= 0. *Does not pop the rstack*.
+    fn wordJumpIfRLE(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
+        var first: u64 = try this.rstack.pop();
+        var second: u64 = try this.rstack.pop();
+        try this.rstack.push(second);
+        try this.rstack.push(first);
+
+        const delta: i64 = @as(i64, @bitCast(body[i + 1]));
+        try this.trace("JumpIfRNP first {} second {} target {} ", .{ first, second, delta });
+
+        if (second <= first) {
+            return delta - 1;
+        } else {
+            return 1;
+        }
+    }
+
+    pub fn wordDrop(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+        _ = try this.stack.pop();
+        return 0;
+    }
+
+    pub fn wordRDrop(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+        _ = try this.rstack.pop();
+        return 0;
+    }
+
+    pub fn wordIncRStack(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+        const v = try this.rstack.pop();
+        try this.rstack.push(v + 1);
+        return 0;
+    }
+
+    pub fn wordToRStack(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+        const v = try this.stack.peek();
+        try this.rstack.push(v);
+        return 0;
+    }
+
+    pub fn wordToDStack(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+        const v = try this.rstack.peek();
+        try this.stack.push(v);
+        return 0;
     }
 
     // Convert the token into a value, either a string, a number

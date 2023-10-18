@@ -246,6 +246,13 @@ finish
   drop
 ;
 
+: sum-ints ( n -- sum : add up all the numbers from 1 to n)
+  0 swap
+  repeat
+    ->stack 1 + + 
+  times
+;
+
 :by-hand create
   '*push-u64 ,
   900 ,
@@ -276,6 +283,9 @@ finish
 : test-loop
    0 power-of-two     1 = "While loop, zero iterations" assert
   16 power-of-two 65536 = "While loop, 16 iterations" assert
+  0  sum-ints         0 = "Repeat loop, 0 iterations" assert
+  3  sum-ints         6 = "Repeat loop, 3 iterations" assert
+  10 sum-ints        55 = "Repeat loop, 10 iterations" assert
 ;
 
 : test-strings

@@ -224,14 +224,12 @@ pub fn wordDo(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
-// Compiler word, generate the end code for the end of a while loop.
+// Generate the end code for the end of a while loop.
 // Pops the address of the jump_if_not target and the address of the
 // beginning of the loop off of the rstack.
 // Generates the jump back to the beginning of the loop and
 // fills in the jump-if-not target with the post loop address.
-pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    try forth.assertCompiling();
-
+fn generateLoopTail(forth: *Forth) ForthError!void {
     const do_p: [*]u64 = @ptrFromInt(try forth.rstack.pop());
     const while_p: [*]u64 = @ptrFromInt(try forth.rstack.pop());
 
@@ -246,19 +244,39 @@ pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     current_p = memory.alignByType(forth.current(), u64);
     const do_offset = wordOffset(current_p, do_p) + 1;
     do_p[0] = @bitCast(do_offset);
+}
+
+pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    try generateLoopTail(forth);
 
     return 0;
 }
 
-pub fn wordToRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const v = try forth.stack.pop();
-    try forth.rstack.push(v);
+// Compiler word, generate the code for the begining of a repeat loop.
+// Structure is:  n repeat <body> done
+pub fn wordRepeat(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    try forth.assertCompiling();
+    // code to push count onto return stack
+    try forth.addCall(forth.toRStack);
+    try forth.addCall(forth.drop);
+    try forth.addCall(forth.pushU64);
+    try forth.addNumber(0);
+    try forth.addCall(forth.toRStack);
+    try forth.addCall(forth.drop);
+    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addCall(forth.jumpIfRLE);
+    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addNumber(InvalidOffset);
+
     return 0;
 }
 
-pub fn wordFromRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const v = try forth.rstack.pop();
-    try forth.stack.push(v);
+pub fn wordTimes(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    try forth.addCall(forth.incRStack);
+    try generateLoopTail(forth);
+    try forth.addCall(forth.rDrop);
+    try forth.addCall(forth.rDrop);
+
     return 0;
 }
 
@@ -273,8 +291,6 @@ pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn defineCompiler(forth: *Forth) !void {
     // Return stack.
 
-    _ = try forth.definePrimitiveDesc("->rstack", " n -- : Push the TOS onto the rstack", &wordToRStack, false);
-    _ = try forth.definePrimitiveDesc("<-rstack", " -- n : Pop the rstack and push value onto data stack", &wordFromRStack, false);
     _ = try forth.definePrimitiveDesc("rstack", " -- :Print the return stack.", &wordRStack, false);
 
     // Secondary definition words.
@@ -298,4 +314,6 @@ pub fn defineCompiler(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("while", " -- :Compile the head of a while loop.", &wordWhile, true);
     _ = try forth.definePrimitiveDesc("do", " -- :Compile the condition part of a while loop.", &wordDo, true);
     _ = try forth.definePrimitiveDesc("done", " -- :Compile the end of a while loop.", &wordDone, true);
+    _ = try forth.definePrimitiveDesc("repeat", " n -- :repeat the body n times.", &wordRepeat, true);
+    _ = try forth.definePrimitiveDesc("times", "  -- : End of repeat loop", &wordTimes, true);
 }
