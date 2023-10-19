@@ -51,9 +51,11 @@ pub fn wordDump(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 
 /// --
 pub fn wordStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    try forth.print("Stack: ", .{});
     for (forth.stack.items()) |item| {
-        try forth.print("{}\n", .{item});
+        try forth.print("{}\t", .{item});
     }
+    try forth.print("\n", .{});
     return 0;
 }
 

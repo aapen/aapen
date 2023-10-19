@@ -97,10 +97,9 @@ pub const FrameBufferConsole = struct {
         return ch >= 32;
     }
 
-    pub fn drawChar(self: *FrameBufferConsole, ch: u8) void {
+    pub fn drawChar(self: *FrameBufferConsole, xpos: u64, ypos: u64, ch: u8) void {
         if (isPrintable(ch)) {
-            self.fb.drawChar(self.xpos * 8, self.ypos * 16, ch);
-            self.next();
+            self.fb.drawChar(xpos * 8, ypos * 16, ch);
         }
     }
 

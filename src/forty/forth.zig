@@ -446,6 +446,29 @@ pub const Forth = struct {
         return 0;
     }
 
+    // Evaluate a command, a string containing zero or more words.
+    pub fn evalCommand(this: *Forth, cmd: []const u8) !void {
+        const savedWords = this.words;
+        defer {
+            this.words = savedWords;
+        }
+
+        this.words = ForthTokenIterator.init(cmd);
+
+        var word = this.words.next();
+        while (word != null) : (word = this.words.next()) {
+            if (word) |w| {
+                this.evalToken(w) catch |err| {
+                    try this.print("error: {s} {any}\n", .{ w, err });
+                    this.reset() catch {
+                        try this.print("Not looking good, can't reset Forth!\n", .{});
+                    };
+                    break;
+                };
+            }
+        }
+    }
+
     // Convert the token into a value, either a string, a number
     // or a reference to a word and either compile it or execute
     // directly. Note that this is the place where we ignore comments.

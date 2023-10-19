@@ -32,18 +32,37 @@ pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
+/// len *[]u8  --  <results>
+pub fn wordEvalCommand(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const pStr: [*]u8 = try forth.popAs([*]u8);
+    const token = string.asSlice(pStr);
+    try forth.print("token: {s}\n", .{token});
+    try forth.evalCommand(token);
+    return 0;
+}
+
 /// value addr len --
 pub fn wordSetMemory(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const len = try forth.stack.pop();
     const addr = try forth.popAs([*]u8);
-    const value = try forth.popAs(u8);
+    const value = try forth.stack.pop();
+    const byteValue: u8 = @intCast(value % 256);
 
     var offset: usize = 0;
     while (offset < len) {
-        //try forth.print("setting {*} to {}\n", .{ addr + offset, value });
-        addr[offset] = value;
+        addr[offset] = byteValue;
         offset += 1;
     }
+    return 0;
+}
+
+/// x y a -- ()
+pub fn wordDrawChar(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const a = try forth.stack.pop();
+    const y = try forth.stack.pop();
+    const x = try forth.stack.pop();
+    var ch: u8 = @intCast(a);
+    forth.console.drawChar(x, y, ch);
     return 0;
 }
 
@@ -575,6 +594,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);
     _ = try forth.definePrimitiveDesc("cr", " -- :Emit a newline", &wordCr, false);
     _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
+    _ = try forth.definePrimitiveDesc("draw-char", "x y ch -- :Draw a char", &wordDrawChar, false);
     _ = try forth.definePrimitiveDesc("cls", " -- :Clear the screen", &wordClearScreen, false);
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
@@ -582,7 +602,8 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
 
     // Basic Forth words.
-    _ = try forth.definePrimitiveDesc("eval", "len pStr -- <Results>", &wordEval, false);
+    _ = try forth.definePrimitiveDesc("eval", "pStr -- <Results>", &wordEval, false);
+    _ = try forth.definePrimitiveDesc("eval-cmd", "pStr -- <Results>", &wordEvalCommand, false);
     _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, false);
     _ = try forth.definePrimitiveDesc("2swap", " w1 w2 w3 w4 -- w3 w4 w1 w2 ", &word2Swap, false);
     _ = try forth.definePrimitiveDesc("dup", "w -- w w", &wordDup, false);

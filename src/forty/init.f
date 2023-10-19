@@ -223,30 +223,55 @@ finish
 
 (Screen editing)
 
-: screen-width  fbcons fbcons.width  + @ ;
-: screen-height fbcons fbcons.height + @ ;
+fbcons fbcons.width  + @     :scr-width  let
+fbcons fbcons.height + @     :scr-height let
+scr-width scr-height * :scr-length let
 
-:screen create
-   screen-width  ,
-   screen-height ,
-   screen-width screen-height * ballot
-finish
-
-0           :screen.w  let
-word        :screen.h let
-word word + :screen.contents let
-
-: screen-clear
-  char-space
-  screen screen.contents +
-  screen screen.w + @
-  screen screen.h + @
-  * 
-  set-mem
+: scr-create (name -- pscreen : Create a screen buffer)
+  create
+    scr-length ballot
+  finish
 ;
 
-: screen-sync
+:screen scr-create
+
+: scr-fill (ch screenp --)
+  scr-length set-mem
+;
+
+: scr-clear
+  char-space swap scr-length set-mem
+;
+
+: scr-y (screen n-byte -- i-line)
+  scr-width /
+;
+
+: scr-x (screen n-byte -- i-row)
+  scr-width %
+;
+
+: scr-offset (x y -- mem-offset)
+  scr-width * +
+;
+
+: scr-set (screenp x y ch -- : set the char at x y in screen)
+  rot rot            (stack: screenp ch x y)
+  scr-offset         (stack: screenp ch offset)
+  rot                (stack: ch offset screenp)
+  +                  (stack: ch p)
+  !b
+;
   
+
+: scr-sync (screenp -- )
+  scr-length repeat
+    dup ->stack + @b
+    ->stack scr-x
+    ->stack scr-y
+    rot
+    draw-char
+  times
 ;
 
 
