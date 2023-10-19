@@ -299,7 +299,7 @@ pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn defineCompiler(forth: *Forth) !void {
     // Return stack.
 
-    _ = try forth.definePrimitiveDesc("rstack", " -- :Print the return stack.", &wordRStack, false);
+    _ = try forth.definePrimitiveDesc("?rstack", " -- :Print the return stack.", &wordRStack, false);
 
     // Secondary definition words.
 

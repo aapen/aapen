@@ -111,6 +111,8 @@ finish
 13 :char-cr    let
 10 :char-nl    let
 
+: newline? char-nl = ;
+
 : whitespace? (ch -- b)
   dup dup
   char-space = rot
@@ -136,6 +138,42 @@ finish
 : read-ch ( -- ch : read with echo)
   key
   dup emit
+;
+
+: emit-prompt
+  "repl>> " s.
+;
+
+
+: read-command (sb-addr --)
+  dup sb-clear
+  emit-prompt
+  read-ch
+  while
+    dup newline? not
+  do
+    over sb-append
+    read-ch
+  done
+  drop
+  dup 0 swap sb-append
+  drop
+;
+
+:repl-buffer sb-create
+
+: repl (--)
+  "REPL in forth, type 'quit' to exit" s. cr cr
+  repl-buffer read-command
+  repl-buffer sb-string
+  while
+    dup "quit" s= not
+  do
+    eval-cmd
+    repl-buffer read-command
+    repl-buffer sb-string
+  done
+  "Exit REPL!" s. cr
 ;
 
 
