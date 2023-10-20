@@ -27,7 +27,6 @@ const BoardInfo = hal.interfaces.BoardInfo;
 pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const pStr: [*]u8 = try forth.popAs([*]u8);
     const token = string.asSlice(pStr);
-    try forth.print("token: {s}\n", .{token});
     try forth.evalToken(token);
     return 0;
 }
@@ -36,7 +35,6 @@ pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordEvalCommand(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const pStr: [*]u8 = try forth.popAs([*]u8);
     const token = string.asSlice(pStr);
-    try forth.print("token: {s}\n", .{token});
     try forth.evalCommand(token);
     return 0;
 }

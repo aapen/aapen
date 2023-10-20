@@ -65,51 +65,20 @@ finish
   header.*len - 
 ;
 
-(String buffer)
-
-: sb-create (pName -- : Create a new string buffer with the name)
-  create
-    0 ,
-    16 allot
-  finish
-;
-
-: sb-inc-count (sb-addr -- : Increment the sb char count.)
-  dup
-  @
-  inc
-  swap
-  !
-;
-
-: sb-poke-char (ch sb-addr -- : Add a character at the current position.)
-  dup
-  @  word + +
-  !b
-;
-  
-: sb-append (ch sb-addr --  : Append a new char onto the buffer.)
-  dup rot swap
-  sb-poke-char
-  sb-inc-count
-;
-
-: sb-string (sb-addr -- str : Push the address of the string in the sb)
-  word +
-;
-
-: sb-clear (sb-word --  : Clear this buffer)
-  0 swap !
-;
-
 (Character predicates)
 
+8   :char-bs    let
+10  :char-nl    let
+13  :char-cr    let
+32  :char-space let
+127 :char-del   let
 
-( Testing... )
-
-32 :char-space let
-13 :char-cr    let
-10 :char-nl    let
+: backspace?
+  dup
+  char-bs   = swap
+  char-del  = 
+  or
+;
 
 : newline? char-nl = ;
 
@@ -133,6 +102,72 @@ finish
   \" =
 ;
 
+
+(String buffer)
+
+: sb-create (pName -- : Create a new string buffer with the name)
+  create
+    0 ,
+    16 allot
+  finish
+;
+
+: sb-inc-count (sb-addr -- : Increment the sb char count.)
+  dup
+  @
+  inc
+  swap
+  !
+;
+
+: sb-dec-count (sb-addr -- : Increment the sb char count.)
+  dup
+  @
+  dup 1 >= 
+  if 
+    dec 
+    swap
+    !
+  else
+    2drop
+  endif
+;
+
+: sb-poke-char (ch sb-addr -- : Add a character at the current position.)
+  dup
+  @  word + +
+  !b
+;
+  
+: sb-append (ch sb-addr --  : Append a new char onto the buffer.)
+  dup rot swap
+  sb-poke-char
+  sb-inc-count
+;
+
+: sb-string (sb-addr -- str : Push the address of the string in the sb)
+  word +
+;
+
+: sb-clear (sb-word --  : Clear this buffer)
+  0 swap !
+;
+
+(Key Dispatch table)
+
+: dtab-create (dt-name -- dtab: Create a 128 entry key dispatch table)
+  create
+    128 allot
+  finish
+;
+
+: dtab-set (key word-address dtab -- set handler for key to word-adress)
+  rot      (word-address dtab key)
+  word * + (word-address dtab-entry-addr)
+  !
+;  
+
+
 (Repl)
 
 : read-ch ( -- ch : read with echo)
@@ -152,7 +187,13 @@ finish
   while
     dup newline? not
   do
-    over sb-append
+    dup backspace?
+    if
+      drop
+      dup sb-dec-count
+    else
+      over sb-append
+    endif
     read-ch
   done
   drop
@@ -326,6 +367,8 @@ scr-width scr-height * :scr-length let
   s. cr
   clear
 ;
+
+( Testing... )
 
 : power-of-two ( n -- n ) 
   1 swap 
