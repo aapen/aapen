@@ -1,4 +1,6 @@
 const std = @import("std");
+const config = @import("config");
+
 const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
 const qemu = @import("qemu.zig");

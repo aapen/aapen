@@ -2,6 +2,23 @@ const std = @import("std");
 const Build = std.Build;
 const Target = std.Target;
 const CrossTarget = std.zig.CrossTarget;
+const Module = std.Build.Module;
+
+const SupportedBoard = enum {
+    Raspi3,
+};
+
+fn configModule(b: *std.Build) *Module {
+    const maybe_selected_board = b.option(SupportedBoard, "board", "Select a target board for the kernel build");
+
+    const board = maybe_selected_board orelse .Raspi3;
+
+    const config_path = switch (board) {
+        .Raspi3 => "config/raspi3.zig",
+    };
+
+    return b.createModule(.{ .source_file = .{ .path = config_path } });
+}
 
 pub fn build(b: *std.Build) void {
     const target = std.zig.CrossTarget{
@@ -20,12 +37,14 @@ pub fn build(b: *std.Build) void {
         .link_libc = false,
     });
 
-    kernel.addIncludePath(.{ .path = "include"});
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/exceptions.S"});
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/mmu.S"});
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/cache.S"});
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/boot.S"});
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/util.S"});
+    kernel.addModule("config", configModule(b));
+
+    kernel.addIncludePath(.{ .path = "include" });
+    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/exceptions.S" });
+    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/mmu.S" });
+    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/cache.S" });
+    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/boot.S" });
+    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/util.S" });
     kernel.setLinkerScriptPath(.{ .path = "src/arch/aarch64/kernel.ld" });
 
     b.installArtifact(kernel);
