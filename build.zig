@@ -8,6 +8,9 @@ const Module = std.Build.Module;
 
 const SupportedBoard = enum {
     Raspi3,
+    Raspi4,
+    Raspi400,
+    Raspi5,
 };
 
 fn configModule(b: *std.Build) *Module {
@@ -17,6 +20,9 @@ fn configModule(b: *std.Build) *Module {
 
     const config_path = switch (board) {
         .Raspi3 => "config/raspi3.zig",
+        .Raspi4 => "config/raspi4.zig",
+        .Raspi400 => "config/raspi400.zig",
+        .Raspi5 => "config/raspi5.zig",
     };
 
     return b.createModule(.{ .source_file = .{ .path = config_path } });
