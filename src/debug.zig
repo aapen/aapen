@@ -7,6 +7,9 @@ const root = @import("root");
 const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
 
+const spinlock = @import("spinlock.zig");
+const Spinlock = spinlock.Spinlock;
+
 const serial_log_level: u2 = 1;
 const log_level: u2 = 1;
 
@@ -138,17 +141,23 @@ pub const MessageBuffer = struct {
     const Self = @This();
 
     ring: RingBuffer,
+    lock: *Spinlock,
 
-    pub fn init(raw_space: []u8) Allocator.Error!Self {
+    pub fn init(raw_space: []u8, lock: *Spinlock) Allocator.Error!Self {
         var fba = FixedBufferAllocator.init(raw_space);
         var allocator = fba.allocator();
         var ring = try RingBuffer.init(allocator, raw_space.len);
+
         return .{
             .ring = ring,
+            .lock = lock,
         };
     }
 
     pub fn append(message_buffer: *Self, msg: []const u8) void {
+        message_buffer.lock.acquire();
+        defer message_buffer.lock.release();
+
         message_buffer.ring.writeSliceAssumeCapacity(msg);
         message_buffer.ring.writeAssumeCapacity(@as(u8, 0));
     }

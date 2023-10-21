@@ -9,6 +9,8 @@ const bcd = @import("bcd.zig");
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 const raspi3 = @import("hal/raspi3.zig");
+const spinlock = @import("spinlock.zig");
+const Spinlock = spinlock.Spinlock;
 
 pub const debug = @import("debug.zig");
 pub const devicetree = @import("devicetree.zig");
@@ -31,6 +33,7 @@ var os = Freestanding{
 const mring_space_bytes = 1024 * 1024;
 export var mring_storage: [mring_space_bytes]u8 = undefined;
 pub var mring: debug.MessageBuffer = undefined;
+var mring_spinlock: Spinlock = undefined;
 
 pub var board = hal.interfaces.BoardInfo{};
 pub var kernel_heap = heap{};
@@ -51,7 +54,8 @@ fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
     arch.cpu.mmu.init();
 
-    mring = debug.MessageBuffer.init(&mring_storage) catch unreachable;
+    mring_spinlock.init("kernel_message_ring");
+    mring = debug.MessageBuffer.init(&mring_storage, &mring_spinlock) catch unreachable;
     mring.append("mring init");
 
     kernel_heap.init(raspi3.device_start - 1);
@@ -63,8 +67,9 @@ fn kernelInit() void {
         hal.serial_writer.print("Early init error. Cannot proceed.", .{}) catch {};
     };
 
-    // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
-    arch.cpu.exceptions.init();
+    // State: one core, no interrupts, MMU, heap Allocator, no
+    // display, no serial
+    arch.cpu.init();
 
     // State: one core, interrupts, MMU, heap Allocator, no display, no serial
     uart_valid = true;
@@ -97,7 +102,7 @@ fn kernelInit() void {
         hal.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    hal.usb.powerOn(hal.usb);
+    kprint("Executing on core {d}\n", .{arch.cpu.coreCurrent().core_id});
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});

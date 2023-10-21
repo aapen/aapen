@@ -100,6 +100,21 @@ pub fn irqEnable() void {
     asm volatile ("msr daifclr, #2");
 }
 
+pub fn irqFlagsSave() u64 {
+    return asm (
+        \\ mrs %[ret], daif
+        : [ret] "=r" (-> u64),
+    );
+}
+
+pub fn irqFlagsRestore(flags: u64) void {
+    asm volatile (
+        \\ msr daif, %[flags]
+        :
+        : [flags] "r" (flags),
+    );
+}
+
 // This is an arbitrary, but unique, number
 const soft_reset_breakpoint = 0x7c5;
 

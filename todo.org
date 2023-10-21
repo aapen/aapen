@@ -306,6 +306,9 @@ pub fn sliceAsBytes(slice: anytype) SliceAsBytesReturnType(@TypeOf(slice)) {
                                     ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
 #+end_src
 - ~zig test~ seems to ignore the ~-freference-trace~ argument. (Discovered while trying to uncover the offending source for the type error in the above example.)
+** Zig atomics
+Poorly documented. The ordering enum is derived from the C++ standard memory model.
+See https://en.cppreference.com/w/cpp/atomic/memory_order for definitions.
 * Open Questions
 * Closed Questions
 ** DONE Should we use device tree? If so, how?

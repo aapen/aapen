@@ -33,3 +33,67 @@ pub inline fn eret() noreturn {
 pub inline fn wfi() void {
     asm volatile ("wfi");
 }
+
+pub const MAX_CORES = 8;
+
+pub const Cpu = struct {
+    core_id: u8 = 0,
+    int_disable_count: u64 = 0,
+    irq_was_disabled: bool = false,
+};
+
+pub var cores = [_]Cpu{.{}} ** MAX_CORES;
+
+/// Return core # for the currently executing PE
+pub inline fn core_id() u8 {
+    return asm (
+        \\ mrs %[ret], MPIDR_EL1
+        \\ and %[ret], %[ret], 0xff
+        : [ret] "=r" (-> u8),
+    );
+}
+
+pub fn init() void {
+    inline for (0..MAX_CORES) |cid| {
+        cores[cid] = .{
+            .core_id = cid,
+            .int_disable_count = 0,
+            .irq_was_disabled = false,
+        };
+    }
+
+    exceptions.init();
+}
+
+pub fn coreCurrent() *Cpu {
+    return &cores[core_id()];
+}
+
+// interruptDisable and interruptEnable act like a stack. We count the
+// number of disables and only actually turn interrupts back on when a
+// matching number of enables are called.
+pub fn interruptDisable() void {
+    const cpu = coreCurrent();
+    const flags = exceptions.irqFlagsSave();
+
+    // bit 7 of irq_flags is set if interrupts are already disabled
+    if (cpu.int_disable_count == 0) {
+        if (flags & 0x40 != 0) {
+            cpu.irq_was_disabled = true;
+        } else {
+            exceptions.irqDisable();
+        }
+    }
+
+    cpu.int_disable_count += 1;
+}
+
+pub fn interruptEnable() void {
+    const cpu = coreCurrent();
+
+    cpu.int_disable_count -= 1;
+
+    if (cpu.int_disable_count == 0 and !cpu.irq_was_disabled) {
+        exceptions.irqEnable();
+    }
+}
