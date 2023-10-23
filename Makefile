@@ -5,6 +5,14 @@
 ZIG             = zig
 ZIG_BUILD_ARGS  = -Doptimize=Debug -freference-trace
 
+# Could we possibly have a zig build command that would simply output
+# all of the different board flavors? Otherwise we can make this
+# a simple make assignment.
+BOARD_FLAVORS   = $(shell echo pi3 pi4 pi400 pi5)
+
+ELF_FILES = $(addprefix zig-out/kernel-,$(addsuffix .elf,$(BOARD_FLAVORS)))
+KERNEL_FILES = $(addprefix zig-out/kernel-,$(addsuffix .img,$(BOARD_FLAVORS)))
+
 QEMU_EXEC       = qemu-system-aarch64 -semihosting
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
 #QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2711-rpi-400.dtb
@@ -22,8 +30,8 @@ GDB_ARGS        = -s lib
 GDB_TARGET_HOST = --ex "target remote :1234"
 GDB_TARGET_DEV  = --ex "target extended-remote :3333"
 
-KERNEL_ELF      = zig-out/kernel8.elf
-KERNEL          = zig-out/kernel8.img
+# KERNEL_ELF      = zig-out/kernel8.elf
+# KERNEL          = zig-out/kernel8.img
 
 rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
@@ -34,6 +42,7 @@ TEST_SRC        = src/tests.zig
 
 .PHONY: test clean
 
+
 all: init emulate
 
 init: download_firmware dirs
@@ -41,15 +50,15 @@ init: download_firmware dirs
 dirs:
 	mkdir -p zig-out
 
+kernels: $(KERNEL_FILES)
+
+zig-out/kernel-%.img: $(SOURCES)
+	$(ZIG) build -Dboard=$(*F) -Dimage=kernel-$(*F) $(ZIG_BUILD_ARGS)
+
 download_firmware: firmware/COPYING.linux
 
 firmware/COPYING.linux:
 	./tools/fetch_firmware.sh
-
-$(KERNEL): $(SRCS)
-	$(ZIG) build $(ZIG_BUILD_ARGS)
-
-kernel: $(KERNEL)
 
 test:
 	$(ZIG) test $(TEST_SRC)

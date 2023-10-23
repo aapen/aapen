@@ -7,22 +7,22 @@ const CrossTarget = std.zig.CrossTarget;
 const Module = std.Build.Module;
 
 const SupportedBoard = enum {
-    Raspi3,
-    Raspi4,
-    Raspi400,
-    Raspi5,
+    pi3,
+    pi4,
+    pi400,
+    pi5,
 };
 
 fn configModule(b: *std.Build) *Module {
     const maybe_selected_board = b.option(SupportedBoard, "board", "Select a target board for the kernel build");
 
-    const board = maybe_selected_board orelse .Raspi3;
+    const board = maybe_selected_board orelse .pi3;
 
     const config_path = switch (board) {
-        .Raspi3 => "config/raspi3.zig",
-        .Raspi4 => "config/raspi4.zig",
-        .Raspi400 => "config/raspi400.zig",
-        .Raspi5 => "config/raspi5.zig",
+        .pi3 => "config/raspi3.zig",
+        .pi4 => "config/raspi4.zig",
+        .pi400 => "config/raspi400.zig",
+        .pi5 => "config/raspi5.zig",
     };
 
     return b.createModule(.{ .source_file = .{ .path = config_path } });
