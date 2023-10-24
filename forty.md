@@ -1,4 +1,6 @@
-## Forty Dictionary
+# Forty Dictionary
+
+## Words
 
 ### Testing and Inspection
 
@@ -12,6 +14,8 @@
 * ?:  -- :Print description of word.
 * ?stack:  -- :Print the stack.
 * ?rstack:  -- :Print the return stack.
+
+* word: A constant, the number of bytes in a word.
 
 * dump: addr len -- : Dump an arbitrary area of memory
 
@@ -46,6 +50,27 @@
 * fill: l t r b c -- : fill rectangle with color
 * blit: sx sy w h dx dy -- : Copy a screen rect
 
+* scr-height: A constant
+* scr-length: A constant
+* scr-width: A constant
+ 
+* black: A constant
+* blue: A constant
+* brown: A constant
+* cyan: A constant
+* dark-grey: A constant
+* green: A constant
+* grey: A constant
+* light-blue: A constant
+* light-green: A constant
+* light-grey: A constant
+* light-red: A constant
+* orange: A constant
+* red: A constant
+* violet: A constant
+* white: A constant
+* yellow: A constant
+
 ### System Status and Low Level Operations
 
 * mem-available:  -- n : Push number bytes of memory currently available
@@ -55,11 +80,12 @@
 
 * ticks:  -- n: Read clock
 
-* *jump-if-not: A prim
-* *jump: A prim
-* *push-u64: A prim
-* *push-string: A prim
-* *jump-if-rle: A prim
+* *jump-if-not: Lower level word used by compiler
+* *jump: Lower level word used by compiler
+* *push-u64: Lower level word used by compiler
+* *push-string: Lower level word used by compiler
+* *jump-if-rle: Lower level word used by compiler
+* *stop: The stop instruction (a constant) used by compiler
 
 * reset:  -- : Soft reset the system
 
@@ -96,6 +122,12 @@
 * whitespace?: ch -- b
 * newline?:
 * backspace?:
+
+* char-bs - A constant
+* char-cr - A constant
+* char-del - A constant
+* char-nl - A constant
+* char-space - A constant
 
 * s=: s s -- b :string contents equality
 * s.: s -- :print tos as a string
@@ -232,3 +264,106 @@
 
 * }:  -- : Turn compile mode back on
 * {:  -- : Temp turn off compile mode.
+
+## Lower Level Constants
+
+### Board Related
+
+* board.*len
+* board.device.*len
+* board.device.mac_address
+* board.device.manufacturer
+* board.device.serial_number
+* board.device
+* board.memory.*len
+* board.memory.regions
+* board.memory
+* board.model.*len
+* board.model.memory
+* board.model.name
+* board.model.pcb_revision
+* board.model.processor
+* board.model.version
+* board.model
+* board
+
+### Frame Buffer and Console Related
+
+* fb.*len
+* fb.base
+* fb.bg
+* fb.bpp
+* fb.buffer_size
+* fb.dma
+* fb.dma_channel
+* fb.fg
+* fb.pitch
+* fb.range
+* fb.vtable.*len
+* fb.vtable.line
+* fb.vtable
+* fb.xres
+* fb.yres
+* fb
+
+* fbcons.*len
+* fbcons.fb
+* fbcons.height
+* fbcons.serial
+* fbcons.tab_width
+* fbcons.width
+* fbcons.xpos
+* fbcons.ypos
+* fbcons
+
+### Forth Interpreter Related
+
+* forth.*len
+* forth.allocator
+* forth.arena_allocator
+* forth.buffer
+* forth.compiling
+* forth.console
+* forth.debug
+* forth.drop
+* forth.ibase
+* forth.incRStack
+* forth.input
+* forth.jump
+* forth.jumpIfNot
+* forth.jumpIfRLE
+* forth.lastWord
+* forth.line_buffer
+* forth.memory
+* forth.newWord
+* forth.obase
+* forth.pushString
+* forth.pushU64
+* forth.rDrop
+* forth.rstack
+* forth.stack
+* forth.temp_allocator
+* forth.toDStack
+* forth.toRStack
+* forth.words
+* forth
+
+
+### Header (word) Related
+
+* header.*len
+* header.desc
+* header.func
+* header.immediate
+* header.len
+* header.name
+* header.previous
+
+* inner
+
+### Memory Manager Related
+
+* memory.*len
+* memory.current
+* memory.length
+* memory.p

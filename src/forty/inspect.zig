@@ -94,6 +94,16 @@ pub fn wordDesc(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
+pub fn wordDescAll(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    var e = forth.lastWord;
+    while (e) |entry| {
+        try forth.print("{s}: {s}\n", .{ entry.name, entry.desc });
+        e = entry.previous;
+    }
+    try forth.print("\n", .{});
+    return 0;
+}
+
 pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var name = forth.words.next() orelse return ForthError.WordReadError;
     var header = forth.findWord(name) orelse return ForthError.NotFound;
@@ -143,4 +153,5 @@ pub fn defineInspect(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("???", " -- :Print dictionary words that begin with...", &wordDictionaryFilter, false);
 
     _ = try forth.definePrimitiveDesc("?word", " -- :Print details of word.", &wordDumpWord, false);
+    _ = try forth.definePrimitiveDesc("?words", " -- :Print details all the words.", &wordDescAll, false);
 }
