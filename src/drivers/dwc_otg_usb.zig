@@ -108,6 +108,7 @@ pub const UsbController = struct {
         self.interface = .{
             .powerOn = powerOn,
             .powerOff = powerOff,
+            .hostControllerInitialize = hostControllerInitialize,
         };
         self.core_registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
@@ -129,5 +130,17 @@ pub const UsbController = struct {
         const self = @fieldParentPtr(@This(), "interface", intf);
         const usb_power_result = self.power_controller.powerOff(self.power_controller, 3);
         kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
+    }
+
+    fn hostControllerInitialize(intf: *hal.interfaces.USB) !void {
+        const self = @fieldParentPtr(@This(), "interface", intf);
+
+        intf.powerOn(intf);
+
+        const id = self.core_registers.gsnpsid;
+        const major = (id >> 12) & 0xf;
+        const minor = id & 0xfff;
+
+        kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ major, minor });
     }
 };

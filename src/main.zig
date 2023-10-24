@@ -1,4 +1,6 @@
 const std = @import("std");
+const config = @import("config");
+
 const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
 const qemu = @import("qemu.zig");
@@ -97,7 +99,9 @@ fn kernelInit() void {
         hal.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    hal.usb.powerOn(hal.usb);
+    hal.usb.hostControllerInitialize(hal.usb) catch |err| {
+        kerror(@src(), "USB Host initialization: {any}\n", .{err});
+    };
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
         kerror(@src(), "Forth init: {any}\n", .{err});
