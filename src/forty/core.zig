@@ -23,7 +23,13 @@ const Header = memory_module.Header;
 
 const BoardInfo = hal.interfaces.BoardInfo;
 
-/// len *[]u8  --  <results>
+/// *Header  --  <results>
+pub fn wordExec(forth: *Forth, body: [*]u64, offset: u64, _: *Header) ForthError!i64 {
+    const p = try forth.popAs(*Header);
+    return p.func(forth, body, offset, p);
+}
+
+/// *[]u8  --  <results>
 pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const pStr: [*]u8 = try forth.popAs([*]u8);
     const token = string.asSlice(pStr);
@@ -31,11 +37,21 @@ pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
-/// len *[]u8  --  <results>
+///  *[]u8  --  <results>
 pub fn wordEvalCommand(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const pStr: [*]u8 = try forth.popAs([*]u8);
     const token = string.asSlice(pStr);
     try forth.evalCommand(token);
+    return 0;
+}
+
+///  *[]u8  --  <results>
+pub fn wordLookup(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const pName: [*]u8 = try forth.popAs([*]u8);
+    const name = string.asSlice(pName);
+    const word = forth.findWord(name);
+    const iWord = @intFromPtr(word);
+    try forth.stack.push(iWord);
     return 0;
 }
 
@@ -279,6 +295,21 @@ pub fn word2Dup(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try s.push(w2);
     try s.push(w1);
     try s.push(w2);
+    return 0;
+}
+
+/// w1 w2 w3 -- w1 w2 w3 w1 w2 w3
+pub fn word3Dup(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    var s = &forth.stack;
+    const w3 = try s.pop();
+    const w2 = try s.pop();
+    const w1 = try s.pop();
+    try s.push(w1);
+    try s.push(w2);
+    try s.push(w3);
+    try s.push(w1);
+    try s.push(w2);
+    try s.push(w3);
     return 0;
 }
 
@@ -600,12 +631,16 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
 
     // Basic Forth words.
+    _ = try forth.definePrimitiveDesc("exec", "pHeader -- <Results>", &wordExec, false);
     _ = try forth.definePrimitiveDesc("eval", "pStr -- <Results>", &wordEval, false);
-    _ = try forth.definePrimitiveDesc("eval-cmd", "pStr -- <Results>", &wordEvalCommand, false);
+    _ = try forth.definePrimitiveDesc("eval-command", "pStr -- <Results>", &wordEvalCommand, false);
+    _ = try forth.definePrimitiveDesc("lookup", "word-name -- wordp or 0", &wordLookup, false);
+
     _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, false);
     _ = try forth.definePrimitiveDesc("2swap", " w1 w2 w3 w4 -- w3 w4 w1 w2 ", &word2Swap, false);
     _ = try forth.definePrimitiveDesc("dup", "w -- w w", &wordDup, false);
     _ = try forth.definePrimitiveDesc("2dup", "w1 w2 -- w1 w2 w1 w2", &word2Dup, false);
+    _ = try forth.definePrimitiveDesc("3dup", "w1 w2 w3 -- w1 w2 w3 w1 w2 w3 ", &word3Dup, false);
     _ = try forth.definePrimitiveDesc("clear", "<anything> --", &wordClear, false);
     _ = try forth.definePrimitiveDesc("drop", "w --", &wordDrop, false);
     _ = try forth.definePrimitiveDesc("2drop", "w w --", &word2Drop, false);
