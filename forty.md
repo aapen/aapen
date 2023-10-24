@@ -1,4 +1,16 @@
-# Forty Dictionary
+# Forty
+
+## Syntax
+
+  In general, the Forty syntax follows Forth syntax, except:
+
+  * `"foo bar"` is a *seven* character string along the lines of C or Python. Double quoted strings are a special syntactical case in Forty, so you don't need a space after the initial `"`.
+
+  * `:foo` is a three character string. The colon form of strings is useful when using words like `create` that take a string name. Note you cannot have a space in a colon defined string.
+  * `'foo` is the address of the word foo.
+  * \x is a single character, the integer value of the character. In this case, 120.
+  * 0xnnn... is a number expressed in hex, no matter what the current base is. For example 0xa is decimal ten no matter what the current base is.
+  * 0#nnn... is a number expressed in decimal, no matter what the current base is. For example 0#11 is decimal eleven no matter what the current base is.
 
 ## Words
 
@@ -53,7 +65,7 @@
 * scr-height: A constant
 * scr-length: A constant
 * scr-width: A constant
- 
+
 * black: A constant
 * blue: A constant
 * brown: A constant
