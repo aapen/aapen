@@ -78,6 +78,9 @@ pub const FrameBuffer = struct {
     }
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
+    const CharRow = @Vector(8, u8);
+    const CharBits = @Vector(8, bool);
+
     pub fn drawChar(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {
         var romidx: usize = @as(usize, ch - 32) * 16;
         if (romidx + 16 >= character_rom.len)
@@ -86,14 +89,13 @@ pub const FrameBuffer = struct {
         var line_stride = self.pitch;
         var fbidx = x + (y * line_stride);
 
-        for (0..16) |_| {
-            var charbits: u8 = character_rom[romidx];
-            for (0..8) |_| {
-                self.base[fbidx] = if ((charbits & 0x80) != 0) self.fg else self.bg;
-                fbidx += 1;
-                charbits <<= 1;
-            }
-            fbidx -= 8;
+        const backgv: CharRow = @splat(self.bg);
+        const foregv: CharRow = @splat(self.fg);
+
+        inline for (0..16) |_| {
+            const rowbits: CharBits = @bitCast(@bitReverse(character_rom[romidx]));
+            const row = @select(u8, rowbits, foregv, backgv);
+            (self.base + fbidx)[0..8].* = row;
             fbidx += line_stride;
             romidx += 1;
         }
