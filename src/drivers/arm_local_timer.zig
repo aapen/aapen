@@ -1,7 +1,8 @@
 const hal2 = @import("../hal2.zig");
 
+const interrupt_controller = @import("arm_local_interrupt_controller.zig");
+
 const hal = @import("../hal.zig");
-const InterruptController = hal.interfaces.InterruptController;
 const IrqId = hal.interfaces.IrqId;
 
 const interrupts = @import("arm_local_interrupt_controller.zig");
@@ -21,6 +22,18 @@ pub const FreeRunningCounter = struct {
     }
 };
 
+pub fn mktimer(id: u2, base: u64, intc: interrupt_controller.LocalInterruptController) Timer {
+    return Timer{
+        .timer_id = id,
+        .irq = .{ .index = id },
+        .match_reset = @as(u4, 1) << id,
+        .control = @ptrFromInt(base),
+        .compare = @ptrFromInt(base + 0x0c + (@as(u64, id) * 4)),
+        .next_callback = Timer.noAction,
+        .intc = intc,
+    };
+}
+
 pub const Timer = struct {
     fn noAction(intf: *const anyopaque) u32 {
         _ = intf;
@@ -32,40 +45,13 @@ pub const Timer = struct {
         _unused_reserved: u28 = 0,
     };
 
-    interface: hal.interfaces.Timer = undefined,
-
-    intc: *InterruptController,
+    intc: interrupt_controller.LocalInterruptController,
     irq: IrqId,
     timer_id: u2,
     control: *volatile TimerControlStatus,
     compare: *volatile u32,
     match_reset: u4 = 0,
     next_callback: hal.interfaces.TimerCallbackFn = noAction,
-
-    pub fn init(
-        self: *Timer,
-        timer_base: u64,
-        intc: *InterruptController,
-        timer_id: u2,
-        irq: IrqId,
-    ) void {
-        self.interface = .{
-            .schedule = schedule,
-        };
-
-        self.timer_id = timer_id;
-        self.irq = irq;
-        self.match_reset = @as(u4, 1) << self.timer_id;
-        self.control = @ptrFromInt(timer_base);
-        self.compare = @ptrFromInt(timer_base + 0x0c + (@as(u64, self.timer_id) * 4));
-        self.next_callback = noAction;
-        self.intc = intc;
-        self.intc.connect(self.intc, self.irq, irqHandle);
-    }
-
-    pub fn timer(self: *Timer) *hal.interfaces.Timer {
-        return &self.interface;
-    }
 
     pub fn deinit(self: *Timer) void {
         self.intc.disconnect(self.intc, self.irq);
@@ -85,9 +71,7 @@ pub const Timer = struct {
         self.control.match = self.match_reset;
     }
 
-    fn schedule(intf: *hal.interfaces.Timer, in_ticks: u32, cb: hal.interfaces.TimerCallbackFn) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    fn schedule(self: *const Timer, in_ticks: u32, cb: hal.interfaces.TimerCallbackFn) void {
         self.disable();
         const tick = hal2.clock.ticksReadLow();
 
@@ -99,9 +83,8 @@ pub const Timer = struct {
         self.enable();
     }
 
-    pub fn irqHandle(_: *anyopaque, id: IrqId) void {
-        const which_timer = id.index & 0x3;
-        var self = timers[which_timer];
+    pub fn irqHandle(context: *anyopaque, _: IrqId) void {
+        const self: *const Timer = @ptrCast(@alignCast(context));
 
         // invoke callback
         const next_delta = self.next_callback(&self.interface);
@@ -119,12 +102,3 @@ pub const Timer = struct {
         }
     }
 };
-
-pub var timers: [4]Timer = undefined;
-
-pub fn init(system_timer_base: u64, intc: *InterruptController) void {
-    // TODO externalize this constant
-    inline for (0..3) |timer_id| {
-        timers[timer_id].init(system_timer_base, intc, timer_id, interrupts.mkid(0, timer_id));
-    }
-}

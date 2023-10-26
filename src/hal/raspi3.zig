@@ -13,7 +13,6 @@ pub const bcm_video = @import("../drivers/bcm_video_controller.zig");
 pub const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
 pub const pl011 = @import("../drivers/pl011.zig");
 pub const simple_bus = @import("../drivers/simple_bus.zig");
-pub const timer = @import("../drivers/arm_local_timer.zig");
 pub const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
 
 pub const memory_map = @import("raspi3/memory_map.zig");
@@ -36,9 +35,6 @@ pub fn init(alloc: *Allocator) !void {
 
     local_interrupt_controller.init(peripheral_base + 0xb200);
     hal.interrupt_controller = local_interrupt_controller.controller();
-
-    timer.init(peripheral_base + 0x3000, hal.interrupt_controller);
-    hal.timer = timer.timers[1].timer();
 
     mailbox.init(peripheral_base + 0xB880, hal.interrupt_controller, &soc_bus.bus_ranges);
     peripheral_clock_controller.init(&mailbox);

@@ -24,6 +24,9 @@ pub const power_controller = board_support.power_controller;
 pub const Serial = board_support.Serial;
 pub const serial = board_support.serial;
 
+pub const Timer = board_support.Timer;
+pub const timer = board_support.timer;
+
 const SerialWriter = std.io.Writer(*const Serial, error{}, serialStringSend);
 
 pub const serial_writer: SerialWriter = .{

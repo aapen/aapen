@@ -25,6 +25,12 @@ pub const board_info_controller = BoardInfoController{
     .mailbox = &mailbox,
 };
 
+pub const Clock = arm_local_timer.FreeRunningCounter;
+pub const clock = Clock{
+    .count_low = @ptrFromInt(peripheral_base + 0x3004),
+    .count_high = @ptrFromInt(peripheral_base + 0x3008),
+};
+
 pub const InterruptController = arm_local_interrupt.LocalInterruptController;
 pub const interrupt_controller = InterruptController{
     .registers = @ptrFromInt(peripheral_base + 0xb200),
@@ -58,8 +64,10 @@ pub const soc = SOC{
     //    .bus_ranges = null,
 };
 
-pub const Clock = arm_local_timer.FreeRunningCounter;
-pub const clock = Clock{
-    .count_low = @ptrFromInt(peripheral_base + 0x3004),
-    .count_high = @ptrFromInt(peripheral_base + 0x3008),
+pub const Timer = arm_local_timer.Timer;
+pub const timer: [4]Timer = [_]Timer{
+    arm_local_timer.mktimer(0, peripheral_base + 0x3000, interrupt_controller),
+    arm_local_timer.mktimer(1, peripheral_base + 0x3000, interrupt_controller),
+    arm_local_timer.mktimer(2, peripheral_base + 0x3000, interrupt_controller),
+    arm_local_timer.mktimer(3, peripheral_base + 0x3000, interrupt_controller),
 };
