@@ -26,13 +26,11 @@ pub var allocator: *Allocator = undefined;
 pub var soc_bus = simple_bus.SimpleBus{};
 pub var local_interrupt_controller = arm_local_interrupt.LocalInterruptController{};
 pub var gpio = bcm_gpio.BroadcomGpio{};
-pub var pl011_uart = pl011.Pl011Uart{};
 pub var mailbox = bcm_mailbox.BroadcomMailbox{};
 pub var peripheral_clock_controller = bcm_peripheral_clocks.PeripheralClockController{};
 pub var dma_controller = bcm_dma.BroadcomDMAController{};
 pub var video_controller = bcm_video.BroadcomVideoController{};
 pub var power_controller = bcm_power.BroadcomPowerController{};
-pub var board_info_controller = bcm_board_info.BroadcomBoardInfoController{};
 pub var usb = dwc_otg_usb.UsbController{};
 
 pub fn init(alloc: *Allocator) !void {
@@ -49,17 +47,11 @@ pub fn init(alloc: *Allocator) !void {
 
     gpio.init(peripheral_base + 0x200000);
 
-    pl011_uart.init(peripheral_base + 0x201000, &gpio);
-    hal.serial = pl011_uart.serial();
-
     mailbox.init(peripheral_base + 0xB880, hal.interrupt_controller, &soc_bus.bus_ranges);
     peripheral_clock_controller.init(&mailbox);
 
     power_controller.init(&mailbox);
     hal.power_controller = power_controller.controller();
-
-    board_info_controller.init(&mailbox);
-    hal.info_controller = board_info_controller.controller();
 
     dma_controller.init(allocator, peripheral_base + 0x7000, hal.interrupt_controller, &soc_bus.dma_ranges, hal.clock);
     hal.dma_controller = dma_controller.dma();

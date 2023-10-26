@@ -6,6 +6,15 @@ const board_support = switch (config.board) {
     inline else => @compileError("Unsupported board " ++ @tagName(config.board)),
 };
 
+pub const BoardInfoController = board_support.BoardInfoController;
+pub const board_info_controller = board_support.board_info_controller;
+
+pub const GPIO = board_support.GPIO;
+pub const gpio = board_support.gpio;
+
+pub const InterruptController = board_support.InterruptController;
+pub const interrupt_controller = board_support.interrupt_controller;
+
 pub const Serial = board_support.Serial;
 pub const serial = board_support.serial;
 

@@ -12,26 +12,11 @@ const Regions = memory.Regions;
 const Region = memory.Region;
 
 pub const BroadcomBoardInfoController = struct {
-    arm_memory_range: Region = Region{ .name = "ARM Memory" },
-    videocore_memory_range: Region = Region{ .name = "Videocore Memory" },
+    arm_memory_range: *Region,
+    videocore_memory_range: *Region,
+    mailbox: *const BroadcomMailbox,
 
-    interface: hal.interfaces.BoardInfoController = undefined,
-    mailbox: *BroadcomMailbox = undefined,
-
-    pub fn init(self: *BroadcomBoardInfoController, mailbox: *BroadcomMailbox) void {
-        self.interface = .{
-            .inspect = inspect,
-        };
-        self.mailbox = mailbox;
-    }
-
-    pub fn controller(self: *BroadcomBoardInfoController) *BoardInfoController {
-        return &self.interface;
-    }
-
-    pub fn inspect(intf: *BoardInfoController, info: *BoardInfo) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn inspect(self: *const BroadcomBoardInfoController, info: *BoardInfo) void {
         var arm_memory = GetMemoryRange.arm();
         var vc_memory = GetMemoryRange.videocore();
         var revision = GetInfo.boardRevision();
@@ -47,11 +32,11 @@ pub const BroadcomBoardInfoController = struct {
         var env = Envelope.init(self.mailbox, &messages);
         _ = env.call() catch 0;
 
-        arm_memory.copy(&self.arm_memory_range);
-        vc_memory.copy(&self.videocore_memory_range);
+        arm_memory.copy(self.arm_memory_range);
+        vc_memory.copy(self.videocore_memory_range);
 
-        info.memory.regions.append(self.arm_memory_range) catch {};
-        info.memory.regions.append(self.videocore_memory_range) catch {};
+        info.memory.regions.append(self.arm_memory_range.*) catch {};
+        info.memory.regions.append(self.videocore_memory_range.*) catch {};
 
         info.device.mac_address = mac_address.value;
         info.device.serial_number = serial.value;
@@ -59,7 +44,7 @@ pub const BroadcomBoardInfoController = struct {
         self.decode_revision(revision.value, info);
     }
 
-    fn decode_revision(self: *BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
+    fn decode_revision(self: *const BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
         if (revision & 0x800000 == 0x800000) {
             self.decode_revision_new_scheme(revision, info);
         } else {}
@@ -92,7 +77,7 @@ pub const BroadcomBoardInfoController = struct {
         BoardType{ .name = "Model 4B", .version = 4 },
     };
 
-    fn decode_revision_new_scheme(_: *BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
+    fn decode_revision_new_scheme(_: *const BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
         // var warranty: u2 = (revision >> 24) & 0b11;
         var memsize: u32 = (revision >> 20) & 0b111;
         var manufacturer: u32 = (revision >> 16) & 0b1111;
@@ -172,7 +157,7 @@ const GetMemoryRange = struct {
         self.memory_size = buf[1];
     }
 
-    pub fn copy(self: *Self, target: *Region) void {
+    pub fn copy(self: *const Self, target: *Region) void {
         target.fromSize(self.memory_base, self.memory_size);
     }
 };

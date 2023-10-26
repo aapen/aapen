@@ -1,6 +1,5 @@
 const board_info = @import("interfaces/board_info.zig");
 pub const BoardInfo = board_info.BoardInfo;
-pub const BoardInfoController = board_info.BoardInfoController;
 
 const clock = @import("interfaces/clock.zig");
 pub const Clock = clock.Clock;
@@ -21,9 +20,6 @@ pub const IrqHandlerFn = interrupt_controller.IrqHandlerFn;
 const power_controller = @import("interfaces/power_controller.zig");
 pub const PowerController = power_controller.PowerController;
 pub const PowerResult = power_controller.PowerResult;
-
-const serial = @import("interfaces/serial.zig");
-pub const Serial = serial.Serial;
 
 const usb = @import("interfaces/usb.zig");
 pub const USB = usb.USB;

@@ -4,7 +4,10 @@ const assert = std.debug.assert;
 const root = @import("root");
 const kinfo = root.kinfo;
 
+const hal2 = @import("../hal2.zig");
 const hal = @import("../hal.zig");
+
+const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
 
 const architecture = @import("../architecture.zig");
 const cache = architecture.cache;
@@ -62,7 +65,8 @@ pub const BroadcomMailbox = struct {
 
     registers: *volatile Registers = undefined,
     intc: *hal.interfaces.InterruptController = undefined,
-    translations: *AddressTranslations = undefined,
+    intc2: *const local_interrupt_controller.LocalInterruptController = undefined,
+    translations: *const AddressTranslations = undefined,
 
     pub fn init(self: *BroadcomMailbox, base: u64, interrupt_controller: *hal.interfaces.InterruptController, translations: *AddressTranslations) void {
         self.registers = @ptrFromInt(base);
@@ -73,17 +77,17 @@ pub const BroadcomMailbox = struct {
     // ----------------------------------------------------------------------
     // Send and receive messages
     // ----------------------------------------------------------------------
-    fn mailFull(self: *BroadcomMailbox) bool {
+    fn mailFull(self: *const BroadcomMailbox) bool {
         barriers.barrierMemoryDevice();
         return self.registers.mailbox_0_status.mail_full == 1;
     }
 
-    fn mailEmpty(self: *BroadcomMailbox) bool {
+    fn mailEmpty(self: *const BroadcomMailbox) bool {
         barriers.barrierMemoryDevice();
         return self.registers.mailbox_0_status.mail_empty == 1;
     }
 
-    pub fn mailboxWrite(self: *BroadcomMailbox, channel: MailboxChannel, data: u32) void {
+    pub fn mailboxWrite(self: *const BroadcomMailbox, channel: MailboxChannel, data: u32) void {
         while (self.mailFull()) {}
 
         var val = (data & 0xfffffff0) | @intFromEnum(channel);
@@ -93,7 +97,7 @@ pub const BroadcomMailbox = struct {
     // TODO: Use peek instead of read so we don't lose messages meant for
     // other channels.
     // TODO: Use an interrupt to read this and put it into a data structure
-    pub fn mailboxRead(self: *BroadcomMailbox, channel_expected: MailboxChannel) u32 {
+    pub fn mailboxRead(self: *const BroadcomMailbox, channel_expected: MailboxChannel) u32 {
         while (true) {
             while (self.mailEmpty()) {}
 
@@ -237,13 +241,13 @@ pub const BroadcomMailbox = struct {
 
         const max_buffer_length = 128;
 
-        owner: *BroadcomMailbox = undefined,
+        owner: *const BroadcomMailbox = undefined,
         channel: MailboxChannel = .property_arm_to_vc,
         messages: []Message,
         buffer: [max_buffer_length]u32 align(16),
         total_size: u32,
 
-        pub fn init(owner: *BroadcomMailbox, messages: []Message) Envelope {
+        pub fn init(owner: *const BroadcomMailbox, messages: []Message) Envelope {
             var content_size: u32 = 0;
             for (messages) |m| {
                 content_size += m.total_size;

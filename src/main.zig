@@ -35,13 +35,14 @@ const mring_space_bytes = 1024 * 1024;
 export var mring_storage: [mring_space_bytes]u8 = undefined;
 pub var mring: debug.MessageBuffer = undefined;
 
-pub var board = hal.interfaces.BoardInfo{};
+//pub var board = hal.interfaces.BoardInfo{};
 pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{
     .serial = &hal2.serial,
     .fb = &fb,
 };
+pub var board = hal.interfaces.BoardInfo{};
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .sp = undefined,
@@ -56,8 +57,6 @@ pub var console_valid = false;
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no
     // display, serial
-    kprint("serial init OK", .{});
-
     arch.cpu.mmu.init();
 
     mring = debug.MessageBuffer.init(&mring_storage) catch unreachable;
@@ -83,7 +82,7 @@ fn kernelInit() void {
 
     // State: one core, interrupts, MMU, heap Allocator, display, serial
     board.init(&os.page_allocator);
-    hal.info_controller.inspect(hal.info_controller, &board);
+    hal2.board_info_controller.inspect(&board);
 
     // hal.timer.schedule(200000, printOneDot, &.{});
 

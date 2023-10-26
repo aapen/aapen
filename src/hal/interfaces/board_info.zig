@@ -32,7 +32,3 @@ pub const BoardInfo = struct {
         self.memory.regions = memory.Regions.init(allocator.*);
     }
 };
-
-pub const BoardInfoController = struct {
-    inspect: *const fn (board_info_controller: *BoardInfoController, info: *BoardInfo) void,
-};

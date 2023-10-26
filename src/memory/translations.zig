@@ -3,7 +3,7 @@ const ArrayList = std.ArrayList;
 
 pub const AddressTranslations = ArrayList(*AddressTranslation);
 
-pub fn toChild(translations: *AddressTranslations, parent_addr: u64) u64 {
+pub fn toChild(translations: *const AddressTranslations, parent_addr: u64) u64 {
     for (translations.items) |t| {
         if (t.parentBusContains(parent_addr)) {
             return t.parentToChild(parent_addr);
@@ -12,7 +12,7 @@ pub fn toChild(translations: *AddressTranslations, parent_addr: u64) u64 {
     return parent_addr;
 }
 
-pub fn toParent(translations: *AddressTranslations, child_addr: u64) u64 {
+pub fn toParent(translations: *const AddressTranslations, child_addr: u64) u64 {
     for (translations.items) |t| {
         if (t.childBusContains(child_addr)) {
             return t.childToParent(child_addr);
