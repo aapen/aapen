@@ -11,20 +11,25 @@ pub const Region = struct {
     size: usize = undefined,
     end: usize = undefined,
 
-    pub fn fromSize(self: *Region, base: usize, size: usize) void {
+    pub fn fromSize(name: []const u8, base: usize, size: usize) Region {
         assert(size > 0);
 
-        self.base = base;
-        self.size = size;
-        self.end = (base + size) - 1;
+        return .{
+            .name = name,
+            .base = base,
+            .size = size,
+            .end = (base + size) - 1,
+        };
     }
 
-    pub fn fromStartToEnd(self: *Region, start: usize, end: usize) void {
+    pub fn fromStartToEnd(name: []const u8, start: usize, end: usize) Region {
         assert(end > start);
-
-        self.base = start;
-        self.size = (end - start) + 1;
-        self.end = end;
+        return .{
+            .name = name,
+            .base = start,
+            .size = (end - start) + 1,
+            .end = end,
+        };
     }
 
     pub fn print(self: *const Region) !void {
@@ -33,5 +38,10 @@ pub const Region = struct {
         } else {
             root.kprint("{?s:>20}: 0x{x:0>8} .. 0x{x:0>8}\n", .{ "unnamed region", self.base, self.end });
         }
+    }
+
+    pub fn allocator(self: *const Region) std.heap.FixedBufferAllocator {
+        const base: [*]u8 = @ptrFromInt(self.base);
+        return std.heap.FixedBufferAllocator.init(base[0..self.size]);
     }
 };

@@ -2,10 +2,10 @@ const std = @import("std");
 const root = @import("root");
 const kprint = root.kprint;
 
-const hal2 = @import("../hal2.zig");
-
 const hal = @import("../hal.zig");
-const InterruptController = hal.interfaces.InterruptController;
+
+const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
+const bcm_power = @import("bcm_power.zig");
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -90,54 +90,25 @@ const CoreRegisters = extern struct {
 // 		 snpsid);
 
 pub const UsbController = struct {
-    interface: hal.interfaces.USB = undefined,
+    registers: *volatile CoreRegisters,
+    intc: *const local_interrupt_controller.LocalInterruptController,
+    translations: *const AddressTranslations,
+    power_controller: *const bcm_power.BroadcomPowerController,
 
-    core_registers: *volatile CoreRegisters = undefined,
-    intc: *InterruptController = undefined,
-    translations: *AddressTranslations = undefined,
-
-    // TODO initialize the clock
-    // TODO initialize the phy interface
-    pub fn init(
-        self: *UsbController,
-        base: u64,
-        interrupt_controller: *InterruptController,
-        translations: *AddressTranslations,
-    ) void {
-        self.interface = .{
-            .powerOn = powerOn,
-            .powerOff = powerOff,
-            .hostControllerInitialize = hostControllerInitialize,
-        };
-        self.core_registers = @ptrFromInt(base);
-        self.intc = interrupt_controller;
-        self.translations = translations;
-    }
-
-    pub fn usb(self: *UsbController) *hal.interfaces.USB {
-        return &self.interface;
-    }
-
-    fn powerOn(intf: *hal.interfaces.USB) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-        _ = self;
-        const usb_power_result = hal2.power_controller.powerOn(3);
+    pub fn powerOn(self: *const UsbController) void {
+        const usb_power_result = self.power_controller.powerOn(3);
         kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     }
 
-    fn powerOff(intf: *hal.interfaces.USB) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-        _ = self;
-        const usb_power_result = hal2.power_controller.powerOff(3);
+    pub fn powerOff(self: *const UsbController) void {
+        const usb_power_result = self.power_controller.powerOff(3);
         kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     }
 
-    fn hostControllerInitialize(intf: *hal.interfaces.USB) !void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
+    pub fn hostControllerInitialize(self: *const UsbController) !void {
+        self.powerOn();
 
-        intf.powerOn(intf);
-
-        const id = self.core_registers.gsnpsid;
+        const id = self.registers.gsnpsid;
         const major = (id >> 12) & 0xf;
         const minor = id & 0xfff;
 

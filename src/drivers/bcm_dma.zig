@@ -4,15 +4,9 @@ const kwarn = root.kwarn;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const hal2 = @import("../hal2.zig");
-
 const hal = @import("../hal.zig");
-//const Clock = hal.interfaces.Clock;
-const DMAChannel = hal.interfaces.DMAChannel;
-const DMAController = hal.interfaces.DMAController;
-const DMAError = hal.interfaces.DMAError;
-const DMARequest = hal.interfaces.DMARequest;
-const InterruptController = hal.interfaces.InterruptController;
+
+const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -21,6 +15,37 @@ const toChild = memory.toChild;
 const toParent = memory.toParent;
 
 extern fn spinDelay(cpu_cycles: u32) void;
+
+pub const DMAChannel = struct {
+    channel_id: u8,
+    registers: *volatile BroadcomDMAController.ChannelRegisters,
+};
+
+pub const DMAError = error{
+    NoAvailableChannel,
+    OutOfMemory,
+};
+
+const BroadcomDMAControlBlock = extern struct {
+    transfer_information: BroadcomDMAController.TransferInformation,
+    source_address: u32,
+    destination_address: u32,
+    transfer_length: u32,
+    stride: u32,
+    next_control_block: u32,
+    _reserved_0: u32 = 0,
+    _reserved_1: u32 = 0,
+};
+
+pub const BroadcomDMARequest = struct {
+    control_blocks: ?[]BroadcomDMAControlBlock = null,
+    source: u32 = 0,
+    source_increment: bool = true,
+    destination: u32 = 0,
+    destination_increment: bool = true,
+    length: usize = 0,
+    stride: usize = 0,
+};
 
 pub const BroadcomDMAController = struct {
     const ControlAndStatus = packed struct {
@@ -94,62 +119,21 @@ pub const BroadcomDMAController = struct {
         debug: u32,
     };
 
-    const BroadcomDMAControlBlock = extern struct {
-        transfer_information: TransferInformation,
-        source_address: u32,
-        destination_address: u32,
-        transfer_length: u32,
-        stride: u32,
-        next_control_block: u32,
-        _reserved_0: u32 = 0,
-        _reserved_1: u32 = 0,
-    };
-
-    const BroadcomDMARequest = struct {
-        control_blocks: ?[]BroadcomDMAControlBlock,
-        request: DMARequest,
-    };
-
     const ChannelId = u5;
 
     const max_channel_id: ChannelId = 14;
 
-    const ChannelContext = struct {
-        id: ChannelId,
-        registers: *volatile ChannelRegisters,
-    };
-
-    interface: DMAController = undefined,
     //    clock: *Clock = undefined,
-    allocator: *Allocator = undefined,
-    register_base: u64 = undefined,
-    dma_translations: *AddressTranslations = undefined,
+    allocator: Allocator = undefined,
+    register_base: u64,
+    translations: *const AddressTranslations,
     interrupt_status: *volatile u32 = undefined,
     transfer_enabled: *volatile u32 = undefined,
-    intc: *InterruptController = undefined,
+    intc: *const local_interrupt_controller.LocalInterruptController = undefined,
     in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
 
-    pub fn init(self: *BroadcomDMAController, allocator: *Allocator, base: u64, interrupt_controller: *InterruptController, dma_translations: *AddressTranslations) void {
-        self.interface = .{
-            .createRequest = createRequest,
-            .destroyRequest = destroyRequest,
-            .reserveChannel = reserveChannel,
-            .initiate = initiate,
-            .awaitChannel = awaitChannel,
-            .releaseChannel = releaseChannel,
-        };
-
-        self.allocator = allocator;
-        self.dma_translations = dma_translations;
-        //        self.clock = clock;
-        self.register_base = base;
-        self.interrupt_status = @ptrFromInt(base + 0xfe0);
-        self.transfer_enabled = @ptrFromInt(base + 0xff0);
-        self.intc = interrupt_controller;
-    }
-
-    pub fn dma(self: *BroadcomDMAController) *DMAController {
-        return &self.interface;
+    pub fn init(self: *const BroadcomDMAController, allocator: Allocator) void {
+        @constCast(self).allocator = allocator;
     }
 
     fn channelClaimUnused(self: *BroadcomDMAController) !ChannelId {
@@ -162,21 +146,13 @@ pub const BroadcomDMAController = struct {
         return DMAError.NoAvailableChannel;
     }
 
-    fn channelRegisters(self: *BroadcomDMAController, channel_id: ChannelId) *volatile ChannelRegisters {
+    fn channelRegisters(self: *const BroadcomDMAController, channel_id: ChannelId) *volatile ChannelRegisters {
         return @ptrFromInt(self.register_base + (0x100 * @as(usize, channel_id)));
     }
 
-    fn reserveChannel(intf: *DMAController) DMAError!DMAChannel {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
-        var channel_id = try self.channelClaimUnused();
-        var context = try self.allocator.create(ChannelContext);
+    pub fn reserveChannel(self: *const BroadcomDMAController) DMAError!DMAChannel {
+        var channel_id = try @constCast(self).channelClaimUnused();
         var channel_registers = self.channelRegisters(channel_id);
-
-        context.* = ChannelContext{
-            .id = channel_id,
-            .registers = channel_registers,
-        };
 
         self.transfer_enabled.* = @as(u32, 1) << channel_id;
 
@@ -187,43 +163,33 @@ pub const BroadcomDMAController = struct {
         channel_registers.control.reset = 1;
         while (channel_registers.control.reset == 1) {}
 
-        return DMAChannel{ .owner = intf, .context = context };
+        return .{
+            .channel_id = channel_id,
+            .registers = channel_registers,
+        };
     }
 
-    fn createRequest(intf: *DMAController) DMAError!*DMARequest {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn createRequest(self: *const BroadcomDMAController) DMAError!*BroadcomDMARequest {
         var request = try self.allocator.create(BroadcomDMARequest);
         request.control_blocks = null;
-        return &request.request;
+        return request;
     }
 
-    fn destroyRequest(intf: *DMAController, request: *DMARequest) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-        const request_owner = @fieldParentPtr(BroadcomDMARequest, "request", request);
-
-        if (request_owner.control_blocks) |cb_slice| {
+    pub fn destroyRequest(self: *const BroadcomDMAController, request: *BroadcomDMARequest) void {
+        if (request.control_blocks) |cb_slice| {
             self.allocator.free(cb_slice);
         }
 
-        self.allocator.destroy(request_owner);
+        self.allocator.destroy(request);
     }
 
     // TODO: after dma completes, free the control block
-    pub fn initiate(intf: *DMAController, channel: DMAChannel, request: *DMARequest) DMAError!void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-        const request_owner = @fieldParentPtr(BroadcomDMARequest, "request", request);
-
+    pub fn initiate(self: *const BroadcomDMAController, channel: DMAChannel, request: *BroadcomDMARequest) DMAError!void {
         const cb_slice = try self.allocator.alignedAlloc(BroadcomDMAControlBlock, 32, 1);
+        request.control_blocks = cb_slice;
+
+        const channel_registers = channel.registers;
         const control_block = &cb_slice[0];
-        request_owner.control_blocks = cb_slice;
-
-        const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
-        var channel_registers = context.registers;
-
-        // kwarn(@src(), "Zig believes the control block alignment to be {d}\n", .{@alignOf(BroadcomDMAControlBlock)});
-        // kwarn(@src(), "Control block allocated at 0x{x:0>8} in ARM memory\n", .{@intFromPtr(control_block)});
-
         const mode_2d: u1 = if (request.stride != 0) 1 else 0;
 
         control_block.* = .{
@@ -235,8 +201,8 @@ pub const BroadcomDMAController = struct {
                 .two_d_mode = mode_2d,
             },
 
-            .source_address = @truncate(toChild(self.dma_translations, request.source)),
-            .destination_address = @truncate(toChild(self.dma_translations, request.destination)),
+            .source_address = @truncate(toChild(self.translations, request.source)),
+            .destination_address = @truncate(toChild(self.translations, request.destination)),
             .transfer_length = @truncate(request.length),
             .stride = @truncate(request.stride),
             .next_control_block = 0,
@@ -244,7 +210,7 @@ pub const BroadcomDMAController = struct {
             ._reserved_1 = 0,
         };
 
-        const control_block_bus_addr: u32 = @truncate(toChild(self.dma_translations, @intFromPtr(control_block)));
+        const control_block_bus_addr: u32 = @truncate(toChild(self.translations, @intFromPtr(control_block)));
         channel_registers.control_block_addr = control_block_bus_addr;
         channel_registers.control = ControlAndStatus{
             .active = 1,
@@ -256,8 +222,7 @@ pub const BroadcomDMAController = struct {
 
     /// blocks until DMA completes. returns true on success, false if
     /// an error happened
-    fn awaitChannel(intf: *DMAController, channel: DMAChannel) bool {
-        const self = @fieldParentPtr(@This(), "interface", intf);
+    pub fn awaitChannel(self: *const BroadcomDMAController, channel: DMAChannel) bool {
         _ = self;
 
         // apply a timeout. for now this is a fixed delay, but it will
@@ -268,16 +233,15 @@ pub const BroadcomDMAController = struct {
         //
         // would be nice to have a general 'watchdog' facility that we
         // could apply to any word
-        const start_time = hal2.clock.ticks();
+        const start_time = hal.clock.ticks();
         const deadline = start_time + 1_500_000;
 
-        const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
-        const channel_registers = context.registers;
+        const channel_registers = channel.registers;
 
         var current_time = start_time;
-        while (channel_registers.control.active == 0b1) : (current_time = hal2.clock.ticks()) {
+        while (channel_registers.control.active == 0b1) : (current_time = hal.clock.ticks()) {
             if (current_time >= deadline) {
-                kwarn(@src(), "DMA on channel {} exceeded timeout by {d}\n", .{ context.id, (current_time - deadline) });
+                kwarn(@src(), "DMA on channel {} exceeded timeout by {d}\n", .{ channel.channel_id, (current_time - deadline) });
                 return false;
             }
         }
@@ -285,9 +249,8 @@ pub const BroadcomDMAController = struct {
         return channel_registers.control.dma_error == 0;
     }
 
-    fn releaseChannel(intf: *DMAController, channel: DMAChannel) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-        const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
-        self.in_use[context.id] = false;
+    pub fn releaseChannel(self: *const BroadcomDMAController, channel: DMAChannel) void {
+        self.transfer_enabled.* &= ~(@as(u32, 1) << channel.channel_id);
+        self.in_use[channel.channel_id] = false;
     }
 };

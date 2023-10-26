@@ -1,16 +1,4 @@
 const std = @import("std");
-const ArrayList = std.ArrayList;
-const Allocator = std.mem.Allocator;
-const bigToNative = std.mem.bigToNative;
-
-const root = @import("root");
-const kprint = root.kprint;
-const kwarn = root.kwarn;
-const kinfo = root.kinfo;
-
-const devicetree = @import("../devicetree.zig");
-const Node = devicetree.Fdt.Node;
-const Property = devicetree.Fdt.Property;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -20,13 +8,19 @@ pub const SimpleBus = struct {
     bus_ranges: AddressTranslations = undefined,
     dma_ranges: AddressTranslations = undefined,
 
-    pub fn deviceTreeParse(self: *SimpleBus, node_name: []const u8) !void {
-        const devicenode = try devicetree.global_devicetree.nodeLookupByPath(node_name);
+    pub fn init(self: *const SimpleBus, allocator: std.mem.Allocator) !void {
+        var mut_self = @constCast(self);
+        mut_self.bus_ranges = AddressTranslations.init(allocator);
+        mut_self.dma_ranges = AddressTranslations.init(allocator);
+    }
 
-        var bus_ranges = try devicenode.translations("ranges");
-        self.bus_ranges = bus_ranges;
+    pub fn appendBusRange(self: *const SimpleBus, child_address: u64, parent_address: u64, length: usize) !void {
+        var mut_self = @constCast(self);
+        try mut_self.bus_ranges.append(memory.translation(child_address, parent_address, length));
+    }
 
-        var dma_ranges = try devicenode.translations("dma-ranges");
-        self.dma_ranges = dma_ranges;
+    pub fn appendDmaRange(self: *const SimpleBus, child_address: u64, parent_address: u64, length: usize) !void {
+        var mut_self = @constCast(self);
+        try mut_self.dma_ranges.append(memory.translation(child_address, parent_address, length));
     }
 };

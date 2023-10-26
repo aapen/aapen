@@ -1,7 +1,7 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 
-pub const AddressTranslations = ArrayList(*AddressTranslation);
+pub const AddressTranslations = ArrayList(AddressTranslation);
 
 pub fn toChild(translations: *const AddressTranslations, parent_addr: u64) u64 {
     for (translations.items) |t| {
@@ -21,20 +21,22 @@ pub fn toParent(translations: *const AddressTranslations, child_addr: u64) u64 {
     return child_addr;
 }
 
+pub fn translation(child_address: u64, parent_address: u64, length: usize) AddressTranslation {
+    return .{
+        .parent_space_begin = parent_address,
+        .parent_space_end = parent_address + length,
+        .child_space_begin = child_address,
+        .child_space_end = child_address + length,
+        .length = length,
+    };
+}
+
 pub const AddressTranslation = struct {
     parent_space_begin: u64,
     parent_space_end: u64,
     child_space_begin: u64,
     child_space_end: u64,
     length: usize,
-
-    pub fn init(self: *AddressTranslation, parent_address: u64, child_address: u64, length: usize) void {
-        self.parent_space_begin = parent_address;
-        self.parent_space_end = parent_address + length;
-        self.child_space_begin = child_address;
-        self.child_space_end = child_address + length;
-        self.length = length;
-    }
 
     inline fn contains(actual: u64, begin: u64, end: u64) bool {
         return (actual >= begin and actual < end);

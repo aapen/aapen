@@ -1,11 +1,11 @@
-const hal2 = @import("../hal2.zig");
-
-const interrupt_controller = @import("arm_local_interrupt_controller.zig");
-
 const hal = @import("../hal.zig");
-const IrqId = hal.interfaces.IrqId;
 
 const interrupts = @import("arm_local_interrupt_controller.zig");
+
+pub const IrqId = interrupts.IrqId;
+pub const LocalInterruptController = interrupts.LocalInterruptController;
+
+pub const TimerCallbackFn = *const fn (timer: *anyopaque) u32;
 
 pub const FreeRunningCounter = struct {
     count_low: *volatile u32,
@@ -22,7 +22,7 @@ pub const FreeRunningCounter = struct {
     }
 };
 
-pub fn mktimer(id: u2, base: u64, intc: interrupt_controller.LocalInterruptController) Timer {
+pub fn mktimer(id: u2, base: u64, intc: LocalInterruptController) Timer {
     return Timer{
         .timer_id = id,
         .irq = .{ .index = id },
@@ -45,13 +45,13 @@ pub const Timer = struct {
         _unused_reserved: u28 = 0,
     };
 
-    intc: interrupt_controller.LocalInterruptController,
+    intc: LocalInterruptController,
     irq: IrqId,
     timer_id: u2,
     control: *volatile TimerControlStatus,
     compare: *volatile u32,
     match_reset: u4 = 0,
-    next_callback: hal.interfaces.TimerCallbackFn = noAction,
+    next_callback: TimerCallbackFn = noAction,
 
     pub fn deinit(self: *Timer) void {
         self.intc.disconnect(self.intc, self.irq);
@@ -71,9 +71,9 @@ pub const Timer = struct {
         self.control.match = self.match_reset;
     }
 
-    fn schedule(self: *const Timer, in_ticks: u32, cb: hal.interfaces.TimerCallbackFn) void {
+    fn schedule(self: *const Timer, in_ticks: u32, cb: TimerCallbackFn) void {
         self.disable();
-        const tick = hal2.clock.ticksReadLow();
+        const tick = hal.clock.ticksReadLow();
 
         // we ignore overflow because the counter will wrap around the
         // same way the compare value does.
@@ -92,7 +92,7 @@ pub const Timer = struct {
 
         if (next_delta >= 0) {
             // repeating, reset the schedule
-            const tick = hal2.clock.ticksReadLow();
+            const tick = hal.clock.ticksReadLow();
             const next_tick = @addWithOverflow(tick, next_delta)[0];
             self.compare.* = next_tick;
         } else {

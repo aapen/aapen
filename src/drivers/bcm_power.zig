@@ -1,10 +1,17 @@
 const hal = @import("../hal.zig");
-const PowerResult = hal.interfaces.PowerResult;
 
 const bcm_mailbox = @import("bcm_mailbox.zig");
 const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
+
+pub const PowerResult = enum {
+    unknown,
+    failed,
+    no_such_device,
+    power_on,
+    power_off,
+};
 
 pub const BroadcomPowerController = struct {
     mailbox: *const BroadcomMailbox = undefined,

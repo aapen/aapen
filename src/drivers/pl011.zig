@@ -1,13 +1,7 @@
 const std = @import("std");
 
-const hal = @import("../hal.zig");
-const Serial = hal.interfaces.Serial;
-
 const bcm_gpio = @import("bcm_gpio.zig");
 const BroadcomGpio = bcm_gpio.BroadcomGpio;
-
-const arch = @import("../architecture.zig");
-const cpu = arch.cpu;
 
 extern fn spinDelay(cpu_cycles: u32) void;
 
@@ -187,25 +181,16 @@ pub const Pl011Uart = struct {
         interrupt_clear: InterruptClearRegister, //0x44
     };
 
-    registers: *volatile Registers = undefined,
-    interface: hal.interfaces.Serial = undefined,
+    registers: *volatile Registers,
+    gpio: *const BroadcomGpio,
 
-    pub fn init(self: *Pl011Uart, base: u64, gpio: *BroadcomGpio) void {
-        self.registers = @ptrFromInt(base);
-
-        self.interface = .{
-            .getc = getc,
-            .putc = putc,
-            .puts = puts,
-            .hasc = hasc,
-        };
-
+    pub fn init(self: *Pl011Uart) void {
         // Configure GPIO pins for serial I/O
-        gpio.pins[14].enable();
-        gpio.pins[15].enable();
+        self.gpio.pins[14].enable();
+        self.gpio.pins[15].enable();
 
-        gpio.pins[14].selectFunction(.alt0);
-        gpio.pins[15].selectFunction(.alt0);
+        self.gpio.pins[14].selectFunction(.alt0);
+        self.gpio.pins[15].selectFunction(.alt0);
 
         // Turn UART off while initializing
         self.registers.control.uart_enable = .disable;
@@ -245,39 +230,27 @@ pub const Pl011Uart = struct {
         self.registers.control.uart_enable = .enable;
     }
 
-    pub fn serial(self: *Pl011Uart) *Serial {
-        return &self.interface;
-    }
-
-    fn getc(intf: *Serial) u8 {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn getc(self: *const Pl011Uart) u8 {
         while (self.registers.flags.receive_fifo_empty != 0) {}
         return self.registers.data.data;
     }
 
-    fn putc(intf: *Serial, ch: u8) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn putc(self: *const Pl011Uart, ch: u8) void {
         self.send(ch);
     }
 
-    fn puts(intf: *Serial, buffer: []const u8) usize {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn puts(self: *const Pl011Uart, buffer: []const u8) usize {
         for (buffer) |ch| {
             self.send(ch);
         }
         return buffer.len;
     }
 
-    fn hasc(intf: *Serial) bool {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn hasc(self: *const Pl011Uart) bool {
         return self.registers.flags.receive_fifo_empty == 0;
     }
 
-    fn send(self: *Pl011Uart, ch: u8) void {
+    pub fn send(self: *const Pl011Uart, ch: u8) void {
         while (self.registers.flags.transmit_fifo_full != 0) {}
         self.registers.data.data = ch;
     }

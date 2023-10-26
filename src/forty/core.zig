@@ -1,8 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const hal2 = @import("../hal2.zig");
 const hal = @import("../hal.zig");
+const BoardInfo = hal.BoardInfo;
 
 const frame_buffer = @import("../frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
@@ -21,8 +21,6 @@ const Forth = forth_module.Forth;
 
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
-
-const BoardInfo = hal.interfaces.BoardInfo;
 
 /// len *[]u8  --  <results>
 pub fn wordEval(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
@@ -89,29 +87,8 @@ pub fn wordKeyMaybe(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
 
 /// -- n
 pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var ticks = hal2.clock.ticks();
+    var ticks = hal.clock.ticks();
     try forth.stack.push(ticks);
-    return 0;
-}
-
-/// src dest len stride --
-pub fn wordDma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const dmac = hal.dma_controller;
-    const channel = dmac.reserveChannel(dmac) catch return ForthError.BadOperation;
-    defer dmac.releaseChannel(dmac, channel);
-
-    var request = dmac.createRequest(dmac) catch return ForthError.OutOfMemory;
-    defer dmac.destroyRequest(dmac, request);
-
-    request.stride = try forth.stack.pop();
-    request.length = try forth.stack.pop();
-    request.destination = try forth.popAs(u32);
-    request.source = try forth.popAs(u32);
-
-    dmac.initiate(dmac, channel, request) catch return ForthError.BadOperation;
-    var success = dmac.awaitChannel(dmac, channel);
-
-    try forth.stack.push(if (success) 1 else 0);
     return 0;
 }
 
@@ -583,7 +560,6 @@ pub fn defineCore(forth: *Forth) !void {
 
     // Display.
 
-    _ = try forth.definePrimitiveDesc("dma", "src dest len stride -- : Perform a DMA", &wordDma, false);
     _ = try forth.definePrimitiveDesc("blit", "sx sy w h dx dy -- : Copy a screen rect", &wordBlit, false);
     _ = try forth.definePrimitiveDesc("fill", "l t r b c -- : fill rectangle with color", &wordFill, false);
     _ = try forth.definePrimitiveDesc("line", "x0 y0 x1 y1 c -- : draw line with color", &wordLine, false);

@@ -7,11 +7,8 @@ const kprint = root.kprint;
 const frame_buffer = @import("frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
 
-const hal2 = @import("hal2.zig");
-
 const hal = @import("hal.zig");
-const VideoController = hal.common.VideoController;
-const Serial = hal.interfaces.Serial;
+
 const Allocator = std.mem.Allocator;
 
 const Readline = @import("readline.zig");
@@ -24,7 +21,7 @@ pub const FrameBufferConsole = struct {
     width: u64 = undefined,
     height: u64 = undefined,
     fb: *FrameBuffer = undefined,
-    serial: *const hal2.Serial,
+    serial: *const hal.Serial,
 
     pub fn init(self: *FrameBufferConsole) void {
         self.xpos = 0;

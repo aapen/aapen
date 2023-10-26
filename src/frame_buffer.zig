@@ -2,9 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 const hal = @import("hal.zig");
-const DMAController = hal.interfaces.DMAController;
-const DMAChannel = hal.interfaces.DMAChannel;
-const DMARequest = hal.interfaces.DMARequest;
+const DMA = hal.DMA;
 
 const Region = @import("memory.zig").Region;
 
@@ -56,15 +54,15 @@ pub const FrameBuffer = struct {
         OutOfBounds,
     };
 
-    dma: *DMAController = undefined,
-    dma_channel: ?DMAChannel = undefined,
+    dma: *const hal.DMA = undefined,
+    dma_channel: ?hal.DMAChannel = undefined,
     base: [*]u8 = undefined,
     buffer_size: usize = undefined,
     pitch: usize = undefined,
     xres: usize = undefined,
     yres: usize = undefined,
     bpp: u32 = undefined,
-    range: Region = Region{ .name = "Frame Buffer" },
+    range: Region = undefined,
     fg: u8 = DEFAULT_FOREGROUND,
     bg: u8 = DEFAULT_BACKGROUND,
     vtable: VTable = .{ .line = line },
@@ -154,14 +152,14 @@ pub const FrameBuffer = struct {
 
             const len = if (stride_2d > 0) ((xfer_y_len << 16) + xfer_x_len) else (h * fb.xres);
 
-            var req = DMARequest{
+            var req = hal.DMARequest{
                 .source = @truncate(fb_base + (sy * fb_pitch) + sx),
                 .destination = @truncate(fb_base + (dy * fb_pitch) + dx),
                 .length = len,
                 .stride = (stride_2d << 16) | stride_2d,
             };
-            fb.dma.initiate(fb.dma, ch, &req) catch {};
-            _ = fb.dma.awaitChannel(fb.dma, ch);
+            fb.dma.initiate(ch, &req) catch {};
+            _ = fb.dma.awaitChannel(ch);
         }
     }
 
@@ -206,8 +204,8 @@ pub const FrameBuffer = struct {
             else
                 ((b - t) * fb.xres);
 
-            var req = try fb.dma.createRequest(fb.dma);
-            defer fb.dma.destroyRequest(fb.dma, req);
+            var req = try fb.dma.createRequest();
+            defer fb.dma.destroyRequest(req);
 
             req.* = .{
                 .source = @truncate(src),
@@ -217,8 +215,8 @@ pub const FrameBuffer = struct {
                 .length = xfer_count,
                 .stride = (dest_stride << 16) | src_stride,
             };
-            fb.dma.initiate(fb.dma, ch, req) catch {};
-            _ = fb.dma.awaitChannel(fb.dma, ch);
+            fb.dma.initiate(ch, req) catch {};
+            _ = fb.dma.awaitChannel(ch);
         }
     }
 

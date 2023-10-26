@@ -1,10 +1,13 @@
 const hal = @import("../hal.zig");
-const IrqId = hal.interfaces.IrqId;
-const IrqHandlerFn = hal.interfaces.IrqHandlerFn;
-const InterruptController = hal.interfaces.InterruptController;
 
 const exceptions = @import("../architecture.zig").cpu.exceptions;
 const ExceptionContext = exceptions.ExceptionContext;
+
+pub const IrqId = struct {
+    index: usize,
+};
+
+pub const IrqHandlerFn = *const fn (interrupt_controller: *const anyopaque, irq_id: IrqId) void;
 
 // ----------------------------------------------------------------------
 // Interrupt controller
@@ -46,44 +49,18 @@ pub const LocalInterruptController = struct {
 
     const max_handlers = handlerIndex(2, 32);
 
-    interface: hal.interfaces.InterruptController = undefined,
     handlers: [max_handlers]IrqHandlerFn = undefined,
     registers: *volatile Registers = undefined,
 
-    pub fn init(self: *LocalInterruptController, interrupt_controller_base: u64) void {
-        self.interface = .{
-            .connect = connect,
-            .disconnect = disconnect,
-            .enable = enable,
-            .disable = disable,
-            .irqHandle = irqHandle,
-        };
-        self.registers = @ptrFromInt(interrupt_controller_base);
-
-        for (0..max_handlers) |i| {
-            self.handlers[i] = nullHandler;
-        }
-    }
-
-    pub fn controller(self: *LocalInterruptController) *InterruptController {
-        return &self.interface;
-    }
-
-    fn connect(intf: *InterruptController, id: IrqId, handler: IrqHandlerFn) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn connect(self: *const LocalInterruptController, id: IrqId, handler: IrqHandlerFn) void {
         self.handlers[id.index] = handler;
     }
 
-    fn disconnect(intf: *InterruptController, id: IrqId) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn disconnect(self: *const LocalInterruptController, id: IrqId) void {
         self.handlers[id.index] = nullHandler;
     }
 
-    fn enable(intf: *InterruptController, id: IrqId) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn enable(self: *const LocalInterruptController, id: IrqId) void {
         const mask = handlerBitMask(id);
         switch (handlerRegister(id)) {
             0 => self.registers.enable_basic_irqs = mask,
@@ -93,9 +70,7 @@ pub const LocalInterruptController = struct {
         }
     }
 
-    fn disable(intf: *InterruptController, id: IrqId) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn disable(self: *const LocalInterruptController, id: IrqId) void {
         const mask = handlerBitMask(id);
         switch (handlerRegister(id)) {
             0 => self.registers.disable_basic_irqs = mask,
@@ -105,9 +80,7 @@ pub const LocalInterruptController = struct {
         }
     }
 
-    fn irqHandle(intf: *InterruptController, context: *const ExceptionContext) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn irqHandle(self: *const LocalInterruptController, context: *const ExceptionContext) void {
         _ = context;
 
         const basic_interrupts = self.registers.irq_pending[0];
@@ -168,11 +141,11 @@ pub const LocalInterruptController = struct {
         }
     }
 
-    fn handle(self: *LocalInterruptController, id: IrqId) void {
-        self.handlers[id.index](&self.interface, id);
+    fn handle(self: *const LocalInterruptController, id: IrqId) void {
+        self.handlers[id.index](self, id);
     }
 
-    fn basicIrqHandleIfRaised(self: *LocalInterruptController, pending: u32, check: u32, irq_id: IrqId) void {
+    fn basicIrqHandleIfRaised(self: *const LocalInterruptController, pending: u32, check: u32, irq_id: IrqId) void {
         if ((pending & check) != 0) {
             self.handle(irq_id);
         }

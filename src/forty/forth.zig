@@ -2,8 +2,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
-const hal2 = @import("../hal2.zig");
-
 const hal = @import("../hal.zig");
 const fbcons = @import("../fbcons.zig");
 const Readline = @import("../readline.zig");
@@ -592,12 +590,12 @@ pub const Forth = struct {
 
     pub fn print(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
         try this.console.print(fmt, args);
-        try hal2.serial_writer.print(fmt, args);
+        try hal.serial_writer.print(fmt, args);
     }
 
     pub fn emit(this: *Forth, ch: u8) !void {
         this.console.emit(ch);
-        try hal2.serial_writer.writeByte(ch);
+        try hal.serial_writer.writeByte(ch);
     }
 
     pub fn writer(this: *Forth) fbcons.FrameBufferConsole.Writer {

@@ -1,6 +1,5 @@
 const root = @import("root");
 const debug = @import("../../debug.zig");
-const devicetree = @import("../../devicetree.zig");
 const cpu = @import("../../architecture.zig").cpu;
 const hal = @import("../../hal.zig");
 const registers = @import("registers.zig");
@@ -89,7 +88,7 @@ fn unwindPointLocate(_: *ExceptionContext) *UnwindPoint {
 }
 
 export fn irqCurrentElx(context: *const ExceptionContext) void {
-    hal.interrupt_controller.irqHandle(hal.interrupt_controller, context);
+    hal.interrupt_controller.irqHandle(context);
 }
 
 pub fn irqDisable() void {

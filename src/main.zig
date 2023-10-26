@@ -3,7 +3,6 @@ const config = @import("config");
 
 const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
-const hal2 = @import("hal2.zig");
 const qemu = @import("qemu.zig");
 const heap = @import("heap.zig");
 const frame_buffer = @import("frame_buffer.zig");
@@ -14,7 +13,6 @@ const Forth = forty.Forth;
 const raspi3 = @import("hal/raspi3.zig");
 
 pub const debug = @import("debug.zig");
-pub const devicetree = @import("devicetree.zig");
 
 pub const kinfo = debug.kinfo;
 pub const kwarn = debug.kwarn;
@@ -35,14 +33,13 @@ const mring_space_bytes = 1024 * 1024;
 export var mring_storage: [mring_space_bytes]u8 = undefined;
 pub var mring: debug.MessageBuffer = undefined;
 
-//pub var board = hal.interfaces.BoardInfo{};
-pub var kernel_heap = heap{};
+pub var board = hal.BoardInfo{};
+pub var kernel_heap: heap.Heap = undefined;
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{
-    .serial = &hal2.serial,
+    .serial = hal.serial,
     .fb = &fb,
 };
-pub var board = hal.interfaces.BoardInfo{};
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .sp = undefined,
@@ -62,27 +59,25 @@ fn kernelInit() void {
     mring = debug.MessageBuffer.init(&mring_storage) catch unreachable;
     mring.append("mring init");
 
-    kernel_heap.init(raspi3.device_start - 1);
+    kernel_heap = heap.Heap.init(@intFromPtr(hal.heap_start), hal.heap_end);
     os.page_allocator = kernel_heap.allocator();
 
-    devicetree.init();
-
-    hal.init(devicetree.root_node, &os.page_allocator) catch {
-        //       hal.serial_writer.print("Early init error. Cannot proceed.", .{}) catch {};
+    hal.init(os.page_allocator) catch |err| {
+        kprint("HAL init error {any}\n", .{err});
     };
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, serial
     arch.cpu.exceptions.init();
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
-    hal.video_controller.allocFrameBuffer(hal.video_controller, &fb, 1024, 768, 8, &frame_buffer.default_palette);
+    hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
 
     frame_buffer_console.init();
     console_valid = true;
 
     // State: one core, interrupts, MMU, heap Allocator, display, serial
     board.init(&os.page_allocator);
-    hal2.board_info_controller.inspect(&board);
+    hal.board_info_controller.inspect(&board);
 
     // hal.timer.schedule(200000, printOneDot, &.{});
 
@@ -97,10 +92,10 @@ fn kernelInit() void {
 
     diagnostics() catch |err| {
         kerror(@src(), "Error printing diagnostics: {any}\n", .{err});
-        hal.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
+        hal.serial_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    hal.usb.hostControllerInitialize(hal.usb) catch |err| {
+    hal.usb.hostControllerInitialize() catch |err| {
         kerror(@src(), "USB Host initialization: {any}\n", .{err});
     };
 

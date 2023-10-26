@@ -1,50 +1,115 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-
-const arch = @import("../architecture.zig");
-const hal = @import("../hal.zig");
 const memory = @import("../memory.zig");
 
-pub const bcm_board_info = @import("../drivers/bcm_board_info.zig");
-pub const bcm_dma = @import("../drivers/bcm_dma.zig");
-pub const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
-pub const bcm_peripheral_clocks = @import("../drivers/bcm_peripheral_clocks.zig");
-pub const bcm_video = @import("../drivers/bcm_video_controller.zig");
-pub const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
-pub const pl011 = @import("../drivers/pl011.zig");
-pub const simple_bus = @import("../drivers/simple_bus.zig");
-pub const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
+const memory_map = @import("raspi3/memory_map.zig");
+const peripheral_base = memory_map.peripheral_base;
 
-pub const memory_map = @import("raspi3/memory_map.zig");
-pub const peripheral_base = memory_map.peripheral_base;
-pub const device_start = memory_map.device_start;
+// ARM devices
+const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
+const arm_local_timer = @import("../drivers/arm_local_timer.zig");
+const pl011 = @import("../drivers/pl011.zig");
 
-pub var allocator: *Allocator = undefined;
-pub var soc_bus = simple_bus.SimpleBus{};
-pub var local_interrupt_controller = arm_local_interrupt.LocalInterruptController{};
-pub var mailbox = bcm_mailbox.BroadcomMailbox{};
-pub var peripheral_clock_controller = bcm_peripheral_clocks.PeripheralClockController{};
-pub var dma_controller = bcm_dma.BroadcomDMAController{};
-pub var video_controller = bcm_video.BroadcomVideoController{};
-pub var usb = dwc_otg_usb.UsbController{};
+// Broadcom devices
+const bcm_dma = @import("../drivers/bcm_dma.zig");
+const bcm_gpio = @import("../drivers/bcm_gpio.zig");
+const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
+const bcm_board_info = @import("../drivers/bcm_board_info.zig");
+const bcm_power = @import("../drivers/bcm_power.zig");
+const bcm_video_controller = @import("../drivers/bcm_video_controller.zig");
 
-pub fn init(alloc: *Allocator) !void {
-    allocator = alloc;
+// Other devices
+const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
+const simple_bus = @import("../drivers/simple_bus.zig");
 
-    try soc_bus.deviceTreeParse("soc");
+pub const BoardInfoController = bcm_board_info.BroadcomBoardInfoController;
+pub const BoardInfo = bcm_board_info.BoardInfo;
+pub const board_info_controller = BoardInfoController{
+    .mailbox = &mailbox,
+};
 
-    local_interrupt_controller.init(peripheral_base + 0xb200);
-    hal.interrupt_controller = local_interrupt_controller.controller();
+pub const Clock = arm_local_timer.FreeRunningCounter;
+pub const clock = Clock{
+    .count_low = @ptrFromInt(peripheral_base + 0x3004),
+    .count_high = @ptrFromInt(peripheral_base + 0x3008),
+};
 
-    mailbox.init(peripheral_base + 0xB880, hal.interrupt_controller, &soc_bus.bus_ranges);
-    peripheral_clock_controller.init(&mailbox);
+pub const DMA = bcm_dma.BroadcomDMAController;
+pub const DMAChannel = bcm_dma.DMAChannel;
+pub const DMARequest = bcm_dma.BroadcomDMARequest;
+pub const DMAError = bcm_dma.DMAError;
+pub const dma = DMA{
+    .register_base = peripheral_base + 0x7000,
+    .intc = &interrupt_controller,
+    .interrupt_status = @ptrFromInt(peripheral_base + 0x7000 + 0xfe0),
+    .transfer_enabled = @ptrFromInt(peripheral_base + 0x7000 + 0xff0),
+    .translations = &soc.dma_ranges,
+};
 
-    dma_controller.init(allocator, peripheral_base + 0x7000, hal.interrupt_controller, &soc_bus.dma_ranges);
-    hal.dma_controller = dma_controller.dma();
+pub const InterruptController = arm_local_interrupt.LocalInterruptController;
+pub const interrupt_controller = InterruptController{
+    .registers = @ptrFromInt(peripheral_base + 0xb200),
+};
 
-    video_controller.init(&mailbox, hal.dma_controller);
-    hal.video_controller = video_controller.controller();
+pub const GPIO = bcm_gpio.BroadcomGpio;
+pub const gpio = GPIO{
+    .registers = @ptrFromInt(peripheral_base + 0x200000),
+};
 
-    usb.init(peripheral_base + 0x980000, hal.interrupt_controller, &soc_bus.bus_ranges);
-    hal.usb = usb.usb();
+pub const heap_start = memory_map.heap_start;
+pub const heap_end = memory_map.heap_end;
+
+pub const Mailbox = bcm_mailbox.BroadcomMailbox;
+pub const mailbox = Mailbox{
+    .registers = @ptrFromInt(peripheral_base + 0xB880),
+    .translations = &soc.bus_ranges,
+};
+
+pub const PowerController = bcm_power.BroadcomPowerController;
+pub const PowerResult = bcm_power.PowerResult;
+pub const power_controller = PowerController{
+    .mailbox = &mailbox,
+};
+
+pub const Serial = pl011.Pl011Uart;
+pub const serial = pl011.Pl011Uart{
+    .registers = @ptrFromInt(peripheral_base + 0x201000),
+    .gpio = &gpio,
+};
+
+pub const SOC = simple_bus.SimpleBus;
+pub const soc = SOC{};
+
+pub const Timer = arm_local_timer.Timer;
+pub const TimerCallbackFn = arm_local_timer.TimerCallbackFn;
+pub const timer: [4]Timer = [_]Timer{
+    arm_local_timer.mktimer(0, peripheral_base + 0x3000, interrupt_controller),
+    arm_local_timer.mktimer(1, peripheral_base + 0x3000, interrupt_controller),
+    arm_local_timer.mktimer(2, peripheral_base + 0x3000, interrupt_controller),
+    arm_local_timer.mktimer(3, peripheral_base + 0x3000, interrupt_controller),
+};
+
+pub const USB = dwc_otg_usb.UsbController;
+pub const usb = dwc_otg_usb.UsbController{
+    .registers = @ptrFromInt(peripheral_base + 0x980000),
+    .intc = &interrupt_controller,
+    .power_controller = &power_controller,
+    .translations = &soc.bus_ranges,
+};
+
+pub const VideoController = bcm_video_controller.BroadcomVideoController;
+pub const video_controller = VideoController{
+    .mailbox = &mailbox,
+    .dma = &dma,
+};
+
+pub fn init(allocator: std.mem.Allocator) !void {
+    try soc.init(allocator);
+
+    try soc.appendBusRange(0x7e000000, 0x3f000000, 0x1000000);
+    try soc.appendBusRange(0x40000000, 0x40000000, 0x1000);
+
+    try soc.appendDmaRange(0xc0000000, 0x00, 0x3f000000);
+    try soc.appendDmaRange(0x7e000000, 0x3f000000, 0x1000000);
+
+    dma.init(allocator);
 }

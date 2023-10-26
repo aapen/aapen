@@ -1,19 +1,46 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const bcm_mailbox = @import("bcm_mailbox.zig");
 const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
 const hal = @import("../hal.zig");
-const BoardInfo = hal.interfaces.BoardInfo;
-const BoardInfoController = hal.interfaces.BoardInfoController;
 
 const memory = @import("../memory.zig");
 const Regions = memory.Regions;
 const Region = memory.Region;
 
+pub const BoardInfo = struct {
+    pub const Model = struct {
+        name: []const u8 = undefined,
+        version: ?u8 = null,
+        processor: []const u8 = undefined,
+        memory: ?u32 = null,
+        pcb_revision: ?u32 = null,
+    };
+
+    pub const Device = struct {
+        manufacturer: []const u8 = undefined,
+        serial_number: ?u32 = null,
+        mac_address: ?u32 = null,
+    };
+
+    pub const Memory = struct {
+        regions: memory.Regions = undefined,
+    };
+
+    model: Model = Model{},
+    device: Device = Device{},
+    memory: Memory = Memory{},
+
+    pub fn init(self: *BoardInfo, allocator: *Allocator) void {
+        self.memory.regions = memory.Regions.init(allocator.*);
+    }
+};
+
 pub const BroadcomBoardInfoController = struct {
-    arm_memory_range: *Region,
-    videocore_memory_range: *Region,
     mailbox: *const BroadcomMailbox,
 
     pub fn inspect(self: *const BroadcomBoardInfoController, info: *BoardInfo) void {
@@ -32,11 +59,8 @@ pub const BroadcomBoardInfoController = struct {
         var env = Envelope.init(self.mailbox, &messages);
         _ = env.call() catch 0;
 
-        arm_memory.copy(self.arm_memory_range);
-        vc_memory.copy(self.videocore_memory_range);
-
-        info.memory.regions.append(self.arm_memory_range.*) catch {};
-        info.memory.regions.append(self.videocore_memory_range.*) catch {};
+        // info.memory.regions.append(arm_memory.copy("ARM memory")) catch {};
+        // info.memory.regions.append(vc_memory.copy("VC memory")) catch {};
 
         info.device.mac_address = mac_address.value;
         info.device.serial_number = serial.value;
@@ -157,7 +181,7 @@ const GetMemoryRange = struct {
         self.memory_size = buf[1];
     }
 
-    pub fn copy(self: *const Self, target: *Region) void {
-        target.fromSize(self.memory_base, self.memory_size);
+    pub fn copy(self: *const Self, name: []const u8) Region {
+        return Region.fromSize(name, self.memory_base, self.memory_size);
     }
 };

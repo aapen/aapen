@@ -4,7 +4,6 @@ const assert = std.debug.assert;
 const root = @import("root");
 const kinfo = root.kinfo;
 
-const hal2 = @import("../hal2.zig");
 const hal = @import("../hal.zig");
 
 const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
@@ -64,15 +63,7 @@ pub const BroadcomMailbox = struct {
     };
 
     registers: *volatile Registers = undefined,
-    intc: *hal.interfaces.InterruptController = undefined,
-    intc2: *const local_interrupt_controller.LocalInterruptController = undefined,
-    translations: *const AddressTranslations = undefined,
-
-    pub fn init(self: *BroadcomMailbox, base: u64, interrupt_controller: *hal.interfaces.InterruptController, translations: *AddressTranslations) void {
-        self.registers = @ptrFromInt(base);
-        self.intc = interrupt_controller;
-        self.translations = translations;
-    }
+    translations: *const AddressTranslations,
 
     // ----------------------------------------------------------------------
     // Send and receive messages

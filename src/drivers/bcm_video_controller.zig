@@ -3,10 +3,8 @@ const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
-const hal = @import("../hal.zig");
-const DMAController = hal.interfaces.DMAController;
-const DMAChannel = hal.interfaces.DMAChannel;
-const DMARequest = hal.interfaces.DMARequest;
+const bcm_dma = @import("bcm_dma.zig");
+const BroadcomDMAController = bcm_dma.BroadcomDMAController;
 
 const frame_buffer = @import("../frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
@@ -16,25 +14,10 @@ const Regions = memory.Regions;
 const Region = memory.Region;
 
 pub const BroadcomVideoController = struct {
-    interface: hal.interfaces.VideoController = undefined,
-    mailbox: *BroadcomMailbox = undefined,
-    dma: *DMAController = undefined,
+    mailbox: *const BroadcomMailbox = undefined,
+    dma: *const BroadcomDMAController = undefined,
 
-    pub fn init(self: *BroadcomVideoController, mailbox: *BroadcomMailbox, dma: *DMAController) void {
-        self.interface = .{
-            .allocFrameBuffer = allocFrameBuffer,
-        };
-        self.mailbox = mailbox;
-        self.dma = dma;
-    }
-
-    pub fn controller(self: *BroadcomVideoController) *hal.interfaces.VideoController {
-        return &self.interface;
-    }
-
-    pub fn allocFrameBuffer(intf: *hal.interfaces.VideoController, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, default_palette: []const u32) void {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn allocFrameBuffer(self: *const BroadcomVideoController, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, default_palette: []const u32) void {
         var phys = SizeMessage.physical(xres, yres);
         var virt = SizeMessage.virtual(xres, yres);
         var bpp = DepthMessage.init(depth);
@@ -62,9 +45,9 @@ pub const BroadcomVideoController = struct {
         fb.xres = xres;
         fb.yres = yres;
         fb.bpp = bpp.get_bpp();
-        fb.range.fromSize(base_in_arm_address_space, alloc.get_buffer_size());
+        fb.range = Region.fromSize("Frame buffer", base_in_arm_address_space, alloc.get_buffer_size());
         fb.dma = self.dma;
-        fb.dma_channel = self.dma.reserveChannel(self.dma) catch null;
+        fb.dma_channel = self.dma.reserveChannel() catch null;
     }
 };
 
