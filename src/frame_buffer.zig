@@ -8,7 +8,20 @@ const DMARequest = hal.interfaces.DMARequest;
 
 const Region = @import("memory.zig").Region;
 
+const CharBits = @Vector(8, bool);
+
 const character_rom = @embedFile("data/character_rom.bin");
+const character_count = character_rom.len;
+
+// initialized from character_rom when the frame buffer is initialized
+const character_rombits: [character_rom.len]CharBits = init: {
+    @setEvalBranchQuota(character_rom.len);
+    var initial_value: [character_rom.len]CharBits = undefined;
+    inline for (0..character_count) |i| {
+        initial_value[i] = @bitCast(@bitReverse(character_rom[i]));
+    }
+    break :init initial_value;
+};
 
 pub const default_palette = [_]u32{
     0x00000000,
@@ -79,7 +92,6 @@ pub const FrameBuffer = struct {
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
     const CharRow = @Vector(8, u8);
-    const CharBits = @Vector(8, bool);
 
     pub fn drawChar(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {
         var romidx: usize = @as(usize, ch - 32) * 16;
@@ -93,7 +105,7 @@ pub const FrameBuffer = struct {
         const foregv: CharRow = @splat(self.fg);
 
         inline for (0..16) |_| {
-            const rowbits: CharBits = @bitCast(@bitReverse(character_rom[romidx]));
+            const rowbits: CharBits = character_rombits[romidx];
             const row = @select(u8, rowbits, foregv, backgv);
             (self.base + fbidx)[0..8].* = row;
             fbidx += line_stride;
@@ -115,8 +127,8 @@ pub const FrameBuffer = struct {
         var line_stride = self.pitch;
         var fbidx = x + (y * line_stride);
 
-        for (0..16) |_| {
-            for (0..8) |_| {
+        inline for (0..16) |_| {
+            inline for (0..8) |_| {
                 self.base[fbidx] = self.bg;
                 fbidx += 1;
             }
