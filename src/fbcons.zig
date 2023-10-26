@@ -7,6 +7,8 @@ const kprint = root.kprint;
 const frame_buffer = @import("frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
 
+const hal2 = @import("hal2.zig");
+
 const hal = @import("hal.zig");
 const VideoController = hal.common.VideoController;
 const Serial = hal.interfaces.Serial;
@@ -22,10 +24,9 @@ pub const FrameBufferConsole = struct {
     width: u64 = undefined,
     height: u64 = undefined,
     fb: *FrameBuffer = undefined,
-    serial: *Serial = undefined,
+    serial: *const hal2.Serial,
 
-    pub fn init(self: *FrameBufferConsole, serial: *Serial) void {
-        self.serial = serial;
+    pub fn init(self: *FrameBufferConsole) void {
         self.xpos = 0;
         self.ypos = 0;
         self.width = @truncate(self.fb.xres / 8);
@@ -176,30 +177,30 @@ pub const FrameBufferConsole = struct {
     }
 
     pub fn getc(self: *FrameBufferConsole) u8 {
-        var ch = self.serial.getc(self.serial);
+        var ch = self.serial.getc();
         return if (ch == '\r') '\n' else ch;
     }
 
     pub fn putc(self: *FrameBufferConsole, ch: u8) void {
         switch (ch) {
             '\n' => {
-                _ = self.serial.putc(self.serial, '\r');
-                _ = self.serial.putc(self.serial, '\n');
+                _ = self.serial.putc('\r');
+                _ = self.serial.putc('\n');
             },
             0x7f => {
-                _ = self.serial.putc(self.serial, 0x08);
-                _ = self.serial.putc(self.serial, ' ');
-                _ = self.serial.putc(self.serial, 0x08);
+                _ = self.serial.putc(0x08);
+                _ = self.serial.putc(' ');
+                _ = self.serial.putc(0x08);
             },
             else => {
-                _ = self.serial.putc(self.serial, ch);
+                _ = self.serial.putc(ch);
             },
         }
         self.emit(ch);
     }
 
     pub fn char_available(self: *FrameBufferConsole) bool {
-        return self.serial.hasc(self.serial);
+        return self.serial.hasc();
     }
 };
 

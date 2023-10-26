@@ -1,2 +1,2 @@
-// this is a placeholder value
-pub const model = "Raspi3";
+const common = @import("common.zig");
+pub const board = common.Boards.pi3;

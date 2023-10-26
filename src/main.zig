@@ -3,6 +3,7 @@ const config = @import("config");
 
 const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
+const hal2 = @import("hal2.zig");
 const qemu = @import("qemu.zig");
 const heap = @import("heap.zig");
 const frame_buffer = @import("frame_buffer.zig");
@@ -37,7 +38,10 @@ pub var mring: debug.MessageBuffer = undefined;
 pub var board = hal.interfaces.BoardInfo{};
 pub var kernel_heap = heap{};
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
-pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
+pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{
+    .serial = &hal2.serial,
+    .fb = &fb,
+};
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .sp = undefined,
@@ -46,11 +50,14 @@ pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .lr = undefined,
 };
 
-pub var uart_valid = false;
+pub const uart_valid = true;
 pub var console_valid = false;
 
 fn kernelInit() void {
-    // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
+    // State: one core, no interrupts, no MMU, no heap Allocator, no
+    // display, serial
+    kprint("serial init OK", .{});
+
     arch.cpu.mmu.init();
 
     mring = debug.MessageBuffer.init(&mring_storage) catch unreachable;
@@ -62,28 +69,23 @@ fn kernelInit() void {
     devicetree.init();
 
     hal.init(devicetree.root_node, &os.page_allocator) catch {
-        hal.serial_writer.print("Early init error. Cannot proceed.", .{}) catch {};
+        //       hal.serial_writer.print("Early init error. Cannot proceed.", .{}) catch {};
     };
 
-    // State: one core, no interrupts, MMU, heap Allocator, no display, no serial
+    // State: one core, no interrupts, MMU, heap Allocator, no display, serial
     arch.cpu.exceptions.init();
-
-    // State: one core, interrupts, MMU, heap Allocator, no display, no serial
-    uart_valid = true;
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
     hal.video_controller.allocFrameBuffer(hal.video_controller, &fb, 1024, 768, 8, &frame_buffer.default_palette);
 
-    frame_buffer_console.init(hal.serial);
+    frame_buffer_console.init();
     console_valid = true;
 
+    // State: one core, interrupts, MMU, heap Allocator, display, serial
     board.init(&os.page_allocator);
     hal.info_controller.inspect(hal.info_controller, &board);
 
     // hal.timer.schedule(200000, printOneDot, &.{});
-
-    // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial, logging available
 
     kprint("Board model {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,

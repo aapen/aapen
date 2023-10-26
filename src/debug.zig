@@ -6,6 +6,8 @@ const RingBuffer = std.RingBuffer;
 const root = @import("root");
 const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
+const hal2 = @import("hal2.zig");
+const sprint = hal2.serial_writer.print;
 
 const serial_log_level: u2 = 1;
 const log_level: u2 = 1;
@@ -25,8 +27,8 @@ inline fn serial_log_info() bool {
 pub fn kinfo(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (serial_log_info()) {
         if (root.uart_valid) {
-            hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-            hal.serial_writer.print(fmt, args) catch {};
+            hal2.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            hal2.serial_writer.print(fmt, args) catch {};
         }
     }
     if (log_info()) {
@@ -48,8 +50,8 @@ inline fn serial_log_warnings() bool {
 pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (serial_log_warnings()) {
         if (root.uart_valid) {
-            hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-            hal.serial_writer.print(fmt, args) catch {};
+            hal2.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+            hal2.serial_writer.print(fmt, args) catch {};
         }
     }
     if (log_warnings()) {
@@ -62,8 +64,8 @@ pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8,
 
 pub fn kerror(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (root.uart_valid) {
-        hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-        hal.serial_writer.print(fmt, args) catch {};
+        hal2.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
+        hal2.serial_writer.print(fmt, args) catch {};
     }
 
     if (root.console_valid) {
@@ -74,7 +76,7 @@ pub fn kerror(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8
 
 pub fn kprint(comptime fmt: []const u8, args: anytype) void {
     if (root.uart_valid) {
-        hal.serial_writer.print(fmt, args) catch {};
+        hal2.serial_writer.print(fmt, args) catch {};
     }
 
     if (root.console_valid) {
