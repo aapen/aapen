@@ -18,6 +18,9 @@ pub const gpio = board_support.gpio;
 pub const InterruptController = board_support.InterruptController;
 pub const interrupt_controller = board_support.interrupt_controller;
 
+pub const PowerController = board_support.PowerController;
+pub const power_controller = board_support.power_controller;
+
 pub const Serial = board_support.Serial;
 pub const serial = board_support.serial;
 

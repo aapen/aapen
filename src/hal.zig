@@ -11,7 +11,6 @@ pub var interrupt_controller: *interfaces.InterruptController = undefined;
 pub var timer: *interfaces.Timer = undefined;
 pub var usb: *interfaces.USB = undefined;
 pub var video_controller: *interfaces.VideoController = undefined;
-pub var power_controller: *interfaces.PowerController = undefined;
 
 pub fn init(root: *devicetree.Fdt.Node, allocator: *Allocator) !void {
     try detect.detectAndInit(root, allocator);

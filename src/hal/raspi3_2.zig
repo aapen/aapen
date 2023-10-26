@@ -13,6 +13,7 @@ const simple_bus = @import("../drivers/simple_bus.zig");
 const bcm_gpio = @import("../drivers/bcm_gpio.zig");
 const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
 const bcm_board_info = @import("../drivers/bcm_board_info.zig");
+const bcm_power = @import("../drivers/bcm_power.zig");
 
 pub var arm_memory_range = memory.Region{ .name = "ARM memory" };
 pub var videocore_memory_range = memory.Region{ .name = "Videocore memory" };
@@ -39,6 +40,11 @@ pub const mailbox = Mailbox{
     .registers = @ptrFromInt(peripheral_base + 0xB880),
     .intc2 = &interrupt_controller,
     .translations = &soc.bus_ranges,
+};
+
+pub const PowerController = bcm_power.BroadcomPowerController;
+pub const power_controller = PowerController{
+    .mailbox = &mailbox,
 };
 
 pub const Serial = pl011.Pl011Uart;

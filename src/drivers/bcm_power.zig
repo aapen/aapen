@@ -1,5 +1,4 @@
 const hal = @import("../hal.zig");
-const PowerController = hal.interfaces.PowerController;
 const PowerResult = hal.interfaces.PowerResult;
 
 const bcm_mailbox = @import("bcm_mailbox.zig");
@@ -8,21 +7,7 @@ const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
 pub const BroadcomPowerController = struct {
-    interface: PowerController = undefined,
-    mailbox: *BroadcomMailbox = undefined,
-
-    pub fn init(self: *BroadcomPowerController, mailbox: *BroadcomMailbox) void {
-        self.interface = .{
-            .powerOn = powerOn,
-            .powerOff = powerOff,
-            .isPowered = isPowered,
-        };
-        self.mailbox = mailbox;
-    }
-
-    pub fn controller(self: *BroadcomPowerController) *PowerController {
-        return &self.interface;
-    }
+    mailbox: *const BroadcomMailbox = undefined,
 
     fn decode(state: u32) PowerResult {
         var no_device = (state & 0x02) != 0;
@@ -112,9 +97,7 @@ pub const BroadcomPowerController = struct {
         ccp2tx = 8,
     };
 
-    pub fn isPowered(intf: *PowerController, power_domain: u32) PowerResult {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn isPowered(self: *const BroadcomPowerController, power_domain: u32) PowerResult {
         const device: PowerDevice = @enumFromInt(power_domain);
 
         var power_query = QueryMessage.init(device);
@@ -125,8 +108,7 @@ pub const BroadcomPowerController = struct {
         return power_query.state;
     }
 
-    pub fn powerOn(intf: *PowerController, power_domain: u32) PowerResult {
-        const self = @fieldParentPtr(@This(), "interface", intf);
+    pub fn powerOn(self: *const BroadcomPowerController, power_domain: u32) PowerResult {
         const device: PowerDevice = @enumFromInt(power_domain);
 
         var power_control = ControlMessage.init(device);
@@ -137,8 +119,7 @@ pub const BroadcomPowerController = struct {
         return power_control.state;
     }
 
-    pub fn powerOff(intf: *PowerController, power_domain: u32) PowerResult {
-        const self = @fieldParentPtr(@This(), "interface", intf);
+    pub fn powerOff(self: *const BroadcomPowerController, power_domain: u32) PowerResult {
         const device: PowerDevice = @enumFromInt(power_domain);
 
         var power_control = ControlMessage.init(device);

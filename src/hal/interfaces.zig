@@ -18,7 +18,6 @@ pub const IrqId = interrupt_controller.IrqId;
 pub const IrqHandlerFn = interrupt_controller.IrqHandlerFn;
 
 const power_controller = @import("interfaces/power_controller.zig");
-pub const PowerController = power_controller.PowerController;
 pub const PowerResult = power_controller.PowerResult;
 
 const usb = @import("interfaces/usb.zig");

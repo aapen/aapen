@@ -2,9 +2,10 @@ const std = @import("std");
 const root = @import("root");
 const kprint = root.kprint;
 
+const hal2 = @import("../hal2.zig");
+
 const hal = @import("../hal.zig");
 const InterruptController = hal.interfaces.InterruptController;
-const PowerController = hal.interfaces.PowerController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -94,7 +95,6 @@ pub const UsbController = struct {
     core_registers: *volatile CoreRegisters = undefined,
     intc: *InterruptController = undefined,
     translations: *AddressTranslations = undefined,
-    power_controller: *PowerController = undefined,
 
     // TODO initialize the clock
     // TODO initialize the phy interface
@@ -103,7 +103,6 @@ pub const UsbController = struct {
         base: u64,
         interrupt_controller: *InterruptController,
         translations: *AddressTranslations,
-        power_controller: *PowerController,
     ) void {
         self.interface = .{
             .powerOn = powerOn,
@@ -113,7 +112,6 @@ pub const UsbController = struct {
         self.core_registers = @ptrFromInt(base);
         self.intc = interrupt_controller;
         self.translations = translations;
-        self.power_controller = power_controller;
     }
 
     pub fn usb(self: *UsbController) *hal.interfaces.USB {
@@ -122,13 +120,15 @@ pub const UsbController = struct {
 
     fn powerOn(intf: *hal.interfaces.USB) void {
         const self = @fieldParentPtr(@This(), "interface", intf);
-        const usb_power_result = self.power_controller.powerOn(self.power_controller, 3);
+        _ = self;
+        const usb_power_result = hal2.power_controller.powerOn(3);
         kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     }
 
     fn powerOff(intf: *hal.interfaces.USB) void {
         const self = @fieldParentPtr(@This(), "interface", intf);
-        const usb_power_result = self.power_controller.powerOff(self.power_controller, 3);
+        _ = self;
+        const usb_power_result = hal2.power_controller.powerOff(3);
         kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     }
 
