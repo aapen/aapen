@@ -9,6 +9,9 @@ const board_support = switch (config.board) {
 pub const BoardInfoController = board_support.BoardInfoController;
 pub const board_info_controller = board_support.board_info_controller;
 
+pub const Clock = board_support.Clock;
+pub const clock = board_support.clock;
+
 pub const GPIO = board_support.GPIO;
 pub const gpio = board_support.gpio;
 

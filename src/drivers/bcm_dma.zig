@@ -4,8 +4,10 @@ const kwarn = root.kwarn;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const hal2 = @import("../hal2.zig");
+
 const hal = @import("../hal.zig");
-const Clock = hal.interfaces.Clock;
+//const Clock = hal.interfaces.Clock;
 const DMAChannel = hal.interfaces.DMAChannel;
 const DMAController = hal.interfaces.DMAController;
 const DMAError = hal.interfaces.DMAError;
@@ -118,7 +120,7 @@ pub const BroadcomDMAController = struct {
     };
 
     interface: DMAController = undefined,
-    clock: *Clock = undefined,
+    //    clock: *Clock = undefined,
     allocator: *Allocator = undefined,
     register_base: u64 = undefined,
     dma_translations: *AddressTranslations = undefined,
@@ -127,7 +129,7 @@ pub const BroadcomDMAController = struct {
     intc: *InterruptController = undefined,
     in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
 
-    pub fn init(self: *BroadcomDMAController, allocator: *Allocator, base: u64, interrupt_controller: *InterruptController, dma_translations: *AddressTranslations, clock: *Clock) void {
+    pub fn init(self: *BroadcomDMAController, allocator: *Allocator, base: u64, interrupt_controller: *InterruptController, dma_translations: *AddressTranslations) void {
         self.interface = .{
             .createRequest = createRequest,
             .destroyRequest = destroyRequest,
@@ -139,7 +141,7 @@ pub const BroadcomDMAController = struct {
 
         self.allocator = allocator;
         self.dma_translations = dma_translations;
-        self.clock = clock;
+        //        self.clock = clock;
         self.register_base = base;
         self.interrupt_status = @ptrFromInt(base + 0xfe0);
         self.transfer_enabled = @ptrFromInt(base + 0xff0);
@@ -256,6 +258,7 @@ pub const BroadcomDMAController = struct {
     /// an error happened
     fn awaitChannel(intf: *DMAController, channel: DMAChannel) bool {
         const self = @fieldParentPtr(@This(), "interface", intf);
+        _ = self;
 
         // apply a timeout. for now this is a fixed delay, but it will
         // need to be a parameter in the future.
@@ -265,14 +268,14 @@ pub const BroadcomDMAController = struct {
         //
         // would be nice to have a general 'watchdog' facility that we
         // could apply to any word
-        const start_time = self.clock.ticks(self.clock);
+        const start_time = hal2.clock.ticks();
         const deadline = start_time + 1_500_000;
 
         const context: *ChannelContext = @ptrCast(@alignCast(channel.context));
         const channel_registers = context.registers;
 
         var current_time = start_time;
-        while (channel_registers.control.active == 0b1) : (current_time = self.clock.ticks(self.clock)) {
+        while (channel_registers.control.active == 0b1) : (current_time = hal2.clock.ticks()) {
             if (current_time >= deadline) {
                 kwarn(@src(), "DMA on channel {} exceeded timeout by {d}\n", .{ context.id, (current_time - deadline) });
                 return false;

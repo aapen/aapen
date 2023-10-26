@@ -4,7 +4,8 @@ pub const peripheral_base: u64 = 0x3f00_0000;
 const memory = @import("../memory.zig");
 
 // ARM devices
-pub const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
+const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
+const arm_local_timer = @import("../drivers/arm_local_timer.zig");
 const pl011 = @import("../drivers/pl011_2.zig");
 
 // Broadcom devices
@@ -49,4 +50,10 @@ pub const serial = pl011.Pl011Uart{
 pub const SOC = simple_bus.SimpleBus;
 pub const soc = SOC{
     //    .bus_ranges = null,
+};
+
+pub const Clock = arm_local_timer.FreeRunningCounter;
+pub const clock = Clock{
+    .count_low = @ptrFromInt(peripheral_base + 0x3004),
+    .count_high = @ptrFromInt(peripheral_base + 0x3008),
 };

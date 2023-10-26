@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const hal2 = @import("../hal2.zig");
 const hal = @import("../hal.zig");
 
 const frame_buffer = @import("../frame_buffer.zig");
@@ -88,7 +89,7 @@ pub fn wordKeyMaybe(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
 
 /// -- n
 pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var ticks = hal.clock.ticks(hal.clock);
+    var ticks = hal2.clock.ticks();
     try forth.stack.push(ticks);
     return 0;
 }

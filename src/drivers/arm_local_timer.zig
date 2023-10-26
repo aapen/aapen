@@ -1,37 +1,22 @@
+const hal2 = @import("../hal2.zig");
+
 const hal = @import("../hal.zig");
 const InterruptController = hal.interfaces.InterruptController;
 const IrqId = hal.interfaces.IrqId;
 
 const interrupts = @import("arm_local_interrupt_controller.zig");
 
-const FreeRunningCounter = struct {
-    interface: hal.interfaces.Clock = undefined,
-
+pub const FreeRunningCounter = struct {
     count_low: *volatile u32,
     count_high: *volatile u32,
 
-    pub fn init(self: *FreeRunningCounter, timer_base: u64) void {
-        self.interface = .{
-            .ticks = ticks,
-        };
-
-        self.count_low = @ptrFromInt(timer_base + 0x04);
-        self.count_high = @ptrFromInt(timer_base + 0x08);
-    }
-
-    pub fn clock(self: *FreeRunningCounter) *hal.interfaces.Clock {
-        return &self.interface;
-    }
-
-    fn ticks(intf: *hal.interfaces.Clock) u64 {
-        const self = @fieldParentPtr(@This(), "interface", intf);
-
+    pub fn ticks(self: *const FreeRunningCounter) u64 {
         const low: u32 = self.count_low.*;
         const high: u32 = self.count_high.*;
         return @as(u64, high) << 32 | low;
     }
 
-    pub fn ticksReadLow(self: *FreeRunningCounter) u32 {
+    pub fn ticksReadLow(self: *const FreeRunningCounter) u32 {
         return self.count_low.*;
     }
 };
@@ -104,7 +89,7 @@ pub const Timer = struct {
         const self = @fieldParentPtr(@This(), "interface", intf);
 
         self.disable();
-        const tick = counter.ticksReadLow();
+        const tick = hal2.clock.ticksReadLow();
 
         // we ignore overflow because the counter will wrap around the
         // same way the compare value does.
@@ -124,7 +109,7 @@ pub const Timer = struct {
 
         if (next_delta >= 0) {
             // repeating, reset the schedule
-            const tick = counter.ticksReadLow();
+            const tick = hal2.clock.ticksReadLow();
             const next_tick = @addWithOverflow(tick, next_delta)[0];
             self.compare.* = next_tick;
         } else {
@@ -135,12 +120,10 @@ pub const Timer = struct {
     }
 };
 
-pub var counter: FreeRunningCounter = undefined;
 pub var timers: [4]Timer = undefined;
 
 pub fn init(system_timer_base: u64, intc: *InterruptController) void {
     // TODO externalize this constant
-    counter.init(system_timer_base);
     inline for (0..3) |timer_id| {
         timers[timer_id].init(system_timer_base, intc, timer_id, interrupts.mkid(0, timer_id));
     }

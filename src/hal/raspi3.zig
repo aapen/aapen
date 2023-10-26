@@ -43,7 +43,6 @@ pub fn init(alloc: *Allocator) !void {
 
     timer.init(peripheral_base + 0x3000, hal.interrupt_controller);
     hal.timer = timer.timers[1].timer();
-    hal.clock = timer.counter.clock();
 
     gpio.init(peripheral_base + 0x200000);
 
@@ -53,7 +52,7 @@ pub fn init(alloc: *Allocator) !void {
     power_controller.init(&mailbox);
     hal.power_controller = power_controller.controller();
 
-    dma_controller.init(allocator, peripheral_base + 0x7000, hal.interrupt_controller, &soc_bus.dma_ranges, hal.clock);
+    dma_controller.init(allocator, peripheral_base + 0x7000, hal.interrupt_controller, &soc_bus.dma_ranges);
     hal.dma_controller = dma_controller.dma();
 
     video_controller.init(&mailbox, hal.dma_controller);
