@@ -54,7 +54,7 @@ dirs:
 
 kernels: $(KERNEL_FILES)
 
-zig-out/kernel-%.img: $(SOURCES)
+zig-out/kernel-%.img: $(SRCS)
 	$(ZIG) build -Dboard=$(*F) -Dimage=kernel-$(*F) $(ZIG_BUILD_ARGS)
 
 download_firmware: firmware/COPYING.linux

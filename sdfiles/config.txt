@@ -14,3 +14,15 @@ boot_delay=5
 
 # Disable bluetooth as it conflicts with the UART
 dtoverlay=disable-bt
+
+[pi3]
+kernel=kernel-pi3.img
+
+[pi4]
+kernel=kernel-pi4.img
+
+[pi400]
+kernel=kernel-pi400.img                   
+
+[pi5]
+kernel=kernel-pi5.img

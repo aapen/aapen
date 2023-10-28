@@ -18,7 +18,7 @@ const memory_map = @import("../hal/raspi3/memory_map.zig");
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 // ----------------------------------------------------------------------
-// Host channel registers
+// Host controller registers
 // ----------------------------------------------------------------------
 
 const HostChannelRegisters = extern struct {
@@ -44,39 +44,39 @@ const HostRegisters = extern struct {
 };
 
 const CoreRegisters = extern struct {
-    gotgctl: u32 = 0,
-    gotgint: u32 = 0,
-    gahbcfg: u32 = 0,
-    gusbcfg: u32 = 0,
-    grstctl: u32 = 0,
-    gintsts: u32 = 0,
-    gintmsk: u32 = 0,
-    grxstsr: u32 = 0,
-    grxstsp: u32 = 0,
-    grxfsiz: u32 = 0,
-    gnptxfsiz: u32 = 0,
-    gnptxsts: u32 = 0,
-    gi2cctl: u32 = 0,
-    gpvndctl: u32 = 0,
-    ggpio: u32 = 0,
-    guid: u32 = 0,
-    gsnpsid: u32 = 0,
-    ghwcfg1: u32 = 0,
-    ghwcfg2: u32 = 0,
-    ghwcfg3: u32 = 0,
-    ghwcfg4: u32 = 0,
-    glpmcfg: u32 = 0,
-    _pad_0x58_0x9c: [42]u32,
-    hptxfsiz: u32 = 0,
-    dptxfsiz_dieptxf: [15]u32,
-    _pad_0x140_0x3fc: [176]u32,
-    host_regs: u32 = 0,
+    gotgctl: u32 = 0, // 0x00
+    gotgint: u32 = 0, // 0x04
+    gahbcfg: u32 = 0, // 0x08
+    gusbcfg: u32 = 0, // 0x0c
+    grstctl: u32 = 0, // 0x10
+    gintsts: u32 = 0, // 0x14
+    gintmsk: u32 = 0, // 0x18
+    grxstsr: u32 = 0, // 0x1c
+    grxstsp: u32 = 0, // 0x20
+    grxfsiz: u32 = 0, // 0x24
+    gnptxfsiz: u32 = 0, // 0x28
+    gnptxsts: u32 = 0, // 0x2c
+    gi2cctl: u32 = 0, // 0x30
+    gpvndctl: u32 = 0, // 0x34
+    ggpio: u32 = 0, // 0x38
+    guid: u32 = 0, // 0x3c
+    gsnpsid: u32 = 0, // 0x40
+    ghwcfg1: u32 = 0, // 0x44
+    ghwcfg2: u32 = 0, // 0x48
+    ghwcfg3: u32 = 0, // 0x4c
+    ghwcfg4: u32 = 0, // 0x50
+    glpmcfg: u32 = 0, // 0x54
+    _pad_0x58_0x9c: [42]u32, // 0x58 .. 0xfc
+    hptxfsiz: u32 = 0, // 0x100
+    dptxfsiz_dieptxf: [15]u32, // 0x104 .. 0x140
+    _pad_0x140_0x3fc: [176]u32, // 0x144 .. 0x3fc
+    host_regs: HostRegisters, // 0x400
     _pad_0x420_0x43c: [8]u32,
-    hprt0: u32 = 0,
+    hprt0: u32 = 0, // 0x440
     _pad_0x444_0x4fc: [47]u32,
-    hc_regs: [16]u32,
+    hc_regs: HostChannelRegisters, // 0x500
     _pad_0x700_0xe00: [448]u32,
-    pcgcctl: u32 = 0,
+    pcgcctl: u32 = 0, // 0xe00
 };
 
 // snpsid = readl(&regs->gsnpsid);
