@@ -601,4 +601,5 @@ mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 "READY" s. cr
 cr cr
 
+"Forty REPL" s. cr cr
 repl-loop
