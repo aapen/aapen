@@ -248,17 +248,14 @@
 
 ### Logic and Loops
 
-* repeat:  n -- :repeat the body n times.
-* times:   -- : End of repeat loop
+* n times ... repeat  : Repeat the body n times, with the rstack TOS going from 0 to n-1.
 
+* a b for-each ... repeat : Repeat the body b-a times, with the rstack TOS going from a to b-1.
 
-* while:  -- :Compile the head of a while loop.
-* do:  -- :Compile the condition part of a while loop.
-* done:  -- :Compile the end of a while loop.
+* while <condition> do <body> done : While loop.
 
-* if:  -- :If statement
-* else:  -- :Part of if/else/endif
-* endif:  -- :Part of if/else/endif
+* if <condition> then <body> endif
+* if <condition> then <body> else <body2> endif
 
 ### Word definition
 
