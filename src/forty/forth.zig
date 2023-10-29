@@ -357,6 +357,11 @@ pub const Forth = struct {
             }
             const p: *Header = @ptrFromInt(body[i]);
             try forth.trace("Call: {x} {s}\n", .{ body[i], p.name });
+            try forth.trace("{:4}: Stack: ", .{i});
+            for (forth.stack.items()) |item| {
+                try forth.trace("{}\t", .{item});
+            }
+            try forth.trace("\n", .{});
             const delta = try p.func(forth, body, i, p);
             var new_i: i64 = @intCast(i);
             new_i = new_i + 1 + delta;
