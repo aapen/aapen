@@ -88,9 +88,12 @@ pub const timer: [4]Timer = [_]Timer{
     arm_local_timer.mktimer(3, peripheral_base + 0x3000, interrupt_controller),
 };
 
+const usb_base = peripheral_base + 0x980000;
+
 pub const USB = dwc_otg_usb.UsbController;
 pub const usb = dwc_otg_usb.UsbController{
-    .registers = @ptrFromInt(peripheral_base + 0x980000),
+    .core_registers = @ptrFromInt(usb_base),
+    .host_registers = @ptrFromInt(usb_base + 0x400),
     .intc = &interrupt_controller,
     .power_controller = &power_controller,
     .translations = &soc.bus_ranges,
