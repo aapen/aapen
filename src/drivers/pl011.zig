@@ -184,13 +184,13 @@ pub const Pl011Uart = struct {
     registers: *volatile Registers,
     gpio: *const BroadcomGpio,
 
-    pub fn init(self: *Pl011Uart) void {
+    pub fn init(self: *const Pl011Uart) void {
         // Configure GPIO pins for serial I/O
-        self.gpio.pins[14].enable();
-        self.gpio.pins[15].enable();
+        self.gpio.enable(&bcm_gpio.pins[14]);
+        self.gpio.enable(&bcm_gpio.pins[15]);
 
-        self.gpio.pins[14].selectFunction(.alt0);
-        self.gpio.pins[15].selectFunction(.alt0);
+        self.gpio.selectFunction(&bcm_gpio.pins[14], .alt0);
+        self.gpio.selectFunction(&bcm_gpio.pins[15], .alt0);
 
         // Turn UART off while initializing
         self.registers.control.uart_enable = .disable;

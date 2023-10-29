@@ -111,5 +111,6 @@ pub fn init(allocator: std.mem.Allocator) !void {
     try soc.appendDmaRange(0xc0000000, 0x00, 0x3f000000);
     try soc.appendDmaRange(0x7e000000, 0x3f000000, 0x1000000);
 
+    serial.init();
     dma.init(allocator);
 }
