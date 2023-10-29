@@ -5,6 +5,18 @@ const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const Message = BroadcomMailbox.Message;
 const Envelope = BroadcomMailbox.Envelope;
 
+pub const PowerDevice = enum(u32) {
+    sdhci = 0,
+    uart0 = 1,
+    uart1 = 2,
+    usb_hcd = 3,
+    i2c0 = 4,
+    i2c1 = 5,
+    i2c2 = 6,
+    spi = 7,
+    ccp2tx = 8,
+};
+
 pub const PowerResult = enum {
     unknown,
     failed,
@@ -92,21 +104,7 @@ pub const BroadcomPowerController = struct {
         }
     };
 
-    pub const PowerDevice = enum(u32) {
-        sdhci = 0,
-        uart0 = 1,
-        uart1 = 2,
-        usb_hcd = 3,
-        i2c0 = 4,
-        i2c1 = 5,
-        i2c2 = 6,
-        spi = 7,
-        ccp2tx = 8,
-    };
-
-    pub fn isPowered(self: *const BroadcomPowerController, power_domain: u32) PowerResult {
-        const device: PowerDevice = @enumFromInt(power_domain);
-
+    pub fn isPowered(self: *const BroadcomPowerController, device: PowerDevice) PowerResult {
         var power_query = QueryMessage.init(device);
         var messages = [_]Message{power_query.message()};
         var env = Envelope.init(self.mailbox, &messages);
@@ -115,9 +113,7 @@ pub const BroadcomPowerController = struct {
         return power_query.state;
     }
 
-    pub fn powerOn(self: *const BroadcomPowerController, power_domain: u32) PowerResult {
-        const device: PowerDevice = @enumFromInt(power_domain);
-
+    pub fn powerOn(self: *const BroadcomPowerController, device: PowerDevice) PowerResult {
         var power_control = ControlMessage.init(device);
         var messages = [_]Message{power_control.message()};
         var env = Envelope.init(self.mailbox, &messages);
@@ -126,9 +122,7 @@ pub const BroadcomPowerController = struct {
         return power_control.state;
     }
 
-    pub fn powerOff(self: *const BroadcomPowerController, power_domain: u32) PowerResult {
-        const device: PowerDevice = @enumFromInt(power_domain);
-
+    pub fn powerOff(self: *const BroadcomPowerController, device: PowerDevice) PowerResult {
         var power_control = ControlMessage.init(device);
         power_control.desired_state = .off;
         var messages = [_]Message{power_control.message()};

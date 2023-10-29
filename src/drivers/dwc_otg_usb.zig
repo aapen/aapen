@@ -1,6 +1,7 @@
 const std = @import("std");
 const root = @import("root");
 const kprint = root.kprint;
+const kwarn = root.kwarn;
 
 const hal = @import("../hal.zig");
 
@@ -17,6 +18,16 @@ const mailbox = @import("bcm_mailbox.zig");
 const memory_map = @import("../hal/raspi3/memory_map.zig");
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
+
+pub const Error = error{
+    IncorrectDevice,
+};
+
+const snpsid = packed struct {
+    device_minor_rev: u12 = 0,
+    device_series: u4 = 0,
+    device_vendor_id: u16 = 0, // (maybe this is the vendor id?)
+};
 
 // ----------------------------------------------------------------------
 // Host controller registers
@@ -61,7 +72,7 @@ const CoreRegisters = extern struct {
     gpvndctl: u32 = 0, // 0x34
     ggpio: u32 = 0, // 0x38
     guid: u32 = 0, // 0x3c
-    gsnpsid: u32 = 0, // 0x40
+    gsnpsid: snpsid, // 0x40
     ghwcfg1: u32 = 0, // 0x44
     ghwcfg2: u32 = 0, // 0x48
     ghwcfg3: u32 = 0, // 0x4c
@@ -80,15 +91,6 @@ const CoreRegisters = extern struct {
     pcgcctl: u32 = 0, // 0xe00
 };
 
-// snpsid = readl(&regs->gsnpsid);
-// dev_info(dev, "Core Release: %x.%03x\n",
-// 	 snpsid >> 12 & 0xf, snpsid & 0xfff);
-
-// if ((snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_2xx &&
-//     (snpsid & DWC2_SNPSID_DEVID_MASK) != DWC2_SNPSID_DEVID_VER_3xx) {
-// 	dev_info(dev, "SNPSID invalid (not DWC2 OTG device): %08x\n",
-// 		 snpsid);
-
 pub const UsbController = struct {
     registers: *volatile CoreRegisters,
     intc: *const local_interrupt_controller.LocalInterruptController,
@@ -96,12 +98,12 @@ pub const UsbController = struct {
     power_controller: *const bcm_power.BroadcomPowerController,
 
     pub fn powerOn(self: *const UsbController) void {
-        const usb_power_result = self.power_controller.powerOn(3);
+        const usb_power_result = self.power_controller.powerOn(.usb_hcd);
         kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     }
 
     pub fn powerOff(self: *const UsbController) void {
-        const usb_power_result = self.power_controller.powerOff(3);
+        const usb_power_result = self.power_controller.powerOff(.usb_hcd);
         kprint("\n{s:>20}: {s}\n", .{ "Power on USB", @tagName(usb_power_result) });
     }
 
@@ -109,9 +111,12 @@ pub const UsbController = struct {
         self.powerOn();
 
         const id = self.registers.gsnpsid;
-        const major = (id >> 12) & 0xf;
-        const minor = id & 0xfff;
 
-        kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ major, minor });
+        kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
+
+        if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
+            kwarn(@src(), " gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
+            return Error.IncorrectDevice;
+        }
     }
 };

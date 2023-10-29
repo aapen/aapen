@@ -400,3 +400,35 @@ Approach:
 
 ** DONE Device tree load address from Broadcom firmware
 No idea why this is the address: 0x2eff7a00
+* Scratch Notes
+** USB init sequence
+1. check vendor ID register (confirms the USB device exists)
+2. power on (via mailbox message to power controller)
+3. disable interrupts
+   1. ~gahbcfg &= ~~(GLOBAL_INTERRUPT_MASK)~
+4. connect IRQ handler
+5. initialize USB core
+   1. ~gusbcfg &= ~(ULPI_EXT_VBUS_DRV | TERM_SEL_DL_PULSE)~
+   2. reset core
+      1. wait up to 100 ms for ~grstctl & AHB_IDLE == 1~
+      2. ~grstctl |= SOFT_RESET~~
+      3. wait up to 10 ms for ~grstctl & SOFT_RESET == 0~
+      4. wait 100 ms
+   3. select UTMI+ with width = 8
+      ~gusbcfg &= ~(ULPI_UTMI_SEL | CFG_PHYIF)~
+   4. ??
+      1. if ~hw cfg2 hs_phy_type \== phy_ulpi && fs_phy_type \== phy_type_dedicated~
+         1. set bits ~cfg_ulpi_fsls~ and ~cfg_ulpi_clk_sus_m~ in ~gusbcfg~
+      2. else
+         1. clear bits ~cfg_ulpi_fsls~ and ~cfg_ulpi_clk_sus_m~ in ~gusbcfg~
+   5. get host channel count from ~ghwcfg2~
+   6. Enable DMA
+      1. set bits ~dmaenable~ and ~wait_axi_writes~ in ~gahbcfg~, clear ~max_axi_burst_mask~
+   7. disable HNP and SRP
+      1. Clear bits ~hnp_capable~ and ~srp_capable~ in ~gusbcfg~
+   8. enable common interrupts
+      1. set all bits in ~gintsts~
+6. enable global interrupts
+   1. set ~global_int_mask~ in ~gahbcfg~
+7. initialize host
+   1. 
