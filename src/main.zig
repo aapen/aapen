@@ -19,6 +19,11 @@ pub const kwarn = debug.kwarn;
 pub const kerror = debug.kerror;
 pub const kprint = debug.kprint;
 
+pub const std_options = struct {
+    pub const log_level = .info;
+    pub const logFn = debug.log;
+};
+
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
 };
@@ -74,6 +79,8 @@ fn kernelInit() void {
 
     frame_buffer_console.init();
     console_valid = true;
+
+    std.log.info("HAL initialized", .{});
 
     // State: one core, interrupts, MMU, heap Allocator, display, serial
     board.init(&os.page_allocator);

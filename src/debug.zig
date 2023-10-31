@@ -23,6 +23,25 @@ inline fn serial_log_info() bool {
     return serial_log_level > 1;
 }
 
+pub fn log(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const prefix = "[" ++ comptime level.asText() ++ "] (" ++ @tagName(scope) ++ "): ";
+
+    // TODO acquire spinlock
+    // TODO defer release spinlock
+    if (root.uart_valid) {
+        hal.serial_writer.print(prefix ++ format ++ "\n", args) catch {};
+    }
+
+    if (root.console_valid) {
+        root.frame_buffer_console.print(prefix ++ format ++ "\n", args) catch {};
+    }
+}
+
 pub fn kinfo(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     if (serial_log_info()) {
         if (root.uart_valid) {
