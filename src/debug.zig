@@ -4,13 +4,7 @@ const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
-const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
-const sprint = hal.serial_writer.print;
-
-pub inline fn ticks() u64 {
-    return hal.clock.ticks();
-}
 
 pub fn log(
     comptime level: std.log.Level,
