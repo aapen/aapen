@@ -14,13 +14,10 @@ const raspi3 = @import("hal/raspi3.zig");
 
 pub const debug = @import("debug.zig");
 
-pub const kinfo = debug.kinfo;
-pub const kwarn = debug.kwarn;
-pub const kerror = debug.kerror;
 pub const kprint = debug.kprint;
 
 pub const std_options = struct {
-    pub const log_level = .info;
+    pub const log_level = .warn;
     pub const logFn = debug.log;
 };
 
@@ -98,16 +95,16 @@ fn kernelInit() void {
     kprint("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
 
     diagnostics() catch |err| {
-        kerror(@src(), "Error printing diagnostics: {any}\n", .{err});
+        std.log.err("Error printing diagnostics: {any}\n", .{err});
         hal.serial_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
     hal.usb.hostControllerInitialize() catch |err| {
-        kerror(@src(), "USB Host initialization: {any}\n", .{err});
+        std.log.err("USB Host initialization: {any}\n", .{err});
     };
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
-        kerror(@src(), "Forth init: {any}\n", .{err});
+        std.log.err("Forth init: {any}\n", .{err});
     };
 
     supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
@@ -135,7 +132,7 @@ fn printOneDot(_: ?*anyopaque) u32 {
 fn repl() callconv(.C) noreturn {
     while (true) {
         interpreter.repl() catch |err| {
-            kerror(@src(), "REPL error: {any}\n\nABORT.\n", .{err});
+            std.log.err("REPL error: {any}\n\nABORT.\n", .{err});
         };
     }
 }
@@ -144,13 +141,13 @@ fn repl() callconv(.C) noreturn {
 
 fn supplyAddress(name: []const u8, addr: usize) void {
     interpreter.defineConstant(name, addr) catch |err| {
-        kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
+        std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
 fn supplyUsize(name: []const u8, sz: usize) void {
     interpreter.defineConstant(name, sz) catch |err| {
-        kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
+        std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
@@ -224,9 +221,9 @@ pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn
     @setCold(true);
 
     if (return_addr) |ret| {
-        kerror(@src(), "[{x:0>8}] {s}\n", .{ ret, msg });
+        kprint("[{x:0>8}] {s}\n", .{ ret, msg });
     } else {
-        kerror(@src(), "[unknown] {s}\n", .{msg});
+        kprint("[unknown] {s}\n", .{msg});
     }
 
     if (stack) |stack_trace| {

@@ -2,7 +2,6 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 const root = @import("root");
-const kinfo = root.kinfo;
 
 const hal = @import("../hal.zig");
 
@@ -355,7 +354,7 @@ pub const BroadcomMailbox = struct {
 
         pub fn unfill(self: Message, buf: []u32) void {
             if (buf[1] & message_value_length_response == 0) {
-                root.kinfo(@src(), "expected bit 31 to be set, but it wasn't\n", .{});
+                std.log.info("expected bit 31 to be set, but it wasn't\n", .{});
             } else {
                 buf[1] &= ~message_value_length_response;
             }

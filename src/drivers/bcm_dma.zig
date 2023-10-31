@@ -1,5 +1,4 @@
 const root = @import("root");
-const kwarn = root.kwarn;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -241,7 +240,7 @@ pub const BroadcomDMAController = struct {
         var current_time = start_time;
         while (channel_registers.control.active == 0b1) : (current_time = hal.clock.ticks()) {
             if (current_time >= deadline) {
-                kwarn(@src(), "DMA on channel {} exceeded timeout by {d}\n", .{ channel.channel_id, (current_time - deadline) });
+                std.log.warn("DMA on channel {} exceeded timeout by {d}\n", .{ channel.channel_id, (current_time - deadline) });
                 return false;
             }
         }

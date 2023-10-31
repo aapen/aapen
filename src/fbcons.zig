@@ -1,7 +1,6 @@
 const std = @import("std");
 const root = @import("root");
 const debug = root.debug;
-const kinfo = root.kinfo;
 const kprint = root.kprint;
 
 const frame_buffer = @import("frame_buffer.zig");

@@ -8,19 +8,8 @@ const arch = @import("architecture.zig");
 const hal = @import("hal.zig");
 const sprint = hal.serial_writer.print;
 
-const serial_log_level: u2 = 1;
-const log_level: u2 = 1;
-
 pub inline fn ticks() u64 {
     return hal.clock.ticks();
-}
-
-inline fn log_info() bool {
-    return log_level > 1;
-}
-
-inline fn serial_log_info() bool {
-    return serial_log_level > 1;
 }
 
 pub fn log(
@@ -29,6 +18,8 @@ pub fn log(
     comptime format: []const u8,
     args: anytype,
 ) void {
+    if (comptime !std.log.logEnabled(level, scope)) return;
+
     const prefix = "[" ++ comptime level.asText() ++ "] (" ++ @tagName(scope) ++ "): ";
 
     // TODO acquire spinlock
@@ -39,56 +30,6 @@ pub fn log(
 
     if (root.console_valid) {
         root.frame_buffer_console.print(prefix ++ format ++ "\n", args) catch {};
-    }
-}
-
-pub fn kinfo(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
-    if (serial_log_info()) {
-        if (root.uart_valid) {
-            hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-            hal.serial_writer.print(fmt, args) catch {};
-        }
-    }
-    if (log_info()) {
-        if (root.console_valid) {
-            root.frame_buffer_console.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-            root.frame_buffer_console.print(fmt, args) catch {};
-        }
-    }
-}
-
-inline fn log_warnings() bool {
-    return log_level > 0;
-}
-
-inline fn serial_log_warnings() bool {
-    return serial_log_level > 0;
-}
-
-pub fn kwarn(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
-    if (serial_log_warnings()) {
-        if (root.uart_valid) {
-            hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-            hal.serial_writer.print(fmt, args) catch {};
-        }
-    }
-    if (log_warnings()) {
-        if (root.console_valid) {
-            root.frame_buffer_console.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-            root.frame_buffer_console.print(fmt, args) catch {};
-        }
-    }
-}
-
-pub fn kerror(comptime loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
-    if (root.uart_valid) {
-        hal.serial_writer.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-        hal.serial_writer.print(fmt, args) catch {};
-    }
-
-    if (root.console_valid) {
-        root.frame_buffer_console.print("{s} {s}:{d} ", .{ loc.file, loc.fn_name, loc.line }) catch {};
-        root.frame_buffer_console.print(fmt, args) catch {};
     }
 }
 

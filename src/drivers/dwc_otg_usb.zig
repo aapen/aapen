@@ -1,8 +1,6 @@
 const std = @import("std");
 const root = @import("root");
 const kprint = root.kprint;
-const kwarn = root.kwarn;
-const kerror = root.kerror;
 
 const hal = @import("../hal.zig");
 
@@ -321,7 +319,7 @@ pub const UsbController = struct {
         var power_result = (self.power_controller.powerOn(.usb_hcd));
 
         if (power_result != .power_on) {
-            kerror(@src(), "Failed to power on USB device: {any}\n", .{power_result});
+            std.log.err("Failed to power on USB device: {any}\n", .{power_result});
             return Error.PowerFailure;
         }
     }
@@ -330,7 +328,7 @@ pub const UsbController = struct {
         var power_result = (self.power_controller.powerOff(.usb_hcd));
 
         if (power_result != .power_off) {
-            kerror(@src(), "Failed to power off USB device: {any}\n", .{power_result});
+            std.log.err("Failed to power off USB device: {any}\n", .{power_result});
             return Error.PowerFailure;
         }
     }
@@ -341,7 +339,7 @@ pub const UsbController = struct {
         kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
 
         if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
-            kwarn(@src(), " gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
+            std.log.warn(" gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
             return Error.IncorrectDevice;
         }
     }
