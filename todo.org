@@ -444,6 +444,33 @@ No idea why this is the address: 0x2eff7a00
 - ULPI :: UTMI+ Low Pin Interface. PHY specification for some device connections. 8 data wires plus 6 control wires. Not usually exposed via a connector; normally found between chips on a board.
 - UTMI+ :: USB 2.0 Tranceiver Macrocell Interface. PHY specification.
 - xHCI :: eXtensible Host Controller Interface. Specification for how a host computer talks to its USB controller (register interface and protocol). Applies to USB 3.0 and later. [[https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/extensible-host-controler-interface-usb-xhci.pdf][Specification]]
+** QEMU vs HW
+*** Core registers at boot
+**** On RPi3 HW
+#+begin_src
+otg_control:       001c0000
+ahb_config:        0000000e
+usb_config:        20402700
+reset:             80000000
+interrupt_status:  54000029
+interrupt_mask:    00000000
+rx_fifo_size:      00001000
+nper_tx_fifo_size: 01001000
+nper_tx_status:    00080100
+#+end_src
+
+**** On QEMU
+#+begin_src
+otg_control:       000d0000    *different*
+ahb_config:        00000000    *different*
+usb_config:        00001400    *different*
+reset:             80000000
+interrupt_status:  14000021    *different*
+interrupt_mask:    00000000
+rx_fifo_size:      00000400    *different*
+nper_tx_fifo_size: 04000000    *different*
+nper_tx_status:    00040400    *different*
+#+end_src
 ** USB init sequence
 1. check vendor ID register (confirms the USB device exists)
 2. power on (via mailbox message to power controller)
@@ -476,11 +503,15 @@ No idea why this is the address: 0x2eff7a00
 7. initialize host
    1. write 0 to ~usb_power~ (~usb_base~ + 0xe00)
    2. clear bit ~fsls_pclk_sel__mask~ in ~host_config~
-   3. if ~core_hardware_config_2 hs_phy_type \== phy_ulpi *and* fs_phy_type \== phy_type_dedicated~ *and* ~core_usb_config~ has bit ~cfg_ulpi_fsls~ set
-      1. set bit ~fsls_pclk_sel_48_mhz~ in ~host_config~
-   4. else
-      1. set bit ~fsls_pclk_sel_30_60_mhz~ in ~host_config~
-   5. flush tx fifos
-   6. flush rx fifo
-   7. if bit ~host_port_power~ is not set in ~host_port~
+   3. if hwconfig2 says phy is ulpi and dedicated, and usb config says ~ulpi_fsls~, (         if ~core_hardware_config_2 hs_phy_type \== phy_ulpi *and* fs_phy_type \== phy_type_dedicated~ *and* ~core_usb_config~ has bit ~cfg_ulpi_fsls~ set)
+      1. then set ~host_config~'s ~fsls_pclk~ selector to 48 mhz
+      2. otherwise
+         1. set bit ~host_config~'s ~fsls_pclk~ to ~30_60_mhz~ 
+   4. flush tx fifos
+   5. flush rx fifo
+   6. if bit ~host_port_power~ is not set in ~host_port~
       set bit ~host_port_power~
+   7. enable host interrupts
+      1. disable all interrupts during the change (set ~core_int_mask~ to 0)
+      2. clear pending interrupts (set ~core_int_stat~ to all 1's)
+      3. set ~hc_intr~ bit in ~core_int_mask~
