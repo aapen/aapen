@@ -316,7 +316,7 @@ pub const UsbController = struct {
     }
 
     fn powerOn(self: *const UsbController) !void {
-        var power_result = (self.power_controller.powerOn(.usb_hcd));
+        var power_result = try self.power_controller.powerOn(.usb_hcd);
 
         if (power_result != .power_on) {
             std.log.err("Failed to power on USB device: {any}\n", .{power_result});
@@ -324,8 +324,8 @@ pub const UsbController = struct {
         }
     }
 
-    fn powerOff(self: *const UsbController) void {
-        var power_result = (self.power_controller.powerOff(.usb_hcd));
+    fn powerOff(self: *const UsbController) !void {
+        var power_result = try self.power_controller.powerOff(.usb_hcd);
 
         if (power_result != .power_off) {
             std.log.err("Failed to power off USB device: {any}\n", .{power_result});
