@@ -72,7 +72,11 @@ fn kernelInit() void {
     arch.cpu.exceptions.init();
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
-    hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
+    // hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
+    hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette) catch |err| {
+        mring.append("no video");
+        kprint("Video init error {any}\n", .{err});
+    };
 
     frame_buffer_console.init();
     console_valid = true;
@@ -81,7 +85,9 @@ fn kernelInit() void {
 
     // State: one core, interrupts, MMU, heap Allocator, display, serial
     board.init(&os.page_allocator);
-    hal.board_info_controller.inspect(&board);
+    hal.board_info_controller.inspect(&board) catch |err| {
+        kprint("Board inspection error {any}\n", .{err});
+    };
 
     // hal.timer.schedule(200000, printOneDot, &.{});
 

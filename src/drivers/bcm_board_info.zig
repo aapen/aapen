@@ -3,8 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const bcm_mailbox = @import("bcm_mailbox.zig");
 const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const Message = BroadcomMailbox.Message;
-const Envelope = BroadcomMailbox.Envelope;
+const PropertyTag = bcm_mailbox.PropertyTag;
 
 const hal = @import("../hal.zig");
 
@@ -40,32 +39,32 @@ pub const BoardInfo = struct {
     }
 };
 
+const PropertyBoardInfo = extern struct {
+    arm_memory: PropertyMemory = PropertyMemory.initArm(),
+    vc_memory: PropertyMemory = PropertyMemory.initVideocore(),
+    revision: PropertyInfo = PropertyInfo.initRevision(),
+    mac_address: PropertyInfo = PropertyInfo.initMacAddress(),
+    serial: PropertyInfo = PropertyInfo.initSerialNumber(),
+
+    pub fn init() @This() {
+        return .{};
+    }
+};
+
 pub const BroadcomBoardInfoController = struct {
     mailbox: *const BroadcomMailbox,
 
-    pub fn inspect(self: *const BroadcomBoardInfoController, info: *BoardInfo) void {
-        var arm_memory = GetMemoryRange.arm();
-        var vc_memory = GetMemoryRange.videocore();
-        var revision = GetInfo.boardRevision();
-        var mac_address = GetInfo.macAddress();
-        var serial = GetInfo.serialNumber();
-        var messages = [_]Message{
-            arm_memory.message(),
-            vc_memory.message(),
-            revision.message(),
-            mac_address.message(),
-            serial.message(),
-        };
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
+    pub fn inspect(self: *const BroadcomBoardInfoController, info: *BoardInfo) !void {
+        var board_info = PropertyBoardInfo.init();
+        try self.mailbox.getTags(&board_info, @sizeOf(PropertyBoardInfo) / 4);
 
-        // info.memory.regions.append(arm_memory.copy("ARM memory")) catch {};
-        // info.memory.regions.append(vc_memory.copy("VC memory")) catch {};
+        try info.memory.regions.append(Region.fromSize("ARM memory", board_info.arm_memory.base, board_info.arm_memory.size));
+        try info.memory.regions.append(Region.fromSize("VC memory", board_info.vc_memory.base, board_info.vc_memory.size));
 
-        info.device.mac_address = mac_address.value;
-        info.device.serial_number = serial.value;
+        info.device.mac_address = board_info.mac_address.value;
+        info.device.serial_number = board_info.serial.value;
 
-        self.decode_revision(revision.value, info);
+        self.decode_revision(board_info.revision.value, info);
     }
 
     fn decode_revision(self: *const BroadcomBoardInfoController, revision: u32, info: *BoardInfo) void {
@@ -120,68 +119,46 @@ pub const BroadcomBoardInfoController = struct {
     }
 };
 
-const GetInfo = struct {
-    const Self = @This();
+const PropertyInfo = extern struct {
+    tag: PropertyTag,
+    value: u32,
 
-    tag: BroadcomMailbox.RpiFirmwarePropertyTag = undefined,
-    value: u32 = undefined,
-
-    pub fn boardRevision() Self {
-        return Self{ .tag = .rpi_firmware_get_board_revision };
+    pub fn initRevision() @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_get_board_revision, 1, 1),
+            .value = 0,
+        };
     }
 
-    pub fn macAddress() Self {
-        return Self{ .tag = .rpi_firmware_get_board_mac_address };
+    pub fn initMacAddress() @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_get_board_mac_address, 1, 1),
+            .value = 0,
+        };
     }
 
-    pub fn serialNumber() Self {
-        return Self{ .tag = .rpi_firmware_get_board_serial };
-    }
-
-    pub fn message(self: *Self) Message {
-        return Message.init(self, self.tag, 0, 1);
-    }
-
-    pub fn fill(self: *Self, buf: []u32) void {
-        _ = self;
-        _ = buf;
-    }
-
-    pub fn unfill(self: *Self, buf: []u32) void {
-        self.value = buf[0];
+    pub fn initSerialNumber() @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_get_board_serial, 1, 1),
+            .value = 0,
+        };
     }
 };
 
-const GetMemoryRange = struct {
-    const Self = @This();
+const PropertyMemory = extern struct {
+    tag: PropertyTag,
+    base: u32 = 0,
+    size: u32 = 0,
 
-    tag: BroadcomMailbox.RpiFirmwarePropertyTag = undefined,
-    memory_base: u32 = undefined,
-    memory_size: u32 = undefined,
-
-    pub fn arm() Self {
-        return Self{ .tag = .rpi_firmware_get_arm_memory };
+    pub fn initArm() @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_get_arm_memory, 0, 2),
+        };
     }
 
-    pub fn videocore() Self {
-        return Self{ .tag = .rpi_firmware_get_vc_memory };
-    }
-
-    pub fn message(self: *Self) Message {
-        return Message.init(self, self.tag, 0, 2);
-    }
-
-    pub fn fill(self: *Self, buf: []u32) void {
-        _ = self;
-        _ = buf;
-    }
-
-    pub fn unfill(self: *Self, buf: []u32) void {
-        self.memory_base = buf[0];
-        self.memory_size = buf[1];
-    }
-
-    pub fn copy(self: *const Self, name: []const u8) Region {
-        return Region.fromSize(name, self.memory_base, self.memory_size);
+    pub fn initVideocore() @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_get_vc_memory, 0, 2),
+        };
     }
 };

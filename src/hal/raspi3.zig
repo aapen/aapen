@@ -116,4 +116,5 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     serial.init();
     dma.init(allocator);
+    mailbox.init(allocator);
 }

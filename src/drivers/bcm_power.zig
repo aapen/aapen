@@ -2,8 +2,7 @@ const hal = @import("../hal.zig");
 
 const bcm_mailbox = @import("bcm_mailbox.zig");
 const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const Message = BroadcomMailbox.Message;
-const Envelope = BroadcomMailbox.Envelope;
+const PropertyTag = bcm_mailbox.PropertyTag;
 
 pub const PowerDevice = enum(u32) {
     sdhci = 0,
@@ -17,12 +16,44 @@ pub const PowerDevice = enum(u32) {
     ccp2tx = 8,
 };
 
+pub const WaitForTransition = enum(u2) {
+    do_not_wait = 0b00,
+    wait = 0b10,
+};
+
+pub const DesiredState = enum(u1) {
+    off = 0b0,
+    on = 0b1,
+};
+
 pub const PowerResult = enum {
     unknown,
     failed,
     no_such_device,
     power_on,
     power_off,
+};
+
+const PropertyPower = extern struct {
+    tag: PropertyTag,
+    device: u32,
+    state: u32,
+
+    pub fn initQuery(device: PowerDevice) @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_get_power_state, 1, 2),
+            .device = @intFromEnum(device),
+            .state = 0,
+        };
+    }
+
+    pub fn initControl(device: PowerDevice, state: DesiredState, wait: WaitForTransition) @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_set_power_state, 2, 2),
+            .device = @intFromEnum(device),
+            .state = @intFromEnum(state) | @intFromEnum(wait),
+        };
+    }
 };
 
 pub const BroadcomPowerController = struct {
@@ -41,94 +72,23 @@ pub const BroadcomPowerController = struct {
         }
     }
 
-    const QueryMessage = struct {
-        const Self = @This();
-        device: PowerDevice,
-        state: PowerResult = .unknown,
-
-        pub fn init(device: PowerDevice) Self {
-            return Self{
-                .device = device,
-            };
-        }
-
-        pub fn message(self: *Self) Message {
-            return Message.init(self, .rpi_firmware_get_power_state, 1, 2);
-        }
-
-        pub fn fill(self: *Self, buf: []u32) void {
-            buf[0] = @intFromEnum(self.device);
-        }
-
-        pub fn unfill(self: *Self, buf: []u32) void {
-            self.device = @enumFromInt(buf[0]);
-            self.state = decode(buf[1]);
-        }
-    };
-
-    const ControlMessage = struct {
-        const Self = @This();
-
-        pub const WaitForTransition = enum(u2) {
-            do_not_wait = 0b00,
-            wait = 0b10,
-        };
-
-        pub const DesiredState = enum(u1) {
-            off = 0b0,
-            on = 0b1,
-        };
-
-        device: PowerDevice,
-        desired_state: DesiredState = .on,
-        wait: WaitForTransition = .wait,
-        state: PowerResult = .unknown,
-
-        pub fn init(device: PowerDevice) Self {
-            return Self{
-                .device = device,
-            };
-        }
-        pub fn message(self: *Self) Message {
-            return Message.init(self, .rpi_firmware_set_power_state, 2, 2);
-        }
-
-        pub fn fill(self: *Self, buf: []u32) void {
-            buf[0] = @intFromEnum(self.device);
-            buf[1] = @intFromEnum(self.desired_state) | @intFromEnum(self.wait);
-        }
-
-        pub fn unfill(self: *Self, buf: []u32) void {
-            self.device = @enumFromInt(buf[0]);
-            self.state = decode(buf[1]);
-        }
-    };
-
-    pub fn isPowered(self: *const BroadcomPowerController, device: PowerDevice) PowerResult {
-        var power_query = QueryMessage.init(device);
-        var messages = [_]Message{power_query.message()};
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
-
-        return power_query.state;
+    pub fn isPowered(self: *const BroadcomPowerController, device: PowerDevice) !PowerResult {
+        const query = PropertyPower.initQuery(device);
+        try self.mailbox.getTag(&query);
+        return decode(query.state);
     }
 
-    pub fn powerOn(self: *const BroadcomPowerController, device: PowerDevice) PowerResult {
-        var power_control = ControlMessage.init(device);
-        var messages = [_]Message{power_control.message()};
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
+    fn setState(self: *const BroadcomPowerController, device: PowerDevice, desired_state: DesiredState) !PowerResult {
+        var control = PropertyPower.initControl(device, desired_state, .wait);
+        try self.mailbox.getTag(&control);
+        return decode(control.state);
+    }
 
-        return power_control.state;
+    pub fn powerOn(self: *const BroadcomPowerController, device: PowerDevice) !PowerResult {
+        return self.setState(device, .on);
     }
 
     pub fn powerOff(self: *const BroadcomPowerController, device: PowerDevice) PowerResult {
-        var power_control = ControlMessage.init(device);
-        power_control.desired_state = .off;
-        var messages = [_]Message{power_control.message()};
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
-
-        return power_control.state;
+        return self.setState(device, .off);
     }
 };

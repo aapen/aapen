@@ -1,7 +1,6 @@
 const bcm_mailbox = @import("bcm_mailbox.zig");
 const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const Message = BroadcomMailbox.Message;
-const Envelope = BroadcomMailbox.Envelope;
+const PropertyTag = bcm_mailbox.PropertyTag;
 
 pub const ClockId = enum(u32) {
     reserved = 0,
@@ -17,22 +16,78 @@ pub const ClockId = enum(u32) {
     pwm = 10,
 };
 
-pub const PeripheralClockController = struct {
-    mailbox: *BroadcomMailbox = undefined,
+pub const DesiredState = enum(u1) {
+    off = 0b0,
+    on = 0b1,
+};
 
-    pub fn init(self: *PeripheralClockController, mailbox: *BroadcomMailbox) void {
-        self.mailbox = mailbox;
+const RateSelector = enum(u32) {
+    current = 0x0030002,
+    max = 0x00030004,
+    min = 0x00030007,
+};
+
+pub const ClockResult = enum {
+    unknown,
+    failed,
+    no_such_device,
+    clock_on,
+    clock_off,
+};
+
+const PropertyClock = extern struct {
+    tag: PropertyTag,
+    clock: u32,
+    param2: extern union {
+        state: u32,
+        rate: u32,
+    },
+
+    pub fn initStateQuery(clock: ClockId) @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_get_clock_state, 1, 2),
+            .clock = @intFromEnum(clock),
+            .param2 = .{ .state = 0 },
+        };
     }
 
-    pub const Result = enum {
-        unknown,
-        failed,
-        no_such_device,
-        clock_on,
-        clock_off,
-    };
+    pub fn initStateControl(clock: ClockId, desired_state: DesiredState) @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_set_clock_state, 2, 2),
+            .clock = @intFromEnum(clock),
+            .param2 = .{ .state = @intFromEnum(desired_state) },
+        };
+    }
 
-    fn decode(state: u32) Result {
+    pub fn initRateQuery(clock: ClockId, rate_selector: RateSelector) @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_get_clock_rate, 1, 2),
+            .clock = @intFromEnum(clock),
+            .param2 = .{ .rate = @intFromEnum(rate_selector) },
+        };
+    }
+};
+
+const PropertyClockRateControl = extern struct {
+    tag: PropertyTag,
+    clock: u32,
+    rate: u32,
+    skip_turbo: u32,
+
+    pub fn initRateControl(clock: ClockId, desired_rate: u32) @This() {
+        return .{
+            .tag = PropertyTag.init(.rpi_firmware_set_clock_rate, 3, 2),
+            .clock = @intFromEnum(clock),
+            .rate = desired_rate,
+            .skip_turbo = 1,
+        };
+    }
+};
+
+pub const PeripheralClockController = struct {
+    mailbox: *BroadcomMailbox,
+
+    fn decode(state: u32) ClockResult {
         var no_device = (state & 0x02) != 0;
         var actual_state = (state & 0x01) != 0;
 
@@ -45,170 +100,41 @@ pub const PeripheralClockController = struct {
         }
     }
 
-    const StateQueryMessage = struct {
-        const Self = @This();
-        clock_id: ClockId = .reserved,
-        state: Result = .unknown,
-
-        pub fn init(clock_id: ClockId) Self {
-            return Self{
-                .clock_id = clock_id,
-            };
-        }
-
-        pub fn message(self: *Self) Message {
-            return Message.init(self, .rpi_firmware_get_clock_state, 1, 2);
-        }
-
-        pub fn fill(self: *Self, buf: []u32) void {
-            buf[0] = @intFromEnum(self.clock_id);
-        }
-
-        pub fn unfill(self: *Self, buf: []u32) void {
-            self.clock_id = @enumFromInt(buf[0]);
-            self.state = decode(buf[1]);
-        }
-    };
-
-    const StateControlMessage = struct {
-        const Self = @This();
-
-        pub const DesiredState = enum(u1) {
-            off = 0b0,
-            on = 0b1,
-        };
-
-        clock_id: ClockId,
-        desired_state: DesiredState = .on,
-        state: Result = .unknown,
-
-        pub fn init(clock_id: ClockId, desired_state: DesiredState) Self {
-            return Self{
-                .clock_id = clock_id,
-                .desired_state = desired_state,
-            };
-        }
-
-        pub fn message(self: *Self) Message {
-            return Message.init(self, .rpi_firmware_set_clock_state, 2, 2);
-        }
-
-        pub fn fill(self: *Self, buf: []u32) void {
-            buf[0] = @intFromEnum(self.clock_id);
-            buf[1] = @intFromEnum(self.desired_state);
-        }
-
-        pub fn unfill(self: *Self, buf: []u32) void {
-            self.clock_id = @enumFromInt(buf[0]);
-            self.state = decode(buf[1]);
-        }
-    };
-
-    const RateQueryMessage = struct {
-        const RateSelector = enum(u32) {
-            current = 0x0030002,
-            max = 0x00030004,
-            min = 0x00030007,
-        };
-
-        const Self = @This();
-
-        clock_id: ClockId = .reserved,
-        selector: RateSelector = undefined,
-        rate: u32 = undefined,
-
-        pub fn init(clock_id: ClockId, selector: RateSelector) Self {
-            return Self{
-                .clock_id = clock_id,
-                .selector = selector,
-            };
-        }
-
-        pub fn message(self: *Self) Message {
-            return Message.init(self, @enumFromInt(@intFromEnum(self.selector)), 1, 2);
-        }
-
-        pub fn fill(self: *Self, buf: []u32) void {
-            buf[0] = @intFromEnum(self.clock_id);
-        }
-
-        pub fn unfill(self: *Self, buf: []u32) void {
-            self.clock_id = @enumFromInt(buf[0]);
-            self.rate = buf[1];
-        }
-    };
-
-    const RateControlMessage = struct {
-        const Self = @This();
-
-        clock_id: ClockId,
-        desired_rate: u32 = undefined,
-        rate: u32 = undefined,
-
-        pub fn init(clock_id: ClockId, desired_rate: u32) Self {
-            return Self{
-                .clock_id = clock_id,
-                .desired_rate = desired_rate,
-            };
-        }
-
-        pub fn message(self: *Self) Message {
-            return Message.init(self, .rpi_firmware_set_clock_rate, 3, 2);
-        }
-
-        pub fn fill(self: *Self, buf: []u32) void {
-            buf[0] = @intFromEnum(self.clock_id);
-            buf[1] = self.desired_rate;
-            buf[2] = 1; // skip setting turbo ??
-        }
-
-        pub fn unfill(self: *Self, buf: []u32) void {
-            self.clock_id = @enumFromInt(buf[0]);
-            self.rate = buf[1];
-        }
-    };
-
-    fn clockRate(self: *PeripheralClockController, clock_id: ClockId, selector: RateQueryMessage.RateSelector) u32 {
-        var query = RateQueryMessage.init(clock_id, selector);
-        var messages = [_]Message{query.message()};
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
-        return query.rate;
+    fn clockRate(self: *PeripheralClockController, clock_id: ClockId, selector: RateSelector) !u32 {
+        const query = PropertyClock.initRateQuery(clock_id, selector);
+        try self.mailbox.getTag(&query);
+        return query.param1.rate;
     }
 
-    pub fn clockRateCurrent(self: *PeripheralClockController, clock_id: ClockId) u32 {
+    pub fn clockRateCurrent(self: *PeripheralClockController, clock_id: ClockId) !u32 {
         return self.clockRate(clock_id, .current);
     }
 
-    pub fn clockRateMax(self: *PeripheralClockController, clock_id: ClockId) u32 {
+    pub fn clockRateMax(self: *PeripheralClockController, clock_id: ClockId) !u32 {
         return self.clockRate(clock_id, .max);
     }
 
-    pub fn clockRateMin(self: *PeripheralClockController, clock_id: ClockId) u32 {
+    pub fn clockRateMin(self: *PeripheralClockController, clock_id: ClockId) !u32 {
         return self.clockRate(clock_id, .min);
     }
 
-    pub fn clockRateSet(self: *PeripheralClockController, clock_id: ClockId, desired_rate: u32) void {
-        var control = RateControlMessage.init(clock_id, desired_rate);
-        var messages = [_]Message{control.message()};
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
+    pub fn clockRateSet(self: *PeripheralClockController, clock_id: ClockId, desired_rate: u32) !u32 {
+        const control = PropertyClockRateControl.initRateControl(clock_id, desired_rate);
+        try self.mailbox.getTag(&control);
         return control.rate;
     }
 
-    fn clockStateSet(self: *PeripheralClockController, clock_id: ClockId, desired_state: StateControlMessage.DesiredState) Result {
-        var control = StateControlMessage.init(clock_id, desired_state);
-        var messages = [_]Message{control.message()};
-        var env = Envelope.init(self.mailbox, &messages);
-        _ = env.call() catch 0;
-        return control.state;
+    fn clockStateSet(self: *PeripheralClockController, clock_id: ClockId, desired_state: DesiredState) !ClockResult {
+        const control = PropertyClock.initStateControl(clock_id, desired_state);
+        try self.mailbox.getTag(&control);
+        return decode(control.param1.state);
     }
 
-    pub fn clockOn(self: *PeripheralClockController, clock_id: ClockId) Result {
+    pub fn clockOn(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {
         return self.clockStateSet(clock_id, .on);
     }
 
-    pub fn clockOff(self: *PeripheralClockController, clock_id: ClockId) Result {
+    pub fn clockOff(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {
         return self.clockStateSet(clock_id, .off);
     }
 };
