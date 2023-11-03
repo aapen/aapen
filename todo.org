@@ -409,6 +409,7 @@ No idea why this is the address: 0x2eff7a00
 * Scratch Notes
 ** USB Glossary
 - ACK :: Packet sent by receiver to indicate receipt of an error free packet
+- ADP :: Attach Detection Protocol
 - AHB :: Advanced High-performance Bus. Part of ARM's AMBA specification. [[https://developer.arm.com/documentation/ihi0033/latest/][Specification]]
 - AMBA :: Advanced Microcontroller Bus Architecture. Family of ARM specifications for on-chip interconnect of functional blocks in a SoC design. [[https://developer.arm.com/Architectures/AMBA][Library]]
 - APB :: Advanced Peripheral Bus. Part of ARM's AMBA specification.

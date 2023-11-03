@@ -19,6 +19,8 @@ const memory_map = @import("../hal/raspi3/memory_map.zig");
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
+const dwc_max_channels = 16;
+
 pub const Error = error{
     IncorrectDevice,
     PowerFailure,
@@ -34,21 +36,21 @@ const VendorId = packed struct {
 // Channel Registers
 // ----------------------------------------------------------------------
 
-const ChannelCharacter = packed struct {
+const ChannelCharacteristics = packed struct {
     max_packet_size: u11, // 0..10
-    ep_number: u4, // 11..14
-    ep_direction_in: u1, // 15
-    _unknown_0: u1, // 16
+    endpoint_number: u4, // 11..14
+    endpoint_direction: u1, // 15
+    _reserved_16: u1, // 16
     low_speed_device: u1, // 17
-    ep_type: enum(u2) {
+    endpoint_type: enum(u2) {
         control = 0,
         isochronous = 1,
         bulk = 2,
         interrupt = 3,
     }, // 18..19
-    multi_cnt: u2, // 20..21
+    packets_per_frame: u2, // 20..21
     device_address: u7, // 22..28
-    per_odd_frame: u1, // 29
+    odd_frame: u1, // 29
     disable: u1, // 30
     enable: u1, // 31
 };
@@ -56,36 +58,39 @@ const ChannelCharacter = packed struct {
 const ChannelSplitControl = packed struct {
     port_address: u7, // 0 .. 6
     hub_address: u7, // 7..13
-    xact_pos: u2, // 14..15
+    transaction_position: u2, // 14..15
     complete_split: u1, // 16
-    _unknown_0: u14, // 17..30
+    _reserved_17_30: u14, // 17..30
     split_enable: u1, // 31
 };
 
 const ChannelInterrupt = packed struct {
-    transfer_complete: u1, // 0
+    transfer_completed: u1, // 0
     halted: u1, // 1
     ahb_error: u1, // 2
-    stall: u1, // 3
-    nak: u1, // 4
-    ack: u1, // 5
-    nyet: u1, // 6
-    xact_error: u1, // 7
+    stall_response_received: u1, // 3
+    nak_response_received: u1, // 4
+    ack_response_received: u1, // 5
+    nyet_response_received: u1, // 6
+    transaction_error: u1, // 7
     babble_error: u1, // 8
     frame_overrun: u1, // 9
     data_toggle_error: u1, // 10
-    _unknown_0: u21, // 11..31
+    buffer_not_available: u1, // 11
+    excess_transaction_error: u1, // 12
+    frame_list_rollover: u1, // 13
+    _reserved_18_31: u18, // 14..31
 };
 
 const ChannelTransferSize = packed struct {
     transfer_size_bytes: u19, // 0..18
     transfer_size_packets: u10, // 19..28
-    pid: u2, // 29..30
-    _unknown_0: u1, // 31
+    packet_id: u2, // 29..30
+    do_ping: u1, // 31
 };
 
 const HostChannelRegisters = extern struct {
-    host_channel_character: ChannelCharacter, // 0x00
+    host_channel_character: ChannelCharacteristics, // 0x00
     host_channel_split_control: ChannelSplitControl, // 0x04
     host_channel_int: ChannelInterrupt, // 0x08
     host_channel_int_mask: ChannelInterrupt, // 0x0c
@@ -131,35 +136,36 @@ const HostFrames = packed struct {
 const HostPort = packed struct {
     connect: u1, // 0
     connect_changed: u1, // 1
-    enable: u1, // 2
-    enable_changed: u1, // 3
+    enabled: u1, // 2
+    enabled_changed: u1, // 3
     overcurrent: u1, // 4
     overcurrent_changed: u1, // 5
-    _unknown_0: u2, // 6..7
+    status_resume: u1, // 6
+    suspended: u1, // 7
     reset: u1, // 8
-    _unknown_1: u3, // 9..10
-    power: u1, // 11
-    _unknown_2: u5, // 12..17
+    _reserved_9: u1, // 9
+    line_status: u2, // 10..11
+    power: u1, // 12
+    test_control: u4, // 13..16
     speed: enum(u2) {
         high = 0,
         full = 1,
         low = 2,
-    }, // 18..19
-    _unknown_3: u12, // 20..31
+    }, // 17..18
+    _reserved_19_32: u13, // 19..31
 };
 
 const HostRegisters = extern struct {
     config: HostConfig, // 0x00
     frame_interval: u32 = 0, // 0x04
     frame_num: HostFrames, // 0x08
-    _unused_padding: u32 = 0, // 0x0c
-    per_tx_fifo_status: u32 = 0, // 0x10
-    all_channel_interrupt: u32 = 0, // 0x14
-    all_channel_interrupt_mask: u32 = 0, // 0x18
-    frame_last_base_addr: u32 = 0, // 0x1c
+    _reserved_0x0c: u32 = 0, // 0x0c
+    periodic_tx_fifo_status: u32 = 0, // 0x10
+    all_channel_interrupts: u32 = 0, // 0x14
+    all_channel_interrupts_mask: u32 = 0, // 0x18
+    frame_list_base_addr: u32 = 0, // 0x1c
     _unused_padding_1: [8]u32, // 0x20 .. 0x3c
     port: HostPort, // 0x40
-
 };
 
 // ----------------------------------------------------------------------
@@ -302,7 +308,7 @@ const HwConfig2 = packed struct {
 
 const HwConfig3 = packed struct {
     _unknown: u16, // 0..15
-    dfifo_depth: u16, // 16..31
+    dynamic_fifo_total_size: u16, // 16..31
 };
 
 const HwConfig4 = packed struct {
@@ -314,20 +320,20 @@ const HwConfig4 = packed struct {
 
 const CoreRegisters = extern struct {
     otg_control: OtgControl, // 0x00
-    otg_int: u32 = 0, // 0x04
+    otg_interrupt: u32 = 0, // 0x04
     ahb_config: AhbConfig, // 0x08
     usb_config: UsbConfig, // 0x0c
     reset: Reset, // 0x10
     interrupt_status: InterruptStatus, // 0x14
     interrupt_mask: InterruptMask, // 0x18
-    rx_status_rd: RxStatus, // 0x1c
+    rx_status_read: RxStatus, // 0x1c
     rs_status_pop: RxStatus, // 0x20
     rx_fifo_size: u32 = 0, // 0x24
-    nper_tx_fifo_size: u32 = 0, // 0x28
-    nper_tx_status: u32 = 0, // 0x2c
+    nonperiodic_tx_fifo_size: u32 = 0, // 0x28
+    nonperiodic_tx_status: u32 = 0, // 0x2c
     i2c_control: u32 = 0, // 0x30
     phy_vendor_control: u32 = 0, // 0x34
-    cpio: u32 = 0, // 0x38
+    gpio: u32 = 0, // 0x38
     user_id: u32 = 0, // 0x3c
     vendor_id: VendorId, // 0x40
     hardware_config_1: u32 = 0, // 0x44
@@ -335,23 +341,26 @@ const CoreRegisters = extern struct {
     hardware_config_3: HwConfig3, // 0x4c
     hardware_config_4: HwConfig4, // 0x50
     lpm_config: u32 = 0, // 0x54
-    power_down: u32 = 0, // 0x58
-    dfifo_config: u32 = 0, // 0x5c
+    global_power_down: u32 = 0, // 0x58
+    global_fifo_config: u32 = 0, // 0x5c
     adp_control: u32 = 0, // 0x60
-    _pad_0x64_0x7c: [7]u32, // 0x64 .. 0x7c
-    vendor_mdio_control: u32 = 0, // 0x80
-    vendor_mdio_data: u32 = 0, // 0x84
-    vendor_vbus_drv: u32 = 0, // 0x88
-    _pad_0x8c_0x9c: [5]u32, // 0x8c .. 0x9c
-    host_per_tx_fifo_size: u32 = 0, // 0x100
-    dev_per_tx_fifo: [15]u32, // 0x104 .. 0x140
-    _pad_0x140_0x3fc: [176]u32, // 0x144 .. 0x3fc
-    host_regs: HostRegisters, // 0x400
-    _pad_0x444_0x4fc: [47]u32,
-    hc_regs: HostChannelRegisters, // 0x500 .. 0x540
-    _pad_0x700_0xe00: [448]u32,
-    usb_power: u32 = 0, // 0xe00
+    _pad_0x64_0x9c: [39]u32, // 0x64 .. 0x9c
+    host_periodic_tx_fifo_size: u32 = 0, // 0x100
+    device_periodic_tx_fifo: [191]u32, // 0x104 .. 0x3fc
+    host_registers: HostRegisters, // 0x400..0x440
+    _pad_0x444_0x4fc: [47]u32, // 0x444..0x4fc
+    host_channel_registers: [dwc_max_channels]HostChannelRegisters, // 0x500 .. 0x6ff
+    _pad_0x700_0xdfc: [448]u32, // 0x700 - 0xdfc
+    power_clock_control: u32 = 0, // 0xe00
 };
+
+// test {
+//     @compileLog("adp control:", @offsetOf(CoreRegisters, "adp_control"));
+//     @compileLog("device periodic tx fifo:", @offsetOf(CoreRegisters, "device_periodic_tx_fifo"));
+//     @compileLog("host registers: ", @offsetOf(CoreRegisters, "host_registers"));
+//     @compileLog("host channel registers: ", @offsetOf(CoreRegisters, "host_channel_registers"));
+//     @compileLog("power_clock_control", @offsetOf(CoreRegisters, "power_clock_control"));
+// }
 
 pub const UsbController = struct {
     core_registers: *volatile CoreRegisters,
@@ -468,7 +477,7 @@ pub const UsbController = struct {
     }
 
     fn initializeHost(self: *const UsbController) !void {
-        self.core_registers.usb_power = 0;
+        self.core_registers.power_clock_control = 0;
         try self.flushTxFifo();
         self.delayMicros(1);
         try self.flushRxFifo();
@@ -539,18 +548,18 @@ pub const UsbController = struct {
         dumpRegister("interrupt_status", @bitCast(self.core_registers.interrupt_status));
         dumpRegister("interrupt_mask", @bitCast(self.core_registers.interrupt_mask));
         dumpRegister("rx_fifo_size", @bitCast(self.core_registers.rx_fifo_size));
-        dumpRegister("nper_tx_fifo_size", @bitCast(self.core_registers.nper_tx_fifo_size));
-        dumpRegister("nper_tx_status", @bitCast(self.core_registers.nper_tx_status));
+        dumpRegister("nonperiodic_tx_fifo_size", @bitCast(self.core_registers.nonperiodic_tx_fifo_size));
+        dumpRegister("nonperiodic_tx_status", @bitCast(self.core_registers.nonperiodic_tx_status));
 
         kprint("{s: >26}\n", .{""});
         kprint("{s: >26}\n", .{"Host registers"});
         dumpRegister("config", @bitCast(self.host_registers.config));
         dumpRegister("frame_interval", @bitCast(self.host_registers.frame_interval));
         dumpRegister("frame_num", @bitCast(self.host_registers.frame_num));
-        dumpRegister("per_tx_fifo_status", @bitCast(self.host_registers.per_tx_fifo_status));
-        dumpRegister("all_channel_interrupt", @bitCast(self.host_registers.all_channel_interrupt));
-        dumpRegister("all_channel_interrupt_mask", @bitCast(self.host_registers.all_channel_interrupt_mask));
-        dumpRegister("frame_last_base_addr", @bitCast(self.host_registers.frame_last_base_addr));
+        dumpRegister("periodic_tx_fifo_status", @bitCast(self.host_registers.periodic_tx_fifo_status));
+        dumpRegister("all_channel_interrupts", @bitCast(self.host_registers.all_channel_interrupts));
+        dumpRegister("all_channel_interrupts_mask", @bitCast(self.host_registers.all_channel_interrupts_mask));
+        dumpRegister("frame_list_base_addr", @bitCast(self.host_registers.frame_list_base_addr));
         dumpRegister("port", @bitCast(self.host_registers.port));
     }
 };
