@@ -331,7 +331,7 @@ pub const UsbController = struct {
         }
     }
 
-    fn powerOff(self: *const UsbController) void {
+    fn powerOff(self: *const UsbController) !void {
         var power_result = try self.power_controller.powerOff(.usb_hcd);
 
         if (power_result != .power_off) {
