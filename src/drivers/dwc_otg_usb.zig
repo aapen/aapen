@@ -105,7 +105,22 @@ const HostConfig = packed struct {
         sel_48_mhz = 1,
         sel_6_mhz = 2,
     }, // 0..1
-    _unknown_0: u30,
+    fs_ls_support_only: u1, // 2
+    _unknown_0: u4, // 3..6
+    enable_32khz: u1, // 7
+    resume_valid: u8, // 8 .. 15
+    _unknown_1: u7, // 16..22
+    desc_dma: u1, // 23
+    frame_list_entries: enum(u2) {
+        list_entries_8 = 0,
+        list_entries_16 = 1,
+        list_entries_32 = 2,
+        list_entries_64 = 3,
+    }, // 24..25
+    per_sched_enable: u1, //26
+    _unknown_2: u4, // 27..30
+    mode_ch_tim_en: u1, // 31
+
 };
 
 const HostFrames = packed struct {
@@ -169,20 +184,33 @@ const AhbConfig = packed struct {
 };
 
 const UsbConfig = packed struct {
-    _unknown_0: u3, // 0..2
+    toutcal: u3, // 0..3
     phy_if: u1, // 3
     ulpi_utmi_sel: u1, // 4
-    _unknown_1: u3, // 5..7
+    fs_intf: u1, // 5
+    phy_sel: u1, // 6
+    ddr_sel: u1, // 7
     srp_capable: u1, // 8
     hnp_capable: u1, // 9
-    _unknown_2: u7, // 10..16
+    usb_trdtim: u4, // 10..13
+    _reserved_14: u1, // 14
+    phy_low_pwr_clk_sel: u1, // 15
+    otg_utmi_fs_sel: u1, // 16
     ulpi_fsls: u1, // 17
-    _unknown_3: u1, // 18
+    ulpi_auto_res: u1, // 18
     ulpi_clk_sus_m: u1, // 19
     ulpi_ext_vbus_drv: u1, // 20
-    _unknown_4: u1, // 21
+    ulpi_int_vbus_indicator: u1, // 21
     term_sel_dl_pulse: u1, // 22
-    _unknown_5: u9, // 23..31
+    indicator_complement: u1, //23
+    indicator_passthrough: u1, // 24
+    ulpi_int_prot_dis: u1, // 25
+    ic_usb_cap: u1, // 26
+    ic_traffic_pull_remove: u1, // 27
+    tx_end_delay: u1, // 28
+    force_host_mode: u1, // 29
+    force_device_mode: u1, // 30
+    _reserved_31: u1, // 31
 };
 
 const Reset = packed struct {
@@ -200,8 +228,10 @@ const InterruptStatus = packed struct {
     sof_intr: u1, // 3
     _unknown_1: u20, // 4..23
     port_intr: u1, // 24
-    hc_intr: u1, // 25
-    _unknown_2: u6, // 26..31
+    host_channel_intr: u1, // 25
+    _unknown_2: u3, // 26..28
+    disconnect: u1, // 29
+    _unknown_3: u2, // 30..31
 };
 
 const InterruptMask = packed struct {
@@ -214,7 +244,7 @@ const InterruptMask = packed struct {
     usb_suspend: u1, // 11
     _unknown_3: u12, // 12..23
     port_intr: u1, // 24
-    hc_intr: u1, // 25
+    host_channel_intr: u1, // 25
     _unknown_4: u2, // 26..27
     con_id_sts_chng: u1, // 28
     disconnect: u1, // 29
@@ -231,9 +261,21 @@ const RxStatus = packed struct {
 };
 
 const HwConfig2 = packed struct {
-    op_mode: u3, // 0..2
-    architecture: u2, // 3..4
-    _unknown_0: u1, // 5
+    operating_mode: enum(u3) {
+        hnp_srp_capable_otg = 0,
+        srp_only_capable_otg = 1,
+        no_hnp_src_capable_otg = 2,
+        srp_capable_device = 3,
+        no_srp_capable_device = 4,
+        srp_capable_host = 5,
+        no_srp_capable_host = 6,
+    }, // 0..2
+    architecture: enum(u2) {
+        slave_only = 0,
+        ext_dma = 1,
+        int_dma = 2,
+    }, // 3..4
+    point_to_point: u1, // 5
     hs_phy_type: enum(u2) {
         not_supported = 0,
         utmi = 1,
@@ -246,9 +288,16 @@ const HwConfig2 = packed struct {
         unknown_2 = 2,
         unknown_3 = 3,
     }, // 8..9
-    _unknown_1: u4, // 10..13
+    num_device_endpoints: u4, // 10..13
     num_host_channels: u4, // 14..17
-    _unknown_2: u14, // 18..31
+    periodic_endpoint_supported: u1, // 18
+    dynamic_fifo: u1, // 19
+    multi_proc_int: u1, // 20
+    _reserved_21: u1, // 21
+    non_periodic_tx_queue_depth: u2, // 22..23
+    host_periodic_tx_queue_depth: u2, //24..25
+    device_token_queue_depth: u5, // 26..30
+    otg_enable_ic_usb: u1, // 31
 };
 
 const HwConfig3 = packed struct {
@@ -463,7 +512,7 @@ pub const UsbController = struct {
     fn enableHostInterrupts(self: *const UsbController) !void {
         self.core_registers.interrupt_mask = @bitCast(@as(u32, 0));
         self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffffffff));
-        self.core_registers.interrupt_mask.hc_intr = 1;
+        self.core_registers.interrupt_mask.host_channel_intr = 1;
     }
 
     // TODO migrate this to the clock
