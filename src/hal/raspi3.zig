@@ -97,6 +97,7 @@ pub const usb = dwc_otg_usb.UsbController{
     .intc = &interrupt_controller,
     .power_controller = &power_controller,
     .translations = &soc.bus_ranges,
+    .clock = &clock,
 };
 
 pub const VideoController = bcm_video_controller.BroadcomVideoController;
