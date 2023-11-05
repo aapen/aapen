@@ -69,16 +69,6 @@ pub fn wordSetMemory(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i6
     return 0;
 }
 
-/// x y a -- ()
-pub fn wordDrawChar(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    const a = try forth.stack.pop();
-    const y = try forth.stack.pop();
-    const x = try forth.stack.pop();
-    var ch: u8 = @intCast(a);
-    forth.console.drawChar(x, y, ch);
-    return 0;
-}
-
 /// a -- ()
 pub fn wordEmit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const a = try forth.stack.pop();
@@ -108,66 +98,9 @@ pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
-/// sx sy w h dx dy --
-pub fn wordBlit(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var dy = try forth.stack.pop();
-    var dx = try forth.stack.pop();
-    var h = try forth.stack.pop();
-    var w = try forth.stack.pop();
-    var sy = try forth.stack.pop();
-    var sx = try forth.stack.pop();
-    forth.console.fb.blit(sx, sy, w, h, dx, dy);
-    return 0;
-}
-
-/// l t r b c --
-pub fn wordFill(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var color = try forth.stack.pop();
-    var bottom = try forth.stack.pop();
-    var right = try forth.stack.pop();
-    var top = try forth.stack.pop();
-    var left = try forth.stack.pop();
-
-    forth.console.fb.fill(left, top, right, bottom, @truncate(color & 0xff)) catch return ForthError.BadOperation;
-    return 0;
-}
-
-/// x0 y0 x1 y1 c --
-pub fn wordLine(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var color = try forth.stack.pop();
-    var y1 = try forth.stack.pop();
-    var x1 = try forth.stack.pop();
-    var y0 = try forth.stack.pop();
-    var x0 = try forth.stack.pop();
-
-    forth.console.fb.line(x0, y0, x1, y1, @truncate(color & 0xff)) catch return ForthError.BadOperation;
-    return 0;
-}
-
-/// str x y --
-pub fn wordText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var y = try forth.stack.pop();
-    var x = try forth.stack.pop();
-    var str = try forth.popAs([*:0]u8);
-    forth.console.fb.drawString(str, x, y);
-    return 0;
-}
-
 /// --
 pub fn wordReset(_: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     asm volatile ("brk 0x07c5");
-    return 0;
-}
-
-/// --
-pub fn wordCr(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    try forth.emit(0x0a);
-    return 0;
-}
-
-/// --
-pub fn wordClearScreen(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    try forth.emit(0x0c);
     return 0;
 }
 
@@ -590,18 +523,11 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("fb.vtable", FrameBuffer.VTable);
 
     // Display.
-
-    _ = try forth.definePrimitiveDesc("blit", "sx sy w h dx dy -- : Copy a screen rect", &wordBlit, false);
-    _ = try forth.definePrimitiveDesc("fill", "l t r b c -- : fill rectangle with color", &wordFill, false);
-    _ = try forth.definePrimitiveDesc("line", "x0 y0 x1 y1 c -- : draw line with color", &wordLine, false);
-    _ = try forth.definePrimitiveDesc("text", "s x y -- : draw string at position", &wordText, false);
+    _ = try forth.definePrimitiveDesc("dump-usb", "--: Dump USB controller registers", &wordDumpUsbStatus, false);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);
-    _ = try forth.definePrimitiveDesc("cr", " -- :Emit a newline", &wordCr, false);
     _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
-    _ = try forth.definePrimitiveDesc("draw-char", "x y ch -- :Draw a char", &wordDrawChar, false);
-    _ = try forth.definePrimitiveDesc("cls", " -- :Clear the screen", &wordClearScreen, false);
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
     _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, false);

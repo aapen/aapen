@@ -43,7 +43,11 @@ pub const default_palette = [_]u32{
 pub const FrameBuffer = struct {
     //    pub const Self = @This();
     pub const VTable = struct {
-        line: *const fn (fb: *FrameBuffer, x0: usize, y0: usize, x1: usize, x2: usize, color: u8) Error!void,
+        char: *const fn (fb: u64, ch: u64, x: u64, y: u64) void,
+        text: *const fn (fb: u64, str: u64, x: u64, y: u64) void,
+        line: *const fn (fb: u64, x0: u64, y0: u64, x1: u64, x2: u64, color: u64) void,
+        fill: *const fn (fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void,
+        blit: *const fn (fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void,
     };
 
     // These are palette indices
@@ -65,7 +69,42 @@ pub const FrameBuffer = struct {
     range: Region = undefined,
     fg: u8 = DEFAULT_FOREGROUND,
     bg: u8 = DEFAULT_BACKGROUND,
-    vtable: VTable = .{ .line = line },
+    vtable: VTable = .{
+        .char = charInteropShim,
+        .text = textInteropShim,
+        .line = lineInteropShim,
+        .fill = fillInteropShim,
+        .blit = blitInteropShim,
+    },
+
+    fn charInteropShim(fb: u64, ch: u64, x: u64, y: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        var c: u8 = @truncate(ch);
+        self.drawChar(x, y, c);
+    }
+
+    fn textInteropShim(fb: u64, str: u64, x: u64, y: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        var s: [*:0]u8 = @ptrFromInt(str);
+        self.text(s, x, y);
+    }
+
+    fn lineInteropShim(fb: u64, x0: u64, y0: u64, x1: u64, y1: u64, color: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        var c: u8 = @truncate(color);
+        self.line(x0, y0, x1, y1, c) catch {};
+    }
+
+    fn fillInteropShim(fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        var c: u8 = @truncate(color);
+        self.fill(left, top, right, bottom, c) catch {};
+    }
+
+    fn blitInteropShim(fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        self.blit(src_x, src_y, src_w, src_h, dest_x, dest_y);
+    }
 
     pub fn drawPixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {
         if (x < 0) return;
@@ -111,7 +150,7 @@ pub const FrameBuffer = struct {
         }
     }
 
-    pub fn drawString(self: *FrameBuffer, str: [*:0]u8, x_start: usize, y_start: usize) void {
+    pub fn text(self: *FrameBuffer, str: [*:0]u8, x_start: usize, y_start: usize) void {
         var x = x_start;
         var y = y_start;
         var i: usize = 0;

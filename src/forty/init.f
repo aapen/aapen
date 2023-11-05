@@ -1,12 +1,7 @@
-( Some definitions to get us started. )
+(Simple console control)
 
-: star ( -- : Emit a star ) 42 emit ;
-: bar ( -- : Emit a bar) star star star star cr ;
-: dot ( -- : Emit a dot) star cr ;
-: F ( -- : Draw an ascii art F) bar dot bar dot dot ;
-: p ( n -- : Print the top of the stack followed by a newline) . cr ;
-
-F
+: cr 0x0a emit ;
+: cls 0x0c emit ;
 
 ( Input and output base words )
 
@@ -72,6 +67,38 @@ finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
 
+(Drawing)
+: draw-char (y x c -- : Draw character at position)
+  fb
+  [[ fb fb.vtable fb.vtable.char +]] @
+  invoke-4
+;
+
+: text (y x s -- : Draw string at position)
+  fb
+  [[ fb fb.vtable fb.vtable.text +]] @
+  invoke-4
+;
+
+: line  (color y2 x2 y1 x1 -- : Draw a colored line)
+  fb
+  [[ fb fb.vtable fb.vtable.line +]] @
+  invoke-6
+;
+
+: fill  (color bottom right top left -- : Fill a rectangle with color)
+  fb
+  [[ fb fb.vtable fb.vtable.fill +]] @
+  invoke-6
+;
+
+: blit  (dst-y dst-x src-h src-w src-y src-x -- : Copy a rectangle)
+  fb
+  [[ fb fb.vtable fb.vtable.blit +]] @
+  invoke-7
+;
+
+
 (Utilities)
 
 : inc 1 + ;
@@ -96,7 +123,6 @@ finish
 : data-address (p-word -- p-data : Given a word ptr, return the word data ptr)
   header.*len + 
 ;
-
 
 (Character predicates)
 
