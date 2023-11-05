@@ -2,11 +2,14 @@ const std = @import("std");
 const root = @import("root");
 const kprint = root.kprint;
 
-const hal = @import("../hal.zig");
-
 const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
+const LocalInterruptController = local_interrupt_controller.LocalInterruptController;
+
 const local_timer = @import("arm_local_timer.zig");
+const Clock = local_timer.Clock;
+
 const bcm_power = @import("bcm_power.zig");
+const BroadcomPowerController = bcm_power.BroadcomPowerController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -14,8 +17,7 @@ const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
 
-const mailbox = @import("bcm_mailbox.zig");
-const memory_map = @import("../hal/raspi3/memory_map.zig");
+const memory_map = root.HAL.memory_map;
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
@@ -363,12 +365,41 @@ const CoreRegisters = extern struct {
 // }
 
 pub const UsbController = struct {
+    pub const VTable = struct {
+        dumpStatus: *const fn (usb: u64) void,
+    };
+
     core_registers: *volatile CoreRegisters,
     host_registers: *volatile HostRegisters,
-    intc: *const local_interrupt_controller.LocalInterruptController,
+    intc: *const LocalInterruptController,
     translations: *const AddressTranslations,
-    power_controller: *const bcm_power.BroadcomPowerController,
-    clock: *const local_timer.FreeRunningCounter,
+    power_controller: *const BroadcomPowerController,
+    clock: *const Clock,
+    vtable: VTable = .{
+        .dumpStatus = dumpStatusInteropShim,
+    },
+
+    fn dumpStatusInteropShim(usb: u64) void {
+        var self: *UsbController = @ptrFromInt(usb);
+        self.dumpStatus();
+    }
+
+    pub fn init(
+        register_base: u64,
+        intc: *LocalInterruptController,
+        translations: *AddressTranslations,
+        power: *BroadcomPowerController,
+        clock: *Clock,
+    ) UsbController {
+        return .{
+            .core_registers = @ptrFromInt(register_base),
+            .host_registers = @ptrFromInt(register_base + 0x400),
+            .intc = intc,
+            .translations = translations,
+            .power_controller = power,
+            .clock = clock,
+        };
+    }
 
     pub fn hostControllerInitialize(self: *const UsbController) !void {
         try self.powerOn();
@@ -540,7 +571,7 @@ pub const UsbController = struct {
     }
 
     pub fn dumpStatus(self: *const UsbController) void {
-        kprint("{s: >26}\n", .{"Core registers"});
+        kprint("{s: >28}\n", .{"Core registers"});
         dumpRegister("otg_control", @bitCast(self.core_registers.otg_control));
         dumpRegister("ahb_config", @bitCast(self.core_registers.ahb_config));
         dumpRegister("usb_config", @bitCast(self.core_registers.usb_config));
@@ -551,8 +582,8 @@ pub const UsbController = struct {
         dumpRegister("nonperiodic_tx_fifo_size", @bitCast(self.core_registers.nonperiodic_tx_fifo_size));
         dumpRegister("nonperiodic_tx_status", @bitCast(self.core_registers.nonperiodic_tx_status));
 
-        kprint("{s: >26}\n", .{""});
-        kprint("{s: >26}\n", .{"Host registers"});
+        kprint("{s: >28}\n", .{""});
+        kprint("{s: >28}\n", .{"Host registers"});
         dumpRegister("config", @bitCast(self.host_registers.config));
         dumpRegister("frame_interval", @bitCast(self.host_registers.frame_interval));
         dumpRegister("frame_num", @bitCast(self.host_registers.frame_num));
@@ -565,5 +596,5 @@ pub const UsbController = struct {
 };
 
 fn dumpRegister(field_name: []const u8, v: u32) void {
-    kprint("{s: >26}: {x:0>8}\n", .{ field_name, v });
+    kprint("{s: >28}: {x:0>8}\n", .{ field_name, v });
 }

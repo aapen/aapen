@@ -5,7 +5,6 @@ const kprint = root.kprint;
 
 const debug = @import("../../debug.zig");
 const cpu = @import("../../architecture.zig").cpu;
-const hal = @import("../../hal.zig");
 const registers = @import("registers.zig");
 const Esr = @import("registers/esr.zig").Layout;
 
@@ -56,7 +55,7 @@ fn unwindPointLocate(_: *ExceptionContext) *UnwindPoint {
 }
 
 export fn irqCurrentElx(context: *const ExceptionContext) void {
-    hal.interrupt_controller.irqHandle(context);
+    root.hal.interrupt_controller.irqHandle(context);
 }
 
 pub fn irqDisable() void {

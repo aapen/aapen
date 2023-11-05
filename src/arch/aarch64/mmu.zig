@@ -1,6 +1,7 @@
-const cortex_a = @import("../cortex-a.zig");
+const root = @import("root");
+const memory_map = root.HAL.memory_map;
 
-pub const memory_map = @import("../../hal/raspi3/memory_map.zig");
+const cortex_a = @import("../cortex-a.zig");
 
 // Assumptions
 //

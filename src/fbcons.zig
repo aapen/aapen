@@ -1,14 +1,13 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const root = @import("root");
 const debug = root.debug;
 const kprint = root.kprint;
+const Serial = root.HAL.Serial;
 
 const frame_buffer = @import("frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
-
-const hal = @import("hal.zig");
-
-const Allocator = std.mem.Allocator;
 
 const Readline = @import("readline.zig");
 
@@ -20,13 +19,17 @@ pub const FrameBufferConsole = struct {
     width: u64 = undefined,
     height: u64 = undefined,
     fb: *FrameBuffer = undefined,
-    serial: *const hal.Serial,
+    serial: *Serial = undefined,
 
-    pub fn init(self: *FrameBufferConsole) void {
-        self.xpos = 0;
-        self.ypos = 0;
-        self.width = @truncate(self.fb.xres / 8);
-        self.height = @truncate(self.fb.yres / 16);
+    pub fn init(fb: *FrameBuffer, serial: *Serial) FrameBufferConsole {
+        return .{
+            .fb = fb,
+            .serial = serial,
+            .xpos = 0,
+            .ypos = 0,
+            .width = @truncate(fb.xres / 8),
+            .height = @truncate(fb.yres / 16),
+        };
     }
 
     pub fn clear(self: *FrameBufferConsole) void {

@@ -5,8 +5,6 @@ const bcm_mailbox = @import("bcm_mailbox.zig");
 const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const PropertyTag = bcm_mailbox.PropertyTag;
 
-const hal = @import("../hal.zig");
-
 const memory = @import("../memory.zig");
 const Regions = memory.Regions;
 const Region = memory.Region;
@@ -53,6 +51,12 @@ const PropertyBoardInfo = extern struct {
 
 pub const BroadcomBoardInfoController = struct {
     mailbox: *const BroadcomMailbox,
+
+    pub fn init(mailbox: *const BroadcomMailbox) BroadcomBoardInfoController {
+        return .{
+            .mailbox = mailbox,
+        };
+    }
 
     pub fn inspect(self: *const BroadcomBoardInfoController, info: *BoardInfo) !void {
         var board_info = PropertyBoardInfo.init();

@@ -1,8 +1,11 @@
 const std = @import("std");
 const memory = @import("../memory.zig");
 
-const memory_map = @import("raspi3/memory_map.zig");
+pub const memory_map = @import("raspi3/memory_map.zig");
 const peripheral_base = memory_map.peripheral_base;
+
+pub const heap_start = memory_map.heap_start;
+pub const heap_end = memory_map.heap_end;
 
 // ARM devices
 const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
@@ -23,99 +26,80 @@ const simple_bus = @import("../drivers/simple_bus.zig");
 
 pub const BoardInfoController = bcm_board_info.BroadcomBoardInfoController;
 pub const BoardInfo = bcm_board_info.BoardInfo;
-pub const board_info_controller = BoardInfoController{
-    .mailbox = &mailbox,
-};
-
-pub const Clock = arm_local_timer.FreeRunningCounter;
-pub const clock = Clock{
-    .count_low = @ptrFromInt(peripheral_base + 0x3004),
-    .count_high = @ptrFromInt(peripheral_base + 0x3008),
-};
-
+pub const Clock = arm_local_timer.Clock;
 pub const DMA = bcm_dma.BroadcomDMAController;
 pub const DMAChannel = bcm_dma.DMAChannel;
 pub const DMARequest = bcm_dma.BroadcomDMARequest;
 pub const DMAError = bcm_dma.DMAError;
-pub const dma = DMA{
-    .register_base = peripheral_base + 0x7000,
-    .intc = &interrupt_controller,
-    .interrupt_status = @ptrFromInt(peripheral_base + 0x7000 + 0xfe0),
-    .transfer_enabled = @ptrFromInt(peripheral_base + 0x7000 + 0xff0),
-    .translations = &soc.dma_ranges,
-};
-
 pub const InterruptController = arm_local_interrupt.LocalInterruptController;
-pub const interrupt_controller = InterruptController{
-    .registers = @ptrFromInt(peripheral_base + 0xb200),
-};
-
 pub const GPIO = bcm_gpio.BroadcomGpio;
-pub const gpio = GPIO{
-    .registers = @ptrFromInt(peripheral_base + 0x200000),
-};
-
-pub const heap_start = memory_map.heap_start;
-pub const heap_end = memory_map.heap_end;
-
 pub const Mailbox = bcm_mailbox.BroadcomMailbox;
-pub const mailbox = Mailbox{
-    .registers = @ptrFromInt(peripheral_base + 0xB880),
-    .translations = &soc.bus_ranges,
-};
-
 pub const PowerController = bcm_power.BroadcomPowerController;
 pub const PowerResult = bcm_power.PowerResult;
-pub const power_controller = PowerController{
-    .mailbox = &mailbox,
-};
-
 pub const Serial = pl011.Pl011Uart;
-pub const serial = pl011.Pl011Uart{
-    .registers = @ptrFromInt(peripheral_base + 0x201000),
-    .gpio = &gpio,
-};
-
 pub const SOC = simple_bus.SimpleBus;
-pub const soc = SOC{};
-
 pub const Timer = arm_local_timer.Timer;
 pub const TimerCallbackFn = arm_local_timer.TimerCallbackFn;
-pub const timer: [4]Timer = [_]Timer{
-    arm_local_timer.mktimer(0, peripheral_base + 0x3000, interrupt_controller),
-    arm_local_timer.mktimer(1, peripheral_base + 0x3000, interrupt_controller),
-    arm_local_timer.mktimer(2, peripheral_base + 0x3000, interrupt_controller),
-    arm_local_timer.mktimer(3, peripheral_base + 0x3000, interrupt_controller),
-};
-
-const usb_base = peripheral_base + 0x980000;
-
 pub const USB = dwc_otg_usb.UsbController;
-pub const usb = dwc_otg_usb.UsbController{
-    .core_registers = @ptrFromInt(usb_base),
-    .host_registers = @ptrFromInt(usb_base + 0x400),
-    .intc = &interrupt_controller,
-    .power_controller = &power_controller,
-    .translations = &soc.bus_ranges,
-    .clock = &clock,
-};
-
 pub const VideoController = bcm_video_controller.BroadcomVideoController;
-pub const video_controller = VideoController{
-    .mailbox = &mailbox,
-    .dma = &dma,
-};
 
-pub fn init(allocator: std.mem.Allocator) !void {
-    try soc.init(allocator);
+const Self = @This();
 
-    try soc.appendBusRange(0x7e000000, 0x3f000000, 0x1000000);
-    try soc.appendBusRange(0x40000000, 0x40000000, 0x1000);
+board_info_controller: BoardInfoController,
+clock: Clock,
+dma: DMA,
+interrupt_controller: InterruptController,
+gpio: GPIO,
+mailbox: Mailbox,
+power_controller: PowerController,
+serial: Serial,
+soc: SOC,
+timer: [4]Timer,
+usb: USB,
+video_controller: VideoController,
 
-    try soc.appendDmaRange(0xc0000000, 0x00, 0x3f000000);
-    try soc.appendDmaRange(0x7e000000, 0x3f000000, 0x1000000);
+pub fn init(allocator: std.mem.Allocator) !*Self {
+    var self: *Self = try allocator.create(Self);
 
-    serial.init();
-    dma.init(allocator);
-    mailbox.init(allocator);
+    self.soc = SOC.init(allocator);
+
+    try self.soc.appendBusRange(0x7e000000, 0x3f000000, 0x1000000);
+    try self.soc.appendBusRange(0x40000000, 0x40000000, 0x1000);
+
+    try self.soc.appendDmaRange(0xc0000000, 0x00, 0x3f000000);
+    try self.soc.appendDmaRange(0x7e000000, 0x3f000000, 0x1000000);
+
+    self.interrupt_controller = InterruptController.init(peripheral_base + 0xb200);
+
+    self.board_info_controller = BoardInfoController.init(&self.mailbox);
+
+    self.clock = Clock.init(peripheral_base + 0x3000);
+
+    self.dma = DMA.init(allocator, peripheral_base + 0x7000, &self.interrupt_controller, &self.soc.dma_ranges);
+
+    self.gpio = GPIO.init(peripheral_base + 0x200000);
+
+    self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
+
+    self.power_controller = PowerController.init(&self.mailbox);
+
+    self.serial = Serial.init(peripheral_base + 0x201000, &self.gpio);
+
+    self.video_controller = VideoController.init(&self.mailbox, &self.dma);
+
+    self.usb = USB.init(peripheral_base + 0x980000, &self.interrupt_controller, &self.soc.bus_ranges, &self.power_controller, &self.clock);
+
+    for (0..3) |timer_id| {
+        self.timer[timer_id] = Timer.init(timer_id, peripheral_base + 0x3000, &self.clock, &self.interrupt_controller);
+    }
+
+    return self;
+}
+
+const SerialWriter = std.io.Writer(*const Self, error{}, serialStringSend);
+
+pub var serial_writer: SerialWriter = undefined;
+
+fn serialStringSend(self: *const Self, str: []const u8) !usize {
+    return self.serial.puts(str);
 }

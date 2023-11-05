@@ -2,7 +2,6 @@ const std = @import("std");
 const config = @import("config");
 
 const arch = @import("architecture.zig");
-const hal = @import("hal.zig");
 const qemu = @import("qemu.zig");
 const heap = @import("heap.zig");
 const frame_buffer = @import("frame_buffer.zig");
@@ -11,6 +10,11 @@ const bcd = @import("bcd.zig");
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 const raspi3 = @import("hal/raspi3.zig");
+
+pub const HAL = switch (config.board) {
+    .pi3 => @import("hal/raspi3.zig"),
+    inline else => @compileError("Unsupported board " ++ @tagName(config.board)),
+};
 
 pub const debug = @import("debug.zig");
 
@@ -35,13 +39,11 @@ const mring_space_bytes = 1024 * 1024;
 export var mring_storage: [mring_space_bytes]u8 = undefined;
 pub var mring: debug.MessageBuffer = undefined;
 
-pub var board = hal.BoardInfo{};
+pub var hal: *HAL = undefined;
+pub var board = HAL.BoardInfo{};
 pub var kernel_heap: heap.Heap = undefined;
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
-pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{
-    .serial = hal.serial,
-    .fb = &fb,
-};
+pub var frame_buffer_console: fbcons.FrameBufferConsole = undefined;
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .sp = undefined,
@@ -50,7 +52,7 @@ pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .lr = undefined,
 };
 
-pub const uart_valid = true;
+pub var uart_valid = false;
 pub var console_valid = false;
 
 fn kernelInit() void {
@@ -61,12 +63,21 @@ fn kernelInit() void {
     mring = debug.MessageBuffer.init(&mring_storage) catch unreachable;
     mring.append("mring init");
 
-    kernel_heap = heap.Heap.init(@intFromPtr(hal.heap_start), hal.heap_end);
+    kernel_heap = heap.Heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
     os.page_allocator = kernel_heap.allocator();
 
-    hal.init(os.page_allocator) catch |err| {
-        kprint("HAL init error {any}\n", .{err});
-    };
+    if (HAL.init(os.page_allocator)) |h| {
+        hal = h;
+        HAL.serial_writer = .{ .context = h };
+    } else |err| {
+        mring.append("early error");
+        mring.append(@errorName(err));
+    }
+
+    hal.serial.initializeUart();
+    uart_valid = true;
+
+    frame_buffer_console.serial = &hal.serial;
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, serial
     arch.cpu.exceptions.init();
@@ -78,7 +89,7 @@ fn kernelInit() void {
         kprint("Video init error {any}\n", .{err});
     };
 
-    frame_buffer_console.init();
+    frame_buffer_console = fbcons.FrameBufferConsole.init(&fb, &hal.serial);
     console_valid = true;
 
     std.log.info("HAL initialized", .{});
@@ -116,6 +127,7 @@ fn kernelInit() void {
     supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
     supplyAddress("fb", @intFromPtr(&fb));
     supplyAddress("board", @intFromPtr(&board));
+    supplyAddress("hal", @intFromPtr(hal));
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));

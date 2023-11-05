@@ -1,8 +1,11 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-const hal = @import("hal.zig");
-const DMA = hal.DMA;
+const root = @import("root");
+
+const DMA = root.HAL.DMA;
+const DMAChannel = root.HAL.DMAChannel;
+const DMARequest = root.HAL.DMARequest;
 
 const Region = @import("memory.zig").Region;
 
@@ -58,8 +61,8 @@ pub const FrameBuffer = struct {
         OutOfBounds,
     };
 
-    dma: *const hal.DMA = undefined,
-    dma_channel: ?hal.DMAChannel = undefined,
+    dma: *const DMA = undefined,
+    dma_channel: ?DMAChannel = undefined,
     base: [*]u8 = undefined,
     buffer_size: usize = undefined,
     pitch: usize = undefined,
@@ -191,7 +194,7 @@ pub const FrameBuffer = struct {
 
             const len = if (stride_2d > 0) ((xfer_y_len << 16) + xfer_x_len) else (h * fb.xres);
 
-            var req = hal.DMARequest{
+            var req = DMARequest{
                 .source = @truncate(fb_base + (sy * fb_pitch) + sx),
                 .destination = @truncate(fb_base + (dy * fb_pitch) + dx),
                 .length = len,

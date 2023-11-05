@@ -4,7 +4,6 @@ const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
-const hal = @import("hal.zig");
 
 pub fn log(
     comptime level: std.log.Level,
@@ -19,7 +18,7 @@ pub fn log(
     // TODO acquire spinlock
     // TODO defer release spinlock
     if (root.uart_valid) {
-        hal.serial_writer.print(prefix ++ format ++ "\n", args) catch {};
+        root.HAL.serial_writer.print(prefix ++ format ++ "\n", args) catch {};
     }
 
     if (root.console_valid) {
@@ -29,7 +28,7 @@ pub fn log(
 
 pub fn kprint(comptime fmt: []const u8, args: anytype) void {
     if (root.uart_valid) {
-        hal.serial_writer.print(fmt, args) catch {};
+        root.HAL.serial_writer.print(fmt, args) catch {};
     }
 
     if (root.console_valid) {

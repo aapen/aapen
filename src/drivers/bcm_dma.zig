@@ -3,9 +3,8 @@ const root = @import("root");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const hal = @import("../hal.zig");
-
 const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
+const LocalInterruptController = local_interrupt_controller.LocalInterruptController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -123,16 +122,28 @@ pub const BroadcomDMAController = struct {
     const max_channel_id: ChannelId = 14;
 
     //    clock: *Clock = undefined,
-    allocator: Allocator = undefined,
+    allocator: Allocator,
     register_base: u64,
     translations: *const AddressTranslations,
-    interrupt_status: *volatile u32 = undefined,
-    transfer_enabled: *volatile u32 = undefined,
-    intc: *const local_interrupt_controller.LocalInterruptController = undefined,
+    interrupt_status: *volatile u32,
+    transfer_enabled: *volatile u32,
+    intc: *const LocalInterruptController,
     in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
 
-    pub fn init(self: *const BroadcomDMAController, allocator: Allocator) void {
-        @constCast(self).allocator = allocator;
+    pub fn init(
+        allocator: Allocator,
+        register_base: u64,
+        intc: *LocalInterruptController,
+        translations: *AddressTranslations,
+    ) BroadcomDMAController {
+        return .{
+            .allocator = allocator,
+            .register_base = register_base,
+            .intc = intc,
+            .interrupt_status = @ptrFromInt(register_base + 0xfe0),
+            .transfer_enabled = @ptrFromInt(register_base + 0xff0),
+            .translations = translations,
+        };
     }
 
     fn channelClaimUnused(self: *BroadcomDMAController) !ChannelId {
@@ -232,13 +243,13 @@ pub const BroadcomDMAController = struct {
         //
         // would be nice to have a general 'watchdog' facility that we
         // could apply to any word
-        const start_time = hal.clock.ticks();
+        const start_time = root.hal.clock.ticks();
         const deadline = start_time + 1_500_000;
 
         const channel_registers = channel.registers;
 
         var current_time = start_time;
-        while (channel_registers.control.active == 0b1) : (current_time = hal.clock.ticks()) {
+        while (channel_registers.control.active == 0b1) : (current_time = root.hal.clock.ticks()) {
             if (current_time >= deadline) {
                 std.log.warn("DMA on channel {} exceeded timeout by {d}\n", .{ channel.channel_id, (current_time - deadline) });
                 return false;

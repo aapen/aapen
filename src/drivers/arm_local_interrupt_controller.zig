@@ -1,6 +1,5 @@
-const hal = @import("../hal.zig");
-
-const exceptions = @import("../architecture.zig").cpu.exceptions;
+const arch = @import("../architecture.zig");
+const exceptions = arch.cpu.exceptions;
 const ExceptionContext = exceptions.ExceptionContext;
 
 pub const IrqId = struct {
@@ -50,7 +49,13 @@ pub const LocalInterruptController = struct {
     const max_handlers = handlerIndex(2, 32);
 
     handlers: [max_handlers]IrqHandlerFn = undefined,
-    registers: *volatile Registers = undefined,
+    registers: *volatile Registers,
+
+    pub fn init(register_base: u64) LocalInterruptController {
+        return .{
+            .registers = @ptrFromInt(register_base),
+        };
+    }
 
     pub fn connect(self: *const LocalInterruptController, id: IrqId, handler: IrqHandlerFn) void {
         self.handlers[id.index] = handler;

@@ -1,5 +1,3 @@
-const hal = @import("../hal.zig");
-
 const bcm_mailbox = @import("bcm_mailbox.zig");
 const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
 const PropertyTag = bcm_mailbox.PropertyTag;
@@ -57,7 +55,13 @@ const PropertyPower = extern struct {
 };
 
 pub const BroadcomPowerController = struct {
-    mailbox: *const BroadcomMailbox = undefined,
+    mailbox: *const BroadcomMailbox,
+
+    pub fn init(mailbox: *BroadcomMailbox) BroadcomPowerController {
+        return .{
+            .mailbox = mailbox,
+        };
+    }
 
     fn decode(state: u32) PowerResult {
         var no_device = (state & 0x02) != 0;

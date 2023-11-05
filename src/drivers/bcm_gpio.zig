@@ -85,7 +85,13 @@ pub const pins: [28]Pin = init: {
 };
 
 pub const BroadcomGpio = struct {
-    registers: *volatile Registers = undefined,
+    registers: *volatile Registers,
+
+    pub fn init(register_base: u64) BroadcomGpio {
+        return .{
+            .registers = @ptrFromInt(register_base),
+        };
+    }
 
     pub fn selectFunction(self: *const BroadcomGpio, p: *const Pin, fsel: FunctionSelect) void {
         var val = self.registers.function_select[p.function_select_register_index];

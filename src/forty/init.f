@@ -622,6 +622,13 @@ cls
 
 test-all
 
+(Temporary words for debugging)
+: dump-usb  ( -- : Dump USB registers )
+  [[ hal hal.usb +]]
+  [[ hal hal.usb usb.vtable usb.vtable.dumpStatus +]] @
+  invoke-1
+;
+
 cr cr cr
 "************* Nygard/Olsen Forth V40 **************" s. cr
 mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr

@@ -184,7 +184,14 @@ pub const Pl011Uart = struct {
     registers: *volatile Registers,
     gpio: *const BroadcomGpio,
 
-    pub fn init(self: *const Pl011Uart) void {
+    pub fn init(register_base: u64, gpio: *BroadcomGpio) Pl011Uart {
+        return .{
+            .registers = @ptrFromInt(register_base),
+            .gpio = gpio,
+        };
+    }
+
+    pub fn initializeUart(self: *const Pl011Uart) void {
         // Configure GPIO pins for serial I/O
         self.gpio.enable(&bcm_gpio.pins[14]);
         self.gpio.enable(&bcm_gpio.pins[15]);

@@ -14,8 +14,15 @@ const memory = @import("../memory.zig");
 const Region = memory.Region;
 
 pub const BroadcomVideoController = struct {
-    mailbox: *const BroadcomMailbox = undefined,
-    dma: *const BroadcomDMAController = undefined,
+    mailbox: *const BroadcomMailbox,
+    dma: *const BroadcomDMAController,
+
+    pub fn init(mailbox: *BroadcomMailbox, dma: *BroadcomDMAController) BroadcomVideoController {
+        return .{
+            .mailbox = mailbox,
+            .dma = dma,
+        };
+    }
 
     pub fn allocFrameBuffer(self: *const BroadcomVideoController, fb: *FrameBuffer, xres: u32, yres: u32, depth: u32, palette: []const u32) !void {
         var setup = PropertyVideoSetup.init(xres, yres, depth, palette);

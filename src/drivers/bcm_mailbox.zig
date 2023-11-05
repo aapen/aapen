@@ -4,8 +4,6 @@ const assert = std.debug.assert;
 
 const root = @import("root");
 
-const hal = @import("../hal.zig");
-
 const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
 
 const architecture = @import("../architecture.zig");
@@ -79,15 +77,19 @@ pub const BroadcomMailbox = struct {
         mailbox_0_write: u32, // 0x20
     };
 
-    registers: *volatile Registers = undefined,
+    allocator: Allocator,
+    registers: *volatile Registers,
     translations: *const AddressTranslations,
-    allocator: Allocator = undefined,
 
     // ----------------------------------------------------------------------
     // Setup
     // ----------------------------------------------------------------------
-    pub fn init(self: *const BroadcomMailbox, allocator: Allocator) void {
-        @constCast(self).allocator = allocator;
+    pub fn init(allocator: Allocator, register_base: u64, translations: *AddressTranslations) BroadcomMailbox {
+        return .{
+            .allocator = allocator,
+            .registers = @ptrFromInt(register_base),
+            .translations = translations,
+        };
     }
 
     // ----------------------------------------------------------------------

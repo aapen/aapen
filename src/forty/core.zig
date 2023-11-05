@@ -1,8 +1,10 @@
+const root = @import("root");
+const HAL = root.HAL;
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const hal = @import("../hal.zig");
-const BoardInfo = hal.BoardInfo;
+const BoardInfo = root.HAL.BoardInfo;
 
 const frame_buffer = @import("../frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
@@ -93,7 +95,7 @@ pub fn wordKeyMaybe(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
 
 /// -- n
 pub fn wordTicks(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var ticks = hal.clock.ticks();
+    var ticks = root.hal.clock.ticks();
     try forth.stack.push(ticks);
     return 0;
 }
@@ -511,7 +513,6 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
 pub fn defineCore(forth: *Forth) !void {
 
     // Expose internal values to forty.
-
     try forth.defineConstant("word", @sizeOf(u64));
     try forth.defineStruct("board", BoardInfo);
     try forth.defineStruct("board.model", BoardInfo.Model);
@@ -521,9 +522,9 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("fbcons", FrameBufferConsole);
     try forth.defineStruct("fb", FrameBuffer);
     try forth.defineStruct("fb.vtable", FrameBuffer.VTable);
-
-    // Display.
-    _ = try forth.definePrimitiveDesc("dump-usb", "--: Dump USB controller registers", &wordDumpUsbStatus, false);
+    try forth.defineStruct("hal", HAL);
+    try forth.defineStruct("usb", HAL.USB);
+    try forth.defineStruct("usb.vtable", HAL.USB.VTable);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);
