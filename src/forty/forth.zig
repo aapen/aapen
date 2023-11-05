@@ -603,8 +603,17 @@ pub const Forth = struct {
         try hal.serial_writer.writeByte(ch);
     }
 
-    pub fn writer(this: *Forth) fbcons.FrameBufferConsole.Writer {
-        return this.console.writer();
+    pub const Writer = std.io.Writer(*Forth, error{}, write);
+
+    pub fn writer(this: *Forth) Writer {
+        return .{ .context = this };
+    }
+
+    pub fn write(self: *Forth, bytes: []const u8) !usize {
+        for (bytes) |ch| {
+            try self.emit(ch);
+        }
+        return bytes.len;
     }
 
     fn readline(this: *Forth) !usize {
