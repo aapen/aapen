@@ -32,8 +32,8 @@ pub const BoardInfo = struct {
     device: Device = Device{},
     memory: Memory = Memory{},
 
-    pub fn init(self: *BoardInfo, allocator: *Allocator) void {
-        self.memory.regions = memory.Regions.init(allocator.*);
+    pub fn init(self: *BoardInfo, allocator: Allocator) void {
+        self.memory.regions = memory.Regions.init(allocator);
     }
 };
 

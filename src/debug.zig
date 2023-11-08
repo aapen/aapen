@@ -43,31 +43,31 @@ pub fn kprint(comptime fmt: []const u8, args: anytype) void {
 // Kernel message buffer
 // ------------------------------------------------------------------------------
 
-pub const MessageBuffer = struct {
-    const Self = @This();
+const mring_space_bytes = 1024 * 1024;
+pub var mring_storage: [mring_space_bytes]u8 = undefined;
+var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
+var ring: RingBuffer = undefined;
 
-    ring: RingBuffer,
-    lock: *Spinlock,
+pub fn init() !void {
+    var fba = FixedBufferAllocator.init(&mring_storage);
+    var allocator = fba.allocator();
+    ring = try RingBuffer.init(allocator, mring_storage.len);
+}
 
-    pub fn init(
-        raw_space: []u8,
-        lock: *Spinlock,
-    ) Allocator.Error!Self {
-        var fba = FixedBufferAllocator.init(raw_space);
-        var allocator = fba.allocator();
-        var ring = try RingBuffer.init(allocator, raw_space.len);
+/// Use this to report low-level errors. It bypasses the serial
+/// interface, the frame buffer, and even Zig's formatting. (This does
+/// mean you don't get formatted messages, but it also has no chance
+/// of panicking.)
+pub fn kernel_message(msg: []const u8) void {
+    mring_spinlock.acquire();
+    defer mring_spinlock.release();
 
-        return .{
-            .ring = ring,
-            .lock = lock,
-        };
-    }
+    ring.writeSliceAssumeCapacity(msg);
+    ring.writeAssumeCapacity(@as(u8, 0));
+}
 
-    pub fn append(message_buffer: *Self, msg: []const u8) void {
-        message_buffer.lock.acquire();
-        defer message_buffer.lock.release();
-
-        message_buffer.ring.writeSliceAssumeCapacity(msg);
-        message_buffer.ring.writeAssumeCapacity(@as(u8, 0));
-    }
-};
+pub fn kernel_error(msg: []const u8, err: anyerror) void {
+    kernel_message(msg);
+    kernel_message(@errorName(err));
+    kprint("{s}: {any}\n", .{ msg, err });
+}

@@ -18,6 +18,7 @@ pub const HAL = switch (config.board) {
     .pi3 => @import("hal/raspi3.zig"),
     inline else => @compileError("Unsupported board " ++ @tagName(config.board)),
 };
+const diagnostics = @import("hal/diagnostics.zig");
 
 pub const debug = @import("debug.zig");
 
@@ -38,13 +39,12 @@ var os = Freestanding{
 
 // mring is used for debugging low level issues (like when the serial
 // port isn't working.)
-const mring_space_bytes = 1024 * 1024;
-export var mring_storage: [mring_space_bytes]u8 = undefined;
-pub var mring: debug.MessageBuffer = undefined;
-var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
+// const mring_space_bytes = 1024 * 1024;
+// export var mring_storage: [mring_space_bytes]u8 = undefined;
+// pub var mring: debug.MessageBuffer = undefined;
+// var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
 
 pub var hal: *HAL = undefined;
-pub var board = HAL.BoardInfo{};
 pub var kernel_heap: heap.Heap = undefined;
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = undefined;
@@ -67,22 +67,16 @@ fn kernelInit() void {
     // Needed for enter/leave critical sections
     arch.cpu.enableFIQ();
 
-    mring = debug.MessageBuffer.init(
-        &mring_storage,
-        &mring_spinlock,
-    ) catch unreachable;
-    mring.append("mring init");
-    mring.append("second message");
+    debug.init() catch unreachable;
+    debug.kernel_message("init");
 
     kernel_heap = heap.Heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
     os.page_allocator = kernel_heap.allocator();
 
     if (HAL.init(os.page_allocator)) |h| {
         hal = h;
-        HAL.serial_writer = .{ .context = h };
     } else |err| {
-        mring.append("early error");
-        mring.append(@errorName(err));
+        debug.kernel_error("hal init failure", err);
     }
 
     hal.serial.initializeUart();
@@ -94,10 +88,8 @@ fn kernelInit() void {
     arch.cpu.exceptions.init();
 
     // State: one core, interrupts, MMU, heap Allocator, no display, serial
-    // hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
     hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette) catch |err| {
-        mring.append("no video");
-        kprint("Video init error {any}\n", .{err});
+        debug.kernel_error("no video", err);
     };
 
     frame_buffer_console = fbcons.FrameBufferConsole.init(&fb, &hal.serial);
@@ -105,41 +97,31 @@ fn kernelInit() void {
 
     std.log.info("HAL initialized", .{});
 
-    // State: one core, interrupts, MMU, heap Allocator, display, serial
-    board.init(&os.page_allocator);
-    hal.board_info_controller.inspect(&board) catch |err| {
-        kprint("Board inspection error {any}\n", .{err});
-    };
-
-    // hal.timer.schedule(200000, printOneDot, &.{});
-
-    kprint("Board model {s} (a {s}) with {?}MB\n\n", .{
-        board.model.name,
-        board.model.processor,
-        board.model.memory,
-    });
-    kprint("    MAC address: {?}\n", .{board.device.mac_address});
-    kprint("  Serial number: {?}\n", .{board.device.serial_number});
-    kprint("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
-
-    diagnostics() catch |err| {
-        std.log.err("Error printing diagnostics: {any}\n", .{err});
-        hal.serial_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
-    };
+    // State: one core, interrupts, MMU, heap Allocator, display,
+    // serial
+    if (diagnostics.init(os.page_allocator)) {
+        diagnostics.print() catch |err| {
+            debug.kernel_error("Error printing diagnostics", err);
+        };
+        try kernel_heap.range.print();
+        try fb.range.print();
+    } else |err| {
+        debug.kernel_error("Board diagnostics error", err);
+    }
 
     hal.usb.hostControllerInitialize() catch |err| {
-        std.log.err("USB Host initialization: {any}\n", .{err});
+        debug.kernel_error("USB host initialization error", err);
     };
 
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
-        std.log.err("Forth init: {any}\n", .{err});
+        debug.kernel_error("Forth init", err);
     };
 
     supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
     supplyAddress("fb", @intFromPtr(&fb));
-    supplyAddress("board", @intFromPtr(&board));
     supplyAddress("hal", @intFromPtr(hal));
-    supplyAddress("mring", @intFromPtr(&mring_storage));
+    supplyAddress("board", @intFromPtr(&diagnostics.board));
+    supplyAddress("mring", @intFromPtr(&debug.mring_storage));
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -171,14 +153,6 @@ fn supplyAddress(name: []const u8, addr: usize) void {
     interpreter.defineConstant(name, addr) catch |err| {
         std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
     };
-}
-
-fn diagnostics() !void {
-    for (board.memory.regions.items) |r| {
-        try r.print();
-    }
-    try kernel_heap.range.print();
-    try fb.range.print();
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
