@@ -45,7 +45,6 @@ var os = Freestanding{
 // var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
 
 pub var hal: *HAL = undefined;
-pub var kernel_heap: heap = undefined;
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = undefined;
 pub var interpreter: Forth = Forth{};
@@ -70,19 +69,16 @@ fn kernelInit() void {
     debug.init() catch unreachable;
     debug.kernel_message("init");
 
-    kernel_heap = heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
-    os.page_allocator = kernel_heap.allocator();
+    heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
+    os.page_allocator = heap.allocator;
 
-    if (HAL.init(os.page_allocator)) |h| {
+    if (HAL.init(heap.allocator)) |h| {
         hal = h;
+        uart_valid = true;
+        frame_buffer_console.serial = &hal.serial;
     } else |err| {
         debug.kernel_error("hal init failure", err);
     }
-
-    hal.serial.initializeUart();
-    uart_valid = true;
-
-    frame_buffer_console.serial = &hal.serial;
 
     // State: one core, no interrupts, MMU, heap Allocator, no display, serial
     arch.cpu.exceptions.init();
@@ -99,11 +95,11 @@ fn kernelInit() void {
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial
-    if (diagnostics.init(os.page_allocator)) {
+    if (diagnostics.init(heap.allocator)) {
         diagnostics.print() catch |err| {
             debug.kernel_error("Error printing diagnostics", err);
         };
-        try kernel_heap.range.print();
+        try heap.range.print();
         try fb.range.print();
     } else |err| {
         debug.kernel_error("Board diagnostics error", err);
@@ -113,7 +109,7 @@ fn kernelInit() void {
         debug.kernel_error("USB host initialization error", err);
     };
 
-    interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
+    interpreter.init(heap.allocator, &frame_buffer_console) catch |err| {
         debug.kernel_error("Forth init", err);
     };
 

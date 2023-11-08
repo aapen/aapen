@@ -93,6 +93,8 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         self.timer[timer_id] = Timer.init(timer_id, peripheral_base + 0x3000, &self.clock, &self.interrupt_controller);
     }
 
+    self.serial.initializeUart();
+
     serial_writer = .{ .context = self };
 
     return self;
