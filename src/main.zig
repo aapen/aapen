@@ -105,10 +105,11 @@ fn kernelInit() void {
     }
 
     if (FrameBufferConsole.init(heap.allocator, fb, &hal.serial)) |cons| {
+        debug.kernel_message("fbcons init");
         frame_buffer_console = cons;
         console_valid = true;
     } else |err| {
-        debug.kernel_error("fbcons init", err);
+        debug.kernel_error("fbcons init error", err);
     }
 
     // State: one core, interrupts, MMU, heap Allocator, display,
