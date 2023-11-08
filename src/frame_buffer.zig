@@ -1,14 +1,28 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-const hal = @import("hal.zig");
-const DMAController = hal.interfaces.DMAController;
-const DMAChannel = hal.interfaces.DMAChannel;
-const DMARequest = hal.interfaces.DMARequest;
+const root = @import("root");
+
+const DMA = root.HAL.DMA;
+const DMAChannel = root.HAL.DMAChannel;
+const DMARequest = root.HAL.DMARequest;
 
 const Region = @import("memory.zig").Region;
 
+const CharBits = @Vector(8, bool);
+
 const character_rom = @embedFile("data/character_rom.bin");
+const character_count = character_rom.len;
+
+// initialized from character_rom when the frame buffer is initialized
+const character_rombits: [character_rom.len]CharBits = init: {
+    @setEvalBranchQuota(character_rom.len);
+    var initial_value: [character_rom.len]CharBits = undefined;
+    inline for (0..character_count) |i| {
+        initial_value[i] = @bitCast(@bitReverse(character_rom[i]));
+    }
+    break :init initial_value;
+};
 
 pub const default_palette = [_]u32{
     0x00000000,
@@ -32,7 +46,11 @@ pub const default_palette = [_]u32{
 pub const FrameBuffer = struct {
     //    pub const Self = @This();
     pub const VTable = struct {
-        line: *const fn (fb: *FrameBuffer, x0: usize, y0: usize, x1: usize, x2: usize, color: u8) Error!void,
+        char: *const fn (fb: u64, ch: u64, x: u64, y: u64) void,
+        text: *const fn (fb: u64, str: u64, x: u64, y: u64) void,
+        line: *const fn (fb: u64, x0: u64, y0: u64, x1: u64, x2: u64, color: u64) void,
+        fill: *const fn (fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void,
+        blit: *const fn (fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void,
     };
 
     // These are palette indices
@@ -43,7 +61,7 @@ pub const FrameBuffer = struct {
         OutOfBounds,
     };
 
-    dma: *DMAController = undefined,
+    dma: *const DMA = undefined,
     dma_channel: ?DMAChannel = undefined,
     base: [*]u8 = undefined,
     buffer_size: usize = undefined,
@@ -51,10 +69,45 @@ pub const FrameBuffer = struct {
     xres: usize = undefined,
     yres: usize = undefined,
     bpp: u32 = undefined,
-    range: Region = Region{ .name = "Frame Buffer" },
+    range: Region = undefined,
     fg: u8 = DEFAULT_FOREGROUND,
     bg: u8 = DEFAULT_BACKGROUND,
-    vtable: VTable = .{ .line = line },
+    vtable: VTable = .{
+        .char = charInteropShim,
+        .text = textInteropShim,
+        .line = lineInteropShim,
+        .fill = fillInteropShim,
+        .blit = blitInteropShim,
+    },
+
+    fn charInteropShim(fb: u64, ch: u64, x: u64, y: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        var c: u8 = @truncate(ch);
+        self.drawChar(x, y, c);
+    }
+
+    fn textInteropShim(fb: u64, str: u64, x: u64, y: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        var s: [*:0]u8 = @ptrFromInt(str);
+        self.text(s, x, y);
+    }
+
+    fn lineInteropShim(fb: u64, x0: u64, y0: u64, x1: u64, y1: u64, color: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        var c: u8 = @truncate(color);
+        self.line(x0, y0, x1, y1, c) catch {};
+    }
+
+    fn fillInteropShim(fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        var c: u8 = @truncate(color);
+        self.fill(left, top, right, bottom, c) catch {};
+    }
+
+    fn blitInteropShim(fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void {
+        var self: *FrameBuffer = @ptrFromInt(fb);
+        self.blit(src_x, src_y, src_w, src_h, dest_x, dest_y);
+    }
 
     pub fn drawPixel(self: *FrameBuffer, x: usize, y: usize, color: u8) void {
         if (x < 0) return;
@@ -78,6 +131,8 @@ pub const FrameBuffer = struct {
     }
 
     // Font is fixed height of 16 bits, fixed width of 8 bits
+    const CharRow = @Vector(8, u8);
+
     pub fn drawChar(self: *FrameBuffer, x: usize, y: usize, ch: u8) void {
         var romidx: usize = @as(usize, ch - 32) * 16;
         if (romidx + 16 >= character_rom.len)
@@ -86,20 +141,19 @@ pub const FrameBuffer = struct {
         var line_stride = self.pitch;
         var fbidx = x + (y * line_stride);
 
-        for (0..16) |_| {
-            var charbits: u8 = character_rom[romidx];
-            for (0..8) |_| {
-                self.base[fbidx] = if ((charbits & 0x80) != 0) self.fg else self.bg;
-                fbidx += 1;
-                charbits <<= 1;
-            }
-            fbidx -= 8;
+        const backgv: CharRow = @splat(self.bg);
+        const foregv: CharRow = @splat(self.fg);
+
+        inline for (0..16) |_| {
+            const rowbits: CharBits = character_rombits[romidx];
+            const row = @select(u8, rowbits, foregv, backgv);
+            (self.base + fbidx)[0..8].* = row;
             fbidx += line_stride;
             romidx += 1;
         }
     }
 
-    pub fn drawString(self: *FrameBuffer, str: [*:0]u8, x_start: usize, y_start: usize) void {
+    pub fn text(self: *FrameBuffer, str: [*:0]u8, x_start: usize, y_start: usize) void {
         var x = x_start;
         var y = y_start;
         var i: usize = 0;
@@ -113,8 +167,8 @@ pub const FrameBuffer = struct {
         var line_stride = self.pitch;
         var fbidx = x + (y * line_stride);
 
-        for (0..16) |_| {
-            for (0..8) |_| {
+        inline for (0..16) |_| {
+            inline for (0..8) |_| {
                 self.base[fbidx] = self.bg;
                 fbidx += 1;
             }
@@ -146,8 +200,8 @@ pub const FrameBuffer = struct {
                 .length = len,
                 .stride = (stride_2d << 16) | stride_2d,
             };
-            fb.dma.initiate(fb.dma, ch, &req) catch {};
-            _ = fb.dma.awaitChannel(fb.dma, ch);
+            fb.dma.initiate(ch, &req) catch {};
+            _ = fb.dma.awaitChannel(ch);
         }
     }
 
@@ -192,8 +246,8 @@ pub const FrameBuffer = struct {
             else
                 ((b - t) * fb.xres);
 
-            var req = try fb.dma.createRequest(fb.dma);
-            defer fb.dma.destroyRequest(fb.dma, req);
+            var req = try fb.dma.createRequest();
+            defer fb.dma.destroyRequest(req);
 
             req.* = .{
                 .source = @truncate(src),
@@ -203,8 +257,8 @@ pub const FrameBuffer = struct {
                 .length = xfer_count,
                 .stride = (dest_stride << 16) | src_stride,
             };
-            fb.dma.initiate(fb.dma, ch, req) catch {};
-            _ = fb.dma.awaitChannel(fb.dma, ch);
+            fb.dma.initiate(ch, req) catch {};
+            _ = fb.dma.awaitChannel(ch);
         }
     }
 

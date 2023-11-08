@@ -1,25 +1,23 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const FixedBufferAllocator = std.heap.FixedBufferAllocator;
-const Error = Allocator.Error;
-const hal = @import("hal.zig");
-const Region = @import("memory.zig").Region;
 
-const Self = @This();
+const memory = @import("memory.zig");
+const Region = memory.Region;
 
-pub const linker_heap_start: [*]u8 = @extern([*]u8, .{ .name = "__heap_start" });
+pub const Heap = struct {
+    range: Region,
+    fba: FixedBufferAllocator,
 
-range: Region = Region{ .name = "Kernel Heap" },
-fba: FixedBufferAllocator = undefined,
+    pub fn init(lower_bound: usize, upper_bound: usize) Heap {
+        const region = Region.fromStartToEnd("kernel heap", lower_bound, upper_bound);
+        return .{
+            .range = region,
+            .fba = region.allocator(),
+        };
+    }
 
-pub fn init(self: *Self, heap_end: u64) void {
-    var heap_start = @intFromPtr(linker_heap_start);
-    var heap_len = heap_end - heap_start;
-
-    self.fba = FixedBufferAllocator.init(linker_heap_start[0..heap_len]);
-    self.range.fromStartToEnd(heap_start, heap_end);
-}
-
-pub fn allocator(self: *Self) Allocator {
-    return self.fba.allocator();
-}
+    pub fn allocator(self: *Heap) Allocator {
+        return self.fba.allocator();
+    }
+};

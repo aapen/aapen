@@ -2,7 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
-const hal = @import("../hal.zig");
+const root = @import("root");
+
 const fbcons = @import("../fbcons.zig");
 const Readline = @import("../readline.zig");
 const buffer = @import("buffer.zig");
@@ -357,6 +358,11 @@ pub const Forth = struct {
             }
             const p: *Header = @ptrFromInt(body[i]);
             try forth.trace("Call: {x} {s}\n", .{ body[i], p.name });
+            try forth.trace("{:4}: Stack: ", .{i});
+            for (forth.stack.items()) |item| {
+                try forth.trace("{}\t", .{item});
+            }
+            try forth.trace("\n", .{});
             const delta = try p.func(forth, body, i, p);
             var new_i: i64 = @intCast(i);
             new_i = new_i + 1 + delta;
@@ -590,16 +596,25 @@ pub const Forth = struct {
 
     pub fn print(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
         try this.console.print(fmt, args);
-        try hal.serial_writer.print(fmt, args);
+        try root.HAL.serial_writer.print(fmt, args);
     }
 
     pub fn emit(this: *Forth, ch: u8) !void {
         this.console.emit(ch);
-        try hal.serial_writer.writeByte(ch);
+        try root.HAL.serial_writer.writeByte(ch);
     }
 
-    pub fn writer(this: *Forth) fbcons.FrameBufferConsole.Writer {
-        return this.console.writer();
+    pub const Writer = std.io.Writer(*Forth, error{}, write);
+
+    pub fn writer(this: *Forth) Writer {
+        return .{ .context = this };
+    }
+
+    pub fn write(self: *Forth, bytes: []const u8) !usize {
+        for (bytes) |ch| {
+            try self.emit(ch);
+        }
+        return bytes.len;
     }
 
     fn readline(this: *Forth) !usize {

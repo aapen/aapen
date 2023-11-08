@@ -1,16 +1,13 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const root = @import("root");
 const debug = root.debug;
-const kinfo = root.kinfo;
 const kprint = root.kprint;
+const Serial = root.HAL.Serial;
 
 const frame_buffer = @import("frame_buffer.zig");
 const FrameBuffer = frame_buffer.FrameBuffer;
-
-const hal = @import("hal.zig");
-const VideoController = hal.common.VideoController;
-const Serial = hal.interfaces.Serial;
-const Allocator = std.mem.Allocator;
 
 const Readline = @import("readline.zig");
 
@@ -24,12 +21,15 @@ pub const FrameBufferConsole = struct {
     fb: *FrameBuffer = undefined,
     serial: *Serial = undefined,
 
-    pub fn init(self: *FrameBufferConsole, serial: *Serial) void {
-        self.serial = serial;
-        self.xpos = 0;
-        self.ypos = 0;
-        self.width = @truncate(self.fb.xres / 8);
-        self.height = @truncate(self.fb.yres / 16);
+    pub fn init(fb: *FrameBuffer, serial: *Serial) FrameBufferConsole {
+        return .{
+            .fb = fb,
+            .serial = serial,
+            .xpos = 0,
+            .ypos = 0,
+            .width = @truncate(fb.xres / 8),
+            .height = @truncate(fb.yres / 16),
+        };
     }
 
     pub fn clear(self: *FrameBufferConsole) void {
@@ -176,30 +176,30 @@ pub const FrameBufferConsole = struct {
     }
 
     pub fn getc(self: *FrameBufferConsole) u8 {
-        var ch = self.serial.getc(self.serial);
+        var ch = self.serial.getc();
         return if (ch == '\r') '\n' else ch;
     }
 
     pub fn putc(self: *FrameBufferConsole, ch: u8) void {
         switch (ch) {
             '\n' => {
-                _ = self.serial.putc(self.serial, '\r');
-                _ = self.serial.putc(self.serial, '\n');
+                _ = self.serial.putc('\r');
+                _ = self.serial.putc('\n');
             },
             0x7f => {
-                _ = self.serial.putc(self.serial, 0x08);
-                _ = self.serial.putc(self.serial, ' ');
-                _ = self.serial.putc(self.serial, 0x08);
+                _ = self.serial.putc(0x08);
+                _ = self.serial.putc(' ');
+                _ = self.serial.putc(0x08);
             },
             else => {
-                _ = self.serial.putc(self.serial, ch);
+                _ = self.serial.putc(ch);
             },
         }
         self.emit(ch);
     }
 
     pub fn char_available(self: *FrameBufferConsole) bool {
-        return self.serial.hasc(self.serial);
+        return self.serial.hasc();
     }
 };
 

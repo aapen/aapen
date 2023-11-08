@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const hal = @import("../hal.zig");
 const fbcons = @import("../fbcons.zig");
 
 const errors = @import("errors.zig");
@@ -261,8 +260,8 @@ pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 }
 
 // Compiler word, generate the code for the begining of a repeat loop.
-// Structure is:  n repeat <body> done
-pub fn wordRepeat(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+// Structure is:  n times <body> repeat
+pub fn wordTimes(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
     // code to push count onto return stack
     try forth.addCall(forth.toRStack);
@@ -279,7 +278,24 @@ pub fn wordRepeat(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
-pub fn wordTimes(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+// Compiler word, generate the code for the begining of for-range loop.
+// Structure is:  n1 n2 for-range <body> repeat
+pub fn wordForRange(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    try forth.assertCompiling();
+    // code to push count onto return stack
+    try forth.addCall(forth.toRStack);
+    try forth.addCall(forth.drop);
+    try forth.addCall(forth.toRStack);
+    try forth.addCall(forth.drop);
+    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addCall(forth.jumpIfRLE);
+    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addNumber(InvalidOffset);
+
+    return 0;
+}
+
+pub fn wordRepeat(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.addCall(forth.incRStack);
     try generateLoopTail(forth);
     try forth.addCall(forth.rDrop);
@@ -323,6 +339,7 @@ pub fn defineCompiler(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("while", " -- :Compile the head of a while loop.", &wordWhile, true);
     _ = try forth.definePrimitiveDesc("do", " -- :Compile the condition part of a while loop.", &wordDo, true);
     _ = try forth.definePrimitiveDesc("done", " -- :Compile the end of a while loop.", &wordDone, true);
-    _ = try forth.definePrimitiveDesc("repeat", " n -- :repeat the body n times.", &wordRepeat, true);
-    _ = try forth.definePrimitiveDesc("times", "  -- : End of repeat loop", &wordTimes, true);
+    _ = try forth.definePrimitiveDesc("times", "n  -- : repeat the body n times", &wordTimes, true);
+    _ = try forth.definePrimitiveDesc("for-range", "n1 n2  -- : repeat the body n2-n1 times", &wordForRange, true);
+    _ = try forth.definePrimitiveDesc("repeat", " -- : end of loop", &wordRepeat, true);
 }

@@ -1,13 +1,12 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
 const root = @import("root");
-const kinfo = root.kinfo;
 
-const hal = @import("../hal.zig");
+const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
 
 const architecture = @import("../architecture.zig");
-const cache = architecture.cache;
 const barriers = architecture.barriers;
 
 const memory = @import("../memory.zig");
@@ -16,38 +15,56 @@ const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
 
-const MailboxStatusRegister = packed struct {
-    _unused_reserved: u30,
-    mail_empty: u1,
-    mail_full: u1,
-};
+extern fn spinDelay(delay: u32) void;
 
-const IrqEnableBit = enum(u1) {
-    disabled = 0b0,
-    enabled = 0b1,
-};
+pub const PropertyTag = extern struct {
+    tag_id: u32,
+    value_buffer_size: u32,
+    value_length: u32,
 
-const IrqPendingBit = enum(u1) {
-    not_raised = 0b0,
-    raised = 0b1,
-};
-
-const MailboxConfigurationRegister = packed struct {
-    data_available_irq_enable: IrqEnableBit = .disabled,
-    space_available_irq_enable: IrqEnableBit = .disabled,
-    opp_empty_irq_enable: IrqEnableBit = .disabled,
-    mail_clear: u1 = 0,
-    data_available_irq_pending: IrqPendingBit = .not_raised,
-    space_available_irq_pending: IrqPendingBit = .not_raised,
-    opp_empty_irq_pending: IrqPendingBit = .not_raised,
-    _unused_reserved_0: u1 = 0,
-    error_non_owner_read: u1 = 0,
-    error_overflow: u1 = 0,
-    error_underflow: u1 = 0,
-    _unused_reserved_1: u21 = 0,
+    pub fn init(tag_type: BroadcomMailbox.RpiFirmwarePropertyTag, request_words: u29, buffer_words: u29) PropertyTag {
+        const request_size_bytes: u32 = request_words * @sizeOf(u32);
+        const value_buffer_size_bytes: u32 = buffer_words * @sizeOf(u32);
+        return .{
+            .tag_id = @intFromEnum(tag_type),
+            .value_length = request_size_bytes,
+            .value_buffer_size = value_buffer_size_bytes,
+        };
+    }
 };
 
 pub const BroadcomMailbox = struct {
+    const MailboxStatusRegister = packed struct {
+        _unused_reserved: u30,
+        mail_empty: u1,
+        mail_full: u1,
+    };
+
+    const IrqEnableBit = enum(u1) {
+        disabled = 0b0,
+        enabled = 0b1,
+    };
+
+    const IrqPendingBit = enum(u1) {
+        not_raised = 0b0,
+        raised = 0b1,
+    };
+
+    const MailboxConfigurationRegister = packed struct {
+        data_available_irq_enable: IrqEnableBit = .disabled,
+        space_available_irq_enable: IrqEnableBit = .disabled,
+        opp_empty_irq_enable: IrqEnableBit = .disabled,
+        mail_clear: u1 = 0,
+        data_available_irq_pending: IrqPendingBit = .not_raised,
+        space_available_irq_pending: IrqPendingBit = .not_raised,
+        opp_empty_irq_pending: IrqPendingBit = .not_raised,
+        _unused_reserved_0: u1 = 0,
+        error_non_owner_read: u1 = 0,
+        error_overflow: u1 = 0,
+        error_underflow: u1 = 0,
+        _unused_reserved_1: u21 = 0,
+    };
+
     const Registers = extern struct {
         mailbox_0_read: u32, // 0x00
         _reserved_0: u32, // 0x04
@@ -60,30 +77,40 @@ pub const BroadcomMailbox = struct {
         mailbox_0_write: u32, // 0x20
     };
 
-    registers: *volatile Registers = undefined,
-    intc: *hal.interfaces.InterruptController = undefined,
-    translations: *AddressTranslations = undefined,
+    allocator: Allocator,
+    registers: *volatile Registers,
+    translations: *const AddressTranslations,
 
-    pub fn init(self: *BroadcomMailbox, base: u64, interrupt_controller: *hal.interfaces.InterruptController, translations: *AddressTranslations) void {
-        self.registers = @ptrFromInt(base);
-        self.intc = interrupt_controller;
-        self.translations = translations;
+    // ----------------------------------------------------------------------
+    // Setup
+    // ----------------------------------------------------------------------
+    pub fn init(allocator: Allocator, register_base: u64, translations: *AddressTranslations) BroadcomMailbox {
+        return .{
+            .allocator = allocator,
+            .registers = @ptrFromInt(register_base),
+            .translations = translations,
+        };
     }
 
     // ----------------------------------------------------------------------
-    // Send and receive messages
+    // Register-level interface
     // ----------------------------------------------------------------------
-    fn mailFull(self: *BroadcomMailbox) bool {
-        barriers.barrierMemoryDevice();
+    inline fn mailFull(self: *const BroadcomMailbox) bool {
         return self.registers.mailbox_0_status.mail_full == 1;
     }
 
-    fn mailEmpty(self: *BroadcomMailbox) bool {
-        barriers.barrierMemoryDevice();
+    inline fn mailEmpty(self: *const BroadcomMailbox) bool {
         return self.registers.mailbox_0_status.mail_empty == 1;
     }
 
-    pub fn mailboxWrite(self: *BroadcomMailbox, channel: MailboxChannel, data: u32) void {
+    fn flush(self: *const BroadcomMailbox) void {
+        while (!self.mailEmpty()) {
+            _ = self.registers.mailbox_0_read;
+            spinDelay(20);
+        }
+    }
+
+    fn write(self: *const BroadcomMailbox, channel: MailboxChannel, data: u32) void {
         while (self.mailFull()) {}
 
         var val = (data & 0xfffffff0) | @intFromEnum(channel);
@@ -93,7 +120,7 @@ pub const BroadcomMailbox = struct {
     // TODO: Use peek instead of read so we don't lose messages meant for
     // other channels.
     // TODO: Use an interrupt to read this and put it into a data structure
-    pub fn mailboxRead(self: *BroadcomMailbox, channel_expected: MailboxChannel) u32 {
+    fn read(self: *const BroadcomMailbox, channel_expected: MailboxChannel) u32 {
         while (true) {
             while (self.mailEmpty()) {}
 
@@ -106,9 +133,23 @@ pub const BroadcomMailbox = struct {
         }
     }
 
-    // ----------------------------------------------------------------------
-    // Peripheral Registers
-    // ----------------------------------------------------------------------
+    const MailboxError = error{
+        UnexpectedResponse,
+    };
+
+    pub fn sendReceive(self: *const BroadcomMailbox, data_location: u32, channel: MailboxChannel) !void {
+        // discard any old pending messages
+        self.flush();
+
+        self.write(channel, data_location);
+
+        var result = self.read(channel);
+
+        if (result != data_location) {
+            return MailboxError.UnexpectedResponse;
+        }
+    }
+
     // ----------------------------------------------------------------------
     // ARM <-> Videocore protocol
     // ----------------------------------------------------------------------
@@ -226,145 +267,84 @@ pub const BroadcomMailbox = struct {
     };
 
     // ----------------------------------------------------------------------
-    // Support for marshalling / unmarshalling
+    // High level "tags" interface
     // ----------------------------------------------------------------------
 
-    pub const Envelope = struct {
-        const Error = error{
-            StatusError,
-            NoResponse,
-        };
-
-        const max_buffer_length = 128;
-
-        owner: *BroadcomMailbox = undefined,
-        channel: MailboxChannel = .property_arm_to_vc,
-        messages: []Message,
-        buffer: [max_buffer_length]u32 align(16),
-        total_size: u32,
-
-        pub fn init(owner: *BroadcomMailbox, messages: []Message) Envelope {
-            var content_size: u32 = 0;
-            for (messages) |m| {
-                content_size += m.total_size;
-            }
-
-            var total_size = content_size + 3;
-
-            assert(total_size < max_buffer_length);
-
-            return .{
-                .owner = owner,
-                .buffer = [_]u32{0} ** max_buffer_length,
-                .total_size = total_size,
-                .messages = messages,
-            };
-        }
-
-        pub fn call(self: *Envelope) !u32 {
-            var idx: usize = 2;
-
-            for (self.messages) |m| {
-                m.fill(self.buffer[idx..]);
-                idx += m.total_size;
-            }
-
-            self.buffer[idx] = @intFromEnum(RpiFirmwarePropertyTag.rpi_firmware_property_end);
-
-            self.buffer[0] = @intCast(idx * @sizeOf(u32));
-            self.buffer[1] = rpi_firmware_status_request;
-
-            cache.flushDCache(u32, &self.buffer);
-
-            var cpu_address = @intFromPtr(&self.buffer);
-            var bus_address = toChild(self.owner.translations, cpu_address);
-
-            self.owner.mailboxWrite(self.channel, @truncate(bus_address));
-            _ = self.owner.mailboxRead(self.channel);
-
-            cache.invalidateDCache(u32, &self.buffer);
-
-            idx = 2;
-
-            for (self.messages) |m| {
-                m.unfill(self.buffer[idx..]);
-                idx += m.total_size;
-            }
-
-            if (self.buffer[1] == rpi_firmware_status_error) {
-                return Error.StatusError;
-            }
-
-            if (self.buffer[1] != rpi_firmware_status_success) {
-                return Error.NoResponse;
-            }
-
-            // return data;
-            return 0;
-        }
+    const TagError = error{
+        StatusError,
+        NoResponse,
+        Unsuccessful,
     };
 
-    pub const Message = struct {
-        // Should be set in the message response to indicate the word now
-        // holds the length of the response body
-        const message_value_length_response = @as(u32, 1) << 31;
+    pub const PropertyRequestHeader = extern struct {
+        const code_request = 0x0;
+        const code_response_success = 0x80000000;
+        const code_response_failure = 0x80000001;
 
-        fillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
-        unfillFn: *const fn (ptr: *anyopaque, buf: []u32) void,
-
-        ptr: *anyopaque,
-        tag: u32,
-        request_size: u32,
-        content_size: u32,
-        total_size: u32,
-
-        pub fn init(pointer: anytype, tag: RpiFirmwarePropertyTag, request_size: u32, response_size: u32) Message {
-            const Ptr = @TypeOf(pointer);
-            const ptr_info = @typeInfo(Ptr);
-
-            assert(@typeInfo(Ptr) == .Pointer);
-            assert(@typeInfo(Ptr).Pointer.size == .One);
-            assert(@typeInfo(@typeInfo(Ptr).Pointer.child) == .Struct);
-
-            const generic = struct {
-                fn fill(ptr: *anyopaque, buf: []u32) void {
-                    const self: Ptr = @ptrCast(@alignCast(ptr));
-                    return @call(.always_inline, ptr_info.Pointer.child.fill, .{ self, buf });
-                }
-
-                fn unfill(ptr: *anyopaque, buf: []u32) void {
-                    const self: Ptr = @ptrCast(@alignCast(ptr));
-                    return @call(.always_inline, ptr_info.Pointer.child.unfill, .{ self, buf });
-                }
-            };
-
-            const content_size = @max(request_size, response_size);
-
-            return .{
-                .ptr = pointer,
-                .fillFn = generic.fill,
-                .unfillFn = generic.unfill,
-                .tag = @intFromEnum(tag),
-                .request_size = request_size,
-                .content_size = content_size,
-                .total_size = content_size + 3,
-            };
-        }
-
-        pub fn fill(self: Message, buf: []u32) void {
-            buf[0] = self.tag;
-            buf[1] = self.content_size * @sizeOf(u32);
-            buf[2] = self.request_size * @sizeOf(u32);
-            self.fillFn(self.ptr, buf[3..]);
-        }
-
-        pub fn unfill(self: Message, buf: []u32) void {
-            if (buf[1] & message_value_length_response == 0) {
-                root.kinfo(@src(), "expected bit 31 to be set, but it wasn't\n", .{});
-            } else {
-                buf[1] &= ~message_value_length_response;
-            }
-            self.unfillFn(self.ptr, buf[3..]);
-        }
+        buffer_size: u32,
+        code: u32 = code_request,
     };
+
+    const VALUE_LENGTH_RESPONSE: u32 = 1 << 31;
+    const END_TAG = 0;
+    const PROPERTY_TAG_REQUIRED_ALIGNMENT = 16;
+
+    pub fn getTag(self: *const BroadcomMailbox, tag: anytype) !void {
+        const TagPtr = @TypeOf(tag);
+        assert(@typeInfo(TagPtr) == .Pointer);
+        assert(@typeInfo(TagPtr).Pointer.size == .One);
+
+        const Tag = @typeInfo(TagPtr).Pointer.child;
+
+        if (!@hasField(Tag, "tag")) @compileError("tag field missing, expected: tag: PropertyTag");
+        if (@TypeOf(tag.tag) != PropertyTag) @compileError("tag expected type PropertyTag, found: " ++ @typeName(@TypeOf(tag.tag)));
+
+        const property_tag: *PropertyTag = @ptrCast(tag);
+        const tag_size = @sizeOf(Tag);
+
+        try self.getTags(property_tag, tag_size);
+
+        property_tag.value_length &= VALUE_LENGTH_RESPONSE;
+        if (property_tag.value_length == 0) {
+            return TagError.NoResponse;
+        }
+    }
+
+    pub fn getTags(self: *const BroadcomMailbox, tags: *align(4) anyopaque, tag_words: usize) !void {
+        assert(tag_words >= @sizeOf(PropertyTag) / @sizeOf(u32));
+        const tags_ptr: [*]align(4) u8 = @ptrCast(tags);
+
+        const payload_size = tag_words * @sizeOf(u32);
+        const sentinel_size = @sizeOf(u32);
+        const buffer_size = @sizeOf(PropertyRequestHeader) + payload_size + sentinel_size;
+        assert((buffer_size & 0b11) == 0);
+
+        const raw_property_buffer = try self.allocator.alignedAlloc(u8, PROPERTY_TAG_REQUIRED_ALIGNMENT, buffer_size);
+        defer self.allocator.free(raw_property_buffer);
+
+        const property_buffer: *PropertyRequestHeader = @ptrCast(raw_property_buffer);
+        const tags_area: [*]u8 = raw_property_buffer.ptr + @sizeOf(PropertyRequestHeader);
+
+        property_buffer.code = PropertyRequestHeader.code_request;
+        property_buffer.buffer_size = @truncate(buffer_size);
+
+        @memcpy(tags_area[0..payload_size], tags_ptr);
+
+        // the sentinel goes after all the payload
+        const sentinel_ptr: *u32 = @ptrCast(@alignCast(tags_area + payload_size));
+        sentinel_ptr.* = END_TAG;
+
+        barriers.barrierMemoryWrite();
+
+        const buffer_address_mailbox: u32 = @truncate(@intFromPtr(property_buffer));
+        try self.sendReceive(buffer_address_mailbox, MailboxChannel.property_arm_to_vc);
+
+        barriers.barrierMemory();
+
+        if (property_buffer.code != PropertyRequestHeader.code_response_success) {
+            return TagError.Unsuccessful;
+        }
+
+        @memcpy(tags_ptr, tags_area[0..payload_size]);
+    }
 };

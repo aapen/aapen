@@ -1,6 +1,7 @@
 const std = @import("std");
+const config = @import("config");
+
 const arch = @import("architecture.zig");
-const hal = @import("hal.zig");
 const qemu = @import("qemu.zig");
 const heap = @import("heap.zig");
 const frame_buffer = @import("frame_buffer.zig");
@@ -12,13 +13,19 @@ const raspi3 = @import("hal/raspi3.zig");
 const spinlock = @import("spinlock.zig");
 const Spinlock = spinlock.Spinlock;
 
-pub const debug = @import("debug.zig");
-pub const devicetree = @import("devicetree.zig");
+pub const HAL = switch (config.board) {
+    .pi3 => @import("hal/raspi3.zig"),
+    inline else => @compileError("Unsupported board " ++ @tagName(config.board)),
+};
 
-pub const kinfo = debug.kinfo;
-pub const kwarn = debug.kwarn;
-pub const kerror = debug.kerror;
+pub const debug = @import("debug.zig");
+
 pub const kprint = debug.kprint;
+
+pub const std_options = struct {
+    pub const log_level = .warn;
+    pub const logFn = debug.log;
+};
 
 const Freestanding = struct {
     page_allocator: std.mem.Allocator,
@@ -35,10 +42,11 @@ export var mring_storage: [mring_space_bytes]u8 = undefined;
 pub var mring: debug.MessageBuffer = undefined;
 var mring_spinlock: Spinlock = undefined;
 
-pub var board = hal.interfaces.BoardInfo{};
-pub var kernel_heap = heap{};
+pub var hal: *HAL = undefined;
+pub var board = HAL.BoardInfo{};
+pub var kernel_heap: heap.Heap = undefined;
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
-pub var frame_buffer_console: fbcons.FrameBufferConsole = fbcons.FrameBufferConsole{ .fb = &fb };
+pub var frame_buffer_console: fbcons.FrameBufferConsole = undefined;
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .sp = undefined,
@@ -51,42 +59,52 @@ pub var uart_valid = false;
 pub var console_valid = false;
 
 fn kernelInit() void {
-    // State: one core, no interrupts, no MMU, no heap Allocator, no display, no serial
+    // State: one core, no interrupts, no MMU, no heap Allocator, no
+    // display, serial
     arch.cpu.mmu.init();
 
     mring_spinlock.init("kernel_message_ring");
     mring = debug.MessageBuffer.init(&mring_storage, &mring_spinlock) catch unreachable;
     mring.append("mring init");
 
-    kernel_heap.init(raspi3.device_start - 1);
+    kernel_heap = heap.Heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
     os.page_allocator = kernel_heap.allocator();
 
-    devicetree.init();
+    if (HAL.init(os.page_allocator)) |h| {
+        hal = h;
+        HAL.serial_writer = .{ .context = h };
+    } else |err| {
+        mring.append("early error");
+        mring.append(@errorName(err));
+    }
 
-    hal.init(devicetree.root_node, &os.page_allocator) catch {
-        hal.serial_writer.print("Early init error. Cannot proceed.", .{}) catch {};
-    };
-
-    // State: one core, no interrupts, MMU, heap Allocator, no
-    // display, no serial
-    arch.cpu.init();
-
-    // State: one core, interrupts, MMU, heap Allocator, no display, no serial
+    hal.serial.initializeUart();
     uart_valid = true;
 
-    // State: one core, interrupts, MMU, heap Allocator, no display, serial
-    hal.video_controller.allocFrameBuffer(hal.video_controller, &fb, 1024, 768, 8, &frame_buffer.default_palette);
+    frame_buffer_console.serial = &hal.serial;
 
-    frame_buffer_console.init(hal.serial);
+    // State: one core, no interrupts, MMU, heap Allocator, no display, serial
+    arch.cpu.exceptions.init();
+
+    // State: one core, interrupts, MMU, heap Allocator, no display, serial
+    // hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette);
+    hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette) catch |err| {
+        mring.append("no video");
+        kprint("Video init error {any}\n", .{err});
+    };
+
+    frame_buffer_console = fbcons.FrameBufferConsole.init(&fb, &hal.serial);
     console_valid = true;
 
+    std.log.info("HAL initialized", .{});
+
+    // State: one core, interrupts, MMU, heap Allocator, display, serial
     board.init(&os.page_allocator);
-    hal.info_controller.inspect(hal.info_controller, &board);
+    hal.board_info_controller.inspect(&board) catch |err| {
+        kprint("Board inspection error {any}\n", .{err});
+    };
 
     // hal.timer.schedule(200000, printOneDot, &.{});
-
-    // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial, logging available
 
     kprint("Board model {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,
@@ -98,19 +116,24 @@ fn kernelInit() void {
     kprint("Manufactured by: {?s}\n\n", .{board.device.manufacturer});
 
     diagnostics() catch |err| {
-        kerror(@src(), "Error printing diagnostics: {any}\n", .{err});
-        hal.io.uart_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
+        std.log.err("Error printing diagnostics: {any}\n", .{err});
+        hal.serial_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
     kprint("Executing on core {d}\n", .{arch.cpu.coreCurrent().core_id});
 
+    hal.usb.hostControllerInitialize() catch |err| {
+        std.log.err("USB Host initialization: {any}\n", .{err});
+    };
+
     interpreter.init(os.page_allocator, &frame_buffer_console) catch |err| {
-        kerror(@src(), "Forth init: {any}\n", .{err});
+        std.log.err("Forth init: {any}\n", .{err});
     };
 
     supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
     supplyAddress("fb", @intFromPtr(&fb));
     supplyAddress("board", @intFromPtr(&board));
+    supplyAddress("hal", @intFromPtr(hal));
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -133,7 +156,7 @@ fn printOneDot(_: ?*anyopaque) u32 {
 fn repl() callconv(.C) noreturn {
     while (true) {
         interpreter.repl() catch |err| {
-            kerror(@src(), "REPL error: {any}\n\nABORT.\n", .{err});
+            std.log.err("REPL error: {any}\n\nABORT.\n", .{err});
         };
     }
 }
@@ -142,13 +165,13 @@ fn repl() callconv(.C) noreturn {
 
 fn supplyAddress(name: []const u8, addr: usize) void {
     interpreter.defineConstant(name, addr) catch |err| {
-        kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
+        std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
 fn supplyUsize(name: []const u8, sz: usize) void {
     interpreter.defineConstant(name, sz) catch |err| {
-        kwarn(@src(), "Failed to define {s}: {any}\n", .{ name, err });
+        std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
     };
 }
 
@@ -222,9 +245,9 @@ pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn
     @setCold(true);
 
     if (return_addr) |ret| {
-        kerror(@src(), "[{x:0>8}] {s}\n", .{ ret, msg });
+        kprint("[{x:0>8}] {s}\n", .{ ret, msg });
     } else {
-        kerror(@src(), "[unknown] {s}\n", .{msg});
+        kprint("[unknown] {s}\n", .{msg});
     }
 
     if (stack) |stack_trace| {

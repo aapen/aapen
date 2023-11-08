@@ -1,12 +1,8 @@
-( Some definitions to get us started. )
+(Simple console control)
 
-: star ( -- : Emit a star ) 42 emit ;
-: bar ( -- : Emit a bar) star star star star cr ;
-: dot ( -- : Emit a dot) star cr ;
-: F ( -- : Draw an ascii art F) bar dot bar dot dot ;
+: cr 0x0a emit ;
+: cls 0x0c emit ;
 : p ( n -- : Print the top of the stack followed by a newline) . cr ;
-
-F
 
 ( Input and output base words )
 
@@ -34,6 +30,34 @@ F
 : tron  ( -- : Turn debugging on.)   1 forth forth.debug + ! ;
 : troff ( -- : Turn debugging off.)  0 forth forth.debug + ! ;
 
+: assert-verbose ( b desc -- if b is not true )
+  "Assert: " s.
+  s.
+  if
+    " OK"
+  else
+    " ** FAILED! **"
+  endif
+  s. cr
+;
+
+: assert ( b desc -- if b is not true )
+  swap
+  if
+    drop
+  else
+    s. " **Assertion FAILED! **" s. cr
+  endif
+;
+
+: assert-in-word (addr wordp desc -- :Assert that the given addr is part of the word defintion)
+  rot rot
+  3dup
+  >= swap assert
+  dup header.len + @ +
+  <= swap assert
+;
+
 ( Address arithmetic )
 
 : words ( n -- n : Number words -> number bytes ) word * ;
@@ -43,6 +67,38 @@ F
 finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
+
+(Drawing)
+: draw-char (y x c -- : Draw character at position)
+  fb
+  [[ fb fb.vtable fb.vtable.char +]] @
+  invoke-4
+;
+
+: text (y x s -- : Draw string at position)
+  fb
+  [[ fb fb.vtable fb.vtable.text +]] @
+  invoke-4
+;
+
+: line  (color y2 x2 y1 x1 -- : Draw a colored line)
+  fb
+  [[ fb fb.vtable fb.vtable.line +]] @
+  invoke-6
+;
+
+: fill  (color bottom right top left -- : Fill a rectangle with color)
+  fb
+  [[ fb fb.vtable fb.vtable.fill +]] @
+  invoke-6
+;
+
+: blit  (dst-y dst-x src-h src-w src-y src-x -- : Copy a rectangle)
+  fb
+  [[ fb fb.vtable fb.vtable.blit +]] @
+  invoke-7
+;
+
 
 (Utilities)
 
@@ -65,6 +121,10 @@ finish
   header.*len - 
 ;
 
+: data-address (p-word -- p-data : Given a word ptr, return the word data ptr)
+  header.*len + 
+;
+
 (Character predicates)
 
 8   :char-bs    let
@@ -72,6 +132,10 @@ finish
 13  :char-cr    let
 32  :char-space let
 127 :char-del   let
+
+: char-ctrl (ch -- CNTRL-ch)
+  \a -
+;
 
 : backspace?
   dup
@@ -110,6 +174,10 @@ finish
     0 ,
     16 allot
   finish
+;
+
+: sb-count (sb-addr -- n : Return the number of chars in sb)
+  @
 ;
 
 : sb-inc-count (sb-addr -- : Increment the sb char count.)
@@ -153,20 +221,111 @@ finish
   0 swap !
 ;
 
-(Key Dispatch table)
+(Key Dispatch Table: dtab)
 
-: dtab-create (dt-name -- dtab: Create a 128 entry key dispatch table)
-  create
-    128 allot
-  finish
-;
-
-: dtab-set (key word-address dtab -- set handler for key to word-adress)
-  rot      (word-address dtab key)
+: dtab-set (word-address dtab key -- : Set handler for key to word-adress)
   word * + (word-address dtab-entry-addr)
   !
 ;  
 
+: dtab-set-range (word-address dtab key1 key2--)
+  for-range
+    2dup
+    ->stack
+    dtab-set
+  repeat
+  2drop
+;
+
+: dtab-create (dt-name -- dtab: Create a 128 entry key dispatch table)
+  dup
+  create
+    128 allot
+  finish
+  lookup data-address 0x0000 swap 0 128 dtab-set-range
+;
+
+: dtab-lookup (dtab ch -- handler-word: Lookup the handler for the ch)
+  word * +
+  @
+;
+
+: dtab-trigger (dtab ch -- : Trigger the word associated with ch)
+  dup rot swap
+  dtab-lookup
+  dup if
+    exec
+  else
+    drop
+  endif
+;
+
+: emit-prompt
+  "forty>> " s.
+;
+
+:repl-buffer sb-create
+
+: ignore-handler (ch --) drop ;
+
+: insert-handler (ch --)
+  dup emit 
+  repl-buffer sb-append
+;
+
+: backspace-handler (ch -- : Echo the char and back up one in the buffer)
+  repl-buffer sb-count 0 >
+  if
+    emit
+    repl-buffer sb-dec-count
+  else
+    drop
+  endif
+;
+
+: newline-handler (ch -- : Handle a newline. Echos the char, eval, reset buffer.)
+  emit
+  0 repl-buffer sb-append
+  repl-buffer sb-string
+  repl-buffer sb-clear
+  eval-command
+  emit-prompt
+;
+
+: line-demo-handler (ch -- : Draw some pretty lines)
+  drop
+  0 250 for-range
+    20 300              (x1 y1)
+    1000 ->stack 3 *    (x2 y2)
+    ->stack 16 %        (c)
+    line
+  repeat
+;
+
+:handlers dtab-create
+
+'backspace-handler handlers char-bs  dtab-set
+'backspace-handler handlers char-del dtab-set
+'newline-handler   handlers char-nl  dtab-set
+'newline-handler   handlers char-cr  dtab-set
+
+'insert-handler    handlers char-space \~ dtab-set-range
+
+'line-demo-handler handlers \^ dtab-set
+
+: handle-one (ch -- : Handle a single character)
+  handlers key dtab-trigger
+;
+
+
+: repl-loop (-- : Prompt for and execute words, does not return)
+  emit-prompt
+  while
+    1
+  do
+    handle-one
+  done
+;
 
 (Repl)
 
@@ -174,11 +333,6 @@ finish
   key
   dup emit
 ;
-
-: emit-prompt
-  "repl>> " s.
-;
-
 
 : read-command (sb-addr --)
   dup sb-clear
@@ -201,7 +355,6 @@ finish
   drop
 ;
 
-:repl-buffer sb-create
 
 : repl (--)
   "REPL in forth, type 'quit' to exit" s. cr cr
@@ -210,11 +363,31 @@ finish
   while
     dup "quit" s= not
   do
-    eval-cmd
+    eval-command
     repl-buffer read-command
     repl-buffer sb-string
   done
   "Exit REPL!" s. cr
+;
+
+:input-buffer sb-create
+
+: handle (--)
+  "yes>> " s.
+  read-ch
+  while
+    dup 17 = not
+  do
+    input-buffer
+    handlers 
+    rot
+    ?stack
+    dtab-trigger
+    read-ch
+  done
+  drop
+  dup 0 swap sb-append
+  drop
 ;
 
 
@@ -231,7 +404,6 @@ finish
   dup 0 swap sb-append
 ;
 
-:input-buffer sb-create
 
 : read-eval ( -- <results> : read one word, evaluate it)
   input-buffer read-token 
@@ -344,29 +516,15 @@ scr-width scr-height * :scr-length let
   
 
 : scr-sync (screenp -- )
-  scr-length repeat
+  scr-length times
     dup ->stack + @b
     ->stack scr-x
     ->stack scr-y
     rot
     draw-char
-  times
+  repeat
 ;
 
-
-(Assertions)
-
-: assert ( b desc -- if b is not true )
-  "Assert: " s.
-  s.
-  if
-    " OK"
-  else
-    " ** FAILED! **"
-  endif
-  s. cr
-  clear
-;
 
 ( Testing... )
 
@@ -382,9 +540,9 @@ scr-width scr-height * :scr-length let
 
 : sum-ints ( n -- sum : add up all the numbers from 1 to n)
   0 swap
-  repeat
-    ->stack 1 + + 
   times
+    ->stack 1 + + 
+  repeat
 ;
 
 :by-hand create
@@ -399,51 +557,59 @@ finish
 'by-hand secondary!
 
 : test-math 
-  103      103  = "Equality" assert
-  1 1 +      2  = "Simple addition" assert
-  99 1 -    98  = "Subtraction" assert
-  3 7 *     21  = "Multipication" assert
-  0 100 - -100  = "Negative numbers" assert
-  11 5 %     1  = "Modulo" assert
+  "." s.
+  103      103  = "Equality" assert clear
+  1 1 +      2  = "Simple addition" assert clear
+  99 1 -    98  = "Subtraction" assert clear
+  3 7 *     21  = "Multipication" assert clear
+  0 100 - -100  = "Negative numbers" assert clear
+  11 5 %     1  = "Modulo" assert clear
 ;
 
 : test-if
-  77 1    if 100 endif         100 = "If true" assert
-  77 0    if 100 endif          77 = "If false" assert
-  1       if 100 else 99 endif 100 = "If else true" assert
-  0       if 100 else 99 endif  99 = "If else false" assert
+  "." s.
+  77 1    if 100 endif         100 = "If true" assert clear
+  77 0    if 100 endif          77 = "If false" assert clear
+  1       if 100 else 99 endif 100 = "If else true" assert clear
+  0       if 100 else 99 endif  99 = "If else false" assert clear
 ; 
 
 : test-loop
-   0 power-of-two     1 = "While loop, zero iterations" assert
-  16 power-of-two 65536 = "While loop, 16 iterations" assert
-  0  sum-ints         0 = "Repeat loop, 0 iterations" assert
-  3  sum-ints         6 = "Repeat loop, 3 iterations" assert
-  10 sum-ints        55 = "Repeat loop, 10 iterations" assert
+  "." s.
+   0 power-of-two     1 = "While loop, zero iterations" assert clear
+  16 power-of-two 65536 = "While loop, 16 iterations" assert clear
+  0  sum-ints         0 = "Repeat loop, 0 iterations" assert clear
+  3  sum-ints         6 = "Repeat loop, 3 iterations" assert clear
+  10 sum-ints        55 = "Repeat loop, 10 iterations" assert clear
 ;
 
 : test-strings
-  "hello world" "hello world" s= "String comparison" assert
+  "." s.
+  "hello world" "hello world" s= "String comparison" assert clear
 ;
 
 : test-create
-  by-hand 999 = "Word created with create/finish" assert
+  "." s.
+  by-hand 999 = "Word created with create/finish" assert clear
 ;
 
 : test-constants
-  word 8 = "Word size constant" assert
+  "." s.
+  word 8 = "Word size constant" assert clear
 ;
 
 : test-structures
-  'hello header.name + @ "hello" s= "Struct offsets" assert
+  "." s.
+  'hello header.name + @ "hello" s= "Struct offsets" assert clear
 ;
 
 (Retro startup!)
 
-c64-colors cls
+c64-colors 
+cls
 
 : test-all
-  "Self test..." s. cr
+  "Self test..." s. 
   test-if
   test-math
   test-loop
@@ -451,12 +617,23 @@ c64-colors cls
   test-constants
   test-structures
   test-create
+  "Done" s. cr
 ;
 
 test-all
+
+(Temporary words for debugging)
+: dump-usb  ( -- : Dump USB registers )
+  [[ hal hal.usb +]]
+  [[ hal hal.usb usb.vtable usb.vtable.dumpStatus +]] @
+  invoke-1
+;
 
 cr cr cr
 "************* Nygard/Olsen Forth V40 **************" s. cr
 mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 "READY" s. cr
 cr cr
+
+"Forty REPL" s. cr cr
+repl-loop
