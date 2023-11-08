@@ -7,11 +7,12 @@ const heap = @import("heap.zig");
 const frame_buffer = @import("frame_buffer.zig");
 const fbcons = @import("fbcons.zig");
 const bcd = @import("bcd.zig");
+const synchronize = @import("synchronize.zig");
+const Spinlock = synchronize.Spinlock;
+
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 const raspi3 = @import("hal/raspi3.zig");
-const spinlock = @import("spinlock.zig");
-const Spinlock = spinlock.Spinlock;
 
 pub const HAL = switch (config.board) {
     .pi3 => @import("hal/raspi3.zig"),
@@ -40,7 +41,7 @@ var os = Freestanding{
 const mring_space_bytes = 1024 * 1024;
 export var mring_storage: [mring_space_bytes]u8 = undefined;
 pub var mring: debug.MessageBuffer = undefined;
-var mring_spinlock: Spinlock = undefined;
+var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
 
 pub var hal: *HAL = undefined;
 pub var board = HAL.BoardInfo{};
@@ -63,9 +64,15 @@ fn kernelInit() void {
     // display, serial
     arch.cpu.mmu.init();
 
-    mring_spinlock.init("kernel_message_ring");
-    mring = debug.MessageBuffer.init(&mring_storage, &mring_spinlock) catch unreachable;
+    // Needed for enter/leave critical sections
+    arch.cpu.enableFIQ();
+
+    mring = debug.MessageBuffer.init(
+        &mring_storage,
+        &mring_spinlock,
+    ) catch unreachable;
     mring.append("mring init");
+    mring.append("second message");
 
     kernel_heap = heap.Heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
     os.page_allocator = kernel_heap.allocator();
@@ -120,8 +127,6 @@ fn kernelInit() void {
         hal.serial_writer.print("Error printing diagnostics: {any}\n", .{err}) catch {};
     };
 
-    kprint("Executing on core {d}\n", .{arch.cpu.coreCurrent().core_id});
-
     hal.usb.hostControllerInitialize() catch |err| {
         std.log.err("USB Host initialization: {any}\n", .{err});
     };
@@ -134,6 +139,7 @@ fn kernelInit() void {
     supplyAddress("fb", @intFromPtr(&fb));
     supplyAddress("board", @intFromPtr(&board));
     supplyAddress("hal", @intFromPtr(hal));
+    supplyAddress("mring", @intFromPtr(&mring_storage));
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -161,16 +167,8 @@ fn repl() callconv(.C) noreturn {
     }
 }
 
-// TODO do we need both of these now?
-
 fn supplyAddress(name: []const u8, addr: usize) void {
     interpreter.defineConstant(name, addr) catch |err| {
-        std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
-    };
-}
-
-fn supplyUsize(name: []const u8, sz: usize) void {
-    interpreter.defineConstant(name, sz) catch |err| {
         std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
     };
 }

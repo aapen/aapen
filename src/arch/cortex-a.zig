@@ -34,66 +34,118 @@ pub inline fn wfi() void {
     asm volatile ("wfi");
 }
 
+/// Cause a software breakpoint
+pub inline fn brk(breakpoint_id: u32) void {
+    asm volatile ("brk " ++ breakpoint_id);
+}
+
 pub const MAX_CORES = 8;
 
-pub const Cpu = struct {
-    core_id: u8 = 0,
-    int_disable_count: u64 = 0,
-    irq_was_disabled: bool = false,
-};
-
-pub var cores = [_]Cpu{.{}} ** MAX_CORES;
-
 /// Return core # for the currently executing PE
-pub inline fn core_id() u8 {
-    return asm (
+pub inline fn coreId() u8 {
+    var mpidr = asm (
         \\ mrs %[ret], MPIDR_EL1
-        \\ and %[ret], %[ret], 0xff
-        : [ret] "=r" (-> u8),
+        : [ret] "=r" (-> u64),
     );
+    return @truncate(mpidr & (MAX_CORES - 1));
 }
 
 pub fn init() void {
-    inline for (0..MAX_CORES) |cid| {
-        cores[cid] = .{
-            .core_id = cid,
-            .int_disable_count = 0,
-            .irq_was_disabled = false,
-        };
-    }
-
     exceptions.init();
 }
 
-pub fn coreCurrent() *Cpu {
-    return &cores[core_id()];
+// ----------------------------------------------------------------------
+// Low level interrupt control
+// ----------------------------------------------------------------------
+pub fn irqDisable() void {
+    asm volatile ("msr daifset, #2");
 }
 
-// interruptDisable and interruptEnable act like a stack. We count the
-// number of disables and only actually turn interrupts back on when a
-// matching number of enables are called.
-pub fn interruptDisable() void {
-    const cpu = coreCurrent();
-    const flags = exceptions.irqFlagsSave();
-
-    // bit 7 of irq_flags is set if interrupts are already disabled
-    if (cpu.int_disable_count == 0) {
-        if (flags & 0x40 != 0) {
-            cpu.irq_was_disabled = true;
-        } else {
-            exceptions.irqDisable();
-        }
-    }
-
-    cpu.int_disable_count += 1;
+pub fn irqEnable() void {
+    asm volatile ("msr daifclr, #2");
 }
 
-pub fn interruptEnable() void {
-    const cpu = coreCurrent();
+pub fn irqFlagsRead() u32 {
+    return asm (
+        \\ mrs %[ret], daif
+        : [ret] "=r" (-> u32),
+    );
+}
 
-    cpu.int_disable_count -= 1;
+pub fn irqFlagsWrite(flags: u32) void {
+    asm volatile (
+        \\ msr daif, %[flags]
+        :
+        : [flags] "r" (flags),
+    );
+}
 
-    if (cpu.int_disable_count == 0 and !cpu.irq_was_disabled) {
-        exceptions.irqEnable();
+pub fn enableFIQ() void {
+    asm volatile (
+        \\ msr DAIFClr, #1
+    );
+}
+
+pub fn disableFIQ() void {
+    asm volatile (
+        \\ msr DAIFSet, #1
+    );
+}
+
+pub fn enableIRQ() void {
+    asm volatile (
+        \\ msr DAIFClr, #2
+    );
+}
+
+pub fn disableIRQ() void {
+    asm volatile (
+        \\ msr DAIFSet, #2
+    );
+}
+
+pub fn disableFIQandIRQ() void {
+    asm volatile (
+        \\ msr DAIFSet, #3
+    );
+}
+
+pub const InterruptLevel = enum(u8) {
+    Task = 0, // IRQs and FIQs are enabled
+    IRQ = 1, // IRQs disabled, FIQs enabled
+    FIQ = 2, // IRQs and FIQs disabled
+};
+
+pub fn currentInterruptLevel() InterruptLevel {
+    const FIQ_flag = @as(u32, 1 << 6);
+    const IRQ_flag = @as(u32, 1 << 7);
+
+    var flags: u32 = asm volatile (
+        \\ mrs %[f], daif
+        : [f] "=r" (-> u32),
+    );
+
+    if (flags & FIQ_flag != 0) {
+        return .FIQ;
+    } else if (flags & IRQ_flag != 0) {
+        return .IRQ;
+    } else {
+        return .Task;
     }
+}
+
+pub const ExecutionLevel = enum(u2) {
+    EL0 = 0,
+    EL1 = 1,
+    EL2 = 2,
+    EL3 = 3,
+};
+
+pub fn currentExecutionLevel() ExecutionLevel {
+    var el = asm volatile (
+        \\ mrs %[el], CurrentEL
+        : [el] "=r" (-> u64),
+    );
+
+    return @enumFromInt(@as(u2, @truncate(el >> 2)));
 }

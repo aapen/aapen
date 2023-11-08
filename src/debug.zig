@@ -5,8 +5,8 @@ const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
 
-const spinlock = @import("spinlock.zig");
-const Spinlock = spinlock.Spinlock;
+const synchronize = @import("synchronize.zig");
+const Spinlock = synchronize.Spinlock;
 
 pub fn log(
     comptime level: std.log.Level,
@@ -49,7 +49,10 @@ pub const MessageBuffer = struct {
     ring: RingBuffer,
     lock: *Spinlock,
 
-    pub fn init(raw_space: []u8, lock: *Spinlock) Allocator.Error!Self {
+    pub fn init(
+        raw_space: []u8,
+        lock: *Spinlock,
+    ) Allocator.Error!Self {
         var fba = FixedBufferAllocator.init(raw_space);
         var allocator = fba.allocator();
         var ring = try RingBuffer.init(allocator, raw_space.len);

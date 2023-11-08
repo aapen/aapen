@@ -23,7 +23,7 @@ const IrqHandler = *const fn (context: *const ExceptionContext) void;
 
 pub fn init() void {
     registers.vbar_el1.write(@intFromPtr(__exception_handler_table));
-    irqEnable();
+    cpu.irqEnable();
 }
 
 /// Context passed in to every exception handler.
@@ -58,34 +58,11 @@ export fn irqCurrentElx(context: *const ExceptionContext) void {
     root.hal.interrupt_controller.irqHandle(context);
 }
 
-pub fn irqDisable() void {
-    asm volatile ("msr daifset, #2");
-}
-
-pub fn irqEnable() void {
-    asm volatile ("msr daifclr, #2");
-}
-
-pub fn irqFlagsSave() u64 {
-    return asm (
-        \\ mrs %[ret], daif
-        : [ret] "=r" (-> u64),
-    );
-}
-
-pub fn irqFlagsRestore(flags: u64) void {
-    asm volatile (
-        \\ msr daif, %[flags]
-        :
-        : [flags] "r" (flags),
-    );
-}
-
 // This is an arbitrary, but unique, number
 const soft_reset_breakpoint = 0x7c5;
 
 pub fn triggerSoftReset() void {
-    asm volatile ("brk 0x7c5");
+    cpu.breakpoint(soft_reset_breakpoint);
 }
 
 // ----------------------------------------------------------------------
