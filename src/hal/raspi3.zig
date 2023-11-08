@@ -87,7 +87,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
-    self.usb = USB.init(peripheral_base + 0x980000, &self.interrupt_controller, &self.soc.bus_ranges, &self.power_controller, &self.clock);
+    self.usb = USB.init(allocator, peripheral_base + 0x980000, &self.interrupt_controller, &self.soc.bus_ranges, &self.power_controller, &self.clock);
 
     for (0..3) |timer_id| {
         self.timer[timer_id] = Timer.init(timer_id, peripheral_base + 0x3000, &self.clock, &self.interrupt_controller);

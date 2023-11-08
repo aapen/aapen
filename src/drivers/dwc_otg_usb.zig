@@ -1,4 +1,6 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const root = @import("root");
 const kprint = root.kprint;
 
@@ -19,6 +21,16 @@ const toParent = memory.toParent;
 
 const memory_map = root.HAL.memory_map;
 
+const usb = @import("../usb.zig");
+const Address = usb.Address;
+const ConfigurationDescriptor = usb.ConfigurationDescriptor;
+const DEFAULT_ADDRESS = usb.DEFAULT_ADDRESS;
+const DEFAULT_MAX_PACKET_SIZE = usb.DEFAULT_MAX_PACKET_SIZE;
+const DeviceDescriptor = usb.DeviceDescriptor;
+const EndpointType = usb.EndpointType;
+const RequestType = usb.RequestType;
+const UsbSpeed = usb.UsbSpeed;
+
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 const dwc_max_channels = 16;
@@ -26,6 +38,7 @@ const dwc_max_channels = 16;
 pub const Error = error{
     IncorrectDevice,
     PowerFailure,
+    ConfigurationError,
 };
 
 const VendorId = packed struct {
@@ -111,6 +124,7 @@ const HostConfig = packed struct {
         sel_30_60_mhz = 0,
         sel_48_mhz = 1,
         sel_6_mhz = 2,
+        undefined = 3,
     }, // 0..1
     fs_ls_support_only: u1, // 2
     _unknown_0: u4, // 3..6
@@ -153,6 +167,7 @@ const HostPort = packed struct {
         high = 0,
         full = 1,
         low = 2,
+        undefined = 3,
     }, // 17..18
     _reserved_19_32: u13, // 19..31
 };
@@ -277,11 +292,13 @@ const HwConfig2 = packed struct {
         no_srp_capable_device = 4,
         srp_capable_host = 5,
         no_srp_capable_host = 6,
+        undefined = 7,
     }, // 0..2
     architecture: enum(u2) {
         slave_only = 0,
         ext_dma = 1,
         int_dma = 2,
+        undefined = 3,
     }, // 3..4
     point_to_point: u1, // 5
     hs_phy_type: enum(u2) {
@@ -366,25 +383,28 @@ const CoreRegisters = extern struct {
 
 pub const UsbController = struct {
     pub const VTable = struct {
-        dumpStatus: *const fn (usb: u64) void,
+        dumpStatus: *const fn (usb_controller: u64) void,
     };
 
+    allocator: Allocator,
     core_registers: *volatile CoreRegisters,
     host_registers: *volatile HostRegisters,
     intc: *const LocalInterruptController,
     translations: *const AddressTranslations,
     power_controller: *const BroadcomPowerController,
     clock: *const Clock,
+    root_port: RootPort,
     vtable: VTable = .{
         .dumpStatus = dumpStatusInteropShim,
     },
 
-    fn dumpStatusInteropShim(usb: u64) void {
-        var self: *UsbController = @ptrFromInt(usb);
+    fn dumpStatusInteropShim(usb_controller: u64) void {
+        var self: *UsbController = @ptrFromInt(usb_controller);
         self.dumpStatus();
     }
 
     pub fn init(
+        allocator: Allocator,
         register_base: u64,
         intc: *LocalInterruptController,
         translations: *AddressTranslations,
@@ -392,16 +412,18 @@ pub const UsbController = struct {
         clock: *Clock,
     ) UsbController {
         return .{
+            .allocator = allocator,
             .core_registers = @ptrFromInt(register_base),
             .host_registers = @ptrFromInt(register_base + 0x400),
             .intc = intc,
             .translations = translations,
             .power_controller = power,
             .clock = clock,
+            .root_port = RootPort.init(),
         };
     }
 
-    pub fn hostControllerInitialize(self: *const UsbController) !void {
+    pub fn hostControllerInitialize(self: *UsbController) !void {
         try self.powerOn();
         try self.verifyHostControllerDevice();
         try self.disableGlobalInterrupts();
@@ -409,6 +431,7 @@ pub const UsbController = struct {
         try self.initializeControllerCore();
         try self.enableGlobalInterrupts();
         try self.initializeHost();
+        try self.initializeRootPort();
     }
 
     fn powerOn(self: *const UsbController) !void {
@@ -555,11 +578,58 @@ pub const UsbController = struct {
         self.core_registers.interrupt_mask.host_channel_intr = 1;
     }
 
+    fn initializeRootPort(self: *UsbController) !void {
+        try self.enableRootPort();
+        try self.root_port.configure();
+    }
+
+    fn enableRootPort(self: *const UsbController) !void {
+        // We should see the connect bit become true within 510 ms of
+        // power on
+        const connect_end = self.deadline(510);
+        while (self.clock.ticks() <= connect_end and self.host_registers.port.connect == 0) {}
+
+        self.delayMillis(100);
+
+        var port = self.host_registers.port;
+        port.connect_changed = 0;
+        port.enabled = 0;
+        port.enabled_changed = 0;
+        port.overcurrent_changed = 0;
+        port.reset = 1;
+        self.host_registers.port = port;
+
+        self.delayMillis(50);
+
+        port = self.host_registers.port;
+        port.connect_changed = 0;
+        port.enabled = 0;
+        port.enabled_changed = 0;
+        port.overcurrent_changed = 0;
+        port.reset = 0;
+        self.host_registers.port = port;
+
+        self.delayMillis(20);
+    }
+
+    pub fn getPortSpeed(self: *const UsbController) !UsbSpeed {
+        return switch (self.host_registers.port.speed) {
+            .high => UsbSpeed.High,
+            .full => UsbSpeed.Full,
+            .low => UsbSpeed.Low,
+            else => Error.ConfigurationError,
+        };
+    }
+
     // TODO migrate this to the clock
     fn deadline(self: *const UsbController, millis: u32) u64 {
         const start_ticks = self.clock.ticks();
         const elapsed_ticks = millis * 1_000; // clock freq is 1Mhz
         return start_ticks + elapsed_ticks;
+    }
+
+    fn delayMillis(self: *const UsbController, count: u32) void {
+        self.delayMicros(count * 1000);
     }
 
     // TODO migrate this to the clock
@@ -593,8 +663,101 @@ pub const UsbController = struct {
         dumpRegister("frame_list_base_addr", @bitCast(self.host_registers.frame_list_base_addr));
         dumpRegister("port", @bitCast(self.host_registers.port));
     }
+
+    fn dumpRegister(field_name: []const u8, v: u32) void {
+        kprint("{s: >28}: {x:0>8}\n", .{ field_name, v });
+    }
+
+    fn controlMessage(self: *UsbController, endpoint: *Endpoint, request_type: RequestType, request: u8, value: u16, index: u16, data: *anyopaque, data_size: u16) !u16 {
+        var setup: usb.SetupPacket = .{
+            .request_type = @bitCast(request_type),
+            .request = request,
+            .value = value,
+            .index = index,
+            .length = data_size,
+        };
+        var rq = Request.init(endpoint, data, data_size, &setup);
+
+        try self.requestSubmitBlocking(&rq);
+
+        return rq.result_length;
+    }
+
+    fn requestSubmitBlocking(self: *UsbController, request: *Request) !void {
+        _ = self;
+
+        request.status = 0;
+    }
 };
 
-fn dumpRegister(field_name: []const u8, v: u32) void {
-    kprint("{s: >28}: {x:0>8}\n", .{ field_name, v });
-}
+const Request = struct {
+    status: u8,
+    result_length: u32,
+};
+
+// ----------------------------------------------------------------------
+// USB Device Model
+// ----------------------------------------------------------------------
+
+const Endpoint = struct {
+    const EndpointDirection = enum {
+        In,
+        Out,
+        InOut,
+    };
+
+    number: u8,
+    type: EndpointType = .Control,
+    direction: EndpointDirection = .Out,
+    max_packet_size: u32 = DEFAULT_MAX_PACKET_SIZE,
+    interval: u16, // milliseconds
+};
+
+const Device = struct {
+    host: *UsbController = undefined,
+    port: *RootPort = undefined,
+    speed: UsbSpeed = undefined,
+    address: Address = DEFAULT_ADDRESS,
+    endpoint_0: Endpoint = undefined,
+    hub_device: *Device = undefined,
+    hub_address: u8 = 0,
+    hub_port_number: u8 = 1,
+    device_descriptor: DeviceDescriptor = undefined,
+    config_descriptor: ConfigurationDescriptor = undefined,
+
+    pub fn init() Device {
+        return .{};
+    }
+
+    pub fn initialize(self: *Device, host: *UsbController, port: *RootPort, speed: UsbSpeed) !void {
+        self.host = host;
+        self.port = port;
+        self.speed = speed;
+    }
+};
+
+const RootPort = struct {
+    host: *UsbController = undefined,
+    device: *Device = undefined,
+
+    pub fn init() RootPort {
+        return .{
+            .host = undefined,
+            .device = undefined,
+        };
+    }
+
+    pub fn initialize(self: *RootPort, host: *UsbController) !void {
+        self.host = host;
+        self.device = Device.init();
+    }
+
+    fn configure(self: *RootPort) !void {
+        const speed = try self.host.getPortSpeed();
+
+        self.device.initialize(self.host, self, speed) catch |err| {
+            self.device = undefined;
+            return err;
+        };
+    }
+};
