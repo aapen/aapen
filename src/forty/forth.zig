@@ -4,7 +4,7 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 
 const root = @import("root");
 
-const fbcons = @import("../fbcons.zig");
+const FrameBufferConsole = @import("../fbcons.zig");
 const Readline = @import("../readline.zig");
 const buffer = @import("buffer.zig");
 
@@ -41,7 +41,7 @@ pub const Forth = struct {
     allocator: Allocator = undefined,
     arena_allocator: ArenaAllocator = undefined,
     temp_allocator: Allocator = undefined,
-    console: *fbcons.FrameBufferConsole = undefined,
+    console: *FrameBufferConsole = undefined,
     stack: DataStack = undefined,
     rstack: ReturnStack = undefined,
     input: InputStack = undefined,
@@ -66,7 +66,7 @@ pub const Forth = struct {
     line_buffer: *string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
 
-    pub fn init(this: *Forth, a: Allocator, c: *fbcons.FrameBufferConsole) !void {
+    pub fn init(this: *Forth, a: Allocator, c: *FrameBufferConsole) !void {
         this.ibase = 10;
         this.obase = 10;
         this.debug = 0;
@@ -109,7 +109,7 @@ pub const Forth = struct {
 
         initBuffer.init(init_f);
         var initBufferReader = try buffer.createReader(a, &initBuffer);
-        var consoleReader = try fbcons.createReader(a, c);
+        var consoleReader = try FrameBufferConsole.createReader(a, c);
 
         this.input = InputStack.init(&a);
         try this.pushSource(consoleReader);

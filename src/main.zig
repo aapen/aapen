@@ -3,26 +3,27 @@ const config = @import("config");
 
 const arch = @import("architecture.zig");
 const qemu = @import("qemu.zig");
-const heap = @import("heap.zig");
-const frame_buffer = @import("frame_buffer.zig");
-const fbcons = @import("fbcons.zig");
+
+const Heap = @import("heap.zig");
+const FrameBuffer = @import("frame_buffer.zig");
+const FrameBufferConsole = @import("fbcons.zig");
+
 const bcd = @import("bcd.zig");
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
-const raspi3 = @import("hal/raspi3.zig");
 
+pub const debug = @import("debug.zig");
+pub const kprint = debug.kprint;
+
+const raspi3 = @import("hal/raspi3.zig");
 pub const HAL = switch (config.board) {
     .pi3 => @import("hal/raspi3.zig"),
     inline else => @compileError("Unsupported board " ++ @tagName(config.board)),
 };
 const diagnostics = @import("hal/diagnostics.zig");
-
-pub const debug = @import("debug.zig");
-
-pub const kprint = debug.kprint;
 
 pub const std_options = struct {
     pub const log_level = .warn;
@@ -33,20 +34,13 @@ const Freestanding = struct {
     page_allocator: std.mem.Allocator,
 };
 
-var os = Freestanding{
-    .page_allocator = undefined,
-};
+var os: Freestanding = undefined;
 
-// mring is used for debugging low level issues (like when the serial
-// port isn't working.)
-// const mring_space_bytes = 1024 * 1024;
-// export var mring_storage: [mring_space_bytes]u8 = undefined;
-// pub var mring: debug.MessageBuffer = undefined;
-// var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
-
+pub var heap: *Heap = undefined;
 pub var hal: *HAL = undefined;
-pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
-pub var frame_buffer_console: fbcons.FrameBufferConsole = undefined;
+pub var fb: *FrameBuffer = undefined;
+pub var frame_buffer_console: *FrameBufferConsole = undefined;
+
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .sp = undefined,
@@ -55,6 +49,7 @@ pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .lr = undefined,
 };
 
+pub var message_ring_valid = false;
 pub var uart_valid = false;
 pub var console_valid = false;
 
@@ -66,55 +61,79 @@ fn kernelInit() void {
     // Needed for enter/leave critical sections
     arch.cpu.enableFIQ();
 
-    debug.init() catch unreachable;
-    debug.kernel_message("init");
-
-    heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
-    os.page_allocator = heap.allocator;
-
-    if (HAL.init(heap.allocator)) |h| {
-        hal = h;
-        uart_valid = true;
-        frame_buffer_console.serial = &hal.serial;
-    } else |err| {
-        debug.kernel_error("hal init failure", err);
+    if (debug.init()) {
+        debug.kernel_message("init");
+        message_ring_valid = true;
+    } else |_| {
+        // not much we can do here
     }
 
-    // State: one core, no interrupts, MMU, heap Allocator, no display, serial
-    arch.cpu.exceptions.init();
+    if (Heap.init()) |h| {
+        debug.kernel_message("heap init");
+        heap = h;
+    } else |err| {
+        debug.kernel_error("heap init error", err);
+    }
 
-    // State: one core, interrupts, MMU, heap Allocator, no display, serial
-    hal.video_controller.allocFrameBuffer(&fb, 1024, 768, 8, &frame_buffer.default_palette) catch |err| {
-        debug.kernel_error("no video", err);
+    os = Freestanding{
+        .page_allocator = heap.allocator,
     };
 
-    frame_buffer_console = fbcons.FrameBufferConsole.init(&fb, &hal.serial);
-    console_valid = true;
+    if (HAL.init(heap.allocator)) |h| {
+        debug.kernel_message("hal init");
+        hal = h;
+        uart_valid = true;
+    } else |err| {
+        debug.kernel_error("hal init error", err);
+    }
 
-    std.log.info("HAL initialized", .{});
+    // State: one core, no interrupts, MMU, heap Allocator, no
+    // display, serial
+    if (arch.cpu.exceptions.init()) {
+        debug.kernel_message("exceptions init");
+    } else |err| {
+        debug.kernel_error("exceptions init error", err);
+    }
+
+    // State: one core, interrupts, MMU, heap Allocator, no display,
+    // serial
+    if (FrameBuffer.init(heap.allocator, hal)) |buf| {
+        debug.kernel_message("frame buffer init");
+        fb = buf;
+    } else |err| {
+        debug.kernel_error("frame buffer init error", err);
+    }
+
+    if (FrameBufferConsole.init(heap.allocator, fb, &hal.serial)) |cons| {
+        frame_buffer_console = cons;
+        console_valid = true;
+    } else |err| {
+        debug.kernel_error("fbcons init", err);
+    }
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial
     if (diagnostics.init(heap.allocator)) {
-        diagnostics.print() catch |err| {
-            debug.kernel_error("Error printing diagnostics", err);
-        };
-        try heap.range.print();
-        try fb.range.print();
+        debug.kernel_message("diagnostics init");
     } else |err| {
-        debug.kernel_error("Board diagnostics error", err);
+        debug.kernel_error("diagnostics init error", err);
     }
 
-    hal.usb.hostControllerInitialize() catch |err| {
-        debug.kernel_error("USB host initialization error", err);
-    };
+    if (hal.usb.hostControllerInitialize()) {
+        debug.kernel_message("USB host init");
+    } else |err| {
+        debug.kernel_error("USB host init error", err);
+    }
 
-    interpreter.init(heap.allocator, &frame_buffer_console) catch |err| {
-        debug.kernel_error("Forth init", err);
-    };
+    if (interpreter.init(heap.allocator, frame_buffer_console)) {
+        debug.kernel_message("Forth init");
+    } else |err| {
+        debug.kernel_error("Forth init error", err);
+    }
 
-    supplyAddress("fbcons", @intFromPtr(&frame_buffer_console));
-    supplyAddress("fb", @intFromPtr(&fb));
+    // TODO should this move to forty/core.zig?
+    supplyAddress("fbcons", @intFromPtr(frame_buffer_console));
+    supplyAddress("fb", @intFromPtr(fb));
     supplyAddress("hal", @intFromPtr(hal));
     supplyAddress("board", @intFromPtr(&diagnostics.board));
     supplyAddress("mring", @intFromPtr(&debug.mring_storage));
@@ -130,11 +149,6 @@ fn kernelInit() void {
     qemu.exit(0);
 
     unreachable;
-}
-
-fn printOneDot(_: ?*anyopaque) u32 {
-    frame_buffer_console.emit('%');
-    return 300000;
 }
 
 fn repl() callconv(.C) noreturn {

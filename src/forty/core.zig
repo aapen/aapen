@@ -6,11 +6,9 @@ const Allocator = std.mem.Allocator;
 
 const BoardInfo = root.HAL.BoardInfo;
 
-const frame_buffer = @import("../frame_buffer.zig");
-const FrameBuffer = frame_buffer.FrameBuffer;
+const FrameBuffer = @import("../frame_buffer.zig");
 
-const fbcons = @import("../fbcons.zig");
-const FrameBufferConsole = fbcons.FrameBufferConsole;
+const FrameBufferConsole = @import("../fbcons.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;

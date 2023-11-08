@@ -14,9 +14,7 @@ pub fn init(allocator: Allocator) !void {
     root.hal.board_info_controller.inspect(&board) catch |err| {
         kprint("Board inspection error {any}\n", .{err});
     };
-}
 
-pub fn print() !void {
     kprint("Board model {s} (a {s}) with {?}MB\n\n", .{
         board.model.name,
         board.model.processor,
