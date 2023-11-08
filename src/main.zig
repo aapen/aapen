@@ -45,7 +45,7 @@ var os = Freestanding{
 // var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
 
 pub var hal: *HAL = undefined;
-pub var kernel_heap: heap.Heap = undefined;
+pub var kernel_heap: heap = undefined;
 pub var fb: frame_buffer.FrameBuffer = frame_buffer.FrameBuffer{};
 pub var frame_buffer_console: fbcons.FrameBufferConsole = undefined;
 pub var interpreter: Forth = Forth{};
@@ -70,7 +70,7 @@ fn kernelInit() void {
     debug.init() catch unreachable;
     debug.kernel_message("init");
 
-    kernel_heap = heap.Heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
+    kernel_heap = heap.init(@intFromPtr(HAL.heap_start), HAL.heap_end);
     os.page_allocator = kernel_heap.allocator();
 
     if (HAL.init(os.page_allocator)) |h| {
