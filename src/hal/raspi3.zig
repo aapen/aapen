@@ -1,11 +1,12 @@
 const std = @import("std");
 const memory = @import("../memory.zig");
+const Region = memory.Region;
 
-pub const memory_map = @import("raspi3/memory_map.zig");
-const peripheral_base = memory_map.peripheral_base;
-
-pub const heap_start = memory_map.heap_start;
-pub const heap_end = memory_map.heap_end;
+// Memory map
+pub const device_start: u64 = 0x3b40_0000;
+pub const peripheral_base: u64 = 0x3f00_0000;
+pub const heap_start: [*]u8 = @extern([*]u8, .{ .name = "__heap_start" });
+pub const heap_end: usize = device_start - 1;
 
 // ARM devices
 const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");

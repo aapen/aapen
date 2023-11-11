@@ -1,5 +1,5 @@
 const root = @import("root");
-const memory_map = root.HAL.memory_map;
+const HAL = root.HAL;
 
 const cortex_a = @import("../cortex-a.zig");
 
@@ -21,7 +21,7 @@ pub const section_size: u64 = 1 << section_shift;
 // These are choices about memory layout
 // pub const VA_START = 0xffff000000000000;
 pub const block_size: u64 = 0x40000000;
-pub const device_start: u64 = memory_map.device_start;
+pub const device_start: u64 = HAL.device_start;
 
 // These are choices about memory protection
 // These must match the value written to MAIR_EL1 in mmu.S
