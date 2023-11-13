@@ -594,6 +594,10 @@ pub const Forth = struct {
         }
     }
 
+    pub fn serial_print(_: *Forth, comptime fmt: []const u8, args: anytype) !void {
+        try root.HAL.serial_writer.print(fmt, args);
+    }
+
     pub fn print(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
         try this.console.print(fmt, args);
         try root.HAL.serial_writer.print(fmt, args);

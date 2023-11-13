@@ -36,6 +36,11 @@ pub const VTable = struct {
     blit: *const fn (fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void,
 };
 
+// Font dimensions
+
+pub const DEFAULT_FONT_WIDTH = 8;
+pub const DEFAULT_FONT_HEIGHT = 16;
+
 // These are palette indices
 pub const DEFAULT_FOREGROUND: u8 = 0x01;
 pub const DEFAULT_BACKGROUND: u8 = 0x00;
@@ -45,7 +50,7 @@ pub const DEFAULT_DEPTH: u32 = 8;
 pub const DEFAULT_PALETTE = [_]u32{
     0x00000000,
     0x00ffffff,
-    0x00000088,
+    0x000000ff,
     0x00eeffaa,
     0x00cc44cc,
     0x0055cc00,
@@ -69,6 +74,9 @@ xres: u32 = DEFAULT_X_RESOLUTION,
 yres: u32 = DEFAULT_Y_RESOLUTION,
 bpp: u32 = DEFAULT_DEPTH,
 palette: [DEFAULT_PALETTE.len]u32 = DEFAULT_PALETTE,
+
+font_width_px: u32 = DEFAULT_FONT_WIDTH,
+font_height_px: u32 = DEFAULT_FONT_HEIGHT,
 
 dma: *const DMA = undefined,
 dma_channel: ?DMAChannel = undefined,
@@ -147,11 +155,11 @@ pub fn clearRegion(self: *Self, x: usize, y: usize, w: usize, h: usize) void {
 }
 
 // Font is fixed height of 16 bits, fixed width of 8 bits
-const CharRow = @Vector(8, u8);
+const CharRow = @Vector(DEFAULT_FONT_WIDTH, u8);
 
 pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8) void {
-    var romidx: usize = @as(usize, ch - 32) * 16;
-    if (romidx + 16 >= character_rom.len)
+    var romidx: usize = @as(usize, ch - 32) * DEFAULT_FONT_HEIGHT;
+    if (romidx + self.font_height_px >= character_rom.len)
         return;
 
     var line_stride = self.pitch;
@@ -160,10 +168,10 @@ pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8) void {
     const backgv: CharRow = @splat(self.bg);
     const foregv: CharRow = @splat(self.fg);
 
-    inline for (0..16) |_| {
+    inline for (0..DEFAULT_FONT_HEIGHT) |_| {
         const rowbits: CharBits = character_rombits[romidx];
         const row = @select(u8, rowbits, foregv, backgv);
-        (self.base + fbidx)[0..8].* = row;
+        (self.base + fbidx)[0..DEFAULT_FONT_WIDTH].* = row;
         fbidx += line_stride;
         romidx += 1;
     }
@@ -183,14 +191,30 @@ pub fn eraseChar(self: *Self, x: usize, y: usize) void {
     var line_stride = self.pitch;
     var fbidx = x + (y * line_stride);
 
-    inline for (0..16) |_| {
-        inline for (0..8) |_| {
+    inline for (0..DEFAULT_FONT_HEIGHT) |_| {
+        inline for (0..DEFAULT_FONT_WIDTH) |_| {
             self.base[fbidx] = self.bg;
             fbidx += 1;
         }
-        fbidx -= 8;
+        fbidx -= self.font_width_px;
         fbidx += line_stride;
     }
+}
+
+pub inline fn yToRow(self: *Self, y: usize) usize {
+    return @truncate(y / self.font_height_px);
+}
+
+pub inline fn xToCol(self: *Self, x: usize) usize {
+    return @truncate(x / self.font_width_px);
+}
+
+pub inline fn rowToY(self: *Self, row: usize) usize {
+    return row * self.font_height_px;
+}
+
+pub inline fn colToX(self: *Self, col: usize) usize {
+    return col * self.font_width_px;
 }
 
 pub fn blit(fb: *Self, src_x: usize, src_y: usize, src_w: usize, src_h: usize, dest_x: usize, dest_y: usize) void {

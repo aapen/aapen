@@ -125,16 +125,17 @@ finish
   header.*len + 
 ;
 
-(Character predicates)
+(Character)
 
 8   :char-bs    let
 10  :char-nl    let
 13  :char-cr    let
+27  :char-esc   let
 32  :char-space let
 127 :char-del   let
 
 : char-ctrl (ch -- CNTRL-ch)
-  \a -
+  \a - inc
 ;
 
 : backspace?
@@ -163,253 +164,8 @@ finish
 ;
 
 : dquote? (ch -- b)
-  \" =
+  0x22 =
 ;
-
-
-(String buffer)
-
-: sb-create (pName -- : Create a new string buffer with the name)
-  create
-    0 ,
-    16 allot
-  finish
-;
-
-: sb-count (sb-addr -- n : Return the number of chars in sb)
-  @
-;
-
-: sb-inc-count (sb-addr -- : Increment the sb char count.)
-  dup
-  @
-  inc
-  swap
-  !
-;
-
-: sb-dec-count (sb-addr -- : Increment the sb char count.)
-  dup
-  @
-  dup 1 >= 
-  if 
-    dec 
-    swap
-    !
-  else
-    2drop
-  endif
-;
-
-: sb-poke-char (ch sb-addr -- : Add a character at the current position.)
-  dup
-  @  word + +
-  !b
-;
-  
-: sb-append (ch sb-addr --  : Append a new char onto the buffer.)
-  dup rot swap
-  sb-poke-char
-  sb-inc-count
-;
-
-: sb-string (sb-addr -- str : Push the address of the string in the sb)
-  word +
-;
-
-: sb-clear (sb-word --  : Clear this buffer)
-  0 swap !
-;
-
-(Key Dispatch Table: dtab)
-
-: dtab-set (word-address dtab key -- : Set handler for key to word-adress)
-  word * + (word-address dtab-entry-addr)
-  !
-;  
-
-: dtab-set-range (word-address dtab key1 key2--)
-  for-range
-    2dup
-    ->stack
-    dtab-set
-  repeat
-  2drop
-;
-
-: dtab-create (dt-name -- dtab: Create a 128 entry key dispatch table)
-  dup
-  create
-    128 allot
-  finish
-  lookup data-address 0x0000 swap 0 128 dtab-set-range
-;
-
-: dtab-lookup (dtab ch -- handler-word: Lookup the handler for the ch)
-  word * +
-  @
-;
-
-: dtab-trigger (dtab ch -- : Trigger the word associated with ch)
-  dup rot swap
-  dtab-lookup
-  dup if
-    exec
-  else
-    drop
-  endif
-;
-
-: emit-prompt
-  "forty>> " s.
-;
-
-:repl-buffer sb-create
-
-: ignore-handler (ch --) drop ;
-
-: insert-handler (ch --)
-  dup emit 
-  repl-buffer sb-append
-;
-
-: backspace-handler (ch -- : Echo the char and back up one in the buffer)
-  repl-buffer sb-count 0 >
-  if
-    emit
-    repl-buffer sb-dec-count
-  else
-    drop
-  endif
-;
-
-: newline-handler (ch -- : Handle a newline. Echos the char, eval, reset buffer.)
-  emit
-  0 repl-buffer sb-append
-  repl-buffer sb-string
-  repl-buffer sb-clear
-  eval-command
-  emit-prompt
-;
-
-: line-demo-handler (ch -- : Draw some pretty lines)
-  drop
-  0 250 for-range
-    20 300              (x1 y1)
-    1000 ->stack 3 *    (x2 y2)
-    ->stack 16 %        (c)
-    line
-  repeat
-;
-
-:handlers dtab-create
-
-'backspace-handler handlers char-bs  dtab-set
-'backspace-handler handlers char-del dtab-set
-'newline-handler   handlers char-nl  dtab-set
-'newline-handler   handlers char-cr  dtab-set
-
-'insert-handler    handlers char-space \~ dtab-set-range
-
-'line-demo-handler handlers \^ dtab-set
-
-: handle-one (ch -- : Handle a single character)
-  handlers key dtab-trigger
-;
-
-
-: repl-loop (-- : Prompt for and execute words, does not return)
-  emit-prompt
-  while
-    1
-  do
-    handle-one
-  done
-;
-
-(Repl)
-
-: read-ch ( -- ch : read with echo)
-  key
-  dup emit
-;
-
-: read-command (sb-addr --)
-  dup sb-clear
-  emit-prompt
-  read-ch
-  while
-    dup newline? not
-  do
-    dup backspace?
-    if
-      drop
-      dup sb-dec-count
-    else
-      over sb-append
-    endif
-    read-ch
-  done
-  drop
-  dup 0 swap sb-append
-  drop
-;
-
-
-: repl (--)
-  "REPL in forth, type 'quit' to exit" s. cr cr
-  repl-buffer read-command
-  repl-buffer sb-string
-  while
-    dup "quit" s= not
-  do
-    eval-command
-    repl-buffer read-command
-    repl-buffer sb-string
-  done
-  "Exit REPL!" s. cr
-;
-
-:input-buffer sb-create
-
-: handle (--)
-  "yes>> " s.
-  read-ch
-  while
-    dup 17 = not
-  do
-    input-buffer
-    handlers 
-    rot
-    ?stack
-    dtab-trigger
-    read-ch
-  done
-  drop
-  dup 0 swap sb-append
-  drop
-;
-
-
-: read-token (sb-addr --)
-  dup sb-clear
-  read-ch
-  while
-    dup whitespace? not
-  do
-    over sb-append
-    read-ch
-  done
-  drop
-  dup 0 swap sb-append
-;
-
-
-: read-eval ( -- <results> : read one word, evaluate it)
-  input-buffer read-token 
-  sb-string eval
-;
-
 
 (System status)
 
@@ -472,59 +228,152 @@ finish
   white black set-colors 
 ;
 
-(Screen editing)
+: set-text-fg (color-n --)
+  0x90 + emit
+;
 
-fbcons fbcons.width  + @     :scr-width  let
-fbcons fbcons.height + @     :scr-height let
-scr-width scr-height * :scr-length let
+: set-text-bg (color-n -- cntr-char-set color)
+  0xa0 + emit
+;
 
-: scr-create (name -- pscreen : Create a screen buffer)
+(Screen dimensions)
+
+fbcons fbcons.nCols  + @     :scr-cols  let
+fbcons fbcons.nRows + @     :scr-rows let
+
+
+(Key Dispatch Table: dtab)
+
+: dtab-set (word-address dtab key -- : Set handler for key to word-adress)
+  word * + (word-address dtab-entry-addr)
+  !
+;  
+
+: dtab-set-range (word-address dtab key1 key2--)
+  for-range
+    2dup
+    ->stack
+    dtab-set
+  repeat
+  2drop
+;
+
+: dtab-create (dt-name -- dtab: Create a 128 entry key dispatch table)
+  dup
   create
-    scr-length ballot
+    128 allot
   finish
+  lookup data-address 0x0000 swap 0 128 dtab-set-range
 ;
 
-:screen scr-create
-
-: scr-fill (ch screenp --)
-  scr-length set-mem
+: dtab-lookup (dtab ch -- handler-word: Lookup the handler for the ch)
+  word * +
+  @
 ;
 
-: scr-clear
-  char-space swap scr-length set-mem
+: dtab-trigger (dtab ch -- : Trigger the word associated with ch)
+  dup rot swap
+  dtab-lookup
+  dup if
+    exec
+  else
+    drop
+  endif
 ;
 
-: scr-y (screen n-byte -- i-line)
-  scr-width /
+: emit-prompt
+  0x8a emit "forty>> " s. 0x8b emit
 ;
 
-: scr-x (screen n-byte -- i-row)
-  scr-width %
+:repl-buffer create
+  scr-cols inc ballot
+finish
+
+: ignore-handler (ch --) drop ;
+
+: insert-handler (ch --) emit ;
+
+: backspace-handler (ch -- ) emit ;
+
+: newline-handler (ch -- : Handle a newline. Echos the char, eval, reset buffer.)
+  drop
+  repl-buffer -1 line-text
+  dup s~
+  cr
+  repl-buffer eval-command
+  emit-prompt
+  (char-nl emit eval-command emit-prompt)
 ;
 
-: scr-offset (x y -- mem-offset)
-  scr-width * +
+: qqq-newline-handler
+  "Newline!" s~
+  drop
+  repl-buffer -1 line-text
+  "repl buffer:" s~ s~
+  repl-buffer s. cr
 ;
 
-: scr-set (screenp x y ch -- : set the char at x y in screen)
-  rot rot            (stack: screenp ch x y)
-  scr-offset         (stack: screenp ch offset)
-  rot                (stack: ch offset screenp)
-  +                  (stack: ch p)
-  !b
+: redisplay-handler
+  0xff emit
 ;
-  
 
-: scr-sync (screenp -- )
-  scr-length times
-    dup ->stack + @b
-    ->stack scr-x
-    ->stack scr-y
-    rot
-    draw-char
+: escape-handler
+  key drop
+  key 
+  dup 65 = if
+    0x80 emit
+  endif
+  dup 66 = if
+    0x81 emit
+  endif
+  dup 67 = if
+    0x83 emit
+  endif
+  68 = if
+    0x82 emit
+  endif
+;
+
+: line-demo-handler (ch -- : Draw some pretty lines)
+  drop
+  0 250 for-range
+    20 300              (x1 y1)
+    1000 ->stack 3 *    (x2 y2)
+    ->stack 16 %        (c)
+    line
   repeat
 ;
 
+: ex-handler
+  drop
+  repl-buffer 5 line-text s~
+;
+
+:handlers dtab-create
+
+'backspace-handler handlers char-bs  dtab-set
+'backspace-handler handlers char-del dtab-set
+'newline-handler   handlers char-nl  dtab-set
+'newline-handler   handlers char-cr  dtab-set
+'escape-handler    handlers char-esc dtab-set
+'ex-handler        handlers \x char-ctrl dtab-set
+
+'insert-handler    handlers char-space \~ dtab-set-range
+
+'line-demo-handler handlers \^ dtab-set
+
+: handle-one (ch -- : Handle a single character)
+  handlers key dtab-trigger
+;
+
+: repl (-- : Prompt for and execute words, does not return)
+  emit-prompt
+  while
+    1
+  do
+    handle-one
+  done
+;
 
 ( Testing... )
 
@@ -629,11 +478,50 @@ test-all
   invoke-1
 ;
 
-cr cr cr
-"************* Nygard/Olsen Forth V40 **************" s. cr
+
+: aapen-logo
+  yellow set-text-fg
+  "               AAA                              AAA                                                                        " s. cr
+  "              A:::A                            A:::A                                                                       " s. cr
+  "             A:::::A                          A:::::A                                                                      " s. cr
+  green set-text-fg
+  "            A:::::::A                        A:::::::A                                                                     " s. cr
+  "           A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " s. cr
+  "          A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " s. cr
+  red set-text-fg
+  "         A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " s. cr
+  "        A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" s. cr
+  yellow set-text-fg
+  "       A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" s. cr
+  "      A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" s. cr
+  "     A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" s. cr
+  green set-text-fg
+  "    A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" s. cr
+  "   A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" s. cr
+  red set-text-fg
+  "  A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" s. cr
+  " A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" s. cr
+  "AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" s. cr
+  "                                                                  A:::::A                                                  " s. cr
+  yellow set-text-fg
+  "                                                                  A:::::A                                                  " s. cr
+  "                                                                 A:::::::A                                                 " s. cr
+  "                                                                 A:::::::A                                                 " s. cr
+  green set-text-fg
+  "                                                                 A:::::::A                                                 " s. cr
+  "                                                                 AAAAAAAAA                                                 " s. cr
+  light-blue set-text-fg
+;
+
+cr cr
+aapen-logo
+cr
+"V 0.01" s. cr
 mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 "READY" s. cr
 cr cr
 
 "Forty REPL" s. cr cr
-repl-loop
+(repl)
+
+

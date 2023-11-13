@@ -508,6 +508,45 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
     return 0;
 }
 
+pub fn wordLineText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    var n = try forth.popAs(i64);
+    const pStr = try forth.popAs([*]u8);
+    const line_no: u64 = if (n < 0) @intCast(forth.console.currentRow) else @intCast(n);
+
+    const nCols = forth.console.nCols;
+
+    forth.console.getLineText(line_no, true, pStr);
+    //try forth.print("line_no: {} pstr: {*}\n", .{ line_no, pStr });
+    pStr[nCols] = 0;
+    for (0..nCols) |i| {
+        const j = nCols - 1 - i;
+        if (pStr[j] != ' ') {
+            break;
+        }
+        pStr[j] = 0;
+    }
+    try forth.pushAny(pStr);
+    return 0;
+}
+
+pub fn wordSerialSDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    const p = try forth.popAs([*]u8);
+    const s = string.asSlice(p);
+    try forth.serial_print("{s}", .{s});
+
+    return 0;
+}
+
+pub fn wordSerialDot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    var v = try forth.popAs(i64);
+    try forth.serial_print("{}", .{v});
+    return 0;
+}
+pub fn wordTest2(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    _ = forth;
+    return 0;
+}
+
 pub fn defineCore(forth: *Forth) !void {
 
     // Expose internal values to forty.
@@ -520,6 +559,9 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("fbcons", FrameBufferConsole);
     try forth.defineStruct("fb", FrameBuffer);
     try forth.defineStruct("fb.vtable", FrameBuffer.VTable);
+
+    // Hal
+
     try forth.defineStruct("hal", HAL);
     try forth.defineStruct("usb", HAL.USB);
     try forth.defineStruct("usb.vtable", HAL.USB.VTable);
@@ -554,9 +596,11 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("+.", "n -- :print tos as i64 in current obase", &wordSignedDot, false);
     _ = try forth.definePrimitiveDesc("+#.", "n -- :print tos as i64 in current obase", &wordSDecimalDot, false);
     _ = try forth.definePrimitiveDesc(".", "n -- :print tos as u64 in current obase", &wordDot, false);
+    _ = try forth.definePrimitiveDesc("~", "n -- :print tos as i64 to serial", &wordSerialDot, false);
     _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, false);
     _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, false);
     _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, false);
+    _ = try forth.definePrimitiveDesc("s~", "s -- :print tos as a string to serial port", &wordSerialSDot, false);
     _ = try forth.definePrimitiveDesc("s=", "s s -- b :string contents equality", &wordSEqual, false);
     _ = try forth.definePrimitiveDesc("+", "n n -- n :u64 addition", &wordAdd, false);
     _ = try forth.definePrimitiveDesc("-", "n n -- n :u64 subtraction", &wordSub, false);
@@ -582,5 +626,8 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("@w", "addr -- : Load a 32 bit unsigned word", &wordLoadU32, false);
     _ = try forth.definePrimitive("wbe", &wordByteExchangeU32, false);
 
+    _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, false);
+
+    _ = try forth.definePrimitiveDesc("line-text", "nline -- str : Get the text of the given line.", &wordLineText, false);
     _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, false);
 }
