@@ -4,9 +4,23 @@
 		// Path is relataive to the devcontainer.json file.
 		"dockerfile": "Dockerfile"
 	},
+	"features": {
+		"ghcr.io/devcontainers/features/desktop-lite:1": {
+			"password": "aapen"
+		}
+	},
+	"forwardPorts": [6080],
+	"portsAttributes": {
+		"6080": {
+			"label": "desktop"
+		}
+	},
 	"customizations": {
 		"vscode": {
-		  "extensions": ["ziglang.vscode-zig"]
+			 "extensions": [
+				"ziglang.vscode-zig", 
+		  		"ms-azuretools.vscode-docker"
+			]
 		}
-	  }	
+	}	
 }
