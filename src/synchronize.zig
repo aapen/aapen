@@ -37,7 +37,7 @@ pub fn criticalEnter(target_level: InterruptLevel) void {
         std.log.err("attempt to enter a critical section at lower interrupt level", .{});
     }
 
-    cpu.disableFIQandIRQ();
+    cpu.irqAndFiqDisable();
 
     if (critical_levels[core_id] >= MAX_CRITICAL_NESTING) {
         std.log.err("too many nested critical sections", .{});
@@ -47,7 +47,7 @@ pub fn criticalEnter(target_level: InterruptLevel) void {
     saved_flags[core_id][critical_levels[core_id]] = exflags;
 
     if (target_level == .IRQ) {
-        cpu.enableFIQ();
+        cpu.fiqEnable();
     }
 
     barriers.barrierMemory();
@@ -61,7 +61,7 @@ pub fn criticalEnter(target_level: InterruptLevel) void {
 pub fn criticalLeave() void {
     const core_id = cpu.coreId();
     barriers.barrierMemory();
-    cpu.disableFIQ();
+    cpu.fiqDisable();
 
     if (critical_levels[core_id] == 0) {
         std.log.err("unbalanced critical sections", .{});

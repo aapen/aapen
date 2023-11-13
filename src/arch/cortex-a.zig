@@ -57,13 +57,6 @@ pub fn init() void {
 // ----------------------------------------------------------------------
 // Low level interrupt control
 // ----------------------------------------------------------------------
-pub fn irqDisable() void {
-    asm volatile ("msr daifset, #2");
-}
-
-pub fn irqEnable() void {
-    asm volatile ("msr daifclr, #2");
-}
 
 pub fn irqFlagsRead() u32 {
     return asm (
@@ -80,31 +73,31 @@ pub fn irqFlagsWrite(flags: u32) void {
     );
 }
 
-pub fn enableFIQ() void {
+pub fn fiqEnable() void {
     asm volatile (
         \\ msr DAIFClr, #1
     );
 }
 
-pub fn disableFIQ() void {
+pub fn fiqDisable() void {
     asm volatile (
         \\ msr DAIFSet, #1
     );
 }
 
-pub fn enableIRQ() void {
+pub fn irqEnable() void {
     asm volatile (
         \\ msr DAIFClr, #2
     );
 }
 
-pub fn disableIRQ() void {
+pub fn irqDisable() void {
     asm volatile (
         \\ msr DAIFSet, #2
     );
 }
 
-pub fn disableFIQandIRQ() void {
+pub fn irqAndFiqDisable() void {
     asm volatile (
         \\ msr DAIFSet, #3
     );

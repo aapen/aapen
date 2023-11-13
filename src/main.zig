@@ -59,7 +59,7 @@ fn kernelInit() void {
     arch.cpu.mmu.init();
 
     // Needed for enter/leave critical sections
-    arch.cpu.enableFIQ();
+    arch.cpu.fiqEnable();
 
     if (debug.init()) {
         debug.kernel_message("init");
