@@ -58,7 +58,7 @@ pub fn init() !void {
 /// interface, the frame buffer, and even Zig's formatting. (This does
 /// mean you don't get formatted messages, but it also has no chance
 /// of panicking.)
-pub fn kernel_message(msg: []const u8) void {
+pub fn kernelMessage(msg: []const u8) void {
     mring_spinlock.acquire();
     defer mring_spinlock.release();
 
@@ -66,8 +66,8 @@ pub fn kernel_message(msg: []const u8) void {
     ring.writeAssumeCapacity(@as(u8, 0));
 }
 
-pub fn kernel_error(msg: []const u8, err: anyerror) void {
-    kernel_message(msg);
-    kernel_message(@errorName(err));
+pub fn kernelError(msg: []const u8, err: anyerror) void {
+    kernelMessage(msg);
+    kernelMessage(@errorName(err));
     kprint("{s}: {any}\n", .{ msg, err });
 }
