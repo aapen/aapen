@@ -162,7 +162,7 @@ pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 // and pushes the address of the target address onto the rstack.
 pub fn wordIf(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
-    try forth.addCall(forth.jumpIfNot);
+    try forth.addCall(forth.jump_if_not);
     try forth.rstack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
     return 0;
@@ -225,7 +225,7 @@ pub fn wordWhile(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 // and pushes the address of the target address onto the rstack.
 pub fn wordDo(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
-    try forth.addCall(forth.jumpIfNot);
+    try forth.addCall(forth.jump_if_not);
     try forth.rstack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
     return 0;
@@ -264,14 +264,14 @@ pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordTimes(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
     // code to push count onto return stack
-    try forth.addCall(forth.toRStack);
+    try forth.addCall(forth.to_rstack);
     try forth.addCall(forth.drop);
-    try forth.addCall(forth.pushU64);
+    try forth.addCall(forth.push_u64);
     try forth.addNumber(0);
-    try forth.addCall(forth.toRStack);
+    try forth.addCall(forth.to_rstack);
     try forth.addCall(forth.drop);
     try forth.rstack.push(@intFromPtr(forth.current()));
-    try forth.addCall(forth.jumpIfRLE);
+    try forth.addCall(forth.jump_if_rle);
     try forth.rstack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
 
@@ -283,12 +283,12 @@ pub fn wordTimes(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 pub fn wordForRange(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     try forth.assertCompiling();
     // code to push count onto return stack
-    try forth.addCall(forth.toRStack);
+    try forth.addCall(forth.to_rstack);
     try forth.addCall(forth.drop);
-    try forth.addCall(forth.toRStack);
+    try forth.addCall(forth.to_rstack);
     try forth.addCall(forth.drop);
     try forth.rstack.push(@intFromPtr(forth.current()));
-    try forth.addCall(forth.jumpIfRLE);
+    try forth.addCall(forth.jump_if_rle);
     try forth.rstack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
 
@@ -296,10 +296,10 @@ pub fn wordForRange(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
 }
 
 pub fn wordRepeat(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    try forth.addCall(forth.incRStack);
+    try forth.addCall(forth.inc_rstack);
     try generateLoopTail(forth);
-    try forth.addCall(forth.rDrop);
-    try forth.addCall(forth.rDrop);
+    try forth.addCall(forth.r_drop);
+    try forth.addCall(forth.r_drop);
 
     return 0;
 }

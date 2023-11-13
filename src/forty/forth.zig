@@ -50,18 +50,18 @@ pub const Forth = struct {
     obase: u64 = 10,
     debug: u64 = 0,
     memory: Memory = undefined,
-    lastWord: ?*Header = null,
-    newWord: ?*Header = null,
-    pushU64: *Header = undefined,
-    pushString: *Header = undefined,
+    last_word: ?*Header = null,
+    new_word: ?*Header = null,
+    push_u64: *Header = undefined,
+    push_string: *Header = undefined,
     drop: *Header = undefined,
-    rDrop: *Header = undefined,
-    toRStack: *Header = undefined,
-    toDStack: *Header = undefined,
-    jumpIfRLE: *Header = undefined,
-    incRStack: *Header = undefined,
+    r_drop: *Header = undefined,
+    to_rstack: *Header = undefined,
+    to_dstack: *Header = undefined,
+    jump_if_rle: *Header = undefined,
+    inc_rstack: *Header = undefined,
     jump: *Header = undefined,
-    jumpIfNot: *Header = undefined,
+    jump_if_not: *Header = undefined,
     compiling: u64 = 0,
     line_buffer: *string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
@@ -70,8 +70,8 @@ pub const Forth = struct {
         this.ibase = 10;
         this.obase = 10;
         this.debug = 0;
-        this.lastWord = null;
-        this.newWord = null;
+        this.last_word = null;
+        this.new_word = null;
         this.allocator = a;
         this.arena_allocator = ArenaAllocator.init(a);
         this.temp_allocator = this.arena_allocator.allocator();
@@ -82,16 +82,16 @@ pub const Forth = struct {
         this.memory = Memory.init(this.buffer.ptr, this.buffer.len);
         this.line_buffer = try a.create(string.LineBuffer);
 
-        this.pushString = try this.definePrimitive("*push-string", &wordPushString, false);
-        this.pushU64 = try this.definePrimitive("*push-u64", &wordPushU64, false);
+        this.push_string = try this.definePrimitive("*push-string", &wordPushString, false);
+        this.push_u64 = try this.definePrimitive("*push-u64", &wordPushU64, false);
         this.jump = try this.definePrimitive("*jump", &wordJump, false);
-        this.jumpIfNot = try this.definePrimitive("*jump-if-not", &wordJumpIfNot, false);
+        this.jump_if_not = try this.definePrimitive("*jump-if-not", &wordJumpIfNot, false);
         this.drop = try this.definePrimitiveDesc("drop", " n -- : Drop the top stack value", &wordDrop, false);
-        this.rDrop = try this.definePrimitiveDesc("rdrop", " n -- : Drop the top rstack value", &wordRDrop, false);
-        this.toRStack = try this.definePrimitiveDesc("->rstack", " n -- : Push the data TOS onto the rstack, doen't pop stack.", &wordToRStack, false);
-        this.toDStack = try this.definePrimitiveDesc("->stack", " -- n : Copies the rstack TOS onto the data stack, doesn't pop rstack", &wordToDStack, false);
-        this.jumpIfRLE = try this.definePrimitive("*jump-if-rle", &wordJumpIfRLE, false);
-        this.incRStack = try this.definePrimitive("rstack-inc", &wordIncRStack, false);
+        this.r_drop = try this.definePrimitiveDesc("rdrop", " n -- : Drop the top rstack value", &wordRDrop, false);
+        this.to_rstack = try this.definePrimitiveDesc("->rstack", " n -- : Push the data TOS onto the rstack, doen't pop stack.", &wordToRStack, false);
+        this.to_dstack = try this.definePrimitiveDesc("->stack", " -- n : Copies the rstack TOS onto the data stack, doesn't pop rstack", &wordToDStack, false);
+        this.jump_if_rle = try this.definePrimitive("*jump-if-rle", &wordJumpIfRLE, false);
+        this.inc_rstack = try this.definePrimitive("rstack-inc", &wordIncRStack, false);
 
         _ = try this.defineBuffer("cmd-buffer", 20);
         try this.defineConstant("inner", @intFromPtr(&inner));
@@ -167,7 +167,7 @@ pub const Forth = struct {
     pub fn reset(this: *Forth) !void {
         try this.stack.reset();
         try this.rstack.reset();
-        this.newWord = null;
+        this.new_word = null;
         this.compiling = 0;
     }
 
@@ -193,7 +193,7 @@ pub const Forth = struct {
     // Find a word in the dictionary by name, ignores words that are under construction.
     pub fn findWord(this: *Forth, name: []const u8) ?*Header {
         //print("Finding word: {s}\n", .{name});
-        var e = this.lastWord;
+        var e = this.last_word;
         while (e) |entry| {
             //print("Name: {s}\n", .{entry.name});
             if (string.same(entry.name, name)) {
@@ -206,7 +206,7 @@ pub const Forth = struct {
 
     // Returns true if wp points at a word in the dictionary, ignores words that are under construction.
     pub fn isWordP(this: *Forth, wp: u64) bool {
-        var e = this.lastWord;
+        var e = this.last_word;
         while (e) |entry| {
             if (wp == @intFromPtr(entry)) {
                 return true;
@@ -249,7 +249,7 @@ pub const Forth = struct {
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
         _ = try this.startWord(name, "A constant", &inner, false);
-        try this.addCall(this.pushU64);
+        try this.addCall(this.push_u64);
         try this.addNumber(v);
         try this.addStop();
         try this.completeWord();
@@ -310,17 +310,17 @@ pub const Forth = struct {
     pub fn create(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
         var owned_name = try std.mem.Allocator.dupeZ(this.allocator, u8, name);
         var owned_desc = try std.mem.Allocator.dupeZ(this.allocator, u8, desc);
-        const entry: Header = Header.init(owned_name, owned_desc, f, immediate, this.lastWord);
-        this.newWord = try this.addScalar(Header, entry);
-        return this.newWord.?;
+        const entry: Header = Header.init(owned_name, owned_desc, f, immediate, this.last_word);
+        this.new_word = try this.addScalar(Header, entry);
+        return this.new_word.?;
     }
 
     // Finish out the new dictionary entry and add it to the dictionary.
     pub fn complete(this: *Forth) void {
-        const wordLength = @intFromPtr(this.memory.current) - @intFromPtr(this.newWord);
-        this.newWord.?.len = @intCast(wordLength);
-        this.lastWord = this.newWord;
-        this.newWord = null;
+        const wordLength = @intFromPtr(this.memory.current) - @intFromPtr(this.new_word);
+        this.new_word.?.len = @intCast(wordLength);
+        this.last_word = this.new_word;
+        this.new_word = null;
     }
 
     // Allocate some memory, starting on the given alignment.
@@ -334,9 +334,9 @@ pub const Forth = struct {
     // the new word until completeWord is called.
     pub fn startWord(this: *Forth, name: []const u8, desc: []const u8, f: WordFunction, immediate: bool) !*Header {
         try this.assertNotCompiling();
-        const newWord = try this.create(name, desc, f, immediate);
+        const new_word = try this.create(name, desc, f, immediate);
         this.compiling = 1;
-        return newWord;
+        return new_word;
     }
 
     // Finish out a new word and add it to the dictionary.
@@ -501,7 +501,7 @@ pub const Forth = struct {
         const i: u64 = @intFromPtr(header);
 
         if (this.compiling != 0) {
-            try this.addCall(this.pushU64);
+            try this.addCall(this.push_u64);
             try this.addNumber(i);
         } else {
             try this.stack.push(i);
@@ -512,7 +512,7 @@ pub const Forth = struct {
     // If we are not compiling, just push the numnber onto the stack.
     fn evalNumber(this: *Forth, i: u64) !void {
         if (this.compiling != 0) {
-            try this.addCall(this.pushU64);
+            try this.addCall(this.push_u64);
             try this.addNumber(i);
         } else {
             try this.stack.push(i);
@@ -525,7 +525,7 @@ pub const Forth = struct {
     fn evalString(this: *Forth, token: []const u8) !void {
         const s = try parser.parseString(token);
         if (this.compiling != 0) {
-            try this.addCall(this.pushString);
+            try this.addCall(this.push_string);
             try this.addString(s);
         } else {
             const allocated_s = try this.temp_allocator.dupeZ(u8, s);

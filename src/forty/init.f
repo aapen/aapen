@@ -238,8 +238,8 @@ finish
 
 (Screen dimensions)
 
-fbcons fbcons.nCols  + @     :scr-cols  let
-fbcons fbcons.nRows + @     :scr-rows let
+fbcons fbcons.num_cols  + @     :scr-cols  let
+fbcons fbcons.num_rows + @     :scr-rows let
 
 
 (Key Dispatch Table: dtab)

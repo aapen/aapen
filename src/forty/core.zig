@@ -513,13 +513,13 @@ pub fn wordLineText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
     const pStr = try forth.popAs([*]u8);
     const line_no: u64 = if (n < 0) @intCast(forth.console.current_row) else @intCast(n);
 
-    const nCols = forth.console.nCols;
+    const num_cols = forth.console.num_cols;
 
     forth.console.getLineText(line_no, true, pStr);
     //try forth.print("line_no: {} pstr: {*}\n", .{ line_no, pStr });
-    pStr[nCols] = 0;
-    for (0..nCols) |i| {
-        const j = nCols - 1 - i;
+    pStr[num_cols] = 0;
+    for (0..num_cols) |i| {
+        const j = num_cols - 1 - i;
         if (pStr[j] != ' ') {
             break;
         }

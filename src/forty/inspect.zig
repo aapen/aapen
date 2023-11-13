@@ -73,7 +73,7 @@ pub fn wordDictionaryFilter(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthE
 }
 
 fn listDictionary(forth: *Forth, pat: []const u8) ForthError!void {
-    var e = forth.lastWord;
+    var e = forth.last_word;
     var i: usize = 0;
     while (e) |entry| {
         if (std.mem.startsWith(u8, entry.name, pat)) {
@@ -95,7 +95,7 @@ pub fn wordDesc(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
 }
 
 pub fn wordDescAll(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    var e = forth.lastWord;
+    var e = forth.last_word;
     while (e) |entry| {
         try forth.print("{s}: {s}\n", .{ entry.name, entry.desc });
         e = entry.previous;

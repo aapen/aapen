@@ -17,8 +17,8 @@ const Self = @This();
 /// The naming convention is that x and y are pixel coordinates
 /// while rows and columns are character coordinates.
 tab_width: u8 = 8,
-nCols: u64 = undefined,
-nRows: u64 = undefined,
+num_cols: u64 = undefined,
+num_rows: u64 = undefined,
 length: u64 = undefined,
 fb: *FrameBuffer = undefined,
 serial: *Serial = undefined,
@@ -31,16 +31,16 @@ current_insert: u1 = 0,
 pub fn init(allocator: Allocator, fb: *FrameBuffer, serial: *Serial) !*Self {
     var self: *Self = try allocator.create(Self);
 
-    const nCols = fb.xres / fb.font_width_px;
-    const nRows = fb.yres / fb.font_height_px;
-    const length = nCols * nRows;
+    const num_cols = fb.xres / fb.font_width_px;
+    const num_rows = fb.yres / fb.font_height_px;
+    const length = num_cols * num_rows;
     const text = try allocator.alloc(RichChar, length);
 
     self.* = .{
         .fb = fb,
         .serial = serial,
-        .nCols = nCols,
-        .nRows = nRows,
+        .num_cols = num_cols,
+        .num_rows = num_rows,
         .length = length,
         .text = text.ptr,
         .current_col = 0,
@@ -62,7 +62,7 @@ pub fn clear(self: *Self) void {
 
 fn next(self: *Self) void {
     self.current_col += 1;
-    if (self.current_col >= self.nCols) {
+    if (self.current_col >= self.num_cols) {
         self.nextLine();
     }
 }
@@ -70,7 +70,7 @@ fn next(self: *Self) void {
 fn nextTab(self: *Self) void {
     var positions = self.tab_width - (self.current_col % self.tab_width);
     self.current_col += positions;
-    if (self.current_col >= self.nCols) {
+    if (self.current_col >= self.num_cols) {
         self.nextLine();
     }
 }
@@ -78,7 +78,7 @@ fn nextTab(self: *Self) void {
 fn nextLine(self: *Self) void {
     self.current_col = 0;
     self.current_row += 1;
-    if (self.current_row >= self.nRows) {
+    if (self.current_row >= self.num_rows) {
         self.nextScreen();
     }
     self.fb.clearRegion(0, self.fb.rowToY(self.current_row), self.fb.xres, self.fb.font_height_px);
@@ -89,10 +89,10 @@ fn nextScreen(self: *Self) void {
     self.fb.blit(0, self.fb.font_height_px, self.fb.xres, self.fb.yres - self.fb.font_height_px, 0, 0);
 
     self.current_col = 0;
-    self.current_row = self.nRows - 1;
-    const copyLen = self.length - self.nCols;
-    std.mem.copyForwards(RichChar, self.text[0..copyLen], self.text[self.nCols..self.length]);
-    self.setCharRange(0, self.nRows - 1, self.nCols, self.nRows - 1, ' ');
+    self.current_row = self.num_rows - 1;
+    const copyLen = self.length - self.num_cols;
+    std.mem.copyForwards(RichChar, self.text[0..copyLen], self.text[self.num_cols..self.length]);
+    self.setCharRange(0, self.num_rows - 1, self.num_cols, self.num_rows - 1, ' ');
 }
 
 fn underbar(self: *Self, color: u8) void {
@@ -120,7 +120,7 @@ fn leftCursor(self: *Self) void {
 }
 
 fn rightCursor(self: *Self) void {
-    if (self.current_col < self.nCols - 1) {
+    if (self.current_col < self.num_cols - 1) {
         self.current_col += 1;
         self.drawCursor();
     }
@@ -134,7 +134,7 @@ fn upCursor(self: *Self) void {
 }
 
 fn downCursor(self: *Self) void {
-    if (self.current_row < self.nCols - 1) {
+    if (self.current_row < self.num_cols - 1) {
         self.current_row += 1;
         self.drawCursor();
     }
@@ -145,7 +145,7 @@ fn bolCursor(self: *Self) void {
 }
 
 fn eolCursor(self: *Self) void {
-    self.current_col = self.nCols - 1;
+    self.current_col = self.num_cols - 1;
 }
 
 fn backspace(self: *Self) void {
@@ -154,12 +154,12 @@ fn backspace(self: *Self) void {
     }
     self.fb.eraseChar(self.fb.colToX(self.current_col), self.fb.rowToY(self.current_row));
 
-    const iStart = self.charIndex(self.current_col + 1, self.current_row);
-    const iEnd = self.charIndex(self.nCols, self.current_row);
-    for (iStart..iEnd) |i| {
+    const i_start = self.charIndex(self.current_col + 1, self.current_row);
+    const i_end = self.charIndex(self.num_cols, self.current_row);
+    for (i_start..i_end) |i| {
         self.text[i - 1] = self.text[i];
     }
-    self.text[iEnd - 1] = RichChar.init(' ', self.fb.fg, self.fb.bg, 0);
+    self.text[i_end - 1] = RichChar.init(' ', self.fb.fg, self.fb.bg, 0);
     self.redrawLine(self.current_row);
 }
 
@@ -170,21 +170,21 @@ fn isPrintable(ch: u8) bool {
 pub fn getLineText(self: *Self, line_no: usize, filter: bool, result: [*]u8) void {
     const i = self.charIndex(0, line_no);
     const j = self.charIndex(0, line_no + 1);
-    @memset(result[0..self.nCols], ' ');
+    @memset(result[0..self.num_cols], ' ');
 
-    var iDst: usize = 0;
-    for (i..j) |iSrc| {
-        const rc = self.text[iSrc];
+    var i_dest: usize = 0;
+    for (i..j) |i_source| {
+        const rc = self.text[i_source];
         if (filter and (rc.ignore == 1)) {
             continue;
         }
-        result[iDst] = rc.ch;
-        iDst += 1;
+        result[i_dest] = rc.ch;
+        i_dest += 1;
     }
 }
 
 pub fn redrawLine(self: *Self, row: usize) void {
-    for (0..self.nCols) |col| {
+    for (0..self.num_cols) |col| {
         self.text[self.charIndex(col, row)].draw(self.fb, col, row);
     }
     if (row == self.current_row) {
@@ -193,7 +193,7 @@ pub fn redrawLine(self: *Self, row: usize) void {
 }
 
 pub fn redraw(self: *Self) void {
-    for (0..self.nRows) |row| {
+    for (0..self.num_rows) |row| {
         self.redrawLine(row);
     }
 }
@@ -247,7 +247,7 @@ pub fn emitString(self: *Self, str: []const u8) void {
 }
 
 inline fn charIndex(self: *Self, x: u64, y: u64) u64 {
-    return y * self.nCols + x;
+    return y * self.num_cols + x;
 }
 
 pub inline fn setChar(self: *Self, xpos: u64, ypos: u64, rc: RichChar) void {
@@ -269,9 +269,9 @@ pub inline fn setCharRange(self: *Self, x1: usize, y1: usize, x2: usize, y2: usi
 
 pub fn dumpText(self: *Self) void {
     _ = self.serial.puts("===Text ===\r\n");
-    for (0..self.nRows) |row| {
+    for (0..self.num_rows) |row| {
         self.serial.putc('|');
-        for (0..self.nCols) |col| {
+        for (0..self.num_cols) |col| {
             const ch = self.getChar(col, row);
             self.serial.putc(ch.ch);
         }
@@ -282,9 +282,9 @@ pub fn dumpText(self: *Self) void {
 
 pub fn dumpIgnore(self: *Self) void {
     _ = self.serial.puts("=== ignore ===\r\n");
-    for (0..self.nRows) |row| {
+    for (0..self.num_rows) |row| {
         self.serial.putc('|');
-        for (0..self.nCols) |col| {
+        for (0..self.num_cols) |col| {
             const rc = self.getChar(col, row);
             if (rc.ignore == 1) {
                 self.serial.putc('Y');
@@ -298,9 +298,9 @@ pub fn dumpIgnore(self: *Self) void {
 
 pub fn dumpColors(self: *Self) void {
     _ = self.serial.puts("=== fg ===\r\n");
-    for (0..self.nRows) |row| {
+    for (0..self.num_rows) |row| {
         self.serial.putc('|');
-        for (0..self.nCols) |col| {
+        for (0..self.num_cols) |col| {
             const rc = self.getChar(col, row);
             self.serial.putc('A' + rc.fg);
         }
@@ -308,9 +308,9 @@ pub fn dumpColors(self: *Self) void {
     }
 
     _ = self.serial.puts("=== bg ===\r\n");
-    for (0..self.nRows) |row| {
+    for (0..self.num_rows) |row| {
         self.serial.putc('|');
-        for (0..self.nCols) |col| {
+        for (0..self.num_cols) |col| {
             const rc = self.getChar(col, row);
             self.serial.putc('A' + rc.bg);
         }
