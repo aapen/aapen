@@ -511,7 +511,7 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
 pub fn wordLineText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var n = try forth.popAs(i64);
     const pStr = try forth.popAs([*]u8);
-    const line_no: u64 = if (n < 0) @intCast(forth.console.currentRow) else @intCast(n);
+    const line_no: u64 = if (n < 0) @intCast(forth.console.current_row) else @intCast(n);
 
     const nCols = forth.console.nCols;
 
