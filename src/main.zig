@@ -59,20 +59,20 @@ fn kernelInit() void {
     arch.cpu.mmu.init();
 
     // Needed for enter/leave critical sections
-    arch.cpu.enableFIQ();
+    arch.cpu.fiqEnable();
 
     if (debug.init()) {
-        debug.kernel_message("init");
+        debug.kernelMessage("init");
         message_ring_valid = true;
     } else |_| {
         // not much we can do here
     }
 
     if (Heap.init()) |h| {
-        debug.kernel_message("heap init");
+        debug.kernelMessage("heap init");
         heap = h;
     } else |err| {
-        debug.kernel_error("heap init error", err);
+        debug.kernelError("heap init error", err);
     }
 
     os = Freestanding{
@@ -80,56 +80,56 @@ fn kernelInit() void {
     };
 
     if (HAL.init(heap.allocator)) |h| {
-        debug.kernel_message("hal init");
+        debug.kernelMessage("hal init");
         hal = h;
         uart_valid = true;
     } else |err| {
-        debug.kernel_error("hal init error", err);
+        debug.kernelError("hal init error", err);
     }
 
     // State: one core, no interrupts, MMU, heap Allocator, no
     // display, serial
     if (arch.cpu.exceptions.init()) {
-        debug.kernel_message("exceptions init");
+        debug.kernelMessage("exceptions init");
     } else |err| {
-        debug.kernel_error("exceptions init error", err);
+        debug.kernelError("exceptions init error", err);
     }
 
     // State: one core, interrupts, MMU, heap Allocator, no display,
     // serial
     if (FrameBuffer.init(heap.allocator, hal)) |buf| {
-        debug.kernel_message("frame buffer init");
+        debug.kernelMessage("frame buffer init");
         fb = buf;
     } else |err| {
-        debug.kernel_error("frame buffer init error", err);
+        debug.kernelError("frame buffer init error", err);
     }
 
     if (FrameBufferConsole.init(heap.allocator, fb, &hal.serial)) |cons| {
-        debug.kernel_message("fbcons init");
+        debug.kernelMessage("fbcons init");
         frame_buffer_console = cons;
         console_valid = true;
     } else |err| {
-        debug.kernel_error("fbcons init error", err);
+        debug.kernelError("fbcons init error", err);
     }
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial
     if (diagnostics.init(heap.allocator)) {
-        debug.kernel_message("diagnostics init");
+        debug.kernelMessage("diagnostics init");
     } else |err| {
-        debug.kernel_error("diagnostics init error", err);
+        debug.kernelError("diagnostics init error", err);
     }
 
     if (hal.usb.hostControllerInitialize()) {
-        debug.kernel_message("USB host init");
+        debug.kernelMessage("USB host init");
     } else |err| {
-        debug.kernel_error("USB host init error", err);
+        debug.kernelError("USB host init error", err);
     }
 
     if (interpreter.init(heap.allocator, frame_buffer_console)) {
-        debug.kernel_message("Forth init");
+        debug.kernelMessage("Forth init");
     } else |err| {
-        debug.kernel_error("Forth init error", err);
+        debug.kernelError("Forth init error", err);
     }
 
     // TODO should this move to forty/core.zig?
