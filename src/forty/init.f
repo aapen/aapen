@@ -69,16 +69,16 @@ finish
 : +]] 0 while swap dup [[ = not do + done drop ;
 
 (Drawing)
-: draw-char (y x c -- : Draw character at position)
+: draw-char (bg fg y x c -- : Draw character at position)
   fb
   [[ fb fb.vtable fb.vtable.char +]] @
-  invoke-4
+  invoke-6
 ;
 
-: text (y x s -- : Draw string at position)
+: text (bg fg y x s -- : Draw string at position)
   fb
   [[ fb fb.vtable fb.vtable.text +]] @
-  invoke-4
+  invoke-6
 ;
 
 : line  (color y2 x2 y1 x1 -- : Draw a colored line)
@@ -191,11 +191,11 @@ finish
 (Colors)
 
 : set-fg (fg bg -- : Set the text bg color)
-  fb fb.fg + !b
+  fbcons fbcons.fg + !b
 ;
 
 : set-bg (fg bg -- : Set the text fg color)
-  fb fb.bg + !b
+  fbcons fbcons.bg + !b
 ;
 
 : set-colors (fg bg -- : Set the text colors)
@@ -241,6 +241,8 @@ finish
 fbcons fbcons.num_cols  + @     :scr-cols  let
 fbcons fbcons.num_rows + @     :scr-rows let
 
+[[ fb fb.xres +]] @w :scr-xres let
+[[ fb fb.yres +]] @w :scr-yres let
 
 (Key Dispatch Table: dtab)
 
@@ -350,7 +352,7 @@ finish
     forward-handler
     return
   endif
-  68 = if
+  dup 68 = if
     back-handler
     return
   else

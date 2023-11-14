@@ -11,6 +11,9 @@ const FrameBuffer = @import("frame_buffer.zig");
 const Readline = @import("readline.zig");
 const RichChar = @import("rich_char.zig").RichChar;
 
+pub const DEFAULT_FOREGROUND: u8 = 0x01;
+pub const DEFAULT_BACKGROUND: u8 = 0x00;
+
 const Self = @This();
 
 /// Display console.
@@ -21,6 +24,8 @@ num_cols: u64 = undefined,
 num_rows: u64 = undefined,
 length: u64 = undefined,
 fb: *FrameBuffer = undefined,
+fg: u8,
+bg: u8,
 serial: *Serial = undefined,
 text: [*]RichChar,
 current_col: u64 = 0,
@@ -42,6 +47,8 @@ pub fn init(allocator: Allocator, fb: *FrameBuffer, serial: *Serial) !*Self {
         .num_rows = num_rows,
         .length = length,
         .text = text.ptr,
+        .fg = DEFAULT_FOREGROUND,
+        .bg = DEFAULT_BACKGROUND,
         .current_col = 0,
         .current_row = 0,
         .current_ignore = 0,
@@ -51,10 +58,10 @@ pub fn init(allocator: Allocator, fb: *FrameBuffer, serial: *Serial) !*Self {
 }
 
 pub fn clear(self: *Self) void {
-    self.fb.clear();
+    self.fb.clear(self.bg);
     self.current_col = 0;
     self.current_row = 0;
-    const space = RichChar.init(' ', self.fb.fg, self.fb.bg, 0);
+    const space = RichChar.init(' ', self.fg, self.bg, 0);
     @memset(self.text[0..self.length], space);
 }
 
@@ -79,11 +86,10 @@ fn nextLine(self: *Self) void {
     if (self.current_row >= self.num_rows) {
         self.nextScreen();
     }
-    self.fb.clearRegion(0, self.fb.rowToY(self.current_row), self.fb.xres, self.fb.font_height_px);
+    self.fb.clearRegion(0, self.fb.rowToY(self.current_row), self.fb.xres, self.fb.font_height_px, self.bg);
 }
 
 fn nextScreen(self: *Self) void {
-    //self.fb.blit(0, CharHeight, self.fb.xres, self.fb.yres - CharHeight, 0, 0);
     self.fb.blit(0, self.fb.font_height_px, self.fb.xres, self.fb.yres - self.fb.font_height_px, 0, 0);
 
     self.current_col = 0;
@@ -103,11 +109,11 @@ fn underbar(self: *Self, color: u8) void {
 }
 
 fn eraseCursor(self: *Self) void {
-    self.underbar(self.fb.bg);
+    self.underbar(self.bg);
 }
 
 fn drawCursor(self: *Self) void {
-    self.underbar(self.fb.fg);
+    self.underbar(self.fg);
 }
 
 fn leftCursor(self: *Self) void {
@@ -150,14 +156,14 @@ fn backspace(self: *Self) void {
     if (self.current_col > 0) {
         self.current_col -= 1;
     }
-    self.fb.eraseChar(self.fb.colToX(self.current_col), self.fb.rowToY(self.current_row));
+    self.fb.eraseChar(self.fb.colToX(self.current_col), self.fb.rowToY(self.current_row), self.bg);
 
     const i_start = self.charIndex(self.current_col + 1, self.current_row);
     const i_end = self.charIndex(self.num_cols, self.current_row);
     for (i_start..i_end) |i| {
         self.text[i - 1] = self.text[i];
     }
-    self.text[i_end - 1] = RichChar.init(' ', self.fb.fg, self.fb.bg, 0);
+    self.text[i_end - 1] = RichChar.init(' ', self.fg, self.bg, 0);
     self.redrawLine(self.current_row);
 }
 
@@ -198,7 +204,7 @@ pub fn redraw(self: *Self) void {
 
 pub fn addChar(self: *Self, ch: u8) void {
     if (isPrintable(ch)) {
-        const rc = RichChar.init(ch, self.fb.fg, self.fb.bg, self.current_ignore);
+        const rc = RichChar.init(ch, self.fg, self.bg, self.current_ignore);
         self.setChar(self.current_col, self.current_row, rc);
         rc.draw(self.fb, self.current_col, self.current_row);
     }
@@ -230,8 +236,8 @@ pub fn emit(self: *Self, ch: u8) void {
         0x85 => self.eolCursor(),
         0x8a => self.current_ignore = 1,
         0x8b => self.current_ignore = 0,
-        0x90...0x9f => self.fb.fg = (ch - 0x90),
-        0xa0...0xaf => self.fb.bg = (ch - 0xa0),
+        0x90...0x9f => self.fg = (ch - 0x90),
+        0xa0...0xaf => self.bg = (ch - 0xa0),
         0xb0 => self.lineShiftRight(),
         0xf0 => self.dumpText(),
         0xf1 => self.dumpColors(),
@@ -268,7 +274,7 @@ pub inline fn setCharRange(self: *Self, x1: usize, y1: usize, x2: usize, y2: usi
     const i = self.charIndex(x1, y1);
     const j = self.charIndex(x2, y2);
     for (i..j) |k| {
-        self.text[k] = RichChar.init(ch, self.fb.fg, self.fb.bg, 0);
+        self.text[k] = RichChar.init(ch, self.fg, self.bg, 0);
     }
 }
 

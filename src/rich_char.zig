@@ -22,20 +22,11 @@ pub const RichChar = packed struct {
             .ch = ch,
             .fg = 0,
             .bg = 1,
-            .colors = 0,
             .ignore = 0,
         };
     }
 
     pub inline fn draw(self: *const RichChar, fb: *FrameBuffer, col: u64, row: u64) void {
-        const fg = fb.fg;
-        const bg = fb.bg;
-        defer {
-            fb.fg = fg;
-            fb.bg = bg;
-        }
-        fb.fg = self.fg;
-        fb.bg = self.bg;
-        fb.drawChar(fb.colToX(col), fb.rowToY(row), self.ch);
+        fb.drawChar(fb.colToX(col), fb.rowToY(row), self.ch, self.fg, self.bg);
     }
 };

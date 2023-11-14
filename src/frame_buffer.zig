@@ -29,8 +29,8 @@ const character_rombits: [character_rom.len]CharBits = init: {
 pub const Self = @This();
 
 pub const VTable = struct {
-    char: *const fn (fb: u64, ch: u64, x: u64, y: u64) void,
-    text: *const fn (fb: u64, str: u64, x: u64, y: u64) void,
+    char: *const fn (fb: u64, ch: u64, x: u64, y: u64, fg: u64, bg: u64) void,
+    text: *const fn (fb: u64, str: u64, x: u64, y: u64, fg: u64, bg: u64) void,
     line: *const fn (fb: u64, x0: u64, y0: u64, x1: u64, x2: u64, color: u64) void,
     fill: *const fn (fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void,
     blit: *const fn (fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void,
@@ -42,8 +42,6 @@ pub const DEFAULT_FONT_WIDTH = 8;
 pub const DEFAULT_FONT_HEIGHT = 16;
 
 // These are palette indices
-pub const DEFAULT_FOREGROUND: u8 = 0x01;
-pub const DEFAULT_BACKGROUND: u8 = 0x00;
 pub const DEFAULT_X_RESOLUTION: u32 = 1024;
 pub const DEFAULT_Y_RESOLUTION: u32 = 768;
 pub const DEFAULT_DEPTH: u32 = 8;
@@ -84,8 +82,6 @@ base: [*]u8 = undefined,
 buffer_size: usize = undefined,
 pitch: usize = undefined,
 range: Region = undefined,
-fg: u8 = DEFAULT_FOREGROUND,
-bg: u8 = DEFAULT_BACKGROUND,
 vtable: VTable = .{
     .char = charInteropShim,
     .text = textInteropShim,
@@ -94,16 +90,20 @@ vtable: VTable = .{
     .blit = blitInteropShim,
 },
 
-fn charInteropShim(fb: u64, ch: u64, x: u64, y: u64) void {
+fn charInteropShim(fb: u64, ch: u64, x: u64, y: u64, fg: u64, bg: u64) void {
     var self: *Self = @ptrFromInt(fb);
     var c: u8 = @truncate(ch);
-    self.drawChar(x, y, c);
+    var fg8: u8 = @truncate(fg);
+    var bg8: u8 = @truncate(bg);
+    self.drawChar(x, y, c, fg8, bg8);
 }
 
-fn textInteropShim(fb: u64, str: u64, x: u64, y: u64) void {
+fn textInteropShim(fb: u64, str: u64, x: u64, y: u64, fg: u64, bg: u64) void {
     var self: *Self = @ptrFromInt(fb);
     var s: [*:0]u8 = @ptrFromInt(str);
-    self.text(s, x, y);
+    var fg8: u8 = @truncate(fg);
+    var bg8: u8 = @truncate(bg);
+    self.text(s, x, y, fg8, bg8);
 }
 
 fn lineInteropShim(fb: u64, x0: u64, y0: u64, x1: u64, y1: u64, color: u64) void {
@@ -146,18 +146,18 @@ pub fn drawPixel(self: *Self, x: usize, y: usize, color: u8) void {
     self.base[x + (y * self.pitch)] = color;
 }
 
-pub fn clear(self: *Self) void {
-    self.fill(0, 0, self.xres, self.yres, self.bg) catch {};
+pub fn clear(self: *Self, color: u8) void {
+    self.fill(0, 0, self.xres, self.yres, color) catch {};
 }
 
-pub fn clearRegion(self: *Self, x: usize, y: usize, w: usize, h: usize) void {
-    self.fill(x, y, x + w, y + h, self.bg) catch {};
+pub fn clearRegion(self: *Self, x: usize, y: usize, w: usize, h: usize, color: u8) void {
+    self.fill(x, y, x + w, y + h, color) catch {};
 }
 
 // Font is fixed height of 16 bits, fixed width of 8 bits
 const CharRow = @Vector(DEFAULT_FONT_WIDTH, u8);
 
-pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8) void {
+pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8, fg: u8, bg: u8) void {
     var romidx: usize = @as(usize, ch - 32) * DEFAULT_FONT_HEIGHT;
     if (romidx + self.font_height_px >= character_rom.len)
         return;
@@ -165,8 +165,8 @@ pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8) void {
     var line_stride = self.pitch;
     var fbidx = x + (y * line_stride);
 
-    const backgv: CharRow = @splat(self.bg);
-    const foregv: CharRow = @splat(self.fg);
+    const backgv: CharRow = @splat(bg);
+    const foregv: CharRow = @splat(fg);
 
     inline for (0..DEFAULT_FONT_HEIGHT) |_| {
         const rowbits: CharBits = character_rombits[romidx];
@@ -177,23 +177,23 @@ pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8) void {
     }
 }
 
-pub fn text(self: *Self, str: [*:0]u8, x_start: usize, y_start: usize) void {
+pub fn text(self: *Self, str: [*:0]u8, x_start: usize, y_start: usize, fg: u8, bg: u8) void {
     var x = x_start;
     var y = y_start;
     var i: usize = 0;
     while (str[i] != 0) : (i += 1) {
-        self.drawChar(x, y, str[i]);
+        self.drawChar(x, y, str[i], fg, bg);
         x += 8;
     }
 }
 
-pub fn eraseChar(self: *Self, x: usize, y: usize) void {
+pub fn eraseChar(self: *Self, x: usize, y: usize, color: u8) void {
     var line_stride = self.pitch;
     var fbidx = x + (y * line_stride);
 
     inline for (0..DEFAULT_FONT_HEIGHT) |_| {
         inline for (0..DEFAULT_FONT_WIDTH) |_| {
-            self.base[fbidx] = self.bg;
+            self.base[fbidx] = color;
             fbidx += 1;
         }
         fbidx -= self.font_width_px;
