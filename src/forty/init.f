@@ -300,17 +300,9 @@ finish
   repl-buffer -1 line-text
   dup s~
   cr
-  repl-buffer eval-command
+  eval-command
   emit-prompt
   (char-nl emit eval-command emit-prompt)
-;
-
-: qqq-newline-handler
-  "Newline!" s~
-  drop
-  repl-buffer -1 line-text
-  "repl buffer:" s~ s~
-  repl-buffer s. cr
 ;
 
 : redisplay-handler
