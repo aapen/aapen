@@ -281,19 +281,33 @@ fbcons fbcons.num_rows + @     :scr-rows let
   endif
 ;
 
-: emit-prompt
-  0x8a emit "forty>> " s. 0x8b emit
-;
-
 :repl-buffer create
   scr-cols inc ballot
 finish
 
+:repl-insert create
+  1 ,
+finish
+
+: repl-insert? ( -- insert-flag) repl-insert @ ;
+
+: repl-insert-toggle (--)
+  repl-insert @ not repl-insert !
+;
+
+: emit-prompt
+  0x8a emit "forty>> " s. 0x8b emit
+;
 : ignore-handler (ch --) drop ;
 
-: insert-handler (ch --) emit ;
+: insert-handler (ch --)
+  repl-insert? if
+    0xb0 emit
+  endif
+  emit
+;
 
-: backspace-handler (ch -- ) emit ;
+: echo-handler (ch -- ) emit ;
 
 : newline-handler (ch -- : Handle a newline. Echos the char, eval, reset buffer.)
   drop
@@ -309,20 +323,38 @@ finish
   0xff emit
 ;
 
+: toggle-insert-handler
+  drop
+  repl-insert-toggle
+;
+
+: previous-handler drop 0x80 emit ;
+: next-handler     drop 0x81 emit ;
+: back-handler     drop 0x82 emit ;
+: forward-handler  drop 0x83 emit ;
+: bol-handler      drop 0x84 emit ;
+
 : escape-handler
-  key drop
+  drop       (Discard the escape)
+  key drop   (Discard [)
   key 
   dup 65 = if
-    0x80 emit
+    previous-handler
+    return
   endif
   dup 66 = if
-    0x81 emit
+    next-handler
+    return
   endif
   dup 67 = if
-    0x83 emit
+    forward-handler
+    return
   endif
   68 = if
-    0x82 emit
+    back-handler
+    return
+  else
+    "??? esc [ " s~ ~ 
   endif
 ;
 
@@ -337,18 +369,30 @@ finish
 ;
 
 : ex-handler
-  drop
-  repl-buffer 5 line-text s~
+  0xb0 emit
+  \Q emit
+;
+
+: dump-text-handler
+  0xf0 emit
 ;
 
 :handlers dtab-create
 
-'backspace-handler handlers char-bs  dtab-set
-'backspace-handler handlers char-del dtab-set
+'echo-handler      handlers char-bs  dtab-set
+'echo-handler      handlers char-del dtab-set
 'newline-handler   handlers char-nl  dtab-set
 'newline-handler   handlers char-cr  dtab-set
 'escape-handler    handlers char-esc dtab-set
-'ex-handler        handlers \x char-ctrl dtab-set
+
+'toggle-insert-handler handlers \i char-ctrl dtab-set
+'previous-handler      handlers \p char-ctrl dtab-set
+'next-handler          handlers \n char-ctrl dtab-set
+'back-handler          handlers \b char-ctrl dtab-set
+'forward-handler       handlers \f char-ctrl dtab-set
+'bol-handler           handlers \a char-ctrl dtab-set
+'dump-text-handler     handlers \d char-ctrl dtab-set
+'ex-handler            handlers \x char-ctrl dtab-set
 
 'insert-handler    handlers char-space \~ dtab-set-range
 

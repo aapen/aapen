@@ -26,7 +26,6 @@ text: [*]RichChar,
 current_col: u64 = 0,
 current_row: u64 = 0,
 current_ignore: u1 = 0,
-current_insert: u1 = 0,
 
 pub fn init(allocator: Allocator, fb: *FrameBuffer, serial: *Serial) !*Self {
     var self: *Self = try allocator.create(Self);
@@ -46,7 +45,6 @@ pub fn init(allocator: Allocator, fb: *FrameBuffer, serial: *Serial) !*Self {
         .current_col = 0,
         .current_row = 0,
         .current_ignore = 0,
-        .current_insert = 0,
     };
 
     return self;
@@ -207,6 +205,14 @@ pub fn addChar(self: *Self, ch: u8) void {
     self.next();
 }
 
+pub fn lineShiftRight(self: *Self) void {
+    //const old_ch = self.getChar(self.current_col, self.current_row);
+    const i = self.charIndex(self.current_col, self.current_row);
+    const len = self.num_cols - self.current_col - 1;
+    std.mem.copyBackwards(RichChar, self.text[i + 1 .. i + 1 + len], self.text[i .. i + len]);
+    self.redrawLine(self.current_row);
+}
+
 pub fn emit(self: *Self, ch: u8) void {
     self.eraseCursor();
     defer self.drawCursor();
@@ -222,12 +228,11 @@ pub fn emit(self: *Self, ch: u8) void {
         0x83 => self.rightCursor(),
         0x84 => self.bolCursor(),
         0x85 => self.eolCursor(),
-        0x86 => self.current_insert = 1, // Currently ignored.
-        0x87 => self.current_insert = 0,
         0x8a => self.current_ignore = 1,
         0x8b => self.current_ignore = 0,
         0x90...0x9f => self.fb.fg = (ch - 0x90),
         0xa0...0xaf => self.fb.bg = (ch - 0xa0),
+        0xb0 => self.lineShiftRight(),
         0xf0 => self.dumpText(),
         0xf1 => self.dumpColors(),
         0xf2 => self.dumpIgnore(),

@@ -157,6 +157,13 @@ pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     return 0;
 }
 
+// Compile an unconditional return from the current word.
+pub fn wordReturn(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+    try forth.assertCompiling();
+    try forth.addStop();
+    return 0;
+}
+
 // Compiler word, generate the code for an if.
 // Emits an jump_if_not instruction with an invalid target address
 // and pushes the address of the target address onto the rstack.
@@ -321,6 +328,7 @@ pub fn defineCompiler(forth: *Forth) !void {
 
     _ = try forth.definePrimitiveDesc(":", " -- :Start a new word definition", &wordColon, false);
     _ = try forth.definePrimitiveDesc(";", " -- :Complete a new word definition", &wordSemi, true);
+    _ = try forth.definePrimitiveDesc("return", " -- :Return from word", &wordReturn, true);
 
     _ = try forth.definePrimitiveDesc("{", " -- : Temp turn off compile mode.", &wordLBrace, true);
     _ = try forth.definePrimitiveDesc("}", " -- : Turn compile mode back on", &wordRBrace, true);
