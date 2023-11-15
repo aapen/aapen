@@ -138,18 +138,35 @@ fn upCursor(self: *Self) void {
 }
 
 fn downCursor(self: *Self) void {
-    if (self.current_row < self.num_cols - 1) {
+    if (self.current_row < self.num_rows - 1) {
         self.current_row += 1;
         self.drawCursor();
     }
 }
 
 fn bolCursor(self: *Self) void {
-    self.current_col = 0;
+    // Find the first non-ignorable char in the current line.
+    // This skips the prompt.
+    for (0..self.num_cols) |i| {
+        if (self.getChar(i, self.current_row).isSignificant()) {
+            self.current_col = i;
+            break;
+        }
+    }
+    self.drawCursor();
 }
 
 fn eolCursor(self: *Self) void {
-    self.current_col = self.num_cols - 1;
+    // Find the last non-whitespace char in the line.
+    var i = self.num_cols - 1;
+    while (i > 0) {
+        if (self.getChar(i, self.current_row).isSignificant()) {
+            self.current_col = i;
+            break;
+        }
+        i -= 1;
+    }
+    self.drawCursor();
 }
 
 fn backspace(self: *Self) void {

@@ -26,6 +26,10 @@ pub const RichChar = packed struct {
         };
     }
 
+    pub fn isSignificant(self: *const RichChar) bool {
+        return (self.ignore == 0) and (!std.ascii.isWhitespace(self.ch));
+    }
+
     pub inline fn draw(self: *const RichChar, fb: *FrameBuffer, col: u64, row: u64) void {
         fb.drawChar(fb.colToX(col), fb.rowToY(row), self.ch, self.fg, self.bg);
     }

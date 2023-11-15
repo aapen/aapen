@@ -63,7 +63,7 @@
 : words ( n -- n : Number words -> number bytes ) word * ;
 : aligned ( c-addr – a-addr  : Align the address.) word 1 - + word / word * ;
 
-:[[ create 
+:[[ create
 finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
@@ -118,11 +118,11 @@ finish
 ;
 
 : word-address (p-data -- p-word : Given a word data ptr, return word ptr)
-  header.*len - 
+  header.*len -
 ;
 
 : data-address (p-word -- p-data : Given a word ptr, return the word data ptr)
-  header.*len + 
+  header.*len +
 ;
 
 (Character)
@@ -141,7 +141,7 @@ finish
 : backspace?
   dup
   char-bs   = swap
-  char-del  = 
+  char-del  =
   or
 ;
 
@@ -171,7 +171,7 @@ finish
 
 
 : mem-manager (-- addr : Push the address of the memory struct)
-  forth forth.memory + 
+  forth forth.memory +
 ;
 
 : mem-total ( -- n : Push total number of bytes avail.)
@@ -220,12 +220,12 @@ finish
 14 :light-blue  let
 15 :light-grey  let
 
-: c64-colors 
-  light-blue blue set-colors 
+: c64-colors
+  light-blue blue set-colors
 ;
 
-: default-colors 
-  white black set-colors 
+: default-colors
+  white black set-colors
 ;
 
 : set-text-fg (color-n --)
@@ -249,7 +249,7 @@ fbcons fbcons.num_rows + @     :scr-rows let
 : dtab-set (word-address dtab key -- : Set handler for key to word-adress)
   word * + (word-address dtab-entry-addr)
   !
-;  
+;
 
 : dtab-set-range (word-address dtab key1 key2--)
   for-range
@@ -335,11 +335,12 @@ finish
 : back-handler     drop 0x82 emit ;
 : forward-handler  drop 0x83 emit ;
 : bol-handler      drop 0x84 emit ;
+: eol-handler      drop 0x85 emit ;
 
 : escape-handler
   drop       (Discard the escape)
   key drop   (Discard [)
-  key 
+  key
   dup 65 = if
     previous-handler
     return
@@ -356,7 +357,7 @@ finish
     back-handler
     return
   else
-    "??? esc [ " s~ ~ 
+    "??? esc [ " s~ ~
   endif
 ;
 
@@ -387,13 +388,14 @@ finish
 'newline-handler   handlers char-cr  dtab-set
 'escape-handler    handlers char-esc dtab-set
 
-'toggle-insert-handler handlers \i char-ctrl dtab-set
-'previous-handler      handlers \p char-ctrl dtab-set
-'next-handler          handlers \n char-ctrl dtab-set
-'back-handler          handlers \b char-ctrl dtab-set
-'forward-handler       handlers \f char-ctrl dtab-set
 'bol-handler           handlers \a char-ctrl dtab-set
+'back-handler          handlers \b char-ctrl dtab-set
 'dump-text-handler     handlers \d char-ctrl dtab-set
+'eol-handler           handlers \e char-ctrl dtab-set
+'forward-handler       handlers \f char-ctrl dtab-set
+'toggle-insert-handler handlers \i char-ctrl dtab-set
+'next-handler          handlers \n char-ctrl dtab-set
+'previous-handler      handlers \p char-ctrl dtab-set
 'ex-handler            handlers \x char-ctrl dtab-set
 
 'insert-handler    handlers char-space \~ dtab-set-range
@@ -415,11 +417,11 @@ finish
 
 ( Testing... )
 
-: power-of-two ( n -- n ) 
-  1 swap 
-  while dup 0 > 
+: power-of-two ( n -- n )
+  1 swap
+  while dup 0 >
   do
-    swap 2 * 
+    swap 2 *
     swap 1 -
   done
   drop
@@ -428,7 +430,7 @@ finish
 : sum-ints ( n -- sum : add up all the numbers from 1 to n)
   0 swap
   times
-    ->stack 1 + + 
+    ->stack 1 + +
   repeat
 ;
 
@@ -443,7 +445,7 @@ finish
 
 'by-hand secondary!
 
-: test-math 
+: test-math
   "." s.
   103      103  = "Equality" assert clear
   1 1 +      2  = "Simple addition" assert clear
@@ -459,7 +461,7 @@ finish
   77 0    if 100 endif          77 = "If false" assert clear
   1       if 100 else 99 endif 100 = "If else true" assert clear
   0       if 100 else 99 endif  99 = "If else false" assert clear
-; 
+;
 
 : test-loop
   "." s.
@@ -492,11 +494,11 @@ finish
 
 (Retro startup!)
 
-c64-colors 
+c64-colors
 cls
 
 : test-all
-  "Self test..." s. 
+  "Self test..." s.
   test-if
   test-math
   test-loop
@@ -519,27 +521,27 @@ test-all
 
 : aapen-logo
   yellow set-text-fg
-  "               AAA                              AAA                                                                        " s. cr
-  "              A:::A                            A:::A                                                                       " s. cr
-  "             A:::::A                          A:::::A                                                                      " s. cr
+  "                 AAA                              AAA                                                                        " s. cr
+  "                A:::A                            A:::A                                                                       " s. cr
+  "               A:::::A                          A:::::A                                                                      " s. cr
   green set-text-fg
-  "            A:::::::A                        A:::::::A                                                                     " s. cr
-  "           A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " s. cr
-  "          A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " s. cr
+  "              A:::::::A                        A:::::::A                                                                     " s. cr
+  "             A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " s. cr
+  "            A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " s. cr
   red set-text-fg
-  "         A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " s. cr
-  "        A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" s. cr
+  "           A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " s. cr
+  "          A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" s. cr
   yellow set-text-fg
-  "       A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" s. cr
-  "      A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" s. cr
-  "     A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" s. cr
+  "         A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" s. cr
+  "        A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" s. cr
+  "       A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" s. cr
   green set-text-fg
-  "    A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" s. cr
-  "   A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" s. cr
+  "      A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" s. cr
+  "     A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" s. cr
   red set-text-fg
-  "  A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" s. cr
-  " A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" s. cr
-  "AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" s. cr
+  "    A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" s. cr
+  "   A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" s. cr
+  "  AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" s. cr
   "                                                                  A:::::A                                                  " s. cr
   yellow set-text-fg
   "                                                                  A:::::A                                                  " s. cr
@@ -561,5 +563,3 @@ cr cr
 
 "Forty REPL" s. cr cr
 repl
-
-
