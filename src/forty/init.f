@@ -335,6 +335,7 @@ finish
 : back-handler     drop 0x82 emit ;
 : forward-handler  drop 0x83 emit ;
 : bol-handler      drop 0x84 emit ;
+: eol-handler      drop 0x85 emit ;
 
 : escape-handler
   drop       (Discard the escape)
@@ -354,6 +355,14 @@ finish
   endif
   dup 68 = if
     back-handler
+    return
+  endif
+  dup 70 = if
+    eol-handler
+    return
+  endif
+  dup 72 = if
+    bol-handler
     return
   else
     "??? esc [ " s~ ~ 
@@ -393,6 +402,7 @@ finish
 'back-handler          handlers \b char-ctrl dtab-set
 'forward-handler       handlers \f char-ctrl dtab-set
 'bol-handler           handlers \a char-ctrl dtab-set
+'eol-handler           handlers \e char-ctrl dtab-set
 'dump-text-handler     handlers \d char-ctrl dtab-set
 'ex-handler            handlers \x char-ctrl dtab-set
 
