@@ -17,17 +17,16 @@ pub const RichChar = packed struct {
         };
     }
 
-    pub fn plain(ch: u8) RichChar {
-        return RichChar{
-            .ch = ch,
-            .fg = 0,
-            .bg = 1,
-            .ignore = 0,
-        };
+    pub inline fn isIgnorable(self: *const RichChar) bool {
+        return (self.ignore == 1);
     }
 
-    pub fn isSignificant(self: *const RichChar) bool {
-        return (self.ignore == 0) and (!std.ascii.isWhitespace(self.ch));
+    pub inline fn isWhitespace(self: *const RichChar) bool {
+        return std.ascii.isWhitespace(self.ch);
+    }
+
+    pub inline fn isSignificant(self: *const RichChar) bool {
+        return !self.isWhitespace() and !self.isIgnorable();
     }
 
     pub inline fn draw(self: *const RichChar, fb: *FrameBuffer, col: u64, row: u64) void {

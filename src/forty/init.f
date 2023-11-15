@@ -356,6 +356,14 @@ finish
   dup 68 = if
     back-handler
     return
+  endif
+  dup 70 = if
+    eol-handler
+    return
+  endif
+  dup 72 = if
+    bol-handler
+    return
   else
     "??? esc [ " s~ ~
   endif

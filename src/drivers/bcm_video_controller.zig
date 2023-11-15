@@ -13,8 +13,8 @@ const memory = @import("../memory.zig");
 const Region = memory.Region;
 
 pub const BroadcomVideoController = struct {
-    mailbox: *const BroadcomMailbox,
-    dma: *const BroadcomDMAController,
+    mailbox: *BroadcomMailbox,
+    dma: *BroadcomDMAController,
 
     pub fn init(mailbox: *BroadcomMailbox, dma: *BroadcomDMAController) BroadcomVideoController {
         return .{

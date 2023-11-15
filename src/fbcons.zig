@@ -147,17 +147,30 @@ fn downCursor(self: *Self) void {
 fn bolCursor(self: *Self) void {
     // Find the first non-ignorable char in the current line.
     // This skips the prompt.
+
+    var first_non_ignorable: usize = 0;
     for (0..self.num_cols) |i| {
-        if (self.getChar(i, self.current_row).isSignificant()) {
-            self.current_col = i;
+        if (!self.getChar(i, self.current_row).isIgnorable()) {
+            first_non_ignorable = i;
             break;
         }
     }
+
+    // Find the first non-whitespace char in the current line.
+    var first_non_whitespace: usize = 0;
+    for (0..self.num_cols) |i| {
+        if (!self.getChar(i, self.current_row).isWhitespace()) {
+            first_non_whitespace = i;
+            break;
+        }
+    }
+
+    self.current_col = @max(first_non_ignorable, first_non_whitespace);
     self.drawCursor();
 }
 
 fn eolCursor(self: *Self) void {
-    // Find the last non-whitespace char in the line.
+    // Find the last non-whitespace, non-irnorable char in the line.
     var i = self.num_cols - 1;
     while (i > 0) {
         if (self.getChar(i, self.current_row).isSignificant()) {
