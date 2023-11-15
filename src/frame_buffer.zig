@@ -76,7 +76,7 @@ palette: [DEFAULT_PALETTE.len]u32 = DEFAULT_PALETTE,
 font_width_px: u32 = DEFAULT_FONT_WIDTH,
 font_height_px: u32 = DEFAULT_FONT_HEIGHT,
 
-dma: *const DMA = undefined,
+dma: *DMA = undefined,
 dma_channel: ?DMAChannel = undefined,
 base: [*]u8 = undefined,
 buffer_size: usize = undefined,
