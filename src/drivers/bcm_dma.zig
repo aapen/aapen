@@ -12,6 +12,8 @@ const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
 
+const ChannelSet = @import("../channel_set.zig");
+
 extern fn spinDelay(cpu_cycles: u32) void;
 
 pub const DMAChannel = struct {
@@ -128,6 +130,7 @@ pub const BroadcomDMAController = struct {
     interrupt_status: *volatile u32,
     transfer_enabled: *volatile u32,
     intc: *const LocalInterruptController,
+    channels: ChannelSet,
     in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
 
     pub fn init(
@@ -143,17 +146,22 @@ pub const BroadcomDMAController = struct {
             .interrupt_status = @ptrFromInt(register_base + 0xfe0),
             .transfer_enabled = @ptrFromInt(register_base + 0xff0),
             .translations = translations,
+            .channels = ChannelSet.init("DMA channels", max_channel_id),
         };
     }
 
     fn channelClaimUnused(self: *BroadcomDMAController) !ChannelId {
-        for (self.in_use, 0..max_channel_id) |b, i| {
-            if (!b) {
-                self.in_use[i] = true;
-                return @as(ChannelId, @intCast(i));
-            }
-        }
-        return DMAError.NoAvailableChannel;
+        const id = self.channels.allocate() catch {
+            return DMAError.NoAvailableChannel;
+        };
+        return @as(ChannelId, @intCast(id));
+        // for (self.in_use, 0..max_channel_id) |b, i| {
+        //     if (!b) {
+        //         self.in_use[i] = true;
+        //         return @as(ChannelId, @intCast(i));
+        //     }
+        // }
+        // return DMAError.NoAvailableChannel;
     }
 
     fn channelRegisters(self: *const BroadcomDMAController, channel_id: ChannelId) *volatile ChannelRegisters {
@@ -261,6 +269,7 @@ pub const BroadcomDMAController = struct {
 
     pub fn releaseChannel(self: *const BroadcomDMAController, channel: DMAChannel) void {
         self.transfer_enabled.* &= ~(@as(u32, 1) << channel.channel_id);
-        self.in_use[channel.channel_id] = false;
+        //        self.in_use[channel.channel_id] = false;
+        self.channels.free(channel.channel_id);
     }
 };
