@@ -6,6 +6,8 @@ const debug = root.debug;
 const kprint = root.kprint;
 const Serial = root.HAL.Serial;
 
+const serial = @import("serial.zig");
+
 const FrameBuffer = @import("frame_buffer.zig");
 
 const Readline = @import("readline.zig");
@@ -26,13 +28,12 @@ length: u64 = undefined,
 fb: *FrameBuffer = undefined,
 fg: u8,
 bg: u8,
-serial: *Serial = undefined,
 text: [*]RichChar,
 current_col: u64 = 0,
 current_row: u64 = 0,
 current_ignore: u1 = 0,
 
-pub fn init(allocator: Allocator, fb: *FrameBuffer, serial: *Serial) !*Self {
+pub fn init(allocator: Allocator, fb: *FrameBuffer) !*Self {
     var self: *Self = try allocator.create(Self);
 
     const num_cols = fb.xres / fb.font_width_px;
@@ -42,7 +43,6 @@ pub fn init(allocator: Allocator, fb: *FrameBuffer, serial: *Serial) !*Self {
 
     self.* = .{
         .fb = fb,
-        .serial = serial,
         .num_cols = num_cols,
         .num_rows = num_rows,
         .length = length,
@@ -309,53 +309,53 @@ pub inline fn setCharRange(self: *Self, x1: usize, y1: usize, x2: usize, y2: usi
 }
 
 pub fn dumpText(self: *Self) void {
-    _ = self.serial.puts("===Text ===\r\n");
+    _ = serial.puts("===Text ===\r\n");
     for (0..self.num_rows) |row| {
-        self.serial.putc('|');
+        serial.putc('|');
         for (0..self.num_cols) |col| {
             const ch = self.getChar(col, row);
-            self.serial.putc(ch.ch);
+            serial.putc(ch.ch);
         }
-        _ = self.serial.puts("$\r\n");
+        _ = serial.puts("$\r\n");
     }
-    _ = self.serial.puts("------\r\n");
+    _ = serial.puts("------\r\n");
 }
 
 pub fn dumpIgnore(self: *Self) void {
-    _ = self.serial.puts("=== ignore ===\r\n");
+    _ = serial.puts("=== ignore ===\r\n");
     for (0..self.num_rows) |row| {
-        self.serial.putc('|');
+        serial.putc('|');
         for (0..self.num_cols) |col| {
             const rc = self.getChar(col, row);
             if (rc.ignore == 1) {
-                self.serial.putc('Y');
+                serial.putc('Y');
             } else {
-                self.serial.putc('.');
+                serial.putc('.');
             }
         }
-        _ = self.serial.puts("$\r\n");
+        _ = serial.puts("$\r\n");
     }
 }
 
 pub fn dumpColors(self: *Self) void {
-    _ = self.serial.puts("=== fg ===\r\n");
+    _ = serial.puts("=== fg ===\r\n");
     for (0..self.num_rows) |row| {
-        self.serial.putc('|');
+        serial.putc('|');
         for (0..self.num_cols) |col| {
             const rc = self.getChar(col, row);
-            self.serial.putc('A' + rc.fg);
+            serial.putc('A' + rc.fg);
         }
-        _ = self.serial.puts("$\r\n");
+        _ = serial.puts("$\r\n");
     }
 
-    _ = self.serial.puts("=== bg ===\r\n");
+    _ = serial.puts("=== bg ===\r\n");
     for (0..self.num_rows) |row| {
-        self.serial.putc('|');
+        serial.putc('|');
         for (0..self.num_cols) |col| {
             const rc = self.getChar(col, row);
-            self.serial.putc('A' + rc.bg);
+            serial.putc('A' + rc.bg);
         }
-        _ = self.serial.puts("$\r\n");
+        _ = serial.puts("$\r\n");
     }
 }
 
@@ -407,30 +407,32 @@ pub fn readLine(self: *Self, prompt: []const u8, buffer: []u8) usize {
 }
 
 pub fn getc(self: *Self) u8 {
-    var ch = self.serial.getc();
+    _ = self;
+    var ch = serial.getc();
     return if (ch == '\r') '\n' else ch;
 }
 
 pub fn putc(self: *Self, ch: u8) void {
     switch (ch) {
         '\n' => {
-            _ = self.serial.putc('\r');
-            _ = self.serial.putc('\n');
+            _ = serial.putc('\r');
+            _ = serial.putc('\n');
         },
         0x7f => {
-            _ = self.serial.putc(0x08);
-            _ = self.serial.putc(' ');
-            _ = self.serial.putc(0x08);
+            _ = serial.putc(0x08);
+            _ = serial.putc(' ');
+            _ = serial.putc(0x08);
         },
         else => {
-            _ = self.serial.putc(ch);
+            _ = serial.putc(ch);
         },
     }
     self.emit(ch);
 }
 
 pub fn char_available(self: *Self) bool {
-    return self.serial.hasc();
+    _ = self;
+    return serial.hasc();
 }
 
 fn newline(ch: u8) bool {

@@ -37,10 +37,10 @@ pub const GPIO = bcm_gpio.BroadcomGpio;
 pub const Mailbox = bcm_mailbox.BroadcomMailbox;
 pub const PowerController = bcm_power.BroadcomPowerController;
 pub const PowerResult = bcm_power.PowerResult;
-pub const Serial = pl011.Pl011Uart;
 pub const SOC = simple_bus.SimpleBus;
 pub const Timer = arm_local_timer.Timer;
 pub const TimerCallbackFn = arm_local_timer.TimerCallbackFn;
+pub const Uart = pl011.Pl011Uart;
 pub const USB = dwc_otg_usb.UsbController;
 pub const VideoController = bcm_video_controller.BroadcomVideoController;
 
@@ -53,7 +53,7 @@ interrupt_controller: InterruptController,
 gpio: GPIO,
 mailbox: Mailbox,
 power_controller: PowerController,
-serial: Serial,
+uart: Uart,
 soc: SOC,
 timer: [4]Timer,
 usb: USB,
@@ -84,7 +84,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.power_controller = PowerController.init(&self.mailbox);
 
-    self.serial = Serial.init(peripheral_base + 0x201000, &self.gpio);
+    self.uart = Uart.init(peripheral_base + 0x201000, &self.gpio);
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
@@ -94,17 +94,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         self.timer[timer_id] = Timer.init(timer_id, peripheral_base + 0x3000, &self.clock, &self.interrupt_controller);
     }
 
-    self.serial.initializeUart();
-
-    serial_writer = .{ .context = self };
+    self.uart.initializeUart();
 
     return self;
-}
-
-const SerialWriter = std.io.Writer(*const Self, error{}, serialStringSend);
-
-pub var serial_writer: SerialWriter = undefined;
-
-fn serialStringSend(self: *const Self, str: []const u8) !usize {
-    return self.serial.puts(str);
 }

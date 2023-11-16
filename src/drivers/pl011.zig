@@ -243,22 +243,11 @@ pub const Pl011Uart = struct {
     }
 
     pub fn putc(self: *const Pl011Uart, ch: u8) void {
-        self.send(ch);
-    }
-
-    pub fn puts(self: *const Pl011Uart, buffer: []const u8) usize {
-        for (buffer) |ch| {
-            self.send(ch);
-        }
-        return buffer.len;
+        while (self.registers.flags.transmit_fifo_full != 0) {}
+        self.registers.data.data = ch;
     }
 
     pub fn hasc(self: *const Pl011Uart) bool {
         return self.registers.flags.receive_fifo_empty == 0;
-    }
-
-    pub fn send(self: *const Pl011Uart, ch: u8) void {
-        while (self.registers.flags.transmit_fifo_full != 0) {}
-        self.registers.data.data = ch;
     }
 };

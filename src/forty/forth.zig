@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
 const root = @import("root");
+const serial = @import("../serial.zig");
 
 const FrameBufferConsole = @import("../fbcons.zig");
 const Readline = @import("../readline.zig");
@@ -595,17 +596,17 @@ pub const Forth = struct {
     }
 
     pub fn serial_print(_: *Forth, comptime fmt: []const u8, args: anytype) !void {
-        try root.HAL.serial_writer.print(fmt, args);
+        try serial.writer.print(fmt, args);
     }
 
     pub fn print(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
         try this.console.print(fmt, args);
-        try root.HAL.serial_writer.print(fmt, args);
+        try serial.writer.print(fmt, args);
     }
 
     pub fn emit(this: *Forth, ch: u8) !void {
         this.console.emit(ch);
-        try root.HAL.serial_writer.writeByte(ch);
+        try serial.writer.writeByte(ch);
     }
 
     pub const Writer = std.io.Writer(*Forth, error{}, write);

@@ -5,6 +5,8 @@ const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
 
+const serial = @import("serial.zig");
+
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
@@ -18,11 +20,7 @@ pub fn log(
 
     const prefix = "[" ++ comptime level.asText() ++ "] (" ++ @tagName(scope) ++ "): ";
 
-    // TODO acquire spinlock
-    // TODO defer release spinlock
-    if (root.uart_valid) {
-        root.HAL.serial_writer.print(prefix ++ format ++ "\n", args) catch {};
-    }
+    serial.writer.print(prefix ++ format ++ "\n", args) catch {};
 
     if (root.console_valid) {
         root.frame_buffer_console.print(prefix ++ format ++ "\n", args) catch {};
@@ -30,9 +28,7 @@ pub fn log(
 }
 
 pub fn kprint(comptime fmt: []const u8, args: anytype) void {
-    if (root.uart_valid) {
-        root.HAL.serial_writer.print(fmt, args) catch {};
-    }
+    serial.writer.print(fmt, args) catch {};
 
     if (root.console_valid) {
         root.frame_buffer_console.print(fmt, args) catch {};

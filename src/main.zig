@@ -104,7 +104,7 @@ fn kernelInit() void {
         debug.kernelError("frame buffer init error", err);
     }
 
-    if (FrameBufferConsole.init(heap.allocator, fb, &hal.serial)) |cons| {
+    if (FrameBufferConsole.init(heap.allocator, fb)) |cons| {
         debug.kernelMessage("fbcons init");
         frame_buffer_console = cons;
         console_valid = true;
