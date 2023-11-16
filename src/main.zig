@@ -1,5 +1,4 @@
 const std = @import("std");
-const config = @import("config");
 
 const arch = @import("architecture.zig");
 const qemu = @import("qemu.zig");
@@ -18,7 +17,7 @@ const Forth = forty.Forth;
 pub const debug = @import("debug.zig");
 pub const kprint = debug.kprint;
 
-const raspi3 = @import("hal/raspi3.zig");
+const config = @import("config");
 pub const HAL = switch (config.board) {
     .pi3 => @import("hal/raspi3.zig"),
     inline else => @compileError("Unsupported board " ++ @tagName(config.board)),
