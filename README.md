@@ -63,32 +63,24 @@ If you're cross-compiling, type:
 
     $ make clean all
 
-Next, copy the firmware and kernel to a blank FAT32-formatted SD card, for example:
+Next, copy the firmware and kernel to a blank FAT32-formatted SD card,
+for example:
 
     $ cp firmware/* /media/<SD-card>/
     $ cp kernel8.img /media/<SD-card>/
     $ cp sdfiles/config.txt /media/<SD-card>/
 
 Put the prepared SD card into the RPi, connect the USB-to-Serial cable
-(see [RPi Serial Connection](http://elinux.org/RPi_Serial_Connection) for more details),
-and power-up to the console.
+(see [RPi Serial Connection](http://elinux.org/RPi_Serial_Connection)
+for more details), and power-up to the console.
 
-To get to the console, you'll need to connect. Here are two ways to try:
+To get to the console, you'll need to connect:
 
     $ tio /dev/ttyUSB0
 
-Where `<device>` is something like `/dev/ttyUSB0` or similar
-(wherever you plugged in your USB-to-Serial cable).
-
-Alternatively, if `minicom` is not working for you, try using `screen`:
-
-    $ screen <device> 115200
-
-Where `<device>` is, again, something like `/dev/ttyUSB0`.
-
-The console will be waiting for an input, press `<ENTER>`. You should then see:
-
-    pijFORTHos <version> sp=0x00008000
+Where `<device>` is something like `/dev/ttyUSB0` or similar (wherever
+you plugged in your USB-to-Serial cable). `tio` should be available
+from your package manager of choice.
 
 ## Debugging on hardware
 
