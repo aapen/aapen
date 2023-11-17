@@ -4,7 +4,7 @@ const HAL = root.HAL;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const BoardInfo = root.HAL.BoardInfo;
+const BoardInfo = root.HAL.BoardInfoController.BoardInfo;
 
 const FrameBuffer = @import("../frame_buffer.zig");
 

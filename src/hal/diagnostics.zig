@@ -2,9 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const root = @import("root");
-const HAL = root.HAL;
 const kprint = root.kprint;
-const BoardInfo = HAL.BoardInfo;
+const BoardInfo = root.HAL.BoardInfoController.BoardInfo;
 
 pub var board: BoardInfo = BoardInfo{};
 

@@ -26,14 +26,12 @@ const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
 const simple_bus = @import("../drivers/simple_bus.zig");
 
 pub const BoardInfoController = bcm_board_info;
-pub const BoardInfo = bcm_board_info.BoardInfo;
 pub const Clock = arm_local_timer.Clock;
 pub const DMA = bcm_dma;
 pub const InterruptController = arm_local_interrupt;
 pub const GPIO = bcm_gpio;
 pub const Mailbox = bcm_mailbox;
 pub const PowerController = bcm_power;
-pub const PowerResult = bcm_power.PowerResult;
 pub const SOC = simple_bus;
 pub const Timer = arm_local_timer.Timer;
 pub const TimerCallbackFn = arm_local_timer.TimerCallbackFn;
