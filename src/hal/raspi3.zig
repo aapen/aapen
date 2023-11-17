@@ -25,7 +25,7 @@ const bcm_video_controller = @import("../drivers/bcm_video_controller.zig");
 const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
 const simple_bus = @import("../drivers/simple_bus.zig");
 
-pub const BoardInfoController = bcm_board_info.BroadcomBoardInfoController;
+pub const BoardInfoController = bcm_board_info;
 pub const BoardInfo = bcm_board_info.BoardInfo;
 pub const Clock = arm_local_timer.Clock;
 pub const DMA = bcm_dma.BroadcomDMAController;
@@ -72,8 +72,6 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.interrupt_controller = InterruptController.init(peripheral_base + 0xb200);
 
-    self.board_info_controller = BoardInfoController.init(&self.mailbox);
-
     self.clock = Clock.init(peripheral_base + 0x3000);
 
     self.dma = DMA.init(allocator, peripheral_base + 0x7000, &self.interrupt_controller, &self.soc.dma_ranges);
@@ -81,6 +79,8 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     self.gpio = GPIO.init(peripheral_base + 0x200000);
 
     self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
+
+    self.board_info_controller = BoardInfoController.init(&self.mailbox);
 
     self.power_controller = PowerController.init(&self.mailbox);
 
