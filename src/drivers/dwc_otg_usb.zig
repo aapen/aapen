@@ -37,6 +37,8 @@ const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 const dwc_max_channels = 16;
 
+const Self = @This();
+
 // ----------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------
@@ -379,316 +381,318 @@ const CoreRegisters = extern struct {
     power_clock_control: u32 = 0, // 0xe00
 };
 
-pub const UsbController = struct {
-    pub const VTable = struct {
-        dumpStatus: *const fn (usb_controller: u64) void,
-    };
-
-    allocator: Allocator,
-    core_registers: *volatile CoreRegisters,
-    host_registers: *volatile HostRegisters,
-    intc: *InterruptController,
-    translations: *const AddressTranslations,
-    power_controller: *PowerController,
-    clock: *const Clock,
-    root_port: RootPort,
-    channels: ChannelSet,
-    vtable: VTable = .{
-        .dumpStatus = dumpStatusInteropShim,
-    },
-
-    fn dumpStatusInteropShim(usb_controller: u64) void {
-        var self: *UsbController = @ptrFromInt(usb_controller);
-        self.dumpStatus();
-    }
-
-    pub fn init(
-        allocator: Allocator,
-        register_base: u64,
-        intc: *InterruptController,
-        translations: *AddressTranslations,
-        power: *PowerController,
-        clock: *Clock,
-    ) UsbController {
-        return .{
-            .allocator = allocator,
-            .core_registers = @ptrFromInt(register_base),
-            .host_registers = @ptrFromInt(register_base + 0x400),
-            .intc = intc,
-            .translations = translations,
-            .power_controller = power,
-            .clock = clock,
-            .root_port = RootPort.init(),
-            .channels = ChannelSet.init("DWC OTG Host controller channels", dwc_max_channels),
-        };
-    }
-
-    pub fn hostControllerInitialize(self: *UsbController) !void {
-        try self.powerOn();
-        try self.verifyHostControllerDevice();
-        try self.disableGlobalInterrupts();
-        try self.connectInterruptHandler();
-        try self.initializeControllerCore();
-        try self.enableGlobalInterrupts();
-        try self.initializeHost();
-        try self.initializeRootPort();
-    }
-
-    fn powerOn(self: *UsbController) !void {
-        var power_result = try self.power_controller.powerOn(.usb_hcd);
-
-        if (power_result != .power_on) {
-            std.log.err("Failed to power on USB device: {any}\n", .{power_result});
-            return Error.PowerFailure;
-        }
-    }
-
-    fn powerOff(self: *UsbController) !void {
-        var power_result = try self.power_controller.powerOff(.usb_hcd);
-
-        if (power_result != .power_off) {
-            std.log.err("Failed to power off USB device: {any}\n", .{power_result});
-            return Error.PowerFailure;
-        }
-    }
-
-    fn verifyHostControllerDevice(self: *UsbController) !void {
-        const id = self.core_registers.vendor_id;
-
-        kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
-
-        if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
-            std.log.warn(" gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
-            return Error.IncorrectDevice;
-        }
-    }
-
-    fn disableGlobalInterrupts(self: *UsbController) !void {
-        self.core_registers.ahb_config.global_interrupt_mask = 0;
-    }
-
-    fn enableGlobalInterrupts(self: *UsbController) !void {
-        self.core_registers.ahb_config.global_interrupt_mask = 1;
-    }
-
-    fn connectInterruptHandler(self: *UsbController) !void {
-        _ = self;
-    }
-
-    fn initializeControllerCore(self: *UsbController) !void {
-        // clear bits 20 & 22 of core usb config register
-        var config: UsbConfig = self.core_registers.usb_config;
-        config.ulpi_ext_vbus_drv = 0;
-        config.term_sel_dl_pulse = 0;
-        self.core_registers.usb_config = config;
-
-        try self.resetControllerCore();
-
-        self.core_registers.usb_config.ulpi_utmi_sel = 1;
-        self.core_registers.usb_config.phy_if = 1;
-
-        const hw2 = self.core_registers.hardware_config_2;
-        if (hw2.hs_phy_type == .ulpi and hw2.fs_phy_type == .dedicated) {
-            self.core_registers.usb_config.ulpi_fsls = 1;
-            self.core_registers.usb_config.ulpi_clk_sus_m = 1;
-        } else {
-            self.core_registers.usb_config.ulpi_fsls = 0;
-            self.core_registers.usb_config.ulpi_clk_sus_m = 0;
-        }
-
-        var ahb = self.core_registers.ahb_config;
-        ahb.dma_enable = 1;
-        ahb.wait_axi_writes = 1;
-        ahb.max_axi_burst = 0;
-        self.core_registers.ahb_config = ahb;
-
-        var negotiation = self.core_registers.usb_config;
-        negotiation.hnp_capable = 0;
-        negotiation.srp_capable = 0;
-        self.core_registers.usb_config = negotiation;
-
-        // enable common interrupts
-        self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffff_ffff));
-    }
-
-    fn resetControllerCore(self: *UsbController) !void {
-        // wait up to 100 ms for reset to settle
-        const end = self.deadline(100);
-
-        // TODO what should we do if we don't see the idle signal
-        while (self.clock.ticks() < end and self.core_registers.reset.ahb_idle != 1) {}
-
-        self.core_registers.reset.soft_reset = 1;
-
-        // wait up to 10 ms for reset to finish
-        const reset_end = self.deadline(10);
-        // TODO what should we do if we don't see the soft_reset go to zero?
-        while (self.clock.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
-
-        // wait 100 ms
-        const wait_end = self.deadline(100);
-        while (self.clock.ticks() < wait_end) {}
-    }
-
-    fn initializeHost(self: *UsbController) !void {
-        self.core_registers.power_clock_control = 0;
-        try self.flushTxFifo();
-        self.delayMicros(1);
-        try self.flushRxFifo();
-        self.delayMicros(1);
-        try self.powerHostPort();
-        try self.enableHostInterrupts();
-    }
-
-    fn configPhyClockSpeed(self: *UsbController) !void {
-        const core_config = self.core_registers.usb_config;
-        const hw2 = self.core_registers.hardware_config_2;
-        if (hw2.hs_phy_type == .ulpi and hw2.fs_phy_type == .dedicated and core_config.ulpi_fsls) {
-            self.host_registers.config.fsls_pclk_sel = .sel_48_mhz;
-        } else {
-            self.host_registers.config.fsls_pclk_sel = .sel_30_60_mhz;
-        }
-    }
-
-    fn flushTxFifo(self: *UsbController) !void {
-        var reset = self.core_registers.reset;
-        reset.tx_fifo_flush = 1;
-        reset.tx_fifo_num = 0x10;
-        self.core_registers.reset = reset;
-
-        const reset_end = self.deadline(10);
-        while (self.clock.ticks() < reset_end and self.core_registers.reset.tx_fifo_flush != 0) {}
-    }
-
-    fn flushRxFifo(self: *UsbController) !void {
-        self.core_registers.reset.rx_fifo_flush = 1;
-        const reset_end = self.deadline(10);
-        while (self.clock.ticks() < reset_end and self.core_registers.reset.rx_fifo_flush != 0) {}
-    }
-
-    fn powerHostPort(self: *UsbController) !void {
-        if (self.host_registers.port.power == 0) {
-            self.host_registers.port.power = 1;
-        }
-    }
-
-    fn enableHostInterrupts(self: *UsbController) !void {
-        self.core_registers.interrupt_mask = @bitCast(@as(u32, 0));
-        self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffffffff));
-        self.core_registers.interrupt_mask.host_channel_intr = 1;
-    }
-
-    fn initializeRootPort(self: *UsbController) !void {
-        try self.enableRootPort();
-        try self.root_port.configure();
-    }
-
-    fn enableRootPort(self: *UsbController) !void {
-        // We should see the connect bit become true within 510 ms of
-        // power on
-        const connect_end = self.deadline(510);
-        while (self.clock.ticks() <= connect_end and self.host_registers.port.connect == 0) {}
-
-        self.delayMillis(100);
-
-        var port = self.host_registers.port;
-        port.connect_changed = 0;
-        port.enabled = 0;
-        port.enabled_changed = 0;
-        port.overcurrent_changed = 0;
-        port.reset = 1;
-        self.host_registers.port = port;
-
-        self.delayMillis(50);
-
-        port = self.host_registers.port;
-        port.connect_changed = 0;
-        port.enabled = 0;
-        port.enabled_changed = 0;
-        port.overcurrent_changed = 0;
-        port.reset = 0;
-        self.host_registers.port = port;
-
-        self.delayMillis(20);
-    }
-
-    pub fn getPortSpeed(self: *UsbController) !UsbSpeed {
-        return switch (self.host_registers.port.speed) {
-            .high => UsbSpeed.High,
-            .full => UsbSpeed.Full,
-            .low => UsbSpeed.Low,
-            else => Error.ConfigurationError,
-        };
-    }
-
-    // TODO migrate this to the clock
-    fn deadline(self: *UsbController, millis: u32) u64 {
-        const start_ticks = self.clock.ticks();
-        const elapsed_ticks = millis * 1_000; // clock freq is 1Mhz
-        return start_ticks + elapsed_ticks;
-    }
-
-    fn delayMillis(self: *UsbController, count: u32) void {
-        self.delayMicros(count * 1000);
-    }
-
-    // TODO migrate this to the clock
-    fn delayMicros(self: *UsbController, count: u32) void {
-        const start_ticks = self.clock.ticks();
-        const elapsed_ticks = count; // clock freq is 1Mhz
-        const end_ticks = start_ticks + elapsed_ticks;
-        while (self.clock.ticks() <= end_ticks) {}
-    }
-
-    pub fn dumpStatus(self: *UsbController) void {
-        kprint("{s: >28}\n", .{"Core registers"});
-        dumpRegister("otg_control", @bitCast(self.core_registers.otg_control));
-        dumpRegister("ahb_config", @bitCast(self.core_registers.ahb_config));
-        dumpRegister("usb_config", @bitCast(self.core_registers.usb_config));
-        dumpRegister("reset", @bitCast(self.core_registers.reset));
-        dumpRegister("interrupt_status", @bitCast(self.core_registers.interrupt_status));
-        dumpRegister("interrupt_mask", @bitCast(self.core_registers.interrupt_mask));
-        dumpRegister("rx_fifo_size", @bitCast(self.core_registers.rx_fifo_size));
-        dumpRegister("nonperiodic_tx_fifo_size", @bitCast(self.core_registers.nonperiodic_tx_fifo_size));
-        dumpRegister("nonperiodic_tx_status", @bitCast(self.core_registers.nonperiodic_tx_status));
-
-        kprint("{s: >28}\n", .{""});
-        kprint("{s: >28}\n", .{"Host registers"});
-        dumpRegister("config", @bitCast(self.host_registers.config));
-        dumpRegister("frame_interval", @bitCast(self.host_registers.frame_interval));
-        dumpRegister("frame_num", @bitCast(self.host_registers.frame_num));
-        dumpRegister("periodic_tx_fifo_status", @bitCast(self.host_registers.periodic_tx_fifo_status));
-        dumpRegister("all_channel_interrupts", @bitCast(self.host_registers.all_channel_interrupts));
-        dumpRegister("all_channel_interrupts_mask", @bitCast(self.host_registers.all_channel_interrupts_mask));
-        dumpRegister("frame_list_base_addr", @bitCast(self.host_registers.frame_list_base_addr));
-        dumpRegister("port", @bitCast(self.host_registers.port));
-    }
-
-    fn dumpRegister(field_name: []const u8, v: u32) void {
-        kprint("{s: >28}: {x:0>8}\n", .{ field_name, v });
-    }
-
-    fn controlMessage(self: *UsbController, endpoint: *Endpoint, request_type: RequestType, request: u8, value: u16, index: u16, data: *anyopaque, data_size: u16) !u16 {
-        var setup: usb.SetupPacket = .{
-            .request_type = @bitCast(request_type),
-            .request = request,
-            .value = value,
-            .index = index,
-            .length = data_size,
-        };
-        var rq = Request.init(endpoint, data, data_size, &setup);
-
-        try self.requestSubmitBlocking(&rq);
-
-        return rq.result_length;
-    }
-
-    fn requestSubmitBlocking(self: *UsbController, request: *Request) !void {
-        _ = self;
-
-        request.status = 0;
-    }
+pub const VTable = struct {
+    dumpStatus: *const fn (usb_controller: u64) void,
 };
+
+allocator: Allocator,
+core_registers: *volatile CoreRegisters,
+host_registers: *volatile HostRegisters,
+intc: *InterruptController,
+translations: *const AddressTranslations,
+power_controller: *PowerController,
+clock: *Clock,
+root_port: RootPort,
+channels: ChannelSet,
+vtable: VTable = .{
+    .dumpStatus = dumpStatusInteropShim,
+},
+
+fn dumpStatusInteropShim(usb_controller: u64) void {
+    var self: *Self = @ptrFromInt(usb_controller);
+    self.dumpStatus();
+}
+
+pub fn init(
+    allocator: Allocator,
+    register_base: u64,
+    intc: *InterruptController,
+    translations: *AddressTranslations,
+    power: *PowerController,
+    clock: *Clock,
+) Self {
+    return .{
+        .allocator = allocator,
+        .core_registers = @ptrFromInt(register_base),
+        .host_registers = @ptrFromInt(register_base + 0x400),
+        .intc = intc,
+        .translations = translations,
+        .power_controller = power,
+        .clock = clock,
+        .root_port = RootPort.init(),
+        .channels = ChannelSet.init("DWC OTG Host controller channels", dwc_max_channels),
+    };
+}
+
+pub fn initialize(self: *Self) !void {
+    try self.powerOn();
+    try self.verifyHostControllerDevice();
+    try self.disableGlobalInterrupts();
+    try self.connectInterruptHandler();
+    try self.initializeControllerCore();
+    try self.enableGlobalInterrupts();
+    try self.initializeHost();
+    try self.initializeRootPort();
+}
+
+fn powerOn(self: *Self) !void {
+    var power_result = try self.power_controller.powerOn(.usb_hcd);
+
+    if (power_result != .power_on) {
+        std.log.err("Failed to power on USB device: {any}\n", .{power_result});
+        return Error.PowerFailure;
+    }
+}
+
+fn powerOff(self: *Self) !void {
+    var power_result = try self.power_controller.powerOff(.usb_hcd);
+
+    if (power_result != .power_off) {
+        std.log.err("Failed to power off USB device: {any}\n", .{power_result});
+        return Error.PowerFailure;
+    }
+}
+
+fn verifyHostControllerDevice(self: *Self) !void {
+    const id = self.core_registers.vendor_id;
+
+    kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
+
+    if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
+        std.log.warn(" gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
+        return Error.IncorrectDevice;
+    }
+}
+
+fn disableGlobalInterrupts(self: *Self) !void {
+    self.core_registers.ahb_config.global_interrupt_mask = 0;
+}
+
+fn enableGlobalInterrupts(self: *Self) !void {
+    self.core_registers.ahb_config.global_interrupt_mask = 1;
+}
+
+fn connectInterruptHandler(self: *Self) !void {
+    _ = self;
+}
+
+fn initializeControllerCore(self: *Self) !void {
+    // clear bits 20 & 22 of core usb config register
+    var config: UsbConfig = self.core_registers.usb_config;
+    config.ulpi_ext_vbus_drv = 0;
+    config.term_sel_dl_pulse = 0;
+    self.core_registers.usb_config = config;
+
+    try self.resetControllerCore();
+
+    self.core_registers.usb_config.ulpi_utmi_sel = 1;
+    self.core_registers.usb_config.phy_if = 1;
+
+    const hw2 = self.core_registers.hardware_config_2;
+    if (hw2.hs_phy_type == .ulpi and hw2.fs_phy_type == .dedicated) {
+        self.core_registers.usb_config.ulpi_fsls = 1;
+        self.core_registers.usb_config.ulpi_clk_sus_m = 1;
+    } else {
+        self.core_registers.usb_config.ulpi_fsls = 0;
+        self.core_registers.usb_config.ulpi_clk_sus_m = 0;
+    }
+
+    var ahb = self.core_registers.ahb_config;
+    ahb.dma_enable = 1;
+    ahb.wait_axi_writes = 1;
+    ahb.max_axi_burst = 0;
+    self.core_registers.ahb_config = ahb;
+
+    var negotiation = self.core_registers.usb_config;
+    negotiation.hnp_capable = 0;
+    negotiation.srp_capable = 0;
+    self.core_registers.usb_config = negotiation;
+
+    // enable common interrupts
+    self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffff_ffff));
+}
+
+fn resetControllerCore(self: *Self) !void {
+    // wait up to 100 ms for reset to settle
+    const end = self.deadline(100);
+
+    // TODO what should we do if we don't see the idle signal
+    while (self.clock.ticks() < end and self.core_registers.reset.ahb_idle != 1) {}
+
+    self.core_registers.reset.soft_reset = 1;
+
+    // wait up to 10 ms for reset to finish
+    const reset_end = self.deadline(10);
+    // TODO what should we do if we don't see the soft_reset go to zero?
+    while (self.clock.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
+
+    // wait 100 ms
+    const wait_end = self.deadline(100);
+    while (self.clock.ticks() < wait_end) {}
+}
+
+fn initializeHost(self: *Self) !void {
+    self.core_registers.power_clock_control = 0;
+    try self.flushTxFifo();
+    self.delayMicros(1);
+    try self.flushRxFifo();
+    self.delayMicros(1);
+    try self.powerHostPort();
+    try self.enableHostInterrupts();
+}
+
+fn configPhyClockSpeed(self: *Self) !void {
+    const core_config = self.core_registers.usb_config;
+    const hw2 = self.core_registers.hardware_config_2;
+    if (hw2.hs_phy_type == .ulpi and hw2.fs_phy_type == .dedicated and core_config.ulpi_fsls) {
+        self.host_registers.config.fsls_pclk_sel = .sel_48_mhz;
+    } else {
+        self.host_registers.config.fsls_pclk_sel = .sel_30_60_mhz;
+    }
+}
+
+fn flushTxFifo(self: *Self) !void {
+    var reset = self.core_registers.reset;
+    reset.tx_fifo_flush = 1;
+    reset.tx_fifo_num = 0x10;
+    self.core_registers.reset = reset;
+
+    const reset_end = self.deadline(10);
+    while (self.clock.ticks() < reset_end and self.core_registers.reset.tx_fifo_flush != 0) {}
+}
+
+fn flushRxFifo(self: *Self) !void {
+    self.core_registers.reset.rx_fifo_flush = 1;
+    const reset_end = self.deadline(10);
+    while (self.clock.ticks() < reset_end and self.core_registers.reset.rx_fifo_flush != 0) {}
+}
+
+fn powerHostPort(self: *Self) !void {
+    if (self.host_registers.port.power == 0) {
+        self.host_registers.port.power = 1;
+    }
+}
+
+fn enableHostInterrupts(self: *Self) !void {
+    self.core_registers.interrupt_mask = @bitCast(@as(u32, 0));
+    self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffffffff));
+    self.core_registers.interrupt_mask.host_channel_intr = 1;
+}
+
+fn initializeRootPort(self: *Self) !void {
+    try self.enableRootPort();
+    try self.root_port.configure();
+}
+
+fn enableRootPort(self: *Self) !void {
+    // We should see the connect bit become true within 510 ms of
+    // power on
+    const connect_end = self.deadline(510);
+    while (self.clock.ticks() <= connect_end and self.host_registers.port.connect == 0) {}
+
+    self.delayMillis(100);
+
+    var port = self.host_registers.port;
+    port.connect_changed = 0;
+    port.enabled = 0;
+    port.enabled_changed = 0;
+    port.overcurrent_changed = 0;
+    port.reset = 1;
+    self.host_registers.port = port;
+
+    self.delayMillis(50);
+
+    port = self.host_registers.port;
+    port.connect_changed = 0;
+    port.enabled = 0;
+    port.enabled_changed = 0;
+    port.overcurrent_changed = 0;
+    port.reset = 0;
+    self.host_registers.port = port;
+
+    self.delayMillis(20);
+}
+
+pub fn getPortSpeed(self: *Self) !UsbSpeed {
+    return switch (self.host_registers.port.speed) {
+        .high => UsbSpeed.High,
+        .full => UsbSpeed.Full,
+        .low => UsbSpeed.Low,
+        else => Error.ConfigurationError,
+    };
+}
+
+// TODO migrate this to the clock
+fn deadline(self: *Self, millis: u32) u64 {
+    const start_ticks = self.clock.ticks();
+    const elapsed_ticks = millis * 1_000; // clock freq is 1Mhz
+    return start_ticks + elapsed_ticks;
+}
+
+fn delayMillis(self: *Self, count: u32) void {
+    self.delayMicros(count * 1000);
+}
+
+// TODO migrate this to the clock
+fn delayMicros(self: *Self, count: u32) void {
+    const start_ticks = self.clock.ticks();
+    const elapsed_ticks = count; // clock freq is 1Mhz
+    const end_ticks = start_ticks + elapsed_ticks;
+    while (self.clock.ticks() <= end_ticks) {}
+}
+
+pub fn dumpStatus(self: *Self) void {
+    kprint("{s: >28}\n", .{"Core registers"});
+    dumpRegister("otg_control", @bitCast(self.core_registers.otg_control));
+    dumpRegister("ahb_config", @bitCast(self.core_registers.ahb_config));
+    dumpRegister("usb_config", @bitCast(self.core_registers.usb_config));
+    dumpRegister("reset", @bitCast(self.core_registers.reset));
+    dumpRegister("interrupt_status", @bitCast(self.core_registers.interrupt_status));
+    dumpRegister("interrupt_mask", @bitCast(self.core_registers.interrupt_mask));
+    dumpRegister("rx_fifo_size", @bitCast(self.core_registers.rx_fifo_size));
+    dumpRegister("nonperiodic_tx_fifo_size", @bitCast(self.core_registers.nonperiodic_tx_fifo_size));
+    dumpRegister("nonperiodic_tx_status", @bitCast(self.core_registers.nonperiodic_tx_status));
+
+    kprint("{s: >28}\n", .{""});
+    kprint("{s: >28}\n", .{"Host registers"});
+    dumpRegister("config", @bitCast(self.host_registers.config));
+    dumpRegister("frame_interval", @bitCast(self.host_registers.frame_interval));
+    dumpRegister("frame_num", @bitCast(self.host_registers.frame_num));
+    dumpRegister("periodic_tx_fifo_status", @bitCast(self.host_registers.periodic_tx_fifo_status));
+    dumpRegister("all_channel_interrupts", @bitCast(self.host_registers.all_channel_interrupts));
+    dumpRegister("all_channel_interrupts_mask", @bitCast(self.host_registers.all_channel_interrupts_mask));
+    dumpRegister("frame_list_base_addr", @bitCast(self.host_registers.frame_list_base_addr));
+    dumpRegister("port", @bitCast(self.host_registers.port));
+}
+
+fn dumpRegister(field_name: []const u8, v: u32) void {
+    kprint("{s: >28}: {x:0>8}\n", .{ field_name, v });
+}
+
+fn controlMessage(self: *Self, endpoint: *Endpoint, request_type: RequestType, request: u8, value: u16, index: u16, data: *anyopaque, data_size: u16) !u16 {
+    var setup: usb.SetupPacket = .{
+        .request_type = @bitCast(request_type),
+        .request = request,
+        .value = value,
+        .index = index,
+        .length = data_size,
+    };
+    var rq = Request.init(endpoint, data, data_size, &setup);
+
+    try self.requestSubmitBlocking(&rq);
+
+    return rq.result_length;
+}
+
+fn requestSubmitBlocking(self: *Self, request: *Request) !void {
+    _ = self;
+
+    request.status = 0;
+}
+
+// ----------------------------------------------------------------------
+// Protocol Model
+// ----------------------------------------------------------------------
 
 const Request = struct {
     status: u8,
@@ -714,7 +718,7 @@ const Endpoint = struct {
 };
 
 const Device = struct {
-    host: *UsbController = undefined,
+    host: *Self = undefined,
     port: *RootPort = undefined,
     speed: UsbSpeed = undefined,
     address: Address = DEFAULT_ADDRESS,
@@ -729,7 +733,7 @@ const Device = struct {
         return .{};
     }
 
-    pub fn initialize(self: *Device, host: *UsbController, port: *RootPort, speed: UsbSpeed) !void {
+    pub fn initialize(self: *Device, host: *Self, port: *RootPort, speed: UsbSpeed) !void {
         self.host = host;
         self.port = port;
         self.speed = speed;
@@ -737,7 +741,7 @@ const Device = struct {
 };
 
 const RootPort = struct {
-    host: *UsbController = undefined,
+    host: *Self = undefined,
     device: *Device = undefined,
 
     pub fn init() RootPort {
@@ -747,7 +751,7 @@ const RootPort = struct {
         };
     }
 
-    pub fn initialize(self: *RootPort, host: *UsbController) !void {
+    pub fn initialize(self: *RootPort, host: *Self) !void {
         self.host = host;
         self.device = Device.init();
     }

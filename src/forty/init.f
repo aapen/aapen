@@ -519,14 +519,6 @@ cls
 
 test-all
 
-(Temporary words for debugging)
-: dump-usb  ( -- : Dump USB registers )
-  [[ hal hal.usb +]]
-  [[ hal hal.usb usb.vtable usb.vtable.dumpStatus +]] @
-  invoke-1
-;
-
-
 : aapen-logo
   yellow set-text-fg
   "                 AAA                              AAA                                                                        " s. cr

@@ -43,7 +43,7 @@ pub const SOC = simple_bus;
 pub const Timer = arm_local_timer.Timer;
 pub const TimerCallbackFn = arm_local_timer.TimerCallbackFn;
 pub const Uart = pl011;
-pub const USB = dwc_otg_usb.UsbController;
+pub const USBHCI = dwc_otg_usb;
 pub const VideoController = bcm_video_controller;
 
 const Self = @This();
@@ -58,7 +58,7 @@ power_controller: PowerController,
 uart: Uart,
 soc: SOC,
 timer: [4]Timer,
-usb: USB,
+usb_hci: USBHCI,
 video_controller: VideoController,
 
 pub fn init(allocator: std.mem.Allocator) !*Self {
@@ -90,7 +90,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
-    self.usb = USB.init(allocator, peripheral_base + 0x980000, &self.interrupt_controller, &self.soc.bus_ranges, &self.power_controller, &self.clock);
+    self.usb_hci = USBHCI.init(allocator, peripheral_base + 0x980000, &self.interrupt_controller, &self.soc.bus_ranges, &self.power_controller, &self.clock);
 
     for (0..3) |timer_id| {
         self.timer[timer_id] = Timer.init(timer_id, peripheral_base + 0x3000, &self.clock, &self.interrupt_controller);

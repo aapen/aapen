@@ -119,7 +119,7 @@ fn kernelInit() void {
         debug.kernelError("diagnostics init error", err);
     }
 
-    if (hal.usb.hostControllerInitialize()) {
+    if (hal.usb_hci.initialize()) {
         debug.kernelMessage("USB host init");
     } else |err| {
         debug.kernelError("USB host init error", err);
