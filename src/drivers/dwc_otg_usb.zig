@@ -3,9 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const root = @import("root");
 const kprint = root.kprint;
-
-const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
-const LocalInterruptController = local_interrupt_controller.LocalInterruptController;
+const InterruptController = root.HAL.InterruptController;
 
 const local_timer = @import("arm_local_timer.zig");
 const Clock = local_timer.Clock;
@@ -389,7 +387,7 @@ pub const UsbController = struct {
     allocator: Allocator,
     core_registers: *volatile CoreRegisters,
     host_registers: *volatile HostRegisters,
-    intc: *const LocalInterruptController,
+    intc: *InterruptController,
     translations: *const AddressTranslations,
     power_controller: *PowerController,
     clock: *const Clock,
@@ -407,7 +405,7 @@ pub const UsbController = struct {
     pub fn init(
         allocator: Allocator,
         register_base: u64,
-        intc: *LocalInterruptController,
+        intc: *InterruptController,
         translations: *AddressTranslations,
         power: *PowerController,
         clock: *Clock,

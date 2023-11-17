@@ -1,10 +1,8 @@
 const root = @import("root");
+const InterruptController = root.HAL.InterruptController;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-
-const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
-const LocalInterruptController = local_interrupt_controller.LocalInterruptController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -130,14 +128,14 @@ register_base: u64,
 translations: *const AddressTranslations,
 interrupt_status: *volatile u32,
 transfer_enabled: *volatile u32,
-intc: *const LocalInterruptController,
+intc: *InterruptController,
 channels: ChannelSet,
 in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
 
 pub fn init(
     allocator: Allocator,
     register_base: u64,
-    intc: *LocalInterruptController,
+    intc: *InterruptController,
     translations: *AddressTranslations,
 ) Self {
     return .{

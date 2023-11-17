@@ -1,7 +1,7 @@
-const interrupts = @import("arm_local_interrupt_controller.zig");
-
-pub const IrqId = interrupts.IrqId;
-pub const LocalInterruptController = interrupts.LocalInterruptController;
+const root = @import("root");
+const InterruptController = root.HAL.InterruptController;
+const IrqId = root.HAL.IrqId;
+const IrqHandlerFn = root.HAL.IrqHandlerFn;
 
 pub const TimerCallbackFn = *const fn (timer: *anyopaque) u32;
 
@@ -28,7 +28,7 @@ pub const Clock = struct {
 };
 
 pub const Timer = struct {
-    pub fn init(id: usize, base: u64, clock: *Clock, intc: *LocalInterruptController) Timer {
+    pub fn init(id: usize, base: u64, clock: *Clock, intc: *InterruptController) Timer {
         var timer_id: u2 = @truncate(id);
         return .{
             .timer_id = timer_id,
@@ -53,7 +53,7 @@ pub const Timer = struct {
     };
 
     clock: *Clock,
-    intc: *LocalInterruptController,
+    intc: *InterruptController,
     irq: IrqId,
     timer_id: u2,
     control: *volatile TimerControlStatus,
