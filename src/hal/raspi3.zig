@@ -40,7 +40,7 @@ pub const PowerResult = bcm_power.PowerResult;
 pub const SOC = simple_bus.SimpleBus;
 pub const Timer = arm_local_timer.Timer;
 pub const TimerCallbackFn = arm_local_timer.TimerCallbackFn;
-pub const Uart = pl011.Pl011Uart;
+pub const Uart = pl011;
 pub const USB = dwc_otg_usb.UsbController;
 pub const VideoController = bcm_video_controller;
 
