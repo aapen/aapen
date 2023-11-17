@@ -6,8 +6,8 @@ const root = @import("root");
 const debug = @import("debug.zig");
 
 const DMA = root.HAL.DMA;
-const DMAChannel = root.HAL.DMAChannel;
-const DMARequest = root.HAL.DMARequest;
+const DMAChannel = root.HAL.DMA.Channel;
+const DMARequest = root.HAL.DMA.Request;
 
 const Region = @import("memory.zig").Region;
 

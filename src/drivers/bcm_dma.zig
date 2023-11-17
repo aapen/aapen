@@ -16,7 +16,7 @@ const Self = @This();
 
 extern fn spinDelay(cpu_cycles: u32) void;
 
-pub const DMAChannel = struct {
+pub const Channel = struct {
     channel_id: u8,
     registers: *volatile ChannelRegisters,
 };
@@ -37,7 +37,7 @@ const BroadcomDMAControlBlock = extern struct {
     _reserved_1: u32 = 0,
 };
 
-pub const BroadcomDMARequest = struct {
+pub const Request = struct {
     control_blocks: ?[]BroadcomDMAControlBlock = null,
     source: u32 = 0,
     source_increment: bool = true,
@@ -160,7 +160,7 @@ fn channelRegisters(self: *Self, channel_id: ChannelId) *volatile ChannelRegiste
     return @ptrFromInt(self.register_base + (0x100 * @as(usize, channel_id)));
 }
 
-pub fn reserveChannel(self: *Self) DMAError!DMAChannel {
+pub fn reserveChannel(self: *Self) DMAError!Channel {
     var channel_id = try self.channelClaimUnused();
     var channel_registers = self.channelRegisters(channel_id);
 
@@ -179,13 +179,13 @@ pub fn reserveChannel(self: *Self) DMAError!DMAChannel {
     };
 }
 
-pub fn createRequest(self: *Self) DMAError!*BroadcomDMARequest {
-    var request = try self.allocator.create(BroadcomDMARequest);
+pub fn createRequest(self: *Self) DMAError!*Request {
+    var request = try self.allocator.create(Request);
     request.control_blocks = null;
     return request;
 }
 
-pub fn destroyRequest(self: *Self, request: *BroadcomDMARequest) void {
+pub fn destroyRequest(self: *Self, request: *Request) void {
     if (request.control_blocks) |cb_slice| {
         self.allocator.free(cb_slice);
     }
@@ -194,7 +194,7 @@ pub fn destroyRequest(self: *Self, request: *BroadcomDMARequest) void {
 }
 
 // TODO: after dma completes, free the control block
-pub fn initiate(self: *Self, channel: DMAChannel, request: *BroadcomDMARequest) DMAError!void {
+pub fn initiate(self: *Self, channel: Channel, request: *Request) DMAError!void {
     const cb_slice = try self.allocator.alignedAlloc(BroadcomDMAControlBlock, 32, 1);
     request.control_blocks = cb_slice;
 
@@ -232,7 +232,7 @@ pub fn initiate(self: *Self, channel: DMAChannel, request: *BroadcomDMARequest) 
 
 /// blocks until DMA completes. returns true on success, false if
 /// an error happened
-pub fn awaitChannel(self: *Self, channel: DMAChannel) bool {
+pub fn awaitChannel(self: *Self, channel: Channel) bool {
     _ = self;
 
     // apply a timeout. for now this is a fixed delay, but it will
@@ -259,7 +259,7 @@ pub fn awaitChannel(self: *Self, channel: DMAChannel) bool {
     return channel_registers.control.dma_error == 0;
 }
 
-pub fn releaseChannel(self: *Self, channel: DMAChannel) void {
+pub fn releaseChannel(self: *Self, channel: Channel) void {
     self.transfer_enabled.* &= ~(@as(u32, 1) << channel.channel_id);
     //        self.in_use[channel.channel_id] = false;
     self.channels.free(channel.channel_id);

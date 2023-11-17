@@ -1,7 +1,7 @@
 const root = @import("root");
 const InterruptController = root.HAL.InterruptController;
-const IrqId = root.HAL.IrqId;
-const IrqHandlerFn = root.HAL.IrqHandlerFn;
+const IrqId = InterruptController.IrqId;
+const IrqHandlerFn = InterruptController.IrqHandlerFn;
 
 pub const TimerCallbackFn = *const fn (timer: *anyopaque) u32;
 
@@ -42,8 +42,7 @@ pub const Timer = struct {
         };
     }
 
-    fn noAction(intf: *const anyopaque) u32 {
-        _ = intf;
+    fn noAction(_: *const anyopaque) u32 {
         return 0;
     }
 
