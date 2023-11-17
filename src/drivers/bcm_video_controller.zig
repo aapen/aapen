@@ -10,30 +10,30 @@ const FrameBuffer = @import("../frame_buffer.zig");
 const memory = @import("../memory.zig");
 const Region = memory.Region;
 
-pub const BroadcomVideoController = struct {
-    mailbox: *Mailbox,
-    dma: *DMA,
+const Self = @This();
 
-    pub fn init(mailbox: *Mailbox, dma: *DMA) BroadcomVideoController {
-        return .{
-            .mailbox = mailbox,
-            .dma = dma,
-        };
-    }
+mailbox: *Mailbox,
+dma: *DMA,
 
-    pub fn allocFrameBuffer(self: *const BroadcomVideoController, fb: *FrameBuffer) !void {
-        var setup = PropertyVideoSetup.init(fb.xres, fb.yres, fb.bpp, &fb.palette);
-        try self.mailbox.getTags(&setup, @sizeOf(PropertyVideoSetup) / 4);
+pub fn init(mailbox: *Mailbox, dma: *DMA) Self {
+    return .{
+        .mailbox = mailbox,
+        .dma = dma,
+    };
+}
 
-        var base_in_arm_address_space = setup.allocate.base & 0x3fffffff;
-        fb.base = @ptrFromInt(base_in_arm_address_space);
-        fb.buffer_size = setup.allocate.buffer_size;
-        fb.pitch = setup.pitch.pitch;
-        fb.range = Region.fromSize("Frame buffer", base_in_arm_address_space, setup.allocate.buffer_size);
-        fb.dma = self.dma;
-        fb.dma_channel = self.dma.reserveChannel() catch null;
-    }
-};
+pub fn allocFrameBuffer(self: *Self, fb: *FrameBuffer) !void {
+    var setup = PropertyVideoSetup.init(fb.xres, fb.yres, fb.bpp, &fb.palette);
+    try self.mailbox.getTags(&setup, @sizeOf(PropertyVideoSetup) / 4);
+
+    var base_in_arm_address_space = setup.allocate.base & 0x3fffffff;
+    fb.base = @ptrFromInt(base_in_arm_address_space);
+    fb.buffer_size = setup.allocate.buffer_size;
+    fb.pitch = setup.pitch.pitch;
+    fb.range = Region.fromSize("Frame buffer", base_in_arm_address_space, setup.allocate.buffer_size);
+    fb.dma = self.dma;
+    fb.dma_channel = self.dma.reserveChannel() catch null;
+}
 
 const PropertySize = extern struct {
     tag: PropertyTag,
