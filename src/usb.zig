@@ -7,6 +7,35 @@
 
 // TODO all of it
 
+pub const Device = struct {};
+
+pub const EndpointType = enum {
+    Control,
+    Bulk,
+    Interrupt,
+    Isochronous,
+};
+
+pub const Endpoint = struct {
+    type: EndpointType,
+    device: *Device,
+    max_packet_size: u32,
+    direction_in: bool,
+};
+
+// ----------------------------------------------------------------------
+// Requests
+// ----------------------------------------------------------------------
+
+const Request = struct {
+    setup_data: SetupPacket,
+    endpoint: *Endpoint,
+    request_data: []u8,
+
+    status: u32,
+    result_length: u32,
+};
+
 // ----------------------------------------------------------------------
 // Definitions from USB spec: Constants, Structures, and Packet Definitions
 // ----------------------------------------------------------------------
@@ -42,29 +71,31 @@ pub const UsbSpeed = enum {
 };
 
 pub const SetupPacket = extern struct {
-    request_type: packed struct {
-        recipient: enum(u5) {
-            device = 0b00000,
-            interface = 0b00001,
-            endpoint = 0b00010,
-            other = 0b00011,
-            // all other bit patterns are reserved
-        }, // 0 .. 4
-        type: enum(u2) {
-            standard = 0b00,
-            class = 0b01,
-            vendor = 0b10,
-            reserved = 0b11,
-        }, // 5..6
-        transfer_direction: enum(u1) {
-            host_to_device = 0b0,
-            device_to_host = 0b1,
-        },
-    },
+    request_type: RequestType,
     request: u8,
     value: u16,
     index: u16,
     length: u16,
+};
+
+pub const RequestType = packed struct {
+    recipient: enum(u5) {
+        device = 0b00000,
+        interface = 0b00001,
+        endpoint = 0b00010,
+        other = 0b00011,
+        // all other bit patterns are reserved
+    }, // 0 .. 4
+    type: enum(u2) {
+        standard = 0b00,
+        class = 0b01,
+        vendor = 0b10,
+        reserved = 0b11,
+    }, // 5..6
+    transfer_direction: enum(u1) {
+        host_to_device = 0b0,
+        device_to_host = 0b1,
+    },
 };
 
 pub const StandardDeviceRequests = enum(u8) {
@@ -91,13 +122,6 @@ pub const StandardEndpointRequests = enum(u8) {
     clear_feature = 0x01,
     set_feature = 0x03,
     synch_frame = 0x12,
-};
-
-pub const RequestType = enum(u8) {
-    out = 0,
-    in = 0x80,
-    class = 0x20,
-    vendor = 0x40,
 };
 
 pub const DescriptorType = enum(u8) {
@@ -198,8 +222,13 @@ pub const EndpointDescriptor = extern struct {
 pub const StringDescriptor = extern struct {
     length: u8,
     descriptor_type: DescriptorType,
-    // remaining bytes (length - 2 / 2) consists of u16's with the
-    // language codes of each language this string is available in.
+
+    // For string descriptor 0, the remaining bytes (length - 2 / 2)
+    // contain an array of u16's with the language codes of each
+    // language this string is available in. The index of the
+    // desired language in the array will be the `index` field in a request
+    // to get string decriptor. That response will contain a unicode
+    // encoded string of `length` bytes.
 };
 
 pub const Descriptor = extern union {
@@ -211,11 +240,4 @@ pub const Descriptor = extern union {
     interface: InterfaceDescriptor,
     endpoint: EndpointDescriptor,
     string: StringDescriptor,
-};
-
-pub const EndpointType = enum {
-    Control,
-    Bulk,
-    Interrupt,
-    Isochronous,
 };

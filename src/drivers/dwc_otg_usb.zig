@@ -10,8 +10,7 @@ const LocalInterruptController = local_interrupt_controller.LocalInterruptContro
 const local_timer = @import("arm_local_timer.zig");
 const Clock = local_timer.Clock;
 
-const bcm_power = @import("bcm_power.zig");
-const BroadcomPowerController = bcm_power.BroadcomPowerController;
+const PowerController = root.HAL.PowerController;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -20,6 +19,11 @@ const toChild = memory.toChild;
 const toParent = memory.toParent;
 
 const memory_map = root.HAL.memory_map;
+
+const synchronize = @import("../synchronize.zig");
+const Spinlock = synchronize.Spinlock;
+
+const ChannelSet = @import("../channel_set.zig");
 
 const usb = @import("../usb.zig");
 const Address = usb.Address;
@@ -34,6 +38,10 @@ const UsbSpeed = usb.UsbSpeed;
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 const dwc_max_channels = 16;
+
+// ----------------------------------------------------------------------
+// Public API
+// ----------------------------------------------------------------------
 
 pub const Error = error{
     IncorrectDevice,
@@ -373,14 +381,6 @@ const CoreRegisters = extern struct {
     power_clock_control: u32 = 0, // 0xe00
 };
 
-// test {
-//     @compileLog("adp control:", @offsetOf(CoreRegisters, "adp_control"));
-//     @compileLog("device periodic tx fifo:", @offsetOf(CoreRegisters, "device_periodic_tx_fifo"));
-//     @compileLog("host registers: ", @offsetOf(CoreRegisters, "host_registers"));
-//     @compileLog("host channel registers: ", @offsetOf(CoreRegisters, "host_channel_registers"));
-//     @compileLog("power_clock_control", @offsetOf(CoreRegisters, "power_clock_control"));
-// }
-
 pub const UsbController = struct {
     pub const VTable = struct {
         dumpStatus: *const fn (usb_controller: u64) void,
@@ -391,9 +391,10 @@ pub const UsbController = struct {
     host_registers: *volatile HostRegisters,
     intc: *const LocalInterruptController,
     translations: *const AddressTranslations,
-    power_controller: *const BroadcomPowerController,
+    power_controller: *PowerController,
     clock: *const Clock,
     root_port: RootPort,
+    channels: ChannelSet,
     vtable: VTable = .{
         .dumpStatus = dumpStatusInteropShim,
     },
@@ -408,7 +409,7 @@ pub const UsbController = struct {
         register_base: u64,
         intc: *LocalInterruptController,
         translations: *AddressTranslations,
-        power: *BroadcomPowerController,
+        power: *PowerController,
         clock: *Clock,
     ) UsbController {
         return .{
@@ -420,6 +421,7 @@ pub const UsbController = struct {
             .power_controller = power,
             .clock = clock,
             .root_port = RootPort.init(),
+            .channels = ChannelSet.init("DWC OTG Host controller channels", dwc_max_channels),
         };
     }
 
@@ -434,7 +436,7 @@ pub const UsbController = struct {
         try self.initializeRootPort();
     }
 
-    fn powerOn(self: *const UsbController) !void {
+    fn powerOn(self: *UsbController) !void {
         var power_result = try self.power_controller.powerOn(.usb_hcd);
 
         if (power_result != .power_on) {
@@ -443,7 +445,7 @@ pub const UsbController = struct {
         }
     }
 
-    fn powerOff(self: *const UsbController) !void {
+    fn powerOff(self: *UsbController) !void {
         var power_result = try self.power_controller.powerOff(.usb_hcd);
 
         if (power_result != .power_off) {
@@ -452,7 +454,7 @@ pub const UsbController = struct {
         }
     }
 
-    fn verifyHostControllerDevice(self: *const UsbController) !void {
+    fn verifyHostControllerDevice(self: *UsbController) !void {
         const id = self.core_registers.vendor_id;
 
         kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
@@ -463,19 +465,19 @@ pub const UsbController = struct {
         }
     }
 
-    fn disableGlobalInterrupts(self: *const UsbController) !void {
+    fn disableGlobalInterrupts(self: *UsbController) !void {
         self.core_registers.ahb_config.global_interrupt_mask = 0;
     }
 
-    fn enableGlobalInterrupts(self: *const UsbController) !void {
+    fn enableGlobalInterrupts(self: *UsbController) !void {
         self.core_registers.ahb_config.global_interrupt_mask = 1;
     }
 
-    fn connectInterruptHandler(self: *const UsbController) !void {
+    fn connectInterruptHandler(self: *UsbController) !void {
         _ = self;
     }
 
-    fn initializeControllerCore(self: *const UsbController) !void {
+    fn initializeControllerCore(self: *UsbController) !void {
         // clear bits 20 & 22 of core usb config register
         var config: UsbConfig = self.core_registers.usb_config;
         config.ulpi_ext_vbus_drv = 0;
@@ -511,7 +513,7 @@ pub const UsbController = struct {
         self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffff_ffff));
     }
 
-    fn resetControllerCore(self: *const UsbController) !void {
+    fn resetControllerCore(self: *UsbController) !void {
         // wait up to 100 ms for reset to settle
         const end = self.deadline(100);
 
@@ -530,7 +532,7 @@ pub const UsbController = struct {
         while (self.clock.ticks() < wait_end) {}
     }
 
-    fn initializeHost(self: *const UsbController) !void {
+    fn initializeHost(self: *UsbController) !void {
         self.core_registers.power_clock_control = 0;
         try self.flushTxFifo();
         self.delayMicros(1);
@@ -540,7 +542,7 @@ pub const UsbController = struct {
         try self.enableHostInterrupts();
     }
 
-    fn configPhyClockSpeed(self: *const UsbController) !void {
+    fn configPhyClockSpeed(self: *UsbController) !void {
         const core_config = self.core_registers.usb_config;
         const hw2 = self.core_registers.hardware_config_2;
         if (hw2.hs_phy_type == .ulpi and hw2.fs_phy_type == .dedicated and core_config.ulpi_fsls) {
@@ -550,7 +552,7 @@ pub const UsbController = struct {
         }
     }
 
-    fn flushTxFifo(self: *const UsbController) !void {
+    fn flushTxFifo(self: *UsbController) !void {
         var reset = self.core_registers.reset;
         reset.tx_fifo_flush = 1;
         reset.tx_fifo_num = 0x10;
@@ -560,19 +562,19 @@ pub const UsbController = struct {
         while (self.clock.ticks() < reset_end and self.core_registers.reset.tx_fifo_flush != 0) {}
     }
 
-    fn flushRxFifo(self: *const UsbController) !void {
+    fn flushRxFifo(self: *UsbController) !void {
         self.core_registers.reset.rx_fifo_flush = 1;
         const reset_end = self.deadline(10);
         while (self.clock.ticks() < reset_end and self.core_registers.reset.rx_fifo_flush != 0) {}
     }
 
-    fn powerHostPort(self: *const UsbController) !void {
+    fn powerHostPort(self: *UsbController) !void {
         if (self.host_registers.port.power == 0) {
             self.host_registers.port.power = 1;
         }
     }
 
-    fn enableHostInterrupts(self: *const UsbController) !void {
+    fn enableHostInterrupts(self: *UsbController) !void {
         self.core_registers.interrupt_mask = @bitCast(@as(u32, 0));
         self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffffffff));
         self.core_registers.interrupt_mask.host_channel_intr = 1;
@@ -583,7 +585,7 @@ pub const UsbController = struct {
         try self.root_port.configure();
     }
 
-    fn enableRootPort(self: *const UsbController) !void {
+    fn enableRootPort(self: *UsbController) !void {
         // We should see the connect bit become true within 510 ms of
         // power on
         const connect_end = self.deadline(510);
@@ -612,7 +614,7 @@ pub const UsbController = struct {
         self.delayMillis(20);
     }
 
-    pub fn getPortSpeed(self: *const UsbController) !UsbSpeed {
+    pub fn getPortSpeed(self: *UsbController) !UsbSpeed {
         return switch (self.host_registers.port.speed) {
             .high => UsbSpeed.High,
             .full => UsbSpeed.Full,
@@ -622,25 +624,25 @@ pub const UsbController = struct {
     }
 
     // TODO migrate this to the clock
-    fn deadline(self: *const UsbController, millis: u32) u64 {
+    fn deadline(self: *UsbController, millis: u32) u64 {
         const start_ticks = self.clock.ticks();
         const elapsed_ticks = millis * 1_000; // clock freq is 1Mhz
         return start_ticks + elapsed_ticks;
     }
 
-    fn delayMillis(self: *const UsbController, count: u32) void {
+    fn delayMillis(self: *UsbController, count: u32) void {
         self.delayMicros(count * 1000);
     }
 
     // TODO migrate this to the clock
-    fn delayMicros(self: *const UsbController, count: u32) void {
+    fn delayMicros(self: *UsbController, count: u32) void {
         const start_ticks = self.clock.ticks();
         const elapsed_ticks = count; // clock freq is 1Mhz
         const end_ticks = start_ticks + elapsed_ticks;
         while (self.clock.ticks() <= end_ticks) {}
     }
 
-    pub fn dumpStatus(self: *const UsbController) void {
+    pub fn dumpStatus(self: *UsbController) void {
         kprint("{s: >28}\n", .{"Core registers"});
         dumpRegister("otg_control", @bitCast(self.core_registers.otg_control));
         dumpRegister("ahb_config", @bitCast(self.core_registers.ahb_config));
