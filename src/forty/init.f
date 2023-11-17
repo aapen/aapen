@@ -190,12 +190,12 @@ finish
 
 (Colors)
 
-: set-fg (fg bg -- : Set the text bg color)
-  fbcons fbcons.fg + !b
+: set-fg (fg bg -- : Set the text fg color)
+  fbcons fbcons.current_fg + !b
 ;
 
-: set-bg (fg bg -- : Set the text fg color)
-  fbcons fbcons.bg + !b
+: set-bg (fg bg -- : Set the text bg color)
+  fbcons fbcons.current_bg + !b
 ;
 
 : set-colors (fg bg -- : Set the text colors)
@@ -336,6 +336,7 @@ finish
 : forward-handler  drop 0x83 emit ;
 : bol-handler      drop 0x84 emit ;
 : eol-handler      drop 0x85 emit ;
+: redraw-handler   "redraw! " s~ drop 0xff emit ;
 
 : escape-handler
   drop       (Discard the escape)
@@ -404,6 +405,7 @@ finish
 'toggle-insert-handler handlers \i char-ctrl dtab-set
 'next-handler          handlers \n char-ctrl dtab-set
 'previous-handler      handlers \p char-ctrl dtab-set
+'redraw-handler        handlers \r char-ctrl dtab-set
 'ex-handler            handlers \x char-ctrl dtab-set
 
 'insert-handler    handlers char-space \~ dtab-set-range
