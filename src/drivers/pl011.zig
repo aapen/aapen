@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const bcm_gpio = @import("bcm_gpio.zig");
-const BroadcomGpio = bcm_gpio.BroadcomGpio;
+const root = @import("root");
+const GPIO = root.HAL.GPIO;
 
 extern fn spinDelay(cpu_cycles: u32) void;
 
@@ -182,9 +182,9 @@ pub const Pl011Uart = struct {
     };
 
     registers: *volatile Registers,
-    gpio: *const BroadcomGpio,
+    gpio: *GPIO,
 
-    pub fn init(register_base: u64, gpio: *BroadcomGpio) Pl011Uart {
+    pub fn init(register_base: u64, gpio: *GPIO) Pl011Uart {
         return .{
             .registers = @ptrFromInt(register_base),
             .gpio = gpio,
@@ -193,11 +193,11 @@ pub const Pl011Uart = struct {
 
     pub fn initializeUart(self: *const Pl011Uart) void {
         // Configure GPIO pins for serial I/O
-        self.gpio.enable(&bcm_gpio.pins[14]);
-        self.gpio.enable(&bcm_gpio.pins[15]);
+        self.gpio.enable(&self.gpio.pins[14]);
+        self.gpio.enable(&self.gpio.pins[15]);
 
-        self.gpio.selectFunction(&bcm_gpio.pins[14], .alt0);
-        self.gpio.selectFunction(&bcm_gpio.pins[15], .alt0);
+        self.gpio.selectFunction(&self.gpio.pins[14], .alt0);
+        self.gpio.selectFunction(&self.gpio.pins[15], .alt0);
 
         // Turn UART off while initializing
         self.registers.control.uart_enable = .disable;
