@@ -1,9 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const bcm_mailbox = @import("bcm_mailbox.zig");
-const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const PropertyTag = bcm_mailbox.PropertyTag;
+const root = @import("root");
+const Mailbox = root.HAL.Mailbox;
+const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
 const memory = @import("../memory.zig");
 const Regions = memory.Regions;
@@ -50,9 +50,9 @@ const PropertyBoardInfo = extern struct {
 };
 
 pub const BroadcomBoardInfoController = struct {
-    mailbox: *const BroadcomMailbox,
+    mailbox: *Mailbox,
 
-    pub fn init(mailbox: *const BroadcomMailbox) BroadcomBoardInfoController {
+    pub fn init(mailbox: *Mailbox) BroadcomBoardInfoController {
         return .{
             .mailbox = mailbox,
         };

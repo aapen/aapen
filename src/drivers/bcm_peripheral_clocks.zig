@@ -1,6 +1,6 @@
-const bcm_mailbox = @import("bcm_mailbox.zig");
-const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const PropertyTag = bcm_mailbox.PropertyTag;
+const root = @import("root");
+const Mailbox = root.HAL.Mailbox;
+const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
 pub const ClockId = enum(u32) {
     reserved = 0,
@@ -85,7 +85,13 @@ const PropertyClockRateControl = extern struct {
 };
 
 pub const PeripheralClockController = struct {
-    mailbox: *BroadcomMailbox,
+    mailbox: *Mailbox,
+
+    pub fn init(mailbox: *Mailbox) PeripheralClockController {
+        return .{
+            .mailbox = mailbox,
+        };
+    }
 
     fn decode(state: u32) ClockResult {
         var no_device = (state & 0x02) != 0;

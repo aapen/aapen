@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const bcm_mailbox = @import("bcm_mailbox.zig");
-const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const PropertyTag = bcm_mailbox.PropertyTag;
+const root = @import("root");
+const Mailbox = root.HAL.Mailbox;
+const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
 const bcm_dma = @import("bcm_dma.zig");
 const BroadcomDMAController = bcm_dma.BroadcomDMAController;
@@ -13,10 +13,10 @@ const memory = @import("../memory.zig");
 const Region = memory.Region;
 
 pub const BroadcomVideoController = struct {
-    mailbox: *BroadcomMailbox,
+    mailbox: *Mailbox,
     dma: *BroadcomDMAController,
 
-    pub fn init(mailbox: *BroadcomMailbox, dma: *BroadcomDMAController) BroadcomVideoController {
+    pub fn init(mailbox: *Mailbox, dma: *BroadcomDMAController) BroadcomVideoController {
         return .{
             .mailbox = mailbox,
             .dma = dma,

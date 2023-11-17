@@ -1,6 +1,6 @@
-const bcm_mailbox = @import("bcm_mailbox.zig");
-const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const PropertyTag = bcm_mailbox.PropertyTag;
+const root = @import("root");
+const Mailbox = root.HAL.Mailbox;
+const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
 const Self = @This();
 
@@ -56,9 +56,9 @@ const PropertyPower = extern struct {
     }
 };
 
-mailbox: *const BroadcomMailbox,
+mailbox: *Mailbox,
 
-pub fn init(mailbox: *BroadcomMailbox) Self {
+pub fn init(mailbox: *Mailbox) Self {
     return .{
         .mailbox = mailbox,
     };
