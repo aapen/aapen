@@ -8,7 +8,7 @@ const cpu = @import("../../architecture.zig").cpu;
 const registers = @import("registers.zig");
 const Esr = @import("registers/esr.zig").Layout;
 
-const __exception_handler_table: *u64 = @extern(*u64, .{ .name = "__exception_handler_table" });
+const __exception_handler_table = @extern([*]u8, .{ .name = "__exception_handler_table" });
 
 pub const UnwindPoint = struct {
     sp: u64 = undefined,
@@ -22,7 +22,7 @@ pub extern fn markUnwindPoint(point: *UnwindPoint) void;
 const IrqHandler = *const fn (context: *const ExceptionContext) void;
 
 pub fn init() !void {
-    registers.vbar_el1.write(@intFromPtr(__exception_handler_table));
+    cpu.exceptionHandlerTableWrite(__exception_handler_table);
     cpu.irqEnable();
 }
 
