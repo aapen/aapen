@@ -455,6 +455,7 @@ pub const Forth = struct {
 
     // Evaluate a command, a string containing zero or more words.
     pub fn evalCommand(this: *Forth, cmd: []const u8) !void {
+        try serial.writer.print("evalCommand: [{s}]\n", .{cmd});
         const savedWords = this.words;
         defer {
             this.words = savedWords;
@@ -648,6 +649,7 @@ pub const Forth = struct {
                 var word = this.words.next();
                 while (word != null) : (word = this.words.next()) {
                     if (word) |w| {
+                        try serial.writer.print("word: {s}\n", .{w});
                         this.evalToken(w) catch |err| {
                             try this.print("error: {s} {any}\n", .{ w, err });
                             this.reset() catch {

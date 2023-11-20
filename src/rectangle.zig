@@ -2,6 +2,8 @@ const std = @import("std");
 
 const FrameBuffer = @import("frame_buffer.zig");
 
+const serial = @import("serial.zig");
+
 pub const Rectangle = struct {
     valid: bool,
     left: u64,
@@ -31,6 +33,9 @@ pub const Rectangle = struct {
     }
 
     pub fn expand(self: *Rectangle, x: u64, y: u64) void {
+        if (x > 1000 or y > 1000) {
+            try serial.writer.print("Bad rect? {} {}\n", .{ x, y });
+        }
         if (self.valid) {
             self.left = @min(x, self.left);
             self.right = @max(x + 1, self.right);

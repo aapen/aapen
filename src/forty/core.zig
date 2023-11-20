@@ -9,6 +9,7 @@ const BoardInfo = root.HAL.BoardInfo;
 const FrameBuffer = @import("../frame_buffer.zig");
 
 const FrameBufferConsole = @import("../fbcons.zig");
+const CharDisplay = @import("../char_display.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -508,23 +509,16 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
     return 0;
 }
 
-pub fn wordLineText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordGetScreenText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var n = try forth.popAs(i64);
     const pStr = try forth.popAs([*]u8);
-    const line_no: u64 = if (n < 0) @intCast(forth.console.current_row) else @intCast(n);
+    const line_no: u64 = if (n < 0) @intCast(forth.console.display.current_row) else @intCast(n);
 
-    const num_cols = forth.console.num_cols;
+    const num_cols = forth.console.display.num_cols;
 
-    forth.console.getLineText(line_no, true, pStr);
-    //try forth.print("line_no: {} pstr: {*}\n", .{ line_no, pStr });
-    pStr[num_cols] = 0;
-    for (0..num_cols) |i| {
-        const j = num_cols - 1 - i;
-        if (pStr[j] != ' ') {
-            break;
-        }
-        pStr[j] = 0;
-    }
+    forth.console.display.getRowText(line_no, pStr);
+    const trimmed = std.mem.trimRight(u8, pStr[0..num_cols], " ");
+    pStr[trimmed.len] = 0;
     try forth.pushAny(pStr);
     return 0;
 }
@@ -557,6 +551,7 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("board.memory", BoardInfo.Memory);
 
     try forth.defineStruct("fbcons", FrameBufferConsole);
+    try forth.defineStruct("display", CharDisplay);
     try forth.defineStruct("fb", FrameBuffer);
     try forth.defineStruct("fb.vtable", FrameBuffer.VTable);
 
@@ -628,6 +623,6 @@ pub fn defineCore(forth: *Forth) !void {
 
     _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, false);
 
-    _ = try forth.definePrimitiveDesc("line-text", "nline -- str : Get the text of the given line.", &wordLineText, false);
+    _ = try forth.definePrimitiveDesc("get-scr-text", "nline -- str : Get the text of the given line.", &wordGetScreenText, false);
     _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, false);
 }

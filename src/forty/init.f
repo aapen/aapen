@@ -190,17 +190,8 @@ finish
 
 (Colors)
 
-: set-fg (fg bg -- : Set the text fg color)
-  fbcons fbcons.current_fg + !b
-;
-
 : set-bg (fg bg -- : Set the text bg color)
-  fbcons fbcons.current_bg + !b
-;
-
-: set-colors (fg bg -- : Set the text colors)
-  set-bg
-  set-fg
+  [[ fbcons fbcons.display display.current_bg +]] !b
 ;
 
  0 :black       let
@@ -220,14 +211,6 @@ finish
 14 :light-blue  let
 15 :light-grey  let
 
-: c64-colors
-  light-blue blue set-colors
-;
-
-: default-colors
-  white black set-colors
-;
-
 : set-text-fg (color-n --)
   0x90 + emit
 ;
@@ -236,10 +219,24 @@ finish
   0xa0 + emit
 ;
 
+: set-colors (fg bg -- : Set the text colors)
+  set-text-bg
+  set-text-fg
+;
+
+: c64-colors
+  light-blue blue set-colors
+;
+
+: default-colors
+  white black set-colors
+;
+
+
 (Screen dimensions)
 
-fbcons fbcons.num_cols  + @     :scr-cols  let
-fbcons fbcons.num_rows + @     :scr-rows let
+[[ fbcons fbcons.display display.num_cols  +]] @  :scr-cols let
+[[ fbcons fbcons.display display.num_rows  +]] @  :scr-rows let
 
 [[ fb fb.xres +]] @w :scr-xres let
 [[ fb fb.yres +]] @w :scr-yres let
@@ -300,6 +297,11 @@ finish
 : emit-prompt
   0x8a emit "forty>> " s. 0x8b emit
 ;
+
+: emit-prompt
+  "OK" s. cr
+;
+
 : ignore-handler (ch --) drop ;
 
 : insert-handler (ch --)
@@ -309,11 +311,13 @@ finish
   emit
 ;
 
+: insert-handler (ch --) emit ;
+
 : echo-handler (ch -- ) emit ;
 
 : newline-handler (ch -- : Handle a newline. Echos the char, eval, reset buffer.)
   drop
-  repl-buffer -1 line-text
+  repl-buffer -1 get-scr-text
   dup s~
   cr
   eval-command
@@ -382,7 +386,7 @@ finish
 
 : ex-handler
   0xb0 emit
-  \Q emit
+  (\Q emit)
 ;
 
 : dump-text-handler
@@ -504,6 +508,10 @@ finish
 
 (Retro startup!)
 
+hello
+hello
+hello
+0xf0 emit
 c64-colors
 cls
 
@@ -572,4 +580,4 @@ mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 cr cr
 
 "Forty REPL" s. cr cr
-repl
+(repl)
