@@ -516,7 +516,7 @@ pub fn wordGetScreenText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthErro
 
     const num_cols = forth.console.display.num_cols;
 
-    forth.console.display.getRowText(line_no, pStr);
+    forth.console.display.rowTextGet(line_no, pStr);
     const trimmed = std.mem.trimRight(u8, pStr[0..num_cols], " ");
     pStr[trimmed.len] = 0;
     try forth.pushAny(pStr);

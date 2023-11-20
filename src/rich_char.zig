@@ -7,8 +7,6 @@ pub const RichChar = struct {
     fg: u8,
     bg: u8,
     ignore: u1,
-    x: usize,
-    y: usize,
 
     pub fn init(ch: u8, fg: u8, bg: u8, ignore: u1, x: usize, y: usize) RichChar {
         return RichChar{
@@ -31,9 +29,5 @@ pub const RichChar = struct {
 
     pub inline fn isSignificant(self: *const RichChar) bool {
         return !self.isWhitespace() and !self.isIgnorable();
-    }
-
-    pub inline fn render(self: *const RichChar, fb: *FrameBuffer) void {
-        fb.drawChar(self.x, self.y, self.ch, self.fg, self.bg);
     }
 };

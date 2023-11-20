@@ -80,8 +80,8 @@ pub fn emit(self: *Self, ch: u8) void {
         0x90...0x9f => self.display.current_fg = (ch - 0x90),
         0xa0...0xaf => self.display.current_bg = (ch - 0xa0),
         0xb0 => self.display.textShiftLeft(self.display.getCursorCol(), self.display.getCursorRow()),
-        0xf0 => self.display.dumpInfo(),
-        0xf1 => self.display.dumpText(),
+        0xf0 => self.display.infoDump(),
+        0xf1 => self.display.textDump(),
         //0xf1 => self.dumpColors(),
         //0xf2 => self.dumpIgnore(),
         //0xfe => self.redrawLine(self.current_row),
@@ -96,9 +96,9 @@ pub fn addChar(self: *Self, ch: u8) void {
     defer self.end_update();
 
     if (isPrintable(ch)) {
-        self.display.setCurrentChar(ch);
+        self.display.currentCharSet(ch);
     } else {
-        self.display.setCurrentChar('?');
+        self.display.currentCharSet('?');
     }
     self.next();
 }
@@ -112,7 +112,7 @@ fn backspace(self: *Self) void {
     defer self.end_update();
 
     self.display.current_col -= 1;
-    self.display.setCurrentChar(' ');
+    self.display.currentCharSet(' ');
     //self.display.shiftLeft(self.display.current_col, self.display.current_row);
     //TBD
     //self.display.sync();
@@ -144,11 +144,11 @@ fn nextLine(self: *Self) void {
     defer self.end_update();
 
     self.display.current_col = 0;
-    self.display.current_row += 1;
-    if (self.display.current_row >= self.display.num_rows) {
-        self.display.current_row = 0;
+    if (self.display.current_row >= self.display.num_rows - 1) {
+        self.display.scrollUp();
+    } else {
+        self.display.current_row += 1;
     }
-    self.display.setRow(self.display.current_row, ' ');
 }
 
 /// Scroll the screen up. Before we do any scrolling we repaint the screen from
