@@ -306,12 +306,12 @@ finish
 
 : insert-handler (ch --)
   repl-insert? if
-    0xb0 emit
+    0xb1 emit
   endif
   emit
 ;
 
-: insert-handler (ch --) emit ;
+(: insert-handler (ch --) emit ;)
 
 : echo-handler (ch -- ) emit ;
 

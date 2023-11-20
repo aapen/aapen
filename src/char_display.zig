@@ -93,7 +93,6 @@ pub fn init(allocator: Allocator, fb: *FrameBuffer) !*Self {
             self.text[i].ch = ' ';
             self.text[i].fg = DEFAULT_FOREGROUND;
             self.text[i].bg = DEFAULT_BACKGROUND;
-            self.text[i].ignore = 0;
             self.location[i].x = fb.colToX(col);
             self.location[i].y = fb.rowToY(row);
         }
@@ -179,15 +178,7 @@ pub inline fn cursorMoveTo(self: *Self, col: u64, row: u64) void {
     self.current_row = row;
 }
 
-/// Get and set the current (in memory) cursor position.
-pub inline fn getCursorCol(self: *Self) u64 {
-    return self.current_col;
-}
-
-pub inline fn getCursorRow(self: *Self) u64 {
-    return self.current_row;
-}
-
+/// Set the current (in memory) cursor position.
 pub fn leftCursor(self: *Self) void {
     if (self.current_col > 0) {
         self.current_col -= 1;
@@ -229,7 +220,7 @@ pub fn eolCursor(self: *Self) void {
     // Find the last non-whitespace, non-irnorable char in the line.
     var i = self.num_cols - 1;
     while (i > 0) {
-        if (self.charGet(i, self.current_row).isSignificant()) {
+        if (!self.charGet(i, self.current_row).isWhitespace()) {
             self.current_col = i;
             break;
         }
@@ -260,23 +251,22 @@ pub fn textShiftLeft(self: *Self, col: usize, row: usize) void {
     for (start_i..end_i) |i| {
         self.text[i] = self.text[i + 1];
     }
-    self.text[start_i].ch = ' ';
+    self.text[end_i].ch = ' ';
     self.modified_area.expand(col, row);
     self.modified_area.expand(self.num_cols - 1, row);
 }
 
 /// Shift the text on a row one character to the right.
-/// Note that the char at (col, row) is overwritter with a blank.
 pub fn textShiftRight(self: *Self, col: usize, row: usize) void {
-    var len = self.num_cols - col - 1;
-    var i_start = self.charIndexGet(self.num_cols - 1, row);
+    var start_i = self.charIndexGet(self.num_cols - 1, row);
+    var end_i = self.charIndexGet(col, row);
+    try serial.writer.print("start_i {} end {}\n", .{ start_i, end_i });
 
-    var i = i_start;
-    for (0..len) |_| {
-        self.text[i - 1] = self.text[i];
-        i = i - 1;
+    var i: usize = start_i;
+    while (i > end_i) {
+        self.text[i] = self.text[i - 1];
+        i -= 1;
     }
-    self.text[i_start].ch = ' ';
     self.modified_area.expand(col, row);
     self.modified_area.expand(self.num_cols - 1, row);
 }
@@ -327,9 +317,6 @@ pub inline fn currentCharSet(self: *Self, ch: u8) void {
     self.text[i].fg = self.current_fg;
     self.text[i].bg = self.current_bg;
     self.modified_area.expand(self.current_col, self.current_row);
-    if (self.current_col > 400 or self.current_row > 400) {
-        try serial.writer.print("bad row/col {} {} ????\n", .{ self.current_col, self.current_row });
-    }
 }
 
 /// Scroll up by one row, ensuring that the internal state is consistent.

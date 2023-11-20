@@ -79,30 +79,30 @@ pub fn emit(self: *Self, ch: u8) void {
         0x87 => self.display.drawCursor(self.display.displayed_cursor_col, self.display.displayed_cursor_row),
         0x90...0x9f => self.display.current_fg = (ch - 0x90),
         0xa0...0xaf => self.display.current_bg = (ch - 0xa0),
-        0xb0 => self.display.textShiftLeft(self.display.getCursorCol(), self.display.getCursorRow()),
+        0xb0 => self.display.textShiftLeft(self.display.current_col, self.display.current_row),
+        0xb1 => self.display.textShiftRight(self.display.current_col, self.display.current_row),
         0xf0 => self.display.infoDump(),
         0xf1 => self.display.textDump(),
-        //0xf1 => self.dumpColors(),
-        //0xf2 => self.dumpIgnore(),
-        //0xfe => self.redrawLine(self.current_row),
         0xff => self.display.invalidate(),
         else => self.addChar(ch),
     }
 }
 
-/// Add a character at the current position with the current colors and ignore flag.
+/// Add a character at the current position with the current colors.
 pub fn addChar(self: *Self, ch: u8) void {
     self.begin_update();
     defer self.end_update();
 
-    if (isPrintable(ch)) {
-        self.display.currentCharSet(ch);
-    } else {
-        self.display.currentCharSet('?');
-    }
+    self.display.currentCharSet(if (isPrintable(ch)) ch else '?');
+    //    if (isPrintable(ch)) {
+    //        self.display.currentCharSet(ch);
+    //    } else {
+    //        self.display.currentCharSet('?');
+    //    }
     self.next();
 }
 
+/// Do a traditional backspace.
 fn backspace(self: *Self) void {
     if (self.display.current_col <= 0) {
         return;
@@ -112,8 +112,8 @@ fn backspace(self: *Self) void {
     defer self.end_update();
 
     self.display.current_col -= 1;
-    self.display.currentCharSet(' ');
-    //self.display.shiftLeft(self.display.current_col, self.display.current_row);
+    //self.display.currentCharSet(' ');
+    self.display.textShiftLeft(self.display.current_col, self.display.current_row);
     //TBD
     //self.display.sync();
 }
@@ -151,44 +151,12 @@ fn nextLine(self: *Self) void {
     }
 }
 
-/// Scroll the screen up. Before we do any scrolling we repaint the screen from
-/// self.text thereby ensuring that we are scrolling the latest changes.
-//fn scrollUp(self: *Self) void {
-//    self.repaint();
-//    self.fb.blit(0, self.fb.font_height_px, self.fb.xres, self.fb.yres - self.fb.font_height_px, 0, 0);
-//
-//    self.current_col = 0;
-//    self.current_row = self.num_rows - 1;
-//    const copy_len = self.length - self.num_cols;
-//    std.mem.copyForwards(RichChar, self.text[0..copy_len], self.text[self.num_cols..self.length]);
-//    self.setCharRange(0, self.num_rows - 1, self.num_cols, self.num_rows - 1, ' ');
-//}
-//
-///// Set a range of chars in self.text, does not update the modified_area rect.
-//inline fn setCharRange(self: *Self, col1: usize, row1: usize, col2: usize, row2: usize, ch: u8) void {
-//    const i = self.charIndex(col1, row1);
-//    const j = self.charIndex(col2, row2);
-//    for (i..j) |k| {
-//        self.text[k] = RichChar.init(ch, self.current_fg, self.current_bg, 0);
-//    }
-//}
-
 /// Sync up the cursor on the screen with our internal
 /// idea of where the cursor is.
 fn isPrintable(ch: u8) bool {
     return ch >= 32 and ch <= 128;
 }
 
-//pub fn lineShiftRight(self: *Self) void {
-//    self.begin_update();
-//    const i = self.charIndex(self.current_col, self.current_row);
-//    const len = self.num_cols - self.current_col - 1;
-//    //std.mem.copyBackwards(RichChar, self.text[i + 1 .. i + 1 + len], self.text[i .. i + len]);
-//    self.modified_area.expand(self.current_col, self.current_row);
-//    self.modified_area.expand(self.num_cols - 1, self.current_row);
-//    self.end_update();
-//}
-//
 pub fn emitString(self: *Self, str: []const u8) void {
     self.begin_update();
     defer self.end_update();
