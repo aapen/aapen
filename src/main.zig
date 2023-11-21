@@ -197,7 +197,6 @@ const heartbeat: HAL.TimerHandler = .{
 };
 
 fn showHeartbeat(_: *const HAL.TimerHandler, _: *const HAL.Timer) u32 {
-    _ = Serial.puts("hearbeat\n");
     var ch = char_buffer.charGet(0, 0);
     if (ch >= 65) {
         ch = ((ch - 64) % 26) + 65;
