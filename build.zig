@@ -13,27 +13,6 @@ const SupportedBoard = enum {
     pi5,
 };
 
-fn configModule(b: *std.Build) *Module {
-    const maybe_selected_board = b.option(SupportedBoard, "board", "Select a target board for the kernel build");
-
-    const board = maybe_selected_board orelse .pi3;
-
-    const config_path = switch (board) {
-        .pi3 => "config/raspi3.zig",
-        .pi4 => "config/raspi4.zig",
-        .pi400 => "config/raspi400.zig",
-        .pi5 => "config/raspi5.zig",
-    };
-
-    return b.createModule(.{ .source_file = .{ .path = config_path } });
-}
-
-fn kernelFile(b: *std.Build) []const u8 {
-    const maybe_target_file = b.option([]const u8, "image", "Base name for the kernel binaries (both elf and img)");
-
-    return maybe_target_file orelse "kernel8";
-}
-
 pub fn build(b: *std.Build) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -46,11 +25,14 @@ pub fn build(b: *std.Build) !void {
         .abi = Target.Abi.none,
     };
 
+    const board = b.option(SupportedBoard, "board", "Select a target board for the kernel build") orelse .pi3;
+    const options = b.addOptions();
+    options.addOption(SupportedBoard, "board", board);
+
     const optimize = b.standardOptimizeOption(.{});
-    const bin_basename = kernelFile(b);
+    const bin_basename = b.option([]const u8, "image", "Base name for the kernel binaries (both elf and img)") orelse "kernel8";
     const elf_name = try fmt.allocPrint(allocator, "{s}.elf", .{bin_basename});
     defer allocator.free(elf_name);
-
     const img_name = try fmt.allocPrint(allocator, "{s}.img", .{bin_basename});
     defer allocator.free(img_name);
 
@@ -62,7 +44,8 @@ pub fn build(b: *std.Build) !void {
         .link_libc = false,
     });
 
-    kernel.addModule("config", configModule(b));
+    //    kernel.addModule("config", configModule(b));
+    kernel.addOptions("config", options);
 
     kernel.addIncludePath(.{ .path = "include" });
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/exceptions.S" });

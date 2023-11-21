@@ -1,5 +1,4 @@
 const std = @import("std");
-const config = @import("config");
 
 const arch = @import("architecture.zig");
 const qemu = @import("qemu.zig");
@@ -20,7 +19,7 @@ const Forth = forty.Forth;
 pub const debug = @import("debug.zig");
 pub const kprint = debug.kprint;
 
-const raspi3 = @import("hal/raspi3.zig");
+const config = @import("config");
 pub const HAL = switch (config.board) {
     .pi3 => @import("hal/raspi3.zig"),
     inline else => @compileError("Unsupported board " ++ @tagName(config.board)),
@@ -140,7 +139,7 @@ fn kernelInit() void {
         debug.kernelError("diagnostics init error", err);
     }
 
-    if (hal.usb.hostControllerInitialize()) {
+    if (hal.usb_hci.initialize()) {
         debug.kernelMessage("USB host init");
     } else |err| {
         debug.kernelError("USB host init error", err);
@@ -151,6 +150,8 @@ fn kernelInit() void {
     } else |err| {
         debug.kernelError("Forth init error", err);
     }
+
+    hal.system_timer.schedule(heartbeat_interval, &heartbeat);
 
     // TODO should this move to forty/core.zig?
     supplyAddress("fb", @intFromPtr(fb));
@@ -185,6 +186,24 @@ fn supplyAddress(name: []const u8, addr: usize) void {
     interpreter.defineConstant(name, addr) catch |err| {
         std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
     };
+}
+
+const heartbeat_interval: u32 = 600_000;
+const heartbeat: HAL.TimerHandler = .{
+    .callback = showHeartbeat,
+};
+
+fn showHeartbeat(_: *const HAL.TimerHandler, _: *const HAL.Timer) u32 {
+    var ch = frame_buffer_console.getChar(0, 0);
+    if (ch.ch >= 65) {
+        ch.ch = ((ch.ch - 64) % 26) + 65;
+    } else {
+        ch.ch = 65;
+    }
+    frame_buffer_console.setChar(0, 0, ch);
+    ch.draw(frame_buffer_console.fb, 0, 0);
+
+    return heartbeat_interval;
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {

@@ -1,7 +1,3 @@
-#
-# Makefile for pijFORTHos -- Raspberry Pi JonesFORTH Operating System
-#
-
 ZIG             = zig
 ZIG_BUILD_ARGS  = -Doptimize=Debug -freference-trace
 

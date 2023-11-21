@@ -55,6 +55,14 @@ pub fn init() void {
 }
 
 // ----------------------------------------------------------------------
+// Exception table control
+// ----------------------------------------------------------------------
+
+pub fn exceptionHandlerTableWrite(table_base: *anyopaque) void {
+    registers.vbar_el1.write(@intFromPtr(table_base));
+}
+
+// ----------------------------------------------------------------------
 // Low level interrupt control
 // ----------------------------------------------------------------------
 
@@ -75,31 +83,31 @@ pub fn irqFlagsWrite(flags: u32) void {
 
 pub fn fiqEnable() void {
     asm volatile (
-        \\ msr DAIFClr, #1
+        \\ msr DAIFClr, #0b0001
     );
 }
 
 pub fn fiqDisable() void {
     asm volatile (
-        \\ msr DAIFSet, #1
+        \\ msr DAIFSet, #0b0001
     );
 }
 
 pub fn irqEnable() void {
     asm volatile (
-        \\ msr DAIFClr, #2
+        \\ msr DAIFClr, #0b0010
     );
 }
 
 pub fn irqDisable() void {
     asm volatile (
-        \\ msr DAIFSet, #2
+        \\ msr DAIFSet, #0b0010
     );
 }
 
 pub fn irqAndFiqDisable() void {
     asm volatile (
-        \\ msr DAIFSet, #3
+        \\ msr DAIFSet, #0b0011
     );
 }
 

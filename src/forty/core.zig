@@ -4,7 +4,7 @@ const HAL = root.HAL;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const BoardInfo = root.HAL.BoardInfo;
+const BoardInfo = root.HAL.BoardInfoController.BoardInfo;
 
 const FrameBuffer = @import("../frame_buffer.zig");
 const CharBuffer = @import("../char_buffer.zig");
@@ -556,10 +556,9 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("FrameBuffer.VTable", FrameBuffer.VTable);
 
     // Hal
-
     try forth.defineStruct("hal", HAL);
-    try forth.defineStruct("usb", HAL.USB);
-    try forth.defineStruct("usb.vtable", HAL.USB.VTable);
+    try forth.defineStruct("usb", HAL.USBHCI);
+    try forth.defineStruct("usb.vtable", HAL.USBHCI.VTable);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);

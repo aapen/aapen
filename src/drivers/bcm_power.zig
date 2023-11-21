@@ -1,6 +1,8 @@
-const bcm_mailbox = @import("bcm_mailbox.zig");
-const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const PropertyTag = bcm_mailbox.PropertyTag;
+const root = @import("root");
+const Mailbox = root.HAL.Mailbox;
+const PropertyTag = root.HAL.Mailbox.PropertyTag;
+
+const Self = @This();
 
 pub const PowerDevice = enum(u32) {
     sdhci = 0,
@@ -54,45 +56,43 @@ const PropertyPower = extern struct {
     }
 };
 
-pub const BroadcomPowerController = struct {
-    mailbox: *const BroadcomMailbox,
+mailbox: *Mailbox,
 
-    pub fn init(mailbox: *BroadcomMailbox) BroadcomPowerController {
-        return .{
-            .mailbox = mailbox,
-        };
+pub fn init(mailbox: *Mailbox) Self {
+    return .{
+        .mailbox = mailbox,
+    };
+}
+
+fn decode(state: u32) PowerResult {
+    var no_device = (state & 0x02) != 0;
+    var actual_state = (state & 0x01) != 0;
+
+    if (no_device) {
+        return .no_such_device;
+    } else if (actual_state) {
+        return .power_on;
+    } else {
+        return .power_off;
     }
+}
 
-    fn decode(state: u32) PowerResult {
-        var no_device = (state & 0x02) != 0;
-        var actual_state = (state & 0x01) != 0;
+pub fn isPowered(self: *Self, device: PowerDevice) !PowerResult {
+    const query = PropertyPower.initQuery(device);
+    try self.mailbox.getTag(&query);
+    return decode(query.state);
+}
 
-        if (no_device) {
-            return .no_such_device;
-        } else if (actual_state) {
-            return .power_on;
-        } else {
-            return .power_off;
-        }
-    }
+fn setState(self: *Self, device: PowerDevice, desired_state: DesiredState) !PowerResult {
+    var control = PropertyPower.initControl(device, desired_state, .wait);
+    try self.mailbox.getTag(&control);
+    return decode(control.state);
+}
 
-    pub fn isPowered(self: *const BroadcomPowerController, device: PowerDevice) !PowerResult {
-        const query = PropertyPower.initQuery(device);
-        try self.mailbox.getTag(&query);
-        return decode(query.state);
-    }
+pub fn powerOn(self: *Self, device: PowerDevice) !PowerResult {
+    return self.setState(device, .on);
+}
 
-    fn setState(self: *const BroadcomPowerController, device: PowerDevice, desired_state: DesiredState) !PowerResult {
-        var control = PropertyPower.initControl(device, desired_state, .wait);
-        try self.mailbox.getTag(&control);
-        return decode(control.state);
-    }
-
-    pub fn powerOn(self: *const BroadcomPowerController, device: PowerDevice) !PowerResult {
-        return self.setState(device, .on);
-    }
-
-    pub fn powerOff(self: *const BroadcomPowerController, device: PowerDevice) PowerResult {
-        return self.setState(device, .off);
-    }
-};
+pub fn powerOff(self: *Self, device: PowerDevice) PowerResult {
+    return self.setState(device, .off);
+}

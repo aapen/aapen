@@ -1,41 +1,39 @@
 const std = @import("std");
 
-const bcm_mailbox = @import("bcm_mailbox.zig");
-const BroadcomMailbox = bcm_mailbox.BroadcomMailbox;
-const PropertyTag = bcm_mailbox.PropertyTag;
-
-const bcm_dma = @import("bcm_dma.zig");
-const BroadcomDMAController = bcm_dma.BroadcomDMAController;
+const root = @import("root");
+const DMA = root.HAL.DMA;
+const Mailbox = root.HAL.Mailbox;
+const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
 const FrameBuffer = @import("../frame_buffer.zig");
 
 const memory = @import("../memory.zig");
 const Region = memory.Region;
 
-pub const BroadcomVideoController = struct {
-    mailbox: *BroadcomMailbox,
-    dma: *BroadcomDMAController,
+const Self = @This();
 
-    pub fn init(mailbox: *BroadcomMailbox, dma: *BroadcomDMAController) BroadcomVideoController {
-        return .{
-            .mailbox = mailbox,
-            .dma = dma,
-        };
-    }
+mailbox: *Mailbox,
+dma: *DMA,
 
-    pub fn allocFrameBuffer(self: *const BroadcomVideoController, fb: *FrameBuffer) !void {
-        var setup = PropertyVideoSetup.init(fb.xres, fb.yres, fb.bpp, &fb.palette);
-        try self.mailbox.getTags(&setup, @sizeOf(PropertyVideoSetup) / 4);
+pub fn init(mailbox: *Mailbox, dma: *DMA) Self {
+    return .{
+        .mailbox = mailbox,
+        .dma = dma,
+    };
+}
 
-        var base_in_arm_address_space = setup.allocate.base & 0x3fffffff;
-        fb.base = @ptrFromInt(base_in_arm_address_space);
-        fb.buffer_size = setup.allocate.buffer_size;
-        fb.pitch = setup.pitch.pitch;
-        fb.range = Region.fromSize("Frame buffer", base_in_arm_address_space, setup.allocate.buffer_size);
-        fb.dma = self.dma;
-        fb.dma_channel = self.dma.reserveChannel() catch null;
-    }
-};
+pub fn allocFrameBuffer(self: *Self, fb: *FrameBuffer) !void {
+    var setup = PropertyVideoSetup.init(fb.xres, fb.yres, fb.bpp, &fb.palette);
+    try self.mailbox.getTags(&setup, @sizeOf(PropertyVideoSetup) / 4);
+
+    var base_in_arm_address_space = setup.allocate.base & 0x3fffffff;
+    fb.base = @ptrFromInt(base_in_arm_address_space);
+    fb.buffer_size = setup.allocate.buffer_size;
+    fb.pitch = setup.pitch.pitch;
+    fb.range = Region.fromSize("Frame buffer", base_in_arm_address_space, setup.allocate.buffer_size);
+    fb.dma = self.dma;
+    fb.dma_channel = self.dma.reserveChannel() catch null;
+}
 
 const PropertySize = extern struct {
     tag: PropertyTag,

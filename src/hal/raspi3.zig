@@ -25,38 +25,35 @@ const bcm_video_controller = @import("../drivers/bcm_video_controller.zig");
 const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
 const simple_bus = @import("../drivers/simple_bus.zig");
 
-pub const BoardInfoController = bcm_board_info.BroadcomBoardInfoController;
-pub const BoardInfo = bcm_board_info.BoardInfo;
+pub const BoardInfoController = bcm_board_info;
 pub const Clock = arm_local_timer.Clock;
-pub const DMA = bcm_dma.BroadcomDMAController;
-pub const DMAChannel = bcm_dma.DMAChannel;
-pub const DMARequest = bcm_dma.BroadcomDMARequest;
-pub const DMAError = bcm_dma.DMAError;
-pub const InterruptController = arm_local_interrupt.LocalInterruptController;
-pub const GPIO = bcm_gpio.BroadcomGpio;
-pub const Mailbox = bcm_mailbox.BroadcomMailbox;
-pub const PowerController = bcm_power.BroadcomPowerController;
-pub const PowerResult = bcm_power.PowerResult;
-pub const SOC = simple_bus.SimpleBus;
+pub const DMA = bcm_dma;
+pub const InterruptController = arm_local_interrupt;
+pub const GPIO = bcm_gpio;
+pub const Mailbox = bcm_mailbox;
+pub const PowerController = bcm_power;
+pub const SOC = simple_bus;
 pub const Timer = arm_local_timer.Timer;
+pub const TimerHandler = arm_local_timer.TimerHandler;
 pub const TimerCallbackFn = arm_local_timer.TimerCallbackFn;
-pub const Uart = pl011.Pl011Uart;
-pub const USB = dwc_otg_usb.UsbController;
-pub const VideoController = bcm_video_controller.BroadcomVideoController;
+pub const Uart = pl011;
+pub const USBHCI = dwc_otg_usb;
+pub const VideoController = bcm_video_controller;
 
 const Self = @This();
 
 board_info_controller: BoardInfoController,
 clock: Clock,
 dma: DMA,
-interrupt_controller: InterruptController,
+interrupt_controller: *InterruptController,
 gpio: GPIO,
 mailbox: Mailbox,
 power_controller: PowerController,
 uart: Uart,
 soc: SOC,
-timer: [4]Timer,
-usb: USB,
+system_timer: *Timer,
+timer: [4]*Timer,
+usb_hci: USBHCI,
 video_controller: VideoController,
 
 pub fn init(allocator: std.mem.Allocator) !*Self {
@@ -70,17 +67,17 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     try self.soc.appendDmaRange(0xc0000000, 0x00, 0x3f000000);
     try self.soc.appendDmaRange(0x7e000000, 0x3f000000, 0x1000000);
 
-    self.interrupt_controller = InterruptController.init(peripheral_base + 0xb200);
-
-    self.board_info_controller = BoardInfoController.init(&self.mailbox);
+    self.interrupt_controller = try InterruptController.init(allocator, peripheral_base + 0xb200);
 
     self.clock = Clock.init(peripheral_base + 0x3000);
 
-    self.dma = DMA.init(allocator, peripheral_base + 0x7000, &self.interrupt_controller, &self.soc.dma_ranges);
+    self.dma = DMA.init(allocator, peripheral_base + 0x7000, self.interrupt_controller, &self.soc.dma_ranges);
 
     self.gpio = GPIO.init(peripheral_base + 0x200000);
 
     self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
+
+    self.board_info_controller = BoardInfoController.init(&self.mailbox);
 
     self.power_controller = PowerController.init(&self.mailbox);
 
@@ -88,11 +85,13 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
-    self.usb = USB.init(allocator, peripheral_base + 0x980000, &self.interrupt_controller, &self.soc.bus_ranges, &self.power_controller, &self.clock);
+    self.usb_hci = USBHCI.init(allocator, peripheral_base + 0x980000, self.interrupt_controller, &self.soc.bus_ranges, &self.power_controller, &self.clock);
 
     for (0..3) |timer_id| {
-        self.timer[timer_id] = Timer.init(timer_id, peripheral_base + 0x3000, &self.clock, &self.interrupt_controller);
+        self.timer[timer_id] = try Timer.init(allocator, timer_id, peripheral_base + 0x3000, &self.clock, self.interrupt_controller);
     }
+
+    self.system_timer = self.timer[1];
 
     self.uart.initializeUart();
 
