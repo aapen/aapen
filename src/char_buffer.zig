@@ -146,7 +146,7 @@ fn renderCursor(self: *Self, x: u64, y: u64, color: u8) void {
 
 /// Unconditionally render the given rectangle of text onto the screen.
 /// Does not update the internal state.
-fn renderRect(self: *Self, rect: Rectangle) void {
+pub fn renderRect(self: *Self, rect: Rectangle) void {
     if (!rect.valid) {
         return;
     }
@@ -156,6 +156,7 @@ fn renderRect(self: *Self, rect: Rectangle) void {
             const i_char = self.charIndexGet(col, row);
             const ch = self.text[i_char];
             const pt = self.location[i_char];
+            //try serial.writer.print("render c {} {} {c}\n", .{ col, row, ch.ch });
             self.fb.drawChar(pt.x, pt.y, ch.ch, ch.fg, ch.bg);
         }
     }
@@ -203,7 +204,7 @@ pub fn bolCursor(self: *Self) void {
     // Find the first non-whitespace char in the current line.
     var first_non_whitespace: usize = 0;
     for (0..self.num_cols) |i| {
-        if (!self.charGet(i, self.current_row).isWhitespace()) {
+        if (!self.richCharGet(i, self.current_row).isWhitespace()) {
             first_non_whitespace = i;
             break;
         }
@@ -217,7 +218,7 @@ pub fn bolCursor(self: *Self) void {
 pub fn eolCursor(self: *Self) void {
     var i = self.num_cols - 1;
     while (i > 0) {
-        if (!self.charGet(i, self.current_row).isWhitespace()) {
+        if (!self.richCharGet(i, self.current_row).isWhitespace()) {
             if (i < self.num_cols - 1) {
                 self.current_col = i + 1;
             } else {
@@ -306,19 +307,30 @@ pub inline fn charIndexGet(self: *Self, col: u64, row: u64) u64 {
     return row * self.num_cols + col;
 }
 
-/// Get a single character.
-pub inline fn charGet(self: *Self, col: u64, row: u64) RichChar {
+/// Get a single rich character.
+pub inline fn richCharGet(self: *Self, col: u64, row: u64) RichChar {
     const i = self.charIndexGet(col, row);
     return self.text[i];
 }
 
+/// Get a single character.
+pub inline fn charGet(self: *Self, col: u64, row: u64) u8 {
+    const i = self.charIndexGet(col, row);
+    return self.text[i].ch;
+}
+
 /// Set the character under the cursor.
 pub inline fn currentCharSet(self: *Self, ch: u8) void {
-    const i = self.charIndexGet(self.current_col, self.current_row);
+    self.charSet(self.current_col, self.current_row, ch);
+}
+
+/// Set a char.
+pub inline fn charSet(self: *Self, col: u64, row: u64, ch: u8) void {
+    const i = self.charIndexGet(col, row);
     self.text[i].ch = ch;
     self.text[i].fg = self.current_fg;
     self.text[i].bg = self.current_bg;
-    self.modified_area.expand(self.current_col, self.current_row);
+    self.modified_area.expand(col, row);
 }
 
 /// Scroll up by one row, ensuring that the internal state is consistent.
@@ -370,7 +382,7 @@ pub fn textDump(self: *Self) void {
     for (0..self.num_rows) |row| {
         serial.putc('|');
         for (0..self.num_cols) |col| {
-            const ch = self.charGet(col, row);
+            const ch = self.richCharGet(col, row);
             serial.putc(ch.ch);
         }
         _ = serial.puts("$\r\n");
@@ -387,7 +399,7 @@ pub fn infoDump(self: *Self) void {
         const i_start = self.charIndexGet(0, row);
         var count: usize = 0;
         for (0..self.num_cols) |col| {
-            const ch = self.charGet(col, row);
+            const ch = self.richCharGet(col, row);
             if (ch.ch != ' ') {
                 count += 1;
             }

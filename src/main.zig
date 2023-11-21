@@ -8,6 +8,7 @@ const FrameBuffer = @import("frame_buffer.zig");
 const CharBuffer = @import("char_buffer.zig");
 const CharBufferConsole = @import("char_buffer_console.zig");
 const MainConsole = @import("main_console.zig");
+const Rectangle = @import("rectangle.zig").Rectangle;
 
 const bcd = @import("bcd.zig");
 const synchronize = @import("synchronize.zig");
@@ -15,6 +16,8 @@ const Spinlock = synchronize.Spinlock;
 
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
+
+const Serial = @import("serial.zig"); //TBD
 
 pub const debug = @import("debug.zig");
 pub const kprint = debug.kprint;
@@ -194,14 +197,15 @@ const heartbeat: HAL.TimerHandler = .{
 };
 
 fn showHeartbeat(_: *const HAL.TimerHandler, _: *const HAL.Timer) u32 {
-    var ch = frame_buffer_console.getChar(0, 0);
-    if (ch.ch >= 65) {
-        ch.ch = ((ch.ch - 64) % 26) + 65;
+    _ = Serial.puts("hearbeat\n");
+    var ch = char_buffer.charGet(0, 0);
+    if (ch >= 65) {
+        ch = ((ch - 64) % 26) + 65;
     } else {
-        ch.ch = 65;
+        ch = 65;
     }
-    frame_buffer_console.setChar(0, 0, ch);
-    ch.draw(frame_buffer_console.fb, 0, 0);
+    char_buffer.charSet(0, 0, ch);
+    char_buffer.renderRect(Rectangle.init(0, 1, 0, 1));
 
     return heartbeat_interval;
 }
