@@ -1,11 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const root = @import("root");
-const debug = root.debug;
-const kprint = root.kprint;
-const Serial = root.HAL.Serial;
-
 const serial = @import("serial.zig");
 
 const FrameBuffer = @import("frame_buffer.zig");
@@ -36,8 +31,8 @@ fb: *FrameBuffer = undefined,
 /// we update .text and then sync it with the screen.
 text: [*]RichChar,
 
-/// The location (in pixels) of each character on the screen,
-/// saves us from having to compute the location each time
+/// The precomputed location (in pixels) of each character on
+/// the screen, saves us from having to compute the location each time
 /// we render a character.
 location: [*]Point,
 
@@ -107,10 +102,9 @@ pub fn sync(self: *Self) void {
     self.syncCursor();
 }
 
-/// Sync the text on the screen up with our internal memory version if needed.
+/// Sync the text on the screen up with the internal memory if they are different.
 pub fn syncText(self: *Self) void {
     if (self.modified_area.valid) {
-        try serial.writer.print("Syncing screen, rect is {any}\n", .{self.modified_area});
         self.renderRect(self.modified_area);
         self.modified_area.valid = false;
     }
@@ -126,6 +120,7 @@ pub fn syncCursor(self: *Self) void {
     }
 }
 
+/// Unconditionally draw the cursor.
 pub fn drawCursor(self: *Self, col: usize, row: usize) void {
     const i = self.charIndexGet(col, row);
     const ch = self.text[i];
@@ -133,6 +128,7 @@ pub fn drawCursor(self: *Self, col: usize, row: usize) void {
     self.renderCursor(pt.x, pt.y, ch.fg);
 }
 
+/// Unconditionally erase the cursor.
 pub fn eraseCursor(self: *Self, col: usize, row: usize) void {
     const i = self.charIndexGet(col, row);
     const ch = self.text[i];
@@ -140,7 +136,7 @@ pub fn eraseCursor(self: *Self, col: usize, row: usize) void {
     self.renderCursor(pt.x, pt.y, ch.bg);
 }
 
-/// Unconditionally render the cursor onto the screen.
+/// Unconditionally render the cursor onto the screen in the given color.
 /// Does not update the internal state.
 fn renderCursor(self: *Self, x: u64, y: u64, color: u8) void {
     for (0..self.fb.font_width_px) |i| {
@@ -156,7 +152,6 @@ fn renderRect(self: *Self, rect: Rectangle) void {
     }
 
     for (rect.top..rect.bottom) |row| {
-        try serial.writer.print("rendering row {}, left: {} right {}\n", .{ row, rect.left, rect.right });
         for (rect.left..rect.right) |col| {
             const i_char = self.charIndexGet(col, row);
             const ch = self.text[i_char];
@@ -178,7 +173,6 @@ pub inline fn cursorMoveTo(self: *Self, col: u64, row: u64) void {
     self.current_row = row;
 }
 
-/// Set the current (in memory) cursor position.
 pub fn leftCursor(self: *Self) void {
     if (self.current_col > 0) {
         self.current_col -= 1;
@@ -203,6 +197,8 @@ pub fn downCursor(self: *Self) void {
     }
 }
 
+/// Move the cursor to the first non-whitespace char on the line, or the
+/// first col if the line is all whitespace.
 pub fn bolCursor(self: *Self) void {
     // Find the first non-whitespace char in the current line.
     var first_non_whitespace: usize = 0;
@@ -216,12 +212,17 @@ pub fn bolCursor(self: *Self) void {
     self.current_col = first_non_whitespace;
 }
 
+/// Move the cursor to just beyond the last non-whitespace char on the current line.
+/// If the last char on the line is not whitespace, put the cursor there.
 pub fn eolCursor(self: *Self) void {
-    // Find the last non-whitespace, non-irnorable char in the line.
     var i = self.num_cols - 1;
     while (i > 0) {
         if (!self.charGet(i, self.current_row).isWhitespace()) {
-            self.current_col = i;
+            if (i < self.num_cols - 1) {
+                self.current_col = i + 1;
+            } else {
+                self.current_col = i;
+            }
             break;
         }
         i -= 1;
@@ -246,7 +247,6 @@ pub fn clearScreen(self: *Self) void {
 pub fn textShiftLeft(self: *Self, col: usize, row: usize) void {
     var start_i = self.charIndexGet(col, row);
     var end_i = self.charIndexGet(self.num_cols - 1, row);
-    try serial.writer.print("start_i {} end {}\n", .{ start_i, end_i });
 
     for (start_i..end_i) |i| {
         self.text[i] = self.text[i + 1];
@@ -256,11 +256,11 @@ pub fn textShiftLeft(self: *Self, col: usize, row: usize) void {
     self.modified_area.expand(self.num_cols - 1, row);
 }
 
-/// Shift the text on a row one character to the right.
+/// Shift the text on a row one character to the right, starting with the given
+/// column.
 pub fn textShiftRight(self: *Self, col: usize, row: usize) void {
     var start_i = self.charIndexGet(self.num_cols - 1, row);
     var end_i = self.charIndexGet(col, row);
-    try serial.writer.print("start_i {} end {}\n", .{ start_i, end_i });
 
     var i: usize = start_i;
     while (i > end_i) {
@@ -271,6 +271,7 @@ pub fn textShiftRight(self: *Self, col: usize, row: usize) void {
     self.modified_area.expand(self.num_cols - 1, row);
 }
 
+/// Initialize a row of text the given character.
 pub fn rowTextSet(self: *Self, row: usize, ch: u8) void {
     var i = self.charIndexGet(0, row);
 
@@ -291,14 +292,8 @@ pub fn rowTextGet(self: *Self, row: usize, result: [*]u8) void {
     self.textGet(self.charIndexGet(0, row), self.num_cols, result);
 }
 
-/// Compute the char index for a given col, row.
-pub inline fn charIndexGet(self: *Self, col: u64, row: u64) u64 {
-    return row * self.num_cols + col;
-}
-
 /// Get some text from an arbitrary area of the screen, based on a char index.
 pub fn textGet(self: *Self, i_start: usize, len: usize, result: [*]u8) void {
-    try serial.writer.print("getText: istart {} len {} result {*}\n", .{ i_start, len, result });
     var i_dst: usize = 0;
     for (i_start..(i_start + len)) |i| {
         result[i_dst] = self.text[i].ch;
@@ -306,11 +301,18 @@ pub fn textGet(self: *Self, i_start: usize, len: usize, result: [*]u8) void {
     }
 }
 
+/// Compute the char index for a given col, row.
+pub inline fn charIndexGet(self: *Self, col: u64, row: u64) u64 {
+    return row * self.num_cols + col;
+}
+
+/// Get a single character.
 pub inline fn charGet(self: *Self, col: u64, row: u64) RichChar {
     const i = self.charIndexGet(col, row);
     return self.text[i];
 }
 
+/// Set the character under the cursor.
 pub inline fn currentCharSet(self: *Self, ch: u8) void {
     const i = self.charIndexGet(self.current_col, self.current_row);
     self.text[i].ch = ch;
@@ -325,7 +327,7 @@ pub fn scrollUp(self: *Self) void {
     // screen so that there are no outstanding changes. This will also
     // invalidate self.modified_area, which is fine since we are going
     // to come out of this function with the screen sync'ed up with
-    // the in memory state.
+    // the in-memory state.
     self.sync();
 
     // Shift the in-memory text up by 1 row.

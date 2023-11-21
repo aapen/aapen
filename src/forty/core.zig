@@ -7,9 +7,9 @@ const Allocator = std.mem.Allocator;
 const BoardInfo = root.HAL.BoardInfo;
 
 const FrameBuffer = @import("../frame_buffer.zig");
-
-const FrameBufferConsole = @import("../fbcons.zig");
-const CharDisplay = @import("../char_display.zig");
+const CharBuffer = @import("../char_buffer.zig");
+const CharBufferConsole = @import("../char_buffer_console.zig");
+const MainConsole = @import("../main_console.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -512,13 +512,13 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
 pub fn wordGetScreenText(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     var n = try forth.popAs(i64);
     const pStr = try forth.popAs([*]u8);
-    const line_no: u64 = if (n < 0) @intCast(forth.console.display.current_row) else @intCast(n);
+    const line_no: u64 = if (n < 0) @intCast(forth.char_buffer.current_row) else @intCast(n);
 
-    const num_cols = forth.console.display.num_cols;
+    //const num_cols = forth.char_buffer.num_cols;
 
-    forth.console.display.rowTextGet(line_no, pStr);
-    const trimmed = std.mem.trimRight(u8, pStr[0..num_cols], " ");
-    pStr[trimmed.len] = 0;
+    forth.char_buffer.rowTextGet(line_no, pStr);
+    //const trimmed = std.mem.trimRight(u8, pStr[0..num_cols], " ");
+    pStr[forth.char_buffer.current_col + 1] = 0;
     try forth.pushAny(pStr);
     return 0;
 }
@@ -550,10 +550,10 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("board.device", BoardInfo.Device);
     try forth.defineStruct("board.memory", BoardInfo.Memory);
 
-    try forth.defineStruct("fbcons", FrameBufferConsole);
-    try forth.defineStruct("display", CharDisplay);
-    try forth.defineStruct("fb", FrameBuffer);
-    try forth.defineStruct("fb.vtable", FrameBuffer.VTable);
+    try forth.defineStruct("MainConsole", MainConsole);
+    try forth.defineStruct("CharBuffer", CharBuffer);
+    try forth.defineStruct("FrameBuffer", FrameBuffer);
+    try forth.defineStruct("FrameBuffer.VTable", FrameBuffer.VTable);
 
     // Hal
 

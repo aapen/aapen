@@ -20,18 +20,20 @@ pub fn log(
 
     const prefix = "[" ++ comptime level.asText() ++ "] (" ++ @tagName(scope) ++ "): ";
 
-    serial.writer.print(prefix ++ format ++ "\n", args) catch {};
-
-    if (root.console_valid) {
-        root.frame_buffer_console.print(prefix ++ format ++ "\n", args) catch {};
+    if (root.main_console_valid) {
+        root.main_console.print(prefix ++ format ++ "\n", args) catch {};
+    } else {
+        serial.writer.print(prefix ++ format ++ "\n", args) catch {};
     }
 }
 
 pub fn kprint(comptime fmt: []const u8, args: anytype) void {
     serial.writer.print(fmt, args) catch {};
 
-    if (root.console_valid) {
-        root.frame_buffer_console.print(fmt, args) catch {};
+    if (root.main_console_valid) {
+        root.main_console.print(fmt, args) catch {};
+    } else {
+        serial.writer.print(fmt, args) catch {};
     }
 }
 

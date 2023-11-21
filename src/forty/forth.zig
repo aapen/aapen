@@ -5,7 +5,8 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const root = @import("root");
 const serial = @import("../serial.zig");
 
-const FrameBufferConsole = @import("../fbcons.zig");
+const MainConsole = @import("../main_console.zig");
+const CharBuffer = @import("../char_buffer.zig");
 const Readline = @import("../readline.zig");
 const buffer = @import("buffer.zig");
 
@@ -42,7 +43,8 @@ pub const Forth = struct {
     allocator: Allocator = undefined,
     arena_allocator: ArenaAllocator = undefined,
     temp_allocator: Allocator = undefined,
-    console: *FrameBufferConsole = undefined,
+    console: *MainConsole = undefined,
+    char_buffer: *CharBuffer = undefined,
     stack: DataStack = undefined,
     rstack: ReturnStack = undefined,
     input: InputStack = undefined,
@@ -67,7 +69,7 @@ pub const Forth = struct {
     line_buffer: *string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
 
-    pub fn init(this: *Forth, a: Allocator, c: *FrameBufferConsole) !void {
+    pub fn init(this: *Forth, a: Allocator, c: *MainConsole, cb: *CharBuffer) !void {
         this.ibase = 10;
         this.obase = 10;
         this.debug = 0;
@@ -77,6 +79,7 @@ pub const Forth = struct {
         this.arena_allocator = ArenaAllocator.init(a);
         this.temp_allocator = this.arena_allocator.allocator();
         this.console = c;
+        this.char_buffer = cb;
         this.stack = DataStack.init(&a);
         this.rstack = ReturnStack.init(&a);
         this.buffer = try a.alloc(u8, MemSize); // TBD make size a parameter.
@@ -110,7 +113,7 @@ pub const Forth = struct {
 
         initBuffer.init(init_f);
         var initBufferReader = try buffer.createReader(a, &initBuffer);
-        var consoleReader = try FrameBufferConsole.createReader(a, c);
+        var consoleReader = try MainConsole.createReader(a, c);
 
         this.input = InputStack.init(&a);
         try this.pushSource(consoleReader);
@@ -455,7 +458,6 @@ pub const Forth = struct {
 
     // Evaluate a command, a string containing zero or more words.
     pub fn evalCommand(this: *Forth, cmd: []const u8) !void {
-        try serial.writer.print("evalCommand: [{s}]\n", .{cmd});
         const savedWords = this.words;
         defer {
             this.words = savedWords;
@@ -602,12 +604,10 @@ pub const Forth = struct {
 
     pub fn print(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
         try this.console.print(fmt, args);
-        try serial.writer.print(fmt, args);
     }
 
     pub fn emit(this: *Forth, ch: u8) !void {
-        this.console.emit(ch);
-        try serial.writer.writeByte(ch);
+        this.console.putc(ch);
     }
 
     pub const Writer = std.io.Writer(*Forth, error{}, write);
@@ -649,7 +649,6 @@ pub const Forth = struct {
                 var word = this.words.next();
                 while (word != null) : (word = this.words.next()) {
                     if (word) |w| {
-                        try serial.writer.print("word: {s}\n", .{w});
                         this.evalToken(w) catch |err| {
                             try this.print("error: {s} {any}\n", .{ w, err });
                             this.reset() catch {

@@ -71,31 +71,31 @@ finish
 (Drawing)
 : draw-char (bg fg y x c -- : Draw character at position)
   fb
-  [[ fb fb.vtable fb.vtable.char +]] @
+  [[ fb FrameBuffer.vtable FrameBuffer.VTable.char +]] @
   invoke-6
 ;
 
 : text (bg fg y x s -- : Draw string at position)
   fb
-  [[ fb fb.vtable fb.vtable.text +]] @
+  [[ fb FrameBuffer.vtable FrameBuffer.VTable.text +]] @
   invoke-6
 ;
 
 : line  (color y2 x2 y1 x1 -- : Draw a colored line)
   fb
-  [[ fb fb.vtable fb.vtable.line +]] @
+  [[ fb FrameBuffer.vtable FrameBuffer.VTable.line +]] @
   invoke-6
 ;
 
 : fill  (color bottom right top left -- : Fill a rectangle with color)
   fb
-  [[ fb fb.vtable fb.vtable.fill +]] @
+  [[ fb FrameBuffer.vtable FrameBuffer.VTable.fill +]] @
   invoke-6
 ;
 
 : blit  (dst-y dst-x src-h src-w src-y src-x -- : Copy a rectangle)
   fb
-  [[ fb fb.vtable fb.vtable.blit +]] @
+  [[ fb FrameBuffer.vtable FrameBuffer.VTable.blit +]] @
   invoke-7
 ;
 
@@ -190,10 +190,6 @@ finish
 
 (Colors)
 
-: set-bg (fg bg -- : Set the text bg color)
-  [[ fbcons fbcons.display display.current_bg +]] !b
-;
-
  0 :black       let
  1 :white       let
  2 :red         let
@@ -235,11 +231,11 @@ finish
 
 (Screen dimensions)
 
-[[ fbcons fbcons.display display.num_cols  +]] @  :scr-cols let
-[[ fbcons fbcons.display display.num_rows  +]] @  :scr-rows let
+[[ char-buffer CharBuffer.num_cols  +]] @  :scr-cols let
+[[ char-buffer CharBuffer.num_rows  +]] @  :scr-rows let
 
-[[ fb fb.xres +]] @w :scr-xres let
-[[ fb fb.yres +]] @w :scr-yres let
+[[ fb FrameBuffer.xres +]] @w :scr-xres let
+[[ fb FrameBuffer.yres +]] @w :scr-yres let
 
 (Key Dispatch Table: dtab)
 
@@ -310,8 +306,6 @@ finish
   endif
   emit
 ;
-
-(: insert-handler (ch --) emit ;)
 
 : echo-handler (ch -- ) emit ;
 
@@ -508,10 +502,6 @@ finish
 
 (Retro startup!)
 
-hello
-hello
-hello
-0xf0 emit
 c64-colors
 cls
 
@@ -580,4 +570,4 @@ mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 cr cr
 
 "Forty REPL" s. cr cr
-(repl)
+repl

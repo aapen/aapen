@@ -6,7 +6,9 @@ const qemu = @import("qemu.zig");
 
 const Heap = @import("heap.zig");
 const FrameBuffer = @import("frame_buffer.zig");
-const FrameBufferConsole = @import("fbcons.zig");
+const CharBuffer = @import("char_buffer.zig");
+const CharBufferConsole = @import("char_buffer_console.zig");
+const MainConsole = @import("main_console.zig");
 
 const bcd = @import("bcd.zig");
 const synchronize = @import("synchronize.zig");
@@ -39,7 +41,9 @@ var os: Freestanding = undefined;
 pub var heap: *Heap = undefined;
 pub var hal: *HAL = undefined;
 pub var fb: *FrameBuffer = undefined;
-pub var frame_buffer_console: *FrameBufferConsole = undefined;
+pub var char_buffer_console: *CharBufferConsole = undefined;
+pub var char_buffer: *CharBuffer = undefined;
+pub var main_console: *MainConsole = undefined;
 
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
@@ -51,7 +55,8 @@ pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
 
 pub var message_ring_valid = false;
 pub var uart_valid = false;
-pub var console_valid = false;
+pub var char_buffer_console_valid = false;
+pub var main_console_valid = false;
 
 fn kernelInit() void {
     // State: one core, no interrupts, no MMU, no heap Allocator, no
@@ -104,12 +109,27 @@ fn kernelInit() void {
         debug.kernelError("frame buffer init error", err);
     }
 
-    if (FrameBufferConsole.init(heap.allocator, fb)) |cons| {
+    if (CharBuffer.init(heap.allocator, fb)) |cb| {
+        debug.kernelMessage("char buffer init");
+        char_buffer = cb;
+    } else |err| {
+        debug.kernelError("char buffer init error", err);
+    }
+
+    if (CharBufferConsole.init(heap.allocator, char_buffer)) |cbc| {
         debug.kernelMessage("fbcons init");
-        frame_buffer_console = cons;
-        console_valid = true;
+        char_buffer_console = cbc;
+        char_buffer_console_valid = true;
     } else |err| {
         debug.kernelError("fbcons init error", err);
+    }
+
+    if (MainConsole.init(heap.allocator, char_buffer_console)) |c| {
+        debug.kernelMessage("console init");
+        main_console = c;
+        main_console_valid = true;
+    } else |err| {
+        debug.kernelError("console init error", err);
     }
 
     // State: one core, interrupts, MMU, heap Allocator, display,
@@ -126,15 +146,16 @@ fn kernelInit() void {
         debug.kernelError("USB host init error", err);
     }
 
-    if (interpreter.init(heap.allocator, frame_buffer_console)) {
+    if (interpreter.init(heap.allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
     } else |err| {
         debug.kernelError("Forth init error", err);
     }
 
     // TODO should this move to forty/core.zig?
-    supplyAddress("fbcons", @intFromPtr(frame_buffer_console));
     supplyAddress("fb", @intFromPtr(fb));
+    supplyAddress("char-buffer", @intFromPtr(char_buffer));
+    supplyAddress("console", @intFromPtr(main_console));
     supplyAddress("hal", @intFromPtr(hal));
     supplyAddress("board", @intFromPtr(&diagnostics.board));
     supplyAddress("mring", @intFromPtr(&debug.mring_storage));
