@@ -370,10 +370,10 @@ finish
 
 : line-demo-handler (ch -- : Draw some pretty lines)
   drop
-  0 250 for-range
-    20 300              (x1 y1)
-    1000 ->stack 3 *    (x2 y2)
+  0 256 for-range
     ->stack 16 %        (c)
+    ->stack 3 * 1023    (y2 x2)
+    384 0               (y1 x1)
     line
   repeat
 ;

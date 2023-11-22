@@ -109,13 +109,13 @@ fn textInteropShim(fb: u64, str: u64, x: u64, y: u64, fg: u64, bg: u64) void {
 fn lineInteropShim(fb: u64, x0: u64, y0: u64, x1: u64, y1: u64, color: u64) void {
     var self: *Self = @ptrFromInt(fb);
     var c: u8 = @truncate(color);
-    self.line(x0, y0, x1, y1, c) catch {};
+    self.line(x0, y0, x1, y1, c);
 }
 
 fn fillInteropShim(fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void {
     var self: *Self = @ptrFromInt(fb);
     var c: u8 = @truncate(color);
-    self.fill(left, top, right, bottom, c) catch {};
+    self.fill(left, top, right, bottom, c);
 }
 
 fn blitInteropShim(fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void {
@@ -147,11 +147,11 @@ pub fn drawPixel(self: *Self, x: usize, y: usize, color: u8) void {
 }
 
 pub fn clear(self: *Self, color: u8) void {
-    self.fill(0, 0, self.xres, self.yres, color) catch {};
+    self.fill(0, 0, self.xres, self.yres, color);
 }
 
 pub fn clearRegion(self: *Self, x: usize, y: usize, w: usize, h: usize, color: u8) void {
-    self.fill(x, y, x + w, y + h, color) catch {};
+    self.fill(x, y, x + w, y + h, color);
 }
 
 // Font is fixed height of 16 bits, fixed width of 8 bits
@@ -260,53 +260,94 @@ inline fn abs(comptime T: type, val: T) T {
     return if (val > 0) val else -val;
 }
 
-pub fn fill(fb: *Self, left: usize, top: usize, right: usize, bottom: usize, color: u8) !void {
-    var c: @Vector(16, u8) = @splat(color);
-
+pub fn fill(fb: *Self, left: usize, top: usize, right: usize, bottom: usize, color: u8) void {
     var l = clamp(usize, 0, left, fb.xres);
     var r = clamp(usize, 0, right, fb.xres);
     var t = clamp(usize, 0, top, fb.yres);
     var b = clamp(usize, 0, bottom, fb.yres);
 
     if (fb.dma_channel) |ch| {
-        const fb_base: usize = @intFromPtr(fb.base);
-        const fb_pitch = fb.pitch;
+        if (fb.dma.createRequest()) |req| {
+            // DMA fill
+            defer fb.dma.destroyRequest(req);
+            fb.fillDMA(ch, req, l, t, r, b, color);
+            return;
+        } else |_| {
+            // will use fallback
+        }
+    }
 
-        const src = @intFromPtr(&c);
-        const src_stride = 0;
+    // fallback to CPU driven fill
+    fb.fillPixels(l, t, r, b, color);
+}
 
-        const dest = fb_base + (t * fb_pitch) + l;
-        const dest_stride = fb.xres - r + l;
+fn fillDMA(fb: *Self, ch: DMAChannel, req: *DMARequest, l: usize, t: usize, r: usize, b: usize, color: u8) void {
+    var cvec: @Vector(16, u8) = @splat(color);
 
-        const xfer_y_len = b - t;
-        const xfer_x_len = r - l;
+    const fb_base: usize = @intFromPtr(fb.base);
+    const fb_pitch = fb.pitch;
 
-        const xfer_count = if (dest_stride > 0)
-            ((xfer_y_len << 16) + xfer_x_len)
-        else
-            ((b - t) * fb.xres);
+    const src = @intFromPtr(&cvec);
+    const src_stride = 0;
 
-        var req = try fb.dma.createRequest();
-        defer fb.dma.destroyRequest(req);
+    const dest = fb_base + (t * fb_pitch) + l;
+    const dest_stride = fb.xres - r + l;
 
-        req.* = .{
-            .source = @truncate(src),
-            .source_increment = false,
-            .destination = @truncate(dest),
-            .destination_increment = true,
-            .length = xfer_count,
-            .stride = (dest_stride << 16) | src_stride,
-        };
-        fb.dma.initiate(ch, req) catch {};
-        _ = fb.dma.awaitChannel(ch);
+    const xfer_y_len = b - t;
+    const xfer_x_len = r - l;
+
+    const xfer_count = if (dest_stride > 0)
+        ((xfer_y_len << 16) + xfer_x_len)
+    else
+        ((b - t) * fb.xres);
+
+    req.* = .{
+        .source = @truncate(src),
+        .source_increment = false,
+        .destination = @truncate(dest),
+        .destination_increment = true,
+        .length = xfer_count,
+        .stride = (dest_stride << 16) | src_stride,
+    };
+    fb.dma.initiate(ch, req) catch {};
+    _ = fb.dma.awaitChannel(ch);
+}
+
+fn fillPixels(fb: *Self, l: usize, t: usize, r: usize, b: usize, color: u8) void {
+    var cvec: @Vector(16, u8) = @splat(color);
+
+    var line_stride = fb.pitch;
+    var gap = line_stride - (r - l);
+    var fbidx = l + (t * line_stride);
+    var row_vecs = (r - l) / 16;
+    var row_leftover = (r - l) % 16;
+    var rows = (b - t);
+
+    for (0..rows) |_| {
+        for (0..row_vecs) |_| {
+            (fb.base + fbidx)[0..16].* = cvec;
+            fbidx += 16;
+        }
+        for (0..row_leftover) |_| {
+            (fb.base + fbidx)[0] = color;
+        }
+        fbidx += gap;
     }
 }
 
-pub fn line(fb: *Self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) !void {
-    var x_start = try boundsCheck(usize, 0, x0, fb.xres);
-    var y_start = try boundsCheck(usize, 0, y0, fb.yres);
-    var x_end = try boundsCheck(usize, 0, x1, fb.xres);
-    var y_end = try boundsCheck(usize, 0, y1, fb.yres);
+pub fn line(fb: *Self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) void {
+    var x_start = boundsCheck(usize, 0, x0, fb.xres) catch {
+        return;
+    };
+    var y_start = boundsCheck(usize, 0, y0, fb.yres) catch {
+        return;
+    };
+    var x_end = boundsCheck(usize, 0, x1, fb.xres) catch {
+        return;
+    };
+    var y_end = boundsCheck(usize, 0, y1, fb.yres) catch {
+        return;
+    };
 
     if (x_start == x_end) {
         // special case for vertical lines (infinite slope!)
