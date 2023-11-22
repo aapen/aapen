@@ -179,39 +179,38 @@ https://www.youtube.com/watch?v=NNol7fRGo2E
 Kicad files: https://github.com/chickadee-tech/pi-developer
 Sold direct: https://oshpark.com/shared_projects/fBq76nP9
 
-BOM not included... needs JTAG header, GPIO header, 4 LEDs, some resistors (330 Ohm? 4.7K? who knows.)
+This kit allows one Raspberry Pi to act as a JTAG host for debugging
+_another_ Raspberry Pi.
 ** MMU
 Video on address translation & the interaction of granule size with L0-L3 tables: https://www.youtube.com/watch?v=yTKpniRaEoI
 ** GPU interface
 Communication from CPU to GPU is via a "mailbox" interface.
 
-Many of the mailbox commands ("tags") require addresses. These must be translated to the GPU's view of address space, as described in section 1.2 of "Broadcom BCM2837 Peripheral Reference" (titled "Address Map") and section 1.2 of "Broadcom BCM2711 ARM Peripherals" (also titled "Address Map").
+Many of the mailbox commands ("tags") require addresses. These must be
+translated to the GPU's view of address space, as described in section
+1.2 of "Broadcom BCM2837 Peripheral Reference" (titled "Address Map")
+and section 1.2 of "Broadcom BCM2711 ARM Peripherals" (also titled
+"Address Map").
 *** References
 - [[https://github.com/hackerspace/rpi-linux/blob/lr-raspberry-pi-new-mailbox/drivers/mailbox/bcm2835-mailbox.c][bcm2835-ipc.c]] by Lubomir Rintel and Broadcom
 - [[https://github.com/raspberrypi/firmware/wiki/Mailbox-property-interface][Raspberry Pi Firmware wiki]]
 ** USB interface
-Raspberry Pi 3 uses a DesignWare USB 2.0 OTG controller. It is not publicly documented and does not conform to UHCI, EHCI, or xHCI.
+*** Raspberry Pi 3
+Raspberry Pi 3 uses a DesignWare USB 2.0 OTG controller. It is not
+publicly documented and does not conform to UHCI, EHCI, or xHCI.
 
 Some resources:
 - [[https://ultibo.org/wiki/Unit_DWCOTG][Reference]] from the [[https://ultibo.org/wiki/Main_Page][Ultibo]] project.
 - [[https://github.com/rsta2/circle/tree/master/lib/usb][Implementation]] from the [[https://circle-rpi.readthedocs.io/en/45.3/][Circle]] project.
 
-Getting USB up and running is going to be a big job.
-*** TODO Define structure of xHCI registers
-*** TODO Initialize the xHCI controller itself
-*** TODO Create kernel structures to represent the devices (Hardware abstraction layer)
-*** TODO Set up doorbell interface from kernel to xHCI
-*** TODO Set up interrupt handler from xHCI to kernel
-*** TODO Enumerate USB devices
-*** TODO Initialize / setup / assign slot for one USB device
-*** TODO Define a keyboard device class interface
-*** TODO Expose keyboard input to kernel as high-level key events
-*** Reference
+*** Raspberry Pi 4
+Pi 4 and 400 use an XHCI controller connected to the PCI bus.
+
 https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/extensible-host-controler-interface-usb-xhci.pdf
 
 ** Allocators
 - https://nega.tv/writing-your-own-vulkan-memory-allocator/
-
+- Simple [[https://github.com/yannik520/YakOS/blob/master/mm/slob.c][SLOB allocator]]
 ** Interrupt controllers
 *** RPi 3
 This has the integrated "local" interrupt controller. It maps pending
@@ -454,33 +453,6 @@ No idea why this is the address: 0x2eff7a00
 - ULPI :: UTMI+ Low Pin Interface. PHY specification for some device connections. 8 data wires plus 6 control wires. Not usually exposed via a connector; normally found between chips on a board.
 - UTMI+ :: USB 2.0 Tranceiver Macrocell Interface. PHY specification.
 - xHCI :: eXtensible Host Controller Interface. Specification for how a host computer talks to its USB controller (register interface and protocol). Applies to USB 3.0 and later. [[https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/extensible-host-controler-interface-usb-xhci.pdf][Specification]]
-** QEMU vs HW
-*** Core registers at boot
-**** On RPi3 HW
-#+begin_src
-otg_control:       001c0000
-ahb_config:        0000000e
-usb_config:        20402700
-reset:             80000000
-interrupt_status:  54000029
-interrupt_mask:    00000000
-rx_fifo_size:      00001000
-nper_tx_fifo_size: 01001000
-nper_tx_status:    00080100
-#+end_src
-
-**** On QEMU
-#+begin_src
-otg_control:       000d0000    *different*
-ahb_config:        00000000    *different*
-usb_config:        00001400    *different*
-reset:             80000000
-interrupt_status:  14000021    *different*
-interrupt_mask:    00000000
-rx_fifo_size:      00000400    *different*
-nper_tx_fifo_size: 04000000    *different*
-nper_tx_status:    00040400    *different*
-#+end_src
 ** DWC OTG USB init sequence
 1. check vendor ID register (confirms the USB device exists)
 2. power on (via mailbox message to power controller)
