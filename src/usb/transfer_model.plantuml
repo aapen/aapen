@@ -1,0 +1,57 @@
+@startuml
+class Transfer {
+        type
+        device_address
+        endpoint
+}
+
+class Transaction {
+        device_address
+        endpoint
+}
+
+enum Stage {
+        Setup
+        Data
+        Status
+}
+
+class Packet {
+}
+
+enum PID {
+        OUT
+        IN
+        SOF
+        SETUP
+        DATA0
+        DATA1
+        DATA2
+        MDATA
+        ACK
+        NAK
+        NAK
+        STALL
+        NYET
+        PRE
+        ERR
+        Ping
+        "Split"
+}
+
+Transfer "1" *-r-> "1..*" Transaction
+Transaction -u-> Stage : transaction_stage
+Transaction "1" *-r-> "1..*" Packet
+Packet -u-> PID : packet_id
+
+class ControlTransfer
+class IsochronousTransfer
+class InterruptTransfer
+class BulkTransfer
+
+ControlTransfer     -u-|> Transfer
+IsochronousTransfer -u-|> Transfer
+InterruptTransfer   -u-|> Transfer
+BulkTransfer        -u-|> Transfer
+
+@enduml

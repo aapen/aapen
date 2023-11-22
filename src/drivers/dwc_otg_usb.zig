@@ -4,6 +4,9 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const kprint = root.kprint;
 const InterruptController = root.HAL.InterruptController;
+const IrqId = InterruptController.IrqId;
+const IrqHandlerFn = InterruptController.IrqHandlerFn;
+const IrqHandler = InterruptController.IrqHandler;
 
 const local_timer = @import("arm_local_timer.zig");
 const Clock = local_timer.Clock;
@@ -24,18 +27,12 @@ const Spinlock = synchronize.Spinlock;
 const ChannelSet = @import("../channel_set.zig");
 
 const usb = @import("../usb.zig");
-const Address = usb.Address;
-const ConfigurationDescriptor = usb.ConfigurationDescriptor;
-const DEFAULT_ADDRESS = usb.DEFAULT_ADDRESS;
-const DEFAULT_MAX_PACKET_SIZE = usb.DEFAULT_MAX_PACKET_SIZE;
-const DeviceDescriptor = usb.DeviceDescriptor;
-const EndpointType = usb.EndpointType;
-const RequestType = usb.RequestType;
-const UsbSpeed = usb.UsbSpeed;
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 const dwc_max_channels = 16;
+const dwc_wait_blocks = dwc_max_channels;
+const ChannelId = u5;
 
 const Self = @This();
 
@@ -47,6 +44,9 @@ pub const Error = error{
     IncorrectDevice,
     PowerFailure,
     ConfigurationError,
+    OvercurrentDetected,
+    InvalidResponse,
+    NoChannelAvailable,
 };
 
 const VendorId = packed struct {
@@ -62,16 +62,14 @@ const VendorId = packed struct {
 const ChannelCharacteristics = packed struct {
     max_packet_size: u11, // 0..10
     endpoint_number: u4, // 11..14
-    endpoint_direction: u1, // 15
+    endpoint_direction: enum(u1) {
+        out = 0,
+        in = 1,
+    }, // 15
     _reserved_16: u1, // 16
     low_speed_device: u1, // 17
-    endpoint_type: enum(u2) {
-        control = 0,
-        isochronous = 1,
-        bulk = 2,
-        interrupt = 3,
-    }, // 18..19
-    packets_per_frame: u2, // 20..21
+    endpoint_type: EndpointType, // 18..19
+    multi_count: u2, // 20..21
     device_address: u7, // 22..28
     odd_frame: u1, // 29
     disable: u1, // 30
@@ -88,39 +86,70 @@ const ChannelSplitControl = packed struct {
 };
 
 const ChannelInterrupt = packed struct {
-    transfer_completed: u1, // 0
-    halted: u1, // 1
-    ahb_error: u1, // 2
-    stall_response_received: u1, // 3
-    nak_response_received: u1, // 4
-    ack_response_received: u1, // 5
-    nyet_response_received: u1, // 6
-    transaction_error: u1, // 7
-    babble_error: u1, // 8
-    frame_overrun: u1, // 9
-    data_toggle_error: u1, // 10
-    buffer_not_available: u1, // 11
-    excess_transaction_error: u1, // 12
-    frame_list_rollover: u1, // 13
-    _reserved_18_31: u18, // 14..31
+    transfer_completed: u1 = 0, // 0
+    halted: u1 = 0, // 1
+    ahb_error: u1 = 0, // 2
+    stall_response_received: u1 = 0, // 3
+    nak_response_received: u1 = 0, // 4
+    ack_response_received: u1 = 0, // 5
+    nyet_response_received: u1 = 0, // 6
+    transaction_error: u1 = 0, // 7
+    babble_error: u1 = 0, // 8
+    frame_overrun: u1 = 0, // 9
+    data_toggle_error: u1 = 0, // 10
+    buffer_not_available: u1 = 0, // 11
+    excess_transaction_error: u1 = 0, // 12
+    frame_list_rollover: u1 = 0, // 13
+    _reserved_18_31: u18 = 0, // 14..31
+
+    fn isStatusNakNyet(self: *ChannelInterrupt) bool {
+        const st: u32 = @bitCast(self.*);
+        const nak_mask: u32 = @bitCast(ChannelInterrupt{
+            .nak_response_received = 1,
+            .nyet_response_received = 1,
+        });
+        return (st & nak_mask) != 0;
+    }
+
+    fn isStatusError(self: *ChannelInterrupt) bool {
+        const st: u32 = @bitCast(self.*);
+        const error_mask: u32 = @bitCast(ChannelInterrupt{
+            .ahb_error = 1,
+            .stall_response_received = 1,
+            .transaction_error = 1,
+            .babble_error = 1,
+            .frame_overrun = 1,
+            .data_toggle_error = 1,
+        });
+
+        return (st & error_mask) != 0;
+    }
 };
 
-const ChannelTransferSize = packed struct {
+const DwcTransferSizePid = enum(u2) {
+    // These are defined by the DWC2 chip itself
+    Data0 = 0,
+    Data1 = 2,
+    Data2 = 1,
+    Setup = 3,
+};
+
+const TransferSize = packed struct {
     transfer_size_bytes: u19, // 0..18
     transfer_size_packets: u10, // 19..28
-    packet_id: u2, // 29..30
+    pid: DwcTransferSizePid, // 29..30
     do_ping: u1, // 31
 };
 
-const HostChannelRegisters = extern struct {
-    host_channel_character: ChannelCharacteristics, // 0x00
-    host_channel_split_control: ChannelSplitControl, // 0x04
-    host_channel_int: ChannelInterrupt, // 0x08
-    host_channel_int_mask: ChannelInterrupt, // 0x0c
-    host_channel_txfer_size: ChannelTransferSize, // 0x10
-    host_channel_dma_addr: u32 = 0, // 0x14
+const ChannelRegisters = extern struct {
+    channel_character: ChannelCharacteristics, // 0x00
+    channel_split_control: ChannelSplitControl, // 0x04
+    channel_int: ChannelInterrupt, // 0x08
+    channel_int_mask: ChannelInterrupt, // 0x0c
+    channel_transfer_size: TransferSize, // 0x10
+    channel_dma_addr: u32 = 0, // 0x14
     _reserved: u32 = 0, // 0x18
-    host_channel_dma_buf: u32 = 0, // 0x1c
+    channel_dma_buf: u32 = 0, // 0x1c
 };
 
 // ----------------------------------------------------------------------
@@ -149,12 +178,22 @@ const HostConfig = packed struct {
     per_sched_enable: u1, //26
     _unknown_2: u4, // 27..30
     mode_ch_tim_en: u1, // 31
+};
 
+const HostFrameInterval = packed struct {
+    interval: u16,
+    _reserved: u16,
 };
 
 const HostFrames = packed struct {
     number: u16,
     remaining: u16,
+};
+
+const HostPeriodicFifo = packed struct {
+    fifo_space_available: u16,
+    request_queue_space_available: u8,
+    request_queue_top: u8,
 };
 
 const HostPort = packed struct {
@@ -182,10 +221,10 @@ const HostPort = packed struct {
 
 const HostRegisters = extern struct {
     config: HostConfig, // 0x00
-    frame_interval: u32 = 0, // 0x04
+    frame_interval: HostFrameInterval, // 0x04
     frame_num: HostFrames, // 0x08
     _reserved_0x0c: u32 = 0, // 0x0c
-    periodic_tx_fifo_status: u32 = 0, // 0x10
+    periodic_tx_fifo_status: HostPeriodicFifo, // 0x10
     all_channel_interrupts: u32 = 0, // 0x14
     all_channel_interrupts_mask: u32 = 0, // 0x18
     frame_list_base_addr: u32 = 0, // 0x1c
@@ -245,50 +284,110 @@ const UsbConfig = packed struct {
 };
 
 const Reset = packed struct {
-    soft_reset: u1, // 0
-    _unknown_0: u3, // 1..3
-    rx_fifo_flush: u1, // 4
-    tx_fifo_flush: u1, // 5
-    tx_fifo_num: u5, // 6..11
-    _unknown_1: u20, // 12..30
-    ahb_idle: u1, // 31
+    soft_reset: u1, // 0 (rs)
+    hclk_soft_reset: u1, // 1 (rs)
+    frame_counter_reset: u1, // 2 (rs)
+    _reserved_0: u1, // 3
+    rx_fifo_flush: u1, // 4 (rs)
+    tx_fifo_flush: u1, // 5 (rs)
+    tx_fifo_flush_num: u5, // 6..10 (rw)
+    _unknown_1: u19, // 11..29
+    dma_request_in_progress: u1, // 30 (ro)
+    ahb_idle: u1, // 31 (ro)
 };
 
 const InterruptStatus = packed struct {
-    _unknown_0: u3, // 0..2
-    sof_intr: u1, // 3
-    _unknown_1: u20, // 4..23
-    port_intr: u1, // 24
-    host_channel_intr: u1, // 25
-    _unknown_2: u3, // 26..28
-    disconnect: u1, // 29
-    _unknown_3: u2, // 30..31
-};
-
-const InterruptMask = packed struct {
-    _unknown_0: u1, // 0
+    current_mode: u1, // 0
     mode_mismatch: u1, // 1
-    _unknown_1: u1, // 2
+    otg_intr: u1, // 2
     sof_intr: u1, // 3
-    rx_sts_q_lvl: u1, // 4
-    _unknown_2: u6, // 5..10
+    rx_fifo_level: u1, // 4
+    non_periodic_tx_fifo_empty: u1, // 5
+    global_in_non_periodic_effective: u1, // 6
+    global_out_nak_effective: u1, // 7
+    _reserved_0: u2, // 8..9
+    early_suspend: u1, // 10
     usb_suspend: u1, // 11
-    _unknown_3: u12, // 12..23
+    usb_reset: u1, // 12
+    enumeration_done: u1, // 13
+    isochronous_out_packet_dropped: u1, // 14
+    end_of_periodic_frame: u1, // 15
+    _reserved_1: u2, // 16..17
+    in_endpoint: u1, // 18
+    out_endpoint: u1, // 19
+    incomplete_isochronous_transfer: u1, // 20
+    incomplete_periodic_transfer: u1, // 21
+    data_fetch_suspended: u1, // 22
+    _reserved_2: u1, // 23
     port_intr: u1, // 24
     host_channel_intr: u1, // 25
-    _unknown_4: u2, // 26..27
-    con_id_sts_chng: u1, // 28
+    periodic_tx_fifo_empty: u1, // 26
+    _reserved_3: u1, // 27
+    connector_id_status: u1, // 28
     disconnect: u1, // 29
-    sess_req_intr: u1, // 30
-    wakeup_intr: u1, // 31
-
+    session_request: u1, // 30
+    remote_wakeup: u1, // 31
 };
+
+const InterruptMask = InterruptStatus;
 
 const RxStatus = packed struct {
     channel_number: u4, // 0..3
-    byte_count: u12, // 4..15
-    packet_status: u4, // 17..20
-    _unknown_0: u12, // 21..31
+    byte_count: u11, // 4..14
+    received_pid: enum(u2) {
+        data0 = 0b00,
+        data2 = 0b01,
+        data1 = 0b10,
+        mdata = 0b11,
+    }, // 15..16
+    packet_status: enum(u4) {
+        in = 0b0010,
+        transfer_complete = 0b0011,
+        data_toggle_error = 0b0101,
+        channel_halted = 0b0111,
+    }, // 17..20
+    _unknown_0: u11, // 21..31
+};
+
+const NonPeriodicTxFifoSize = packed struct {
+    transmit_ram_start: u16,
+    fifo_depth: u16,
+};
+
+const NonPeriodicTxFifoStatus = packed struct {
+    tx_space_available: u16,
+    rx_space_available: u8,
+    tx_queue_top: u7,
+    _reserved: u1,
+};
+
+const GeneralCoreConfig = packed struct {
+    _reserved_0: u16, // 0..15
+    power_down: enum(u1) {
+        active = 0,
+        deactivated = 1,
+    }, // 16
+    i2c_enable: enum(u1) {
+        disabled = 0,
+        enabled = 1,
+    }, // 17
+    vbus_sense_a: enum(u1) {
+        disabled = 0,
+        enabled = 1,
+    }, // 18
+    vbus_sense_b: enum(u1) {
+        disabled = 0,
+        enabled = 1,
+    }, // 19
+    sof_output_enable: enum(u1) {
+        not_available = 0,
+        available = 1,
+    }, // 20
+    vbus_sense_disable: enum(u1) {
+        sense_available = 0,
+        sense_unavailable = 1,
+    }, // 21
+    _reserved_1: u10, // 22..31
 };
 
 const HwConfig2 = packed struct {
@@ -345,23 +444,25 @@ const HwConfig4 = packed struct {
     _unknown_1: u2, // 30..31
 };
 
+const PeriodicTxFifoSize = NonPeriodicTxFifoSize;
+
 const CoreRegisters = extern struct {
     otg_control: OtgControl, // 0x00
     otg_interrupt: u32 = 0, // 0x04
     ahb_config: AhbConfig, // 0x08
     usb_config: UsbConfig, // 0x0c
     reset: Reset, // 0x10
-    interrupt_status: InterruptStatus, // 0x14
-    interrupt_mask: InterruptMask, // 0x18
+    core_interrupt_status: InterruptStatus, // 0x14
+    core_interrupt_mask: InterruptMask, // 0x18
     rx_status_read: RxStatus, // 0x1c
-    rs_status_pop: RxStatus, // 0x20
+    rx_status_pop: RxStatus, // 0x20
     rx_fifo_size: u32 = 0, // 0x24
-    nonperiodic_tx_fifo_size: u32 = 0, // 0x28
-    nonperiodic_tx_status: u32 = 0, // 0x2c
+    nonperiodic_tx_fifo_size: NonPeriodicTxFifoSize, // 0x28
+    nonperiodic_tx_status: NonPeriodicTxFifoStatus, // 0x2c
     i2c_control: u32 = 0, // 0x30
     phy_vendor_control: u32 = 0, // 0x34
-    gpio: u32 = 0, // 0x38
-    user_id: u32 = 0, // 0x3c
+    general_config: GeneralCoreConfig, // 0x38
+    application_id: u32 = 0, // 0x3c
     vendor_id: VendorId, // 0x40
     hardware_config_1: u32 = 0, // 0x44
     hardware_config_2: HwConfig2, // 0x48
@@ -372,13 +473,14 @@ const CoreRegisters = extern struct {
     global_fifo_config: u32 = 0, // 0x5c
     adp_control: u32 = 0, // 0x60
     _pad_0x64_0x9c: [39]u32, // 0x64 .. 0x9c
-    host_periodic_tx_fifo_size: u32 = 0, // 0x100
-    device_periodic_tx_fifo: [191]u32, // 0x104 .. 0x3fc
-    host_registers: HostRegisters, // 0x400..0x440
-    _pad_0x444_0x4fc: [47]u32, // 0x444..0x4fc
-    host_channel_registers: [dwc_max_channels]HostChannelRegisters, // 0x500 .. 0x6ff
-    _pad_0x700_0xdfc: [448]u32, // 0x700 - 0xdfc
-    power_clock_control: u32 = 0, // 0xe00
+    host_periodic_tx_fifo_size: PeriodicTxFifoSize, // 0x100
+    device_in_periodic_tx_fifo_size: [7]u32, // 0x104 .. 0x118
+
+    // host_registers: HostRegisters, // 0x400..0x440
+    // _pad_0x444_0x4fc: [47]u32, // 0x444..0x4fc
+    // channel_registers: [dwc_max_channels]ChannelRegisters, // 0x500 .. 0x6ff
+    // _pad_0x700_0xdfc: [448]u32, // 0x700 - 0xdfc
+    // power_clock_control: u32 = 0, // 0xe00
 };
 
 pub const VTable = struct {
@@ -388,12 +490,23 @@ pub const VTable = struct {
 allocator: Allocator,
 core_registers: *volatile CoreRegisters,
 host_registers: *volatile HostRegisters,
+channel_registers: *volatile [dwc_max_channels]ChannelRegisters,
+power_and_clock_control: *volatile u32,
+all_channel_intmask_lock: Spinlock,
 intc: *InterruptController,
+irq_id: IrqId,
+irq_handler: IrqHandler = .{
+    .callback = irqHandle,
+},
 translations: *const AddressTranslations,
 power_controller: *PowerController,
 clock: *Clock,
 root_port: RootPort,
+num_host_channels: u4,
 channels: ChannelSet,
+stage_data: [dwc_max_channels]*TransferStageData,
+wait_block_allocations: ChannelSet,
+wait_blocks: [dwc_wait_blocks]bool,
 vtable: VTable = .{
     .dumpStatus = dumpStatusInteropShim,
 },
@@ -407,6 +520,7 @@ pub fn init(
     allocator: Allocator,
     register_base: u64,
     intc: *InterruptController,
+    irq_id: IrqId,
     translations: *AddressTranslations,
     power: *PowerController,
     clock: *Clock,
@@ -415,12 +529,20 @@ pub fn init(
         .allocator = allocator,
         .core_registers = @ptrFromInt(register_base),
         .host_registers = @ptrFromInt(register_base + 0x400),
+        .channel_registers = @ptrFromInt(register_base + 0x500),
+        .power_and_clock_control = @ptrFromInt(register_base + 0xe00),
+        .all_channel_intmask_lock = Spinlock.init("all channels interrupt mask", true),
         .intc = intc,
+        .irq_id = irq_id,
         .translations = translations,
         .power_controller = power,
         .clock = clock,
-        .root_port = RootPort.init(),
+        .root_port = RootPort.init(allocator),
+        .num_host_channels = 0,
         .channels = ChannelSet.init("DWC OTG Host controller channels", dwc_max_channels),
+        .wait_block_allocations = ChannelSet.init("Wait blocks", dwc_wait_blocks),
+        .wait_blocks = [_]bool{false} ** dwc_wait_blocks,
+        .stage_data = undefined,
     };
 }
 
@@ -430,6 +552,7 @@ pub fn initialize(self: *Self) !void {
     try self.disableGlobalInterrupts();
     try self.connectInterruptHandler();
     try self.initializeControllerCore();
+    try self.enableCommonInterrupts();
     try self.enableGlobalInterrupts();
     try self.initializeHost();
     try self.initializeRootPort();
@@ -473,7 +596,118 @@ fn enableGlobalInterrupts(self: *Self) !void {
 }
 
 fn connectInterruptHandler(self: *Self) !void {
-    _ = self;
+    self.intc.connect(self.irq_id, &self.irq_handler);
+    self.intc.enable(self.irq_id);
+}
+
+fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
+    root.debug.kernelMessage("HCI+!");
+
+    var self = @fieldParentPtr(Self, "irq_handler", this);
+
+    const intr_status = self.core_registers.core_interrupt_status;
+
+    if (intr_status.host_channel_intr == 1) {
+        const all_intrs = self.host_registers.all_channel_interrupts;
+        self.host_registers.all_channel_interrupts = all_intrs;
+
+        var channel_mask: u32 = 1;
+        for (0..dwc_max_channels) |channel| {
+            if ((all_intrs & channel_mask) != 0) {
+                // Mask the channel's interrupt
+                self.channel_registers[channel].channel_int_mask = @bitCast(@as(u32, 0));
+                self.irqHandleChannel(@truncate(channel));
+            }
+            channel_mask <<= 1;
+        }
+    }
+
+    // clear the interrupt bits
+    self.core_registers.core_interrupt_status = intr_status;
+}
+
+fn irqHandleChannel(self: *Self, which_channel: u5) void {
+    var buf: [32]u8 = [_]u8{0} ** 32;
+    _ = std.fmt.bufPrintZ(&buf, "{s} {d}", .{ "CHint", which_channel }) catch 0;
+    root.debug.kernelMessage(&buf);
+
+    var stage = self.stage_data[which_channel];
+
+    if (stage == undefined) {
+        root.debug.kernelMessage("Spurious interrupt");
+        return;
+    }
+
+    var request = stage.request;
+
+    switch (stage.substate) {
+        .not_set => {
+            root.debug.kernelMessage("Unexpected interrupt");
+        },
+        .wait_for_channel_disable => {
+            self.channelStart(stage) catch {
+                root.debug.kernelMessage("Error starting channel");
+                // TODO clean up, this transaction will never finish
+            };
+            return;
+        },
+        .wait_for_transaction_complete => {
+            // TODO clean and invalidate dcache for packet range
+            var transfer_size = self.channel_registers[which_channel].channel_transfer_size;
+            var channel_intr = self.channel_registers[which_channel].channel_int;
+
+            // should check for done transaction here... remaining
+            // transfer zero, and complete bit set
+            //
+            // ... without that, this infinitely restarts the
+            // transaction
+            //
+
+            // restart halted transaction
+            if (channel_intr.halted == 1) {
+                // TODO should this enqueue the transaction for later?
+                // self.transactionStart(stage) catch {
+                //     root.debug.kernelMessage("Error starting txn");
+                //     // TODO clean up, this transaction will never finish
+                // };
+                return;
+            }
+
+            stage.transactionComplete(
+                channel_intr,
+                transfer_size.transfer_size_packets,
+                transfer_size.transfer_size_bytes,
+            );
+            return;
+        },
+    }
+
+    switch (stage.state) {
+        .not_set => {
+            root.debug.kernelMessage("Unexpected state");
+        },
+        .no_split_transfer => {
+            var status: ChannelInterrupt = stage.transaction_status;
+
+            // TOOD handle nak / nyet status with periodic transaction
+            if (status.isStatusError()) {
+                std.log.err("usb txn failed (status 0x{x})", .{@as(u32, @bitCast(status))});
+            } else {
+                if (stage.status_stage) {
+                    request.result_length = stage.resultLength();
+                }
+                request.status = 1;
+            }
+
+            self.channelInterruptDisable(which_channel);
+            self.allocator.destroy(stage);
+            self.stage_data[which_channel] = undefined;
+            self.channelFree(which_channel);
+
+            // TODO call completion routine on the request.
+        },
+        // TODO case for start split, case for finish split
+    }
 }
 
 fn initializeControllerCore(self: *Self) !void {
@@ -485,17 +719,21 @@ fn initializeControllerCore(self: *Self) !void {
 
     try self.resetControllerCore();
 
-    self.core_registers.usb_config.ulpi_utmi_sel = 1;
-    self.core_registers.usb_config.phy_if = 1;
+    self.core_registers.usb_config.ulpi_utmi_sel = 0;
+    self.core_registers.usb_config.phy_if = 0;
 
     const hw2 = self.core_registers.hardware_config_2;
+    config = self.core_registers.usb_config;
     if (hw2.hs_phy_type == .ulpi and hw2.fs_phy_type == .dedicated) {
-        self.core_registers.usb_config.ulpi_fsls = 1;
-        self.core_registers.usb_config.ulpi_clk_sus_m = 1;
+        config.ulpi_fsls = 1;
+        config.ulpi_clk_sus_m = 1;
     } else {
-        self.core_registers.usb_config.ulpi_fsls = 0;
-        self.core_registers.usb_config.ulpi_clk_sus_m = 0;
+        config.ulpi_fsls = 0;
+        config.ulpi_clk_sus_m = 0;
     }
+    self.core_registers.usb_config = config;
+
+    self.num_host_channels = hw2.num_host_channels;
 
     var ahb = self.core_registers.ahb_config;
     ahb.dma_enable = 1;
@@ -507,9 +745,10 @@ fn initializeControllerCore(self: *Self) !void {
     negotiation.hnp_capable = 0;
     negotiation.srp_capable = 0;
     self.core_registers.usb_config = negotiation;
+}
 
-    // enable common interrupts
-    self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffff_ffff));
+fn enableCommonInterrupts(self: *Self) !void {
+    self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffff_ffff));
 }
 
 fn resetControllerCore(self: *Self) !void {
@@ -532,11 +771,14 @@ fn resetControllerCore(self: *Self) !void {
 }
 
 fn initializeHost(self: *Self) !void {
-    self.core_registers.power_clock_control = 0;
+    self.power_and_clock_control.* = 0;
+
     try self.flushTxFifo();
     self.delayMicros(1);
+
     try self.flushRxFifo();
     self.delayMicros(1);
+
     try self.powerHostPort();
     try self.enableHostInterrupts();
 }
@@ -552,9 +794,11 @@ fn configPhyClockSpeed(self: *Self) !void {
 }
 
 fn flushTxFifo(self: *Self) !void {
+    const FLUSH_ALL_TX_FIFOS = 0x10;
+
     var reset = self.core_registers.reset;
     reset.tx_fifo_flush = 1;
-    reset.tx_fifo_num = 0x10;
+    reset.tx_fifo_flush_num = FLUSH_ALL_TX_FIFOS;
     self.core_registers.reset = reset;
 
     const reset_end = self.deadline(10);
@@ -574,43 +818,13 @@ fn powerHostPort(self: *Self) !void {
 }
 
 fn enableHostInterrupts(self: *Self) !void {
-    self.core_registers.interrupt_mask = @bitCast(@as(u32, 0));
-    self.core_registers.interrupt_status = @bitCast(@as(u32, 0xffffffff));
-    self.core_registers.interrupt_mask.host_channel_intr = 1;
+    self.core_registers.core_interrupt_mask = @bitCast(@as(u32, 0));
+    self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffffffff));
+    self.core_registers.core_interrupt_mask.host_channel_intr = 1;
 }
 
 fn initializeRootPort(self: *Self) !void {
-    try self.enableRootPort();
-    try self.root_port.configure();
-}
-
-fn enableRootPort(self: *Self) !void {
-    // We should see the connect bit become true within 510 ms of
-    // power on
-    const connect_end = self.deadline(510);
-    while (self.clock.ticks() <= connect_end and self.host_registers.port.connect == 0) {}
-
-    self.delayMillis(100);
-
-    var port = self.host_registers.port;
-    port.connect_changed = 0;
-    port.enabled = 0;
-    port.enabled_changed = 0;
-    port.overcurrent_changed = 0;
-    port.reset = 1;
-    self.host_registers.port = port;
-
-    self.delayMillis(50);
-
-    port = self.host_registers.port;
-    port.connect_changed = 0;
-    port.enabled = 0;
-    port.enabled_changed = 0;
-    port.overcurrent_changed = 0;
-    port.reset = 0;
-    self.host_registers.port = port;
-
-    self.delayMillis(20);
+    try self.root_port.initialize(self);
 }
 
 pub fn getPortSpeed(self: *Self) !UsbSpeed {
@@ -647,8 +861,8 @@ pub fn dumpStatus(self: *Self) void {
     dumpRegister("ahb_config", @bitCast(self.core_registers.ahb_config));
     dumpRegister("usb_config", @bitCast(self.core_registers.usb_config));
     dumpRegister("reset", @bitCast(self.core_registers.reset));
-    dumpRegister("interrupt_status", @bitCast(self.core_registers.interrupt_status));
-    dumpRegister("interrupt_mask", @bitCast(self.core_registers.interrupt_mask));
+    dumpRegister("interrupt_status", @bitCast(self.core_registers.core_interrupt_status));
+    dumpRegister("interrupt_mask", @bitCast(self.core_registers.core_interrupt_mask));
     dumpRegister("rx_fifo_size", @bitCast(self.core_registers.rx_fifo_size));
     dumpRegister("nonperiodic_tx_fifo_size", @bitCast(self.core_registers.nonperiodic_tx_fifo_size));
     dumpRegister("nonperiodic_tx_status", @bitCast(self.core_registers.nonperiodic_tx_status));
@@ -669,39 +883,363 @@ fn dumpRegister(field_name: []const u8, v: u32) void {
     kprint("{s: >28}: {x:0>8}\n", .{ field_name, v });
 }
 
-fn controlMessage(self: *Self, endpoint: *Endpoint, request_type: RequestType, request: u8, value: u16, index: u16, data: *anyopaque, data_size: u16) !u16 {
-    var setup: usb.SetupPacket = .{
+fn controlMessage(
+    self: *Self,
+    endpoint: *Endpoint,
+    request_type: RequestType,
+    request: u8,
+    value: u16,
+    index: u16,
+    data: *align(DMA_ALIGNMENT) anyopaque,
+    data_size: u16,
+) !u19 {
+    const raw_setup_data: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(SetupPacket));
+    var setup: *align(DMA_ALIGNMENT) SetupPacket = @ptrCast(@alignCast(raw_setup_data));
+
+    setup.* = .{
         .request_type = @bitCast(request_type),
         .request = request,
         .value = value,
         .index = index,
         .length = data_size,
     };
-    var rq = Request.init(endpoint, data, data_size, &setup);
+    var rq = try Request.init(self.allocator, endpoint, data, data_size, setup);
 
-    try self.requestSubmitBlocking(&rq);
+    try self.requestSubmitBlocking(rq);
 
     return rq.result_length;
 }
 
-fn requestSubmitBlocking(self: *Self, request: *Request) !void {
-    _ = self;
+fn channelAllocate(self: *Self) !ChannelId {
+    var chan = try self.channels.allocate();
+    errdefer self.channels.free(chan);
 
-    request.status = 0;
+    if (chan >= self.num_host_channels) {
+        return Error.NoChannelAvailable;
+    }
+    return chan;
 }
 
-// ----------------------------------------------------------------------
-// Protocol Model
-// ----------------------------------------------------------------------
+fn channelFree(self: *Self, channel: ChannelId) void {
+    self.channels.free(channel);
+}
 
-const Request = struct {
-    status: u8,
-    result_length: u32,
+const TransferStageState = enum(u8) {
+    not_set = 0,
+    no_split_transfer = 1,
 };
+
+const TransferStageSubstate = enum(u8) {
+    not_set = 0,
+    wait_for_channel_disable = 1,
+    wait_for_transaction_complete = 2,
+};
+
+const TransferStageData = struct {
+    channel: ChannelId,
+    endpoint: *Endpoint,
+    request: *Request,
+    device: *Device,
+    in: bool,
+    status_stage: bool,
+    speed: UsbSpeed,
+    max_packet_size: u11,
+    transfer_size: u16,
+    bytes_per_transaction: u19,
+    packets: u10,
+    packets_per_transaction: u10,
+    interrupt_mask: u32,
+    temp_buffer: []u32,
+    buffer_pointer: [*]u8,
+
+    state: TransferStageState = .not_set,
+    substate: TransferStageSubstate = .not_set,
+
+    total_bytes_transferred: u19 = 0,
+    status_mask: ChannelInterrupt,
+    transaction_status: ChannelInterrupt,
+
+    fn transferBytesRemaining(self: *TransferStageData) u19 {
+        return self.bytes_per_transaction;
+    }
+
+    fn transferPacketsRemaining(self: *TransferStageData) u10 {
+        return self.packets_per_transaction;
+    }
+
+    fn addressDMA(self: *TransferStageData) [*]u8 {
+        return self.buffer_pointer;
+    }
+
+    fn addressDevice(self: *TransferStageData) u8 {
+        return self.device.address;
+    }
+
+    fn endpointType(self: *TransferStageData) EndpointType {
+        return self.endpoint.type;
+    }
+
+    fn endpointNumber(self: *TransferStageData) u4 {
+        return self.endpoint.number;
+    }
+
+    fn controllerPid(self: *TransferStageData) !DwcTransferSizePid {
+        return switch (self.endpoint.pidNext(self.status_stage)) {
+            PID.Setup => .Setup,
+            PID.Data0 => .Data0,
+            PID.Data1 => .Data1,
+        };
+    }
+
+    fn resultLength(self: *TransferStageData) u19 {
+        return @min(self.total_bytes_transferred, self.transfer_size);
+    }
+
+    fn transactionComplete(self: *TransferStageData, status: ChannelInterrupt, packets_left: u10, bytes_left: u19) void {
+        self.transaction_status = status;
+
+        // TODO check for NAK/NYET, see if the request should complete
+        // when NAK/NYET. (Should only happen for Bulk endpoints)
+
+        var packets_transferred: u10 = self.packets_per_transaction - packets_left;
+        var bytes_transferred: u19 = self.bytes_per_transaction - bytes_left;
+
+        self.total_bytes_transferred += bytes_transferred;
+        self.buffer_pointer += bytes_transferred;
+
+        // TODO this only happens if a) it's not a split transaction
+        // or b) it _is_ a split and this is the last transaction in
+        // the split
+        self.endpoint.pidSkip(packets_transferred, self.status_stage);
+
+        self.packets -= packets_transferred;
+
+        if (self.transfer_size - self.total_bytes_transferred < self.bytes_per_transaction) {
+            self.bytes_per_transaction = self.transfer_size - self.total_bytes_transferred;
+        }
+    }
+};
+
+fn createStageData(self: *Self, channel: ChannelId, request: *Request, in: bool, status_stage: bool) !*TransferStageData {
+    const packet_size = request.endpoint.max_packet_size;
+
+    const stage = try self.allocator.create(TransferStageData);
+    stage.channel = channel;
+    stage.request = request;
+    stage.endpoint = request.endpoint;
+    stage.device = request.endpoint.device;
+    stage.in = in;
+    stage.status_stage = status_stage;
+    stage.max_packet_size = packet_size;
+    stage.speed = stage.device.speed;
+    stage.status_mask = ChannelInterrupt{
+        .transfer_completed = 1,
+        .halted = 1,
+        .ahb_error = 1,
+        .stall_response_received = 1,
+        .transaction_error = 1,
+        .babble_error = 1,
+        .frame_overrun = 1,
+        .data_toggle_error = 1,
+    };
+
+    if (!status_stage) {
+        if (request.endpoint.pidNext(status_stage) == PID.Setup) {
+            stage.buffer_pointer = @ptrCast(request.setup_data);
+            stage.transfer_size = @sizeOf(SetupPacket);
+        } else {
+            stage.buffer_pointer = @ptrCast(request.request_data);
+            stage.transfer_size = request.request_data_size;
+        }
+
+        stage.packets = @truncate((stage.transfer_size + packet_size - 1) / packet_size);
+        stage.bytes_per_transaction = stage.transfer_size;
+        stage.packets_per_transaction = stage.packets;
+    } else {
+        const temp_buffer = try self.allocator.alignedAlloc(u32, DMA_ALIGNMENT, 1);
+        stage.buffer_pointer = @ptrCast(temp_buffer);
+        stage.transfer_size = 0;
+        stage.bytes_per_transaction = 0;
+        stage.packets = 1;
+        stage.packets_per_transaction = 1;
+    }
+
+    stage.state = @enumFromInt(0);
+    stage.substate = @enumFromInt(0);
+
+    // TODO consider frame schedulers for split/non-split,
+    // periodic/non-periodic
+
+    // TODO set a deadline on the stage_data for the transfer timeout
+
+    return stage;
+}
+
+fn channelInterruptEnable(self: *Self, channel: ChannelId) void {
+    self.host_registers.all_channel_interrupts_mask |= @as(u32, 1) << channel;
+}
+
+fn channelInterruptDisable(self: *Self, channel: ChannelId) void {
+    self.host_registers.all_channel_interrupts_mask &= ~(@as(u32, 1) << channel);
+}
+
+fn transferStageAsync(self: *Self, request: *Request, in: bool, status_stage: bool) !void {
+    const channel = try self.channelAllocate();
+
+    const stage_data = try self.createStageData(channel, request, in, status_stage);
+    self.stage_data[channel] = stage_data;
+
+    self.channelInterruptEnable(channel);
+
+    // TODO handle split transfers
+    stage_data.state = .no_split_transfer;
+
+    try self.transactionStart(stage_data);
+}
+
+fn transactionQueue(_: *Self, _: *TransferStageData) !void {}
+
+fn transactionStart(self: *Self, stage_data: *TransferStageData) !void {
+    const channel = stage_data.channel;
+    var channel_characteristics = self.channel_registers[channel].channel_character;
+
+    // if the channel is enabled, we must disable it (and wait for
+    // that to complete
+    if (channel_characteristics.enable == 1) {
+        stage_data.substate = .wait_for_channel_disable;
+        channel_characteristics.enable = 0;
+        channel_characteristics.disable = 1;
+        self.channel_registers[channel].channel_character = channel_characteristics;
+        self.channel_registers[channel].channel_int_mask.halted = 1;
+
+        // the rest happens when the interrupt fires
+    } else {
+        try self.channelStart(stage_data);
+    }
+}
+
+fn channelStart(self: *Self, stage: *TransferStageData) !void {
+    var channel = stage.channel;
+
+    stage.substate = .wait_for_transaction_complete;
+
+    // reset all pending channel interrupts
+    self.channel_registers[channel].channel_int = @bitCast(@as(u32, 0xffff_ffff));
+
+    // set transfer size, packet count, and pid
+    const transfer_size: TransferSize = .{
+        .transfer_size_bytes = stage.transferBytesRemaining(),
+        .transfer_size_packets = stage.transferPacketsRemaining(),
+        .pid = try stage.controllerPid(),
+        .do_ping = 0,
+    };
+    self.channel_registers[channel].channel_transfer_size = transfer_size;
+
+    // set DMA address
+    self.channel_registers[channel].channel_dma_addr = @truncate(@intFromPtr(stage.addressDMA()));
+
+    // TODO clear & inval data cache for [stage_data.addressDMA()..stage_data.addressDMA()+stage_data.transferBytesRemaining()]
+
+    // set channel parameters
+    var channel_characteristics = self.channel_registers[channel].channel_character;
+    channel_characteristics.max_packet_size = stage.max_packet_size;
+    channel_characteristics.multi_count = 1;
+
+    if (stage.in) {
+        channel_characteristics.endpoint_direction = .in;
+    } else {
+        channel_characteristics.endpoint_direction = .out;
+    }
+
+    if (stage.speed == UsbSpeed.Low) {
+        channel_characteristics.low_speed_device = 1;
+    } else {
+        channel_characteristics.low_speed_device = 0;
+    }
+
+    channel_characteristics.device_address = @truncate(stage.addressDevice());
+    channel_characteristics.endpoint_type = stage.endpointType();
+    channel_characteristics.endpoint_number = stage.endpointNumber();
+
+    // TODO setup for periodic and split transactions
+    channel_characteristics.odd_frame = 0;
+
+    self.channel_registers[channel].channel_int_mask = @bitCast(stage.status_mask);
+
+    channel_characteristics.enable = 1;
+    channel_characteristics.disable = 0;
+
+    self.channel_registers[channel].channel_character = channel_characteristics;
+}
+
+fn transferStage(self: *Self, request: *Request, in: bool, status_stage: bool) !void {
+    const wait_until = self.deadline(request.timeout);
+
+    const wait_block_assigned = try self.wait_block_allocations.allocate();
+    defer {
+        self.wait_blocks[wait_block_assigned] = false;
+        self.wait_block_allocations.free(wait_block_assigned);
+    }
+
+    if (self.wait_blocks[wait_block_assigned]) {
+        return Error.ConfigurationError;
+    }
+
+    self.wait_blocks[wait_block_assigned] = true;
+    try self.transferStageAsync(request, in, status_stage);
+
+    while (self.clock.ticks() < wait_until and self.wait_blocks[wait_block_assigned] == true) {
+        // do nothing
+    }
+
+    if (self.wait_blocks[wait_block_assigned] == true) {
+        // timeout elapsed... complain
+        root.debug.kernelMessage("USB request timeout");
+    }
+}
+
+fn requestSubmitBlocking(self: *Self, request: *Request) !void {
+    request.status = 0;
+
+    if (request.endpoint.type == EndpointType.Control) {
+        if (request.setup_data.request_type.transfer_direction == .device_to_host) {
+            try self.transferStage(request, false, false);
+            try self.transferStage(request, true, false);
+            try self.transferStage(request, false, true);
+            return;
+        }
+    }
+}
+
+fn descriptorQuery(
+    self: *Self,
+    endpoint: *Endpoint,
+    descriptor_type: DescriptorType,
+    which: DescriptorIndex,
+    result: *align(64) Descriptor,
+    buffer_size: u16,
+    request_type: RequestType,
+    index: u16,
+) !void {
+    const returned = try self.controlMessage(
+        endpoint,
+        request_type,
+        @intFromEnum(StandardDeviceRequests.get_descriptor),
+        @as(u16, @intFromEnum(descriptor_type)) << 8 | @as(u8, which),
+        index,
+        result,
+        buffer_size,
+    );
+
+    if (returned != DEFAULT_MAX_PACKET_SIZE) {
+        return Error.InvalidResponse;
+    }
+}
 
 // ----------------------------------------------------------------------
 // USB Device Model
 // ----------------------------------------------------------------------
+const Function = struct {};
 
 const Endpoint = struct {
     const EndpointDirection = enum {
@@ -710,42 +1248,100 @@ const Endpoint = struct {
         InOut,
     };
 
-    number: u8,
+    device: *Device,
+    number: u4,
     type: EndpointType = .Control,
     direction: EndpointDirection = .Out,
-    max_packet_size: u32 = DEFAULT_MAX_PACKET_SIZE,
-    interval: u16, // milliseconds
+    max_packet_size: u11 = DEFAULT_MAX_PACKET_SIZE,
+    interval: u16 = DEFAULT_INTERVAL, // milliseconds
+    next_pid: PID = PID.Setup,
+
+    fn pidNext(self: *Endpoint, status_stage: bool) PID {
+        if (status_stage) {
+            return PID.Data1;
+        } else {
+            return self.next_pid;
+        }
+    }
+
+    fn pidSkip(self: *Endpoint, packets: u16, status_stage: bool) void {
+        // TODO should never occur with an Isochronous endpoint
+
+        if (!status_stage) {
+            switch (self.next_pid) {
+                .Setup => self.next_pid = .Data1,
+                .Data0 => {
+                    if ((packets & 0x1) == 1) {
+                        self.next_pid = .Data1;
+                    }
+                },
+                .Data1 => {
+                    if ((packets & 0x1) == 1) {
+                        self.next_pid = .Data0;
+                    }
+                },
+            }
+        } else {
+            // TODO should only occur with a Control endpoint
+            self.next_pid = PID.Setup;
+        }
+    }
 };
 
 const Device = struct {
-    host: *Self = undefined,
-    port: *RootPort = undefined,
-    speed: UsbSpeed = undefined,
-    address: Address = DEFAULT_ADDRESS,
-    endpoint_0: Endpoint = undefined,
-    hub_device: *Device = undefined,
-    hub_address: u8 = 0,
-    hub_port_number: u8 = 1,
-    device_descriptor: DeviceDescriptor = undefined,
-    config_descriptor: ConfigurationDescriptor = undefined,
+    host: *Self,
+    port: *RootPort,
+    speed: UsbSpeed,
+    address: Address,
+    endpoint_0: Endpoint,
+    function: [MAX_FUNCTIONS]Function,
+    hub_device: *Device,
+    hub_address: u8,
+    hub_port_number: u8,
+    device_descriptor: DeviceDescriptor,
+    config_descriptor: ConfigurationDescriptor,
+    descriptor_buffer: DescriptorPtr,
 
-    pub fn init() Device {
-        return .{};
+    pub fn init(allocator: Allocator) !*Device {
+        var device = try allocator.create(Device);
+
+        device.address = DEFAULT_ADDRESS;
+        device.hub_address = 0;
+        device.hub_port_number = 1;
+        device.endpoint_0 = Endpoint{ .number = 0, .device = device };
+
+        const raw_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(Descriptor));
+        device.descriptor_buffer = @ptrCast(raw_buffer);
+
+        return device;
     }
 
     pub fn initialize(self: *Device, host: *Self, port: *RootPort, speed: UsbSpeed) !void {
         self.host = host;
         self.port = port;
         self.speed = speed;
+
+        root.debug.kernelMessage("Device.initialize:1");
+
+        try host.descriptorQuery(&self.endpoint_0, .device, DEFAULT_DESCRIPTOR_INDEX, self.descriptor_buffer, DEFAULT_MAX_PACKET_SIZE, request_type_in, 0);
+
+        root.debug.kernelMessage("Device.initialize:2");
+
+        try self.descriptor_buffer.expectDeviceDescriptor();
+
+        root.debug.kernelMessage("Device.initialize:3");
     }
 };
 
 const RootPort = struct {
+    allocator: Allocator,
     host: *Self = undefined,
     device: *Device = undefined,
+    enabled: bool = false,
 
-    pub fn init() RootPort {
+    pub fn init(allocator: Allocator) RootPort {
         return .{
+            .allocator = allocator,
             .host = undefined,
             .device = undefined,
         };
@@ -753,15 +1349,355 @@ const RootPort = struct {
 
     pub fn initialize(self: *RootPort, host: *Self) !void {
         self.host = host;
-        self.device = Device.init();
+
+        try self.enable();
+        try self.configureDevice();
+        try self.overcurrentShutdownCheck();
     }
 
-    fn configure(self: *RootPort) !void {
+    fn enable(self: *RootPort) !void {
+        if (!self.enabled) {
+            // We should see the connect bit become true within 510 ms of
+            // power on
+            const connect_end = self.host.deadline(510);
+            while (self.host.clock.ticks() <= connect_end and self.host.host_registers.port.connect == 0) {}
+
+            self.host.delayMillis(100);
+
+            var port = self.host.host_registers.port;
+            port.connect_changed = 0;
+            port.enabled = 0;
+            port.enabled_changed = 0;
+            port.overcurrent_changed = 0;
+            port.reset = 1;
+            self.host.host_registers.port = port;
+
+            self.host.delayMillis(50);
+
+            port = self.host.host_registers.port;
+            port.connect_changed = 0;
+            port.enabled = 0;
+            port.enabled_changed = 0;
+            port.overcurrent_changed = 0;
+            port.reset = 0;
+            self.host.host_registers.port = port;
+
+            self.host.delayMillis(20);
+            self.enabled = true;
+        }
+    }
+
+    fn disable(self: *RootPort) !void {
+        self.enabled = false;
+    }
+
+    fn configureDevice(self: *RootPort) !void {
         const speed = try self.host.getPortSpeed();
 
+        self.device = try Device.init(self.allocator);
         self.device.initialize(self.host, self, speed) catch |err| {
             self.device = undefined;
             return err;
         };
     }
+
+    fn overcurrentShutdownCheck(self: *RootPort) !void {
+        if (self.overcurrentDetected()) {
+            self.disable() catch {};
+            return Error.OvercurrentDetected;
+        }
+    }
+
+    fn overcurrentDetected(self: *RootPort) bool {
+        return self.host.host_registers.port.overcurrent == 1;
+    }
 };
+
+// ----------------------------------------------------------------------
+// Host, Device, Endpoint, Transfers
+// ----------------------------------------------------------------------
+
+// TODO all of it
+
+pub const EndpointType = enum(u2) {
+    Control = 0,
+    Isochronous = 1,
+    Bulk = 2,
+    Interrupt = 3,
+};
+
+// ----------------------------------------------------------------------
+// Functions
+// ----------------------------------------------------------------------
+
+// ----------------------------------------------------------------------
+// Requests
+// ----------------------------------------------------------------------
+
+const Request = struct {
+    setup_data: *align(DMA_ALIGNMENT) SetupPacket,
+    endpoint: *Endpoint,
+    request_data: *align(DMA_ALIGNMENT) anyopaque,
+    request_data_size: u16,
+
+    status: u32,
+    result_length: u19,
+    timeout: u16,
+
+    fn init(
+        allocator: Allocator,
+        endpoint: *Endpoint,
+        data: *align(DMA_ALIGNMENT) anyopaque,
+        request_data_size: u16,
+        setup_data: *align(DMA_ALIGNMENT) SetupPacket,
+    ) !*Request {
+        var request: *Request = try allocator.create(Request);
+
+        request.* = .{
+            .setup_data = setup_data,
+            .endpoint = endpoint,
+            .request_data = data,
+            .request_data_size = request_data_size,
+            .status = 0,
+            .result_length = 0,
+            .timeout = 0,
+        };
+        return request;
+    }
+};
+
+// ----------------------------------------------------------------------
+// Definitions from USB spec: Constants, Structures, and Packet Definitions
+// ----------------------------------------------------------------------
+
+pub const DEFAULT_MAX_PACKET_SIZE = 8;
+pub const FIRST_DEDICATED_ADDRESS = 1;
+pub const MAX_FUNCTIONS = 10;
+
+pub const Address = u8;
+pub const DEFAULT_ADDRESS: Address = 0;
+pub const MAX_ADDRESS: Address = 63;
+
+pub const DEFAULT_INTERVAL = 1;
+
+/// Index of a descriptor
+pub const DescriptorIndex = u8;
+pub const DEFAULT_DESCRIPTOR_INDEX = 0;
+
+/// Index of a string descriptor
+pub const StringIndex = u8;
+
+/// BCD coded number
+pub const BCD = u16;
+
+/// Assigned ID number
+pub const ID = u16;
+
+pub const PID = enum(u8) {
+    Setup,
+    Data0,
+    Data1,
+};
+
+pub const UsbSpeed = enum {
+    Low,
+    Full,
+    High,
+    Super,
+};
+
+pub const SetupPacket = extern struct {
+    request_type: RequestType,
+    request: u8,
+    value: u16,
+    index: u16,
+    length: u16,
+};
+
+pub const RequestType = packed struct {
+    recipient: enum(u5) {
+        device = 0b00000,
+        interface = 0b00001,
+        endpoint = 0b00010,
+        other = 0b00011,
+        // all other bit patterns are reserved
+    }, // 0 .. 4
+    type: enum(u2) {
+        standard = 0b00,
+        class = 0b01,
+        vendor = 0b10,
+        reserved = 0b11,
+    }, // 5..6
+    transfer_direction: enum(u1) {
+        host_to_device = 0b0,
+        device_to_host = 0b1,
+    },
+};
+
+pub const request_type_in: RequestType = .{
+    .recipient = .device,
+    .type = .standard,
+    .transfer_direction = .device_to_host,
+};
+
+pub const StandardDeviceRequests = enum(u8) {
+    get_status = 0x00,
+    clear_feature = 0x01,
+    set_feature = 0x03,
+    set_address = 0x05,
+    get_descriptor = 0x06,
+    set_descriptor = 0x07,
+    get_configuration = 0x08,
+    set_configuration = 0x09,
+};
+
+pub const StandardInterfaceRequests = enum(u8) {
+    get_status = 0x00,
+    clear_feature = 0x01,
+    set_feature = 0x03,
+    get_interface = 0x0a,
+    set_interface = 0x11,
+};
+
+pub const StandardEndpointRequests = enum(u8) {
+    get_status = 0x00,
+    clear_feature = 0x01,
+    set_feature = 0x03,
+    synch_frame = 0x12,
+};
+
+pub const DescriptorType = enum(u8) {
+    // not for use
+    unknown = 0,
+
+    // general
+    device = 1,
+    configuration = 2,
+    string = 3,
+    interface = 4,
+    endpoint = 5,
+
+    // class specific
+    class_interface = 36,
+    class_endpoint = 37,
+};
+
+pub const DeviceDescriptor = extern struct {
+    length: u8 = 0,
+    descriptor_type: DescriptorType = .unknown,
+    usb_standard_compliance: BCD = 0,
+    device_class: u8 = 0,
+    device_subclass: u8 = 0,
+    device_protocol: u8 = 0,
+    max_packet_size: u8 = 0,
+    vendor: ID = 0,
+    product: ID = 0,
+    device_release: BCD = 0,
+    manufacturer_name: StringIndex = 0,
+    product_name: StringIndex = 0,
+    serial_number: StringIndex = 0,
+    configuration_count: u8 = 0,
+};
+
+pub const ConfigurationDescriptor = extern struct {
+    length: u8,
+    descriptor_type: DescriptorType,
+    total_length: u16,
+    interface_count: u8,
+    configuration_value: u8,
+    configuration: StringIndex,
+    attributes: packed struct {
+        _reserved_0: u5 = 0, // 0..5
+        remote_wakeup: u1 = 0, // 5
+        self_powered: u1 = 0, // 6
+        _reserved_1: u1 = 1, // unused since USB 2.0
+    },
+    power_max: u8,
+};
+
+pub const InterfaceDescriptor = extern struct {
+    length: u8,
+    descriptor_type: DescriptorType,
+    interface_number: u8,
+    alternate_setting: u8,
+    endpoint_count: u8,
+    interface_class: u8,
+    interface_subclass: u8,
+    interface_protocol: u8,
+    interface_string: StringIndex,
+};
+
+pub const TransferType = enum(u2) {
+    control = 0b00,
+    isochronous = 0b01,
+    bulk = 0b10,
+    interrupt = 0b11,
+};
+
+pub const IsoSynchronizationType = enum(u2) {
+    none = 0b00,
+    asynchronous = 0b01,
+    adaptive = 0b10,
+    synchronous = 0b11,
+};
+
+pub const IsoUsageType = enum(u2) {
+    data = 0b00,
+    feedback = 0b01,
+    explicit_feedback = 0b10,
+    reserved = 0b11,
+};
+
+pub const EndpointDescriptor = extern struct {
+    length: u8,
+    descriptor_type: DescriptorType,
+    endpoint_address: u8,
+    attributes: packed struct {
+        transfer_type: TransferType, // 0..1
+        iso_synch_type: IsoSynchronizationType, // 2..3
+        usage_type: IsoUsageType, // 4..5
+        _reserved_0: u2 = 0,
+    },
+    max_packet_size: u16,
+    interval: u8, // polling interval in frames
+};
+
+pub const StringDescriptor = extern struct {
+    length: u8,
+    descriptor_type: DescriptorType,
+
+    // For string descriptor 0, the remaining bytes (length - 2 / 2)
+    // contain an array of u16's with the language codes of each
+    // language this string is available in. The index of the
+    // desired language in the array will be the `index` field in a request
+    // to get string decriptor. That response will contain a unicode
+    // encoded string of `length` bytes.
+};
+
+pub const Descriptor = extern union {
+    header: packed struct {
+        length: u8,
+        descriptor_type: DescriptorType,
+    },
+    device: DeviceDescriptor,
+    configuration: ConfigurationDescriptor,
+    interface: InterfaceDescriptor,
+    endpoint: EndpointDescriptor,
+    string: StringDescriptor,
+
+    const Error = error{
+        LengthMismatch,
+        UnexpectedType,
+    };
+
+    fn expectDeviceDescriptor(desc: *Descriptor) !void {
+        if (desc.header.length != @sizeOf(DeviceDescriptor))
+            return Descriptor.Error.LengthMismatch;
+
+        if (desc.header.descriptor_type != DescriptorType.device)
+            return Descriptor.Error.UnexpectedType;
+    }
+};
+
+pub const DMA_ALIGNMENT = 64;
+pub const DescriptorPtr = *align(DMA_ALIGNMENT) Descriptor;

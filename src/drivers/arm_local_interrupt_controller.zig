@@ -22,6 +22,7 @@ pub const IrqId = enum(u6) {
     TIMER_1 = 1,
     TIMER_2 = 2,
     TIMER_3 = 3,
+    USB_HCI = 9,
     UART = 57,
 };
 
@@ -90,6 +91,7 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
     self.routeAddFromId(.TIMER_1);
     self.routeAddFromId(.TIMER_2);
     self.routeAddFromId(.TIMER_3);
+    self.routeAddFromId(.USB_HCI);
     self.routeAddFromId(.UART);
 
     return self;
@@ -169,6 +171,11 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
             9 => {
                 // handle all pending_2 later
                 pending_2_received = true;
+            },
+            11 => {
+                root.debug.kernelMessage("U!");
+                // Basic IRQ bit 11 -> GPU IRQ 9 -> USB_HCI
+                self.irqHandleBasic(.USB_HCI);
             },
             19 => {
                 self.irqHandleBasic(.UART);
