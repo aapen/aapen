@@ -1,8 +1,18 @@
 @startuml
+class Request {
+        }
+
 class Transfer {
         type
         device_address
         endpoint
+}
+
+enum TransferType {
+        Control
+        Isochronous
+        Interrupt
+        Bulk
 }
 
 class Transaction {
@@ -39,19 +49,16 @@ enum PID {
         "Split"
 }
 
+Request "1" -r-> "1" Transfer
 Transfer "1" *-r-> "1..*" Transaction
+Transfer -u-> TransferType
 Transaction -u-> Stage : transaction_stage
 Transaction "1" *-r-> "1..*" Packet
 Packet -u-> PID : packet_id
 
-class ControlTransfer
-class IsochronousTransfer
-class InterruptTransfer
-class BulkTransfer
-
-ControlTransfer     -u-|> Transfer
-IsochronousTransfer -u-|> Transfer
-InterruptTransfer   -u-|> Transfer
-BulkTransfer        -u-|> Transfer
+note bottom of Request : handled by the application (operating system)
+note bottom of Transfer : handled by the host controller driver
+note bottom of Transaction : handled by the host controller driver
+note bottom of Packet : Handled by the host controller
 
 @enduml

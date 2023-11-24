@@ -1,0 +1,34 @@
+@startuml
+
+state Attached
+state Powered
+
+Attached -d-> Powered : Hub configured
+Powered -u-> Attached : Hub reset or deconfigured
+
+Powered -r-> Suspended_1 : Bus inactive
+
+Suspended_1 -l-> Powered : Bus activity
+
+state Normal {
+        Default -r-> Suspended_2 : Bus inactive
+        Default -d-> Address : Address assigned
+
+        Suspended_2 -l-> Default : Bus activity
+
+        Address -r-> Suspended_3 : Bus inactive
+        Address -d-> Configured : Device configured
+
+        Suspended_3 -l-> Address : Bus activity
+
+        Configured -r-> Suspended_4 : Bus inactive
+        Configured -u-> Address : Device deconfigured
+
+        Suspended_4 -l-> Configured : Bus activity
+}
+
+Powered -d-> Default : Reset
+Normal -u-> Powered : Power interruption
+Normal -r-> Default : Reset
+
+@enduml
