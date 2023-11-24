@@ -371,9 +371,7 @@ pub fn scrollUp(self: *Self) void {
     const top: u64 = self.fb.yres - self.fb.font_height_px;
     const right: u64 = self.fb.xres;
     const bottom: u64 = self.fb.yres;
-    self.fb.fill(left, top, right, bottom, self.current_bg) catch |err| {
-        serial.writer.print("Fill failed on scroll: {}\n", .{err}) catch {};
-    };
+    self.fb.fill(left, top, right, bottom, self.current_bg);
 }
 
 /// Debugging: Dump the in-memory text to the serial port.
