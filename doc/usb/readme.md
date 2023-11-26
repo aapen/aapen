@@ -3,9 +3,10 @@
 ## Limitations
 
 We currently do not handle:
-  * Split transfers
-  * Isochronous transfers
-  * Periodic transfers
+
+  - Split transfers
+  - Isochronous transfers
+  - Periodic transfers
 
 ## Software Model
 
