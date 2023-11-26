@@ -22,8 +22,27 @@ const FormatOptions = std.fmt.FormatOptions;
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
 
+const inner_module = @import("inner.zig");
+const inner = inner_module.inner;
+const OpCode = inner_module.OpCode;
+
+///  --
+pub fn wordStackTrace(forth: *Forth, _: *Header) ForthError!void {
+    const items = forth.call_stack.items();
+
+    // Each call has 2 entries on the stack: a *Header
+    // and an current offset into the body.
+    var i: usize = 0;
+    while (i < items.len) {
+        const p: *Header = @ptrFromInt(items[i]);
+        const offset = items[i + 1];
+        try forth.print("[{}]: {s} ({*}) Offset {}\n", .{ i / 2, p.name, p, offset });
+        i += 2;
+    }
+}
+
 /// addr len --
-pub fn wordDump(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordDump(forth: *Forth, _: *Header) ForthError!void {
     const len = try forth.stack.pop();
     const iAddr = try forth.stack.pop();
     const addr: [*]u8 = @ptrFromInt(iAddr);
@@ -44,30 +63,26 @@ pub fn wordDump(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
         try forth.print("|\n", .{});
         offset += 16;
     }
-    return 0;
 }
 
 /// --
-pub fn wordStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordStack(forth: *Forth, _: *Header) ForthError!void {
     try forth.print("Stack: ", .{});
     for (forth.stack.items()) |item| {
         try forth.print("{}\t", .{item});
     }
     try forth.print("\n", .{});
-    return 0;
 }
 
 /// --
-pub fn wordDictionary(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordDictionary(forth: *Forth, _: *Header) ForthError!void {
     try listDictionary(forth, "");
-    return 0;
 }
 
 /// --
-pub fn wordDictionaryFilter(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordDictionaryFilter(forth: *Forth, _: *Header) ForthError!void {
     const pat = try forth.readWord();
     try listDictionary(forth, pat);
-    return 0;
 }
 
 fn listDictionary(forth: *Forth, pat: []const u8) ForthError!void {
@@ -85,41 +100,38 @@ fn listDictionary(forth: *Forth, pat: []const u8) ForthError!void {
     try forth.print("\n", .{});
 }
 
-pub fn wordDesc(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordDesc(forth: *Forth, _: *Header) ForthError!void {
     var name = forth.words.next() orelse return ForthError.WordReadError;
     var header = forth.findWord(name) orelse return ForthError.NotFound;
     try forth.print("{s}: {s}\n", .{ header.name, header.desc });
-    return 0;
 }
 
-pub fn wordDescAll(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordDescAll(forth: *Forth, _: *Header) ForthError!void {
     var e = forth.last_word;
     while (e) |entry| {
         try forth.print("{s}: {s}\n", .{ entry.name, entry.desc });
         e = entry.previous;
     }
     try forth.print("\n", .{});
-    return 0;
 }
 
-pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordDumpWord(forth: *Forth, _: *Header) ForthError!void {
     var name = forth.words.next() orelse return ForthError.WordReadError;
     var header = forth.findWord(name) orelse return ForthError.NotFound;
 
     // Dump info about a primitive word.
 
-    if (header.func != &Forth.inner) {
+    if (header.func != &inner) {
         const h: u64 = @intFromPtr(header);
         const p: u64 = @intFromPtr(header.func);
         try forth.print("Word name: {s} len: {} header: {x} func: {x}\n", .{ header.name, header.len, h, p });
 
         try forth.print("Description: {s}\n", .{header.desc});
-        return 0;
+        return;
     }
 
     // Word is a secondary, dump the meta info first.
 
-    //    var body = header.bodyOfType([*]u64);
     var len = header.bodyLen();
     try forth.print("Word name: {s} len: {} immed: {}\n", .{ header.name, len, header.immediate });
     try forth.print("Description: {s}\n\n", .{header.desc});
@@ -132,17 +144,19 @@ pub fn wordDumpWord(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64
     for (0..wLen) |j| {
         const chars = string.u64ToChars(ubody[j]);
         try forth.print("{:4} {x:16}   {s}", .{ j, ubody[j], chars });
-        if (forth.isWordP(ubody[j])) {
+        if (inner_module.isOpCode(ubody[j])) {
+            const opCode: OpCode = @enumFromInt(ubody[j]);
+            try forth.print("     {}", .{opCode});
+        } else if (forth.isWordP(ubody[j])) {
             const hp: *Header = @ptrFromInt(ubody[j]);
-            try forth.print("      {s}", .{hp.name});
+            try forth.print("     Call {s}", .{hp.name});
         }
         try forth.print("\n", .{});
     }
-
-    return 0;
 }
 
 pub fn defineInspect(forth: *Forth) !void {
+    _ = try forth.definePrimitiveDesc("stacktrace", " -- : Dump the current forth stacktrace", &wordStackTrace, false);
     _ = try forth.definePrimitiveDesc("dump", "addr len -- : Dump an arbitrary area of memory", &wordDump, false);
 
     _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, false);

@@ -125,6 +125,13 @@ finish
   header.*len +
 ;
 
+: time-execution (word-addr -- num-ticks)
+  ticks
+  swap exec
+  ticks
+  swap -
+;
+
 (Character)
 
 8   :char-bs    let
@@ -316,7 +323,6 @@ finish
   cr
   eval-command
   emit-prompt
-  (char-nl emit eval-command emit-prompt)
 ;
 
 : redisplay-handler
@@ -443,12 +449,12 @@ finish
 ;
 
 :by-hand create
-  '*push-u64 ,
+  *push-u64 ,
   900 ,
-  '*push-u64 ,
+  *push-u64 ,
   99 ,
   '+ ,
-  *stop ,
+  *return ,
 finish
 
 'by-hand secondary!

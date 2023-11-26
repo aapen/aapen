@@ -22,6 +22,10 @@ const FormatOptions = std.fmt.FormatOptions;
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
 
+const inner_module = @import("inner.zig");
+const inner = inner_module.inner;
+const OpCode = inner_module.OpCode;
+
 const InvalidOffset = std.math.maxInt(u64);
 
 inline fn intFromPtr(comptime ResultType: type, p: anytype) ResultType {
@@ -44,13 +48,12 @@ inline fn wordOffset(a: anytype, b: anytype) i64 {
     return @divTrunc(diff, sizeOf(i64, u64));
 }
 
-pub fn pushBodyValue(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!i64 {
+pub fn pushBodyValue(forth: *Forth, header: *Header) ForthError!void {
     var body = header.bodyOfType([*]u64);
     try forth.stack.push(body[0]);
-    return 0;
 }
 
-pub fn wordLet(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordLet(forth: *Forth, _: *Header) ForthError!void {
     const pName = try forth.popAs([*:0]u8);
     const value = try forth.stack.pop();
 
@@ -59,78 +62,69 @@ pub fn wordLet(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     _ = try forth.create(name, "A constant", &pushBodyValue, false);
     try forth.addNumber(value);
     forth.complete();
-    return 0;
 }
 
 // Create a new dictionary definition.
 // Resulting dictionary entry just pushes its body address onto the stack.
 // This is a fairly low level word.
-pub fn wordCreate(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordCreate(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertNotCompiling();
     var pName = try forth.popAs([*:0]u8);
     var lName = string.strlen(pName);
     var name = pName[0..lName];
 
     _ = try forth.create(name, "", Forth.pushBodyAddress, false);
-    return 0;
 }
 
 // Finish out a word created with create.
 // Currently just fills in the length of the word.
-pub fn wordFinish(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordFinish(forth: *Forth, _: *Header) ForthError!void {
     forth.complete();
-    return 0;
 }
 
 // Allocate a word in the dictionary and set its value to TOS.
 // Should be between a create/finish pair, but this is not checked.
-pub fn wordComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordComma(forth: *Forth, _: *Header) ForthError!void {
     const value = try forth.stack.pop();
     try forth.addNumber(value);
-    return 0;
 }
 
 // Allocate a word in the dictionary and set its value to the string point to by TOS.
 // Should be between a create/finish pair, but this is not checked.
-pub fn wordSComma(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordSComma(forth: *Forth, _: *Header) ForthError!void {
     const value = try forth.stack.pop();
     const s: [*:0]const u8 = @ptrFromInt(value);
     try forth.addString(s[0..string.strlen(s)]);
-    return 0;
 }
 
 // Allocate n words in the dictionary. Should be in the middle
 // of a create/finish pair, but this is not checked.
-pub fn wordAllot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordAllot(forth: *Forth, _: *Header) ForthError!void {
     const n = try forth.stack.pop();
     _ = try forth.allocate(@alignOf(u64), n * @sizeOf(u64));
-    return 0;
 }
 
 // Allocate n *Bytes* in the dictionary. Should be in the middle
 // of a create/finish pair, but this is not checked.
-pub fn wordBallot(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordBallot(forth: *Forth, _: *Header) ForthError!void {
     const n = try forth.stack.pop();
     _ = try forth.allocate(@alignOf(u8), n);
-    return 0;
 }
 
 // Temporarily turn compile mode off.
-pub fn wordLBrace(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordLBrace(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
     forth.compiling = 0;
-    return 0;
 }
 
 // Turn compile mode back on.
-pub fn wordRBrace(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordRBrace(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertNotCompiling();
     forth.compiling = 1;
-    return 0;
 }
 
 // Begin the definition of a new secondary word.
-pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordColon(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertNotCompiling();
 
     var name = try forth.readWord();
@@ -143,51 +137,47 @@ pub fn wordColon(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
             desc = try parser.parseComment(t);
         }
     }
-    _ = try forth.startWord(name, desc, Forth.inner, false);
-    return 0;
+    _ = try forth.startWord(name, desc, inner, false);
 }
 
 // Complete a secondary word.
-pub fn wordSemi(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordSemi(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
-    try forth.addStop();
+    try forth.addOpCode(OpCode.Return);
     try forth.completeWord();
-    return 0;
 }
 
 // Compile an unconditional return from the current word.
-pub fn wordReturn(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordReturn(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
-    try forth.addStop();
-    return 0;
+    try forth.addOpCode(OpCode.Return);
 }
 
 // Compiler word, generate the code for an if.
 // Emits an jump_if_not instruction with an invalid target address
-// and pushes the address of the target address onto the rstack.
-pub fn wordIf(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+// and pushes the address of the target address onto the istack.
+pub fn wordIf(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
-    try forth.addCall(forth.jump_if_not);
-    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addOpCode(OpCode.JumpIfNot);
+    try forth.istack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
-    return 0;
 }
 
 // Compiler word, generate the code for the else of if/else/endif.
 // Generates an unconditional jump instruction with an invalid target address,
-// pops the address (pushed by if) off of the rstack and plugs in the address
+// pops the address (pushed by if) off of the istack and plugs in the address
 // just after the jump instruction.
-pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordElse(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
 
-    const if_jump_p = try forth.rstack.pop();
+    const if_jump_p = try forth.istack.pop();
     const if_jump_p_u64: [*]u64 = @ptrFromInt(if_jump_p);
 
     // Add the else jump instruction and push its address onto the stack
     // to be filled in later by endif.
 
-    try forth.addCall(forth.jump);
-    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addOpCode(OpCode.Jump);
+    try forth.istack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
 
     // Back fill the jump address for the If.
@@ -195,17 +185,15 @@ pub fn wordElse(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const current = memory.alignByType(forth.current(), u64);
     const jump_addr = wordOffset(current, if_jump_p_u64) + 1;
     if_jump_p_u64[0] = @bitCast(jump_addr);
-
-    return 0;
 }
 
 // Compiler word, generate the end code for if/endif or if/else/endif.
-// Pops the address off of the rstack and plugs in the offset to the
+// Pops the address off of the istack and plugs in the offset to the
 // current instuction.
-pub fn wordEndif(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordEndif(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
 
-    const if_jump_p = try forth.rstack.pop();
+    const if_jump_p = try forth.istack.pop();
     const if_jump_p_u64: [*]u64 = @ptrFromInt(if_jump_p);
 
     const current = memory.alignByType(forth.current(), u64);
@@ -213,41 +201,38 @@ pub fn wordEndif(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
     const jump_addr = wordOffset(current, if_jump_p_u64) + 1;
 
     if_jump_p_u64[0] = @bitCast(jump_addr);
-    return 0;
 }
 
 // Compiler word, generate the code for the begining of a while loop.
-// Just pushes the current address onto the rstack.
+// Just pushes the current address onto the istack.
 // Structure of a while loop is:  while <cond> do <body> done
-pub fn wordWhile(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordWhile(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
-    try forth.rstack.push(@intFromPtr(forth.current()));
-    return 0;
+    try forth.istack.push(@intFromPtr(forth.current()));
 }
 
 // Compiler word, generate the code for do, which ends the condition part of a while loop.
 // Emits an jump_if_not instruction with an invalid target address (done will fill it in)
-// and pushes the address of the target address onto the rstack.
-pub fn wordDo(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+// and pushes the address of the target address onto the istack.
+pub fn wordDo(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
-    try forth.addCall(forth.jump_if_not);
-    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addOpCode(OpCode.JumpIfNot);
+    try forth.istack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
-    return 0;
 }
 
 // Generate the end code for the end of a while loop.
 // Pops the address of the jump_if_not target and the address of the
-// beginning of the loop off of the rstack.
+// beginning of the loop off of the istack.
 // Generates the jump back to the beginning of the loop and
 // fills in the jump-if-not target with the post loop address.
 fn generateLoopTail(forth: *Forth) ForthError!void {
-    const do_p: [*]u64 = @ptrFromInt(try forth.rstack.pop());
-    const while_p: [*]u64 = @ptrFromInt(try forth.rstack.pop());
+    const do_p: [*]u64 = @ptrFromInt(try forth.istack.pop());
+    const while_p: [*]u64 = @ptrFromInt(try forth.istack.pop());
 
     // Add jump to begining of the loop instruction.
 
-    try forth.addCall(forth.jump);
+    try forth.addOpCode(OpCode.Jump);
     var current_p = memory.alignByType(forth.current(), u64);
     const while_offset = wordOffset(while_p, current_p) + 1;
     try forth.addNumber(@bitCast(while_offset));
@@ -258,69 +243,74 @@ fn generateLoopTail(forth: *Forth) ForthError!void {
     do_p[0] = @bitCast(do_offset);
 }
 
-pub fn wordDone(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordDone(forth: *Forth, _: *Header) ForthError!void {
     try generateLoopTail(forth);
-
-    return 0;
 }
 
 // Compiler word, generate the code for the begining of a repeat loop.
 // Structure is:  n times <body> repeat
-pub fn wordTimes(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordTimes(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
     // code to push count onto return stack
-    try forth.addCall(forth.to_rstack);
-    try forth.addCall(forth.drop);
-    try forth.addCall(forth.push_u64);
+    try forth.addOpCode(OpCode.ToIStack);
+    try forth.addOpCode(OpCode.Drop);
+    try forth.addOpCode(OpCode.PushU64);
     try forth.addNumber(0);
-    try forth.addCall(forth.to_rstack);
-    try forth.addCall(forth.drop);
-    try forth.rstack.push(@intFromPtr(forth.current()));
-    try forth.addCall(forth.jump_if_rle);
-    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addOpCode(OpCode.ToIStack);
+    try forth.addOpCode(OpCode.Drop);
+    try forth.istack.push(@intFromPtr(forth.current()));
+    try forth.addOpCode(OpCode.JumpIfRLE);
+    try forth.istack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
-
-    return 0;
 }
 
 // Compiler word, generate the code for the begining of for-range loop.
 // Structure is:  n1 n2 for-range <body> repeat
-pub fn wordForRange(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+pub fn wordForRange(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertCompiling();
     // code to push count onto return stack
-    try forth.addCall(forth.to_rstack);
-    try forth.addCall(forth.drop);
-    try forth.addCall(forth.to_rstack);
-    try forth.addCall(forth.drop);
-    try forth.rstack.push(@intFromPtr(forth.current()));
-    try forth.addCall(forth.jump_if_rle);
-    try forth.rstack.push(@intFromPtr(forth.current()));
+    try forth.addOpCode(OpCode.ToIStack);
+    try forth.addOpCode(OpCode.Drop);
+    try forth.addOpCode(OpCode.ToIStack);
+    try forth.addOpCode(OpCode.Drop);
+    try forth.istack.push(@intFromPtr(forth.current()));
+    try forth.addOpCode(OpCode.JumpIfRLE);
+    try forth.istack.push(@intFromPtr(forth.current()));
     try forth.addNumber(InvalidOffset);
-
-    return 0;
 }
 
-pub fn wordRepeat(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    try forth.addCall(forth.inc_rstack);
+pub fn wordRepeat(forth: *Forth, _: *Header) ForthError!void {
+    try forth.addOpCode(OpCode.IncIStack);
     try generateLoopTail(forth);
-    try forth.addCall(forth.r_drop);
-    try forth.addCall(forth.r_drop);
-
-    return 0;
+    try forth.addOpCode(OpCode.IDrop);
+    try forth.addOpCode(OpCode.IDrop);
 }
 
 /// --
-pub fn wordRStack(forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-    for (forth.rstack.items()) |item| {
+pub fn wordIStack(forth: *Forth, _: *Header) ForthError!void {
+    for (forth.istack.items()) |item| {
         try forth.print("{}\n", .{item});
     }
-    return 0;
 }
 
 pub fn defineCompiler(forth: *Forth) !void {
     // Return stack.
 
-    _ = try forth.definePrimitiveDesc("?rstack", " -- :Print the return stack.", &wordRStack, false);
+    _ = try forth.definePrimitiveDesc("?istack", " -- :Print the return stack.", &wordIStack, false);
+
+    // OpCode constants.
+
+    try forth.defineConstant("*return", @intFromEnum(OpCode.Return));
+    try forth.defineConstant("*push-u64", @intFromEnum(OpCode.PushU64));
+    try forth.defineConstant("*push-string", @intFromEnum(OpCode.PushString));
+    try forth.defineConstant("*jump", @intFromEnum(OpCode.Jump));
+    try forth.defineConstant("*jump-if-not", @intFromEnum(OpCode.JumpIfNot));
+    try forth.defineConstant("*jump-if-rle", @intFromEnum(OpCode.JumpIfRLE));
+    try forth.defineConstant("*drop", @intFromEnum(OpCode.Drop));
+    try forth.defineConstant("*idrop", @intFromEnum(OpCode.IDrop));
+    try forth.defineConstant("*inc-istack", @intFromEnum(OpCode.IncIStack));
+    try forth.defineConstant("*to-istack", @intFromEnum(OpCode.ToIStack));
+    try forth.defineConstant("*to-dstack", @intFromEnum(OpCode.ToDStack));
 
     // Secondary definition words.
 
