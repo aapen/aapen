@@ -11,7 +11,7 @@ const Forth = forth_module.Forth;
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
 
-fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
+fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth) ForthError!void {
     const f = try forth.stack.pop();
     const func: FuncT = @ptrFromInt(f);
 
@@ -115,87 +115,86 @@ fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth, _: [*
     if (pushResult) {
         try forth.stack.push(result);
     }
-    return 0;
 }
 
 /// fAddr -- : Call a no args function, no return value.
-pub fn wordInvoke0(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn () void, false, forth, body, offset, header);
+pub fn wordInvoke0(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn () void, false, forth);
 }
 
 /// u64 fAddr -- : Call a 1 arg function, no return value.
-pub fn wordInvoke1(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64) void, false, forth, body, offset, header);
+pub fn wordInvoke1(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64) void, false, forth);
 }
 
 /// u64 u64 fAddr -- : Call a 2 arg function, no return value.
-pub fn wordInvoke2(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64) void, false, forth, body, offset, header);
+pub fn wordInvoke2(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64) void, false, forth);
 }
 
 /// u64 u64 u64 fAddr -- : Call a 3 arg function, no return value.
-pub fn wordInvoke3(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64) void, false, forth, body, offset, header);
+pub fn wordInvoke3(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64) void, false, forth);
 }
 
 /// u64 u64 u64 u64 fAddr -- : Call a 4 arg function, no return value.
-pub fn wordInvoke4(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64, u64) void, false, forth, body, offset, header);
+pub fn wordInvoke4(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64, u64) void, false, forth);
 }
 
 /// u64 u64 u64 u64 u64 fAddr -- : Call a 5 arg function, no return value.
-pub fn wordInvoke5(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64, u64, u64) void, false, forth, body, offset, header);
+pub fn wordInvoke5(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64, u64, u64) void, false, forth);
 }
 
 /// u64 u64 u64 u64 u64 u64 fAddr -- : Call a 6 arg function, no return value.
-pub fn wordInvoke6(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64, u64, u64, u64) void, false, forth, body, offset, header);
+pub fn wordInvoke6(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64, u64, u64, u64) void, false, forth);
 }
 
 /// u64 u64 u64 u64 u64 u64 u64 fAddr -- : Call a 7 arg function, no return value.
-pub fn wordInvoke7(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64, u64, u64, u64, u64) void, false, forth, body, offset, header);
+pub fn wordInvoke7(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64, u64, u64, u64, u64) void, false, forth);
 }
 
 /// fAddr -- result : Call a no args function, push return value.
-pub fn wordInvoke0R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn () u64, true, forth, body, offset, header);
+pub fn wordInvoke0R(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn () u64, true, forth);
 }
 
 /// u64 fAddr -- result : Call a 1 argument function, push return value.
-pub fn wordInvoke1R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (a: u64) u64, true, forth, body, offset, header);
+pub fn wordInvoke1R(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (a: u64) u64, true, forth);
 }
 
 /// u64 u64 fAddr -- result : Call a 2 argument function, push return value.
-pub fn wordInvoke2R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (a: u64, b: u64) u64, true, forth, body, offset, header);
+pub fn wordInvoke2R(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (a: u64, b: u64) u64, true, forth);
 }
 
 /// u64 u64 u64 fAddr -- result : Call a 3 argument function, push return value.
-pub fn wordInvoke3R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (a: u64, b: u64, c: u64) u64, true, forth, body, offset, header);
+pub fn wordInvoke3R(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (a: u64, b: u64, c: u64) u64, true, forth);
 }
 
 /// u64 u64 u64 u64 fAddr -- result : Call a 4 arg function, push return value.
-pub fn wordInvoke4R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64, u64) u64, true, forth, body, offset, header);
+pub fn wordInvoke4R(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64, u64) u64, true, forth);
 }
 
 /// u64 u64 u64 u64 u64 fAddr -- result : Call a 5 arg function, push return value.
-pub fn wordInvoke5R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64, u64, u64) u64, true, forth, body, offset, header);
+pub fn wordInvoke5R(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64, u64, u64) u64, true, forth);
 }
 
 /// u64 u64 u64 u64 u64 u64 fAddr -- result : Call a 6 arg function, push return value.
-pub fn wordInvoke6R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64, u64, u64, u64) u64, true, forth, body, offset, header);
+pub fn wordInvoke6R(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64, u64, u64, u64) u64, true, forth);
 }
 
 /// u64 u64 u64 u64 u64 u64 u64 fAddr -- result : Call a 7 arg function, push return value.
-pub fn wordInvoke7R(forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64 {
-    return invokeF(*const fn (u64, u64, u64, u64, u64, u64, u64) u64, true, forth, body, offset, header);
+pub fn wordInvoke7R(forth: *Forth, _: *Header) ForthError!void {
+    return invokeF(*const fn (u64, u64, u64, u64, u64, u64, u64) u64, true, forth);
 }
 
 fn double_u64(a: u64) u64 {

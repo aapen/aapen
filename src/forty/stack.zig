@@ -28,19 +28,23 @@ pub fn Stack(comptime T: type) type {
             }
         }
 
-        pub fn push(self: *Self, value: T) !void {
+        pub inline fn push(self: *Self, value: T) !void {
             try self.contents.append(value);
         }
 
-        pub fn pop(self: *Self) !T {
+        pub inline fn pop(self: *Self) !T {
             if (self.isEmpty()) {
                 return ForthError.UnderFlow;
             }
             return self.contents.pop();
         }
 
-        pub fn isEmpty(self: *Self) bool {
+        pub inline fn isEmpty(self: *Self) bool {
             return self.contents.items.len == 0;
+        }
+
+        pub inline fn depth(self: *Self) usize {
+            return self.contents.items.len;
         }
 
         pub fn items(self: *Self) []T {

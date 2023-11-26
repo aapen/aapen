@@ -25,14 +25,19 @@ const Header = memory_module.Header;
 const Memory = memory_module.Memory;
 const intAlignBy = memory_module.intAlignBy;
 
+const inner_module = @import("inner.zig");
+const inner = inner_module.inner;
+const OpCode = inner_module.OpCode;
+
 pub const init_f = @embedFile("init.f");
 var initBuffer = buffer.BufferSource{};
 
 const InputStack = stack.Stack(*Readline);
 const DataStack = stack.Stack(u64);
-const ReturnStack = stack.Stack(u64);
+const IntermediateStack = stack.Stack(u64);
+const CallStack = stack.Stack(u64);
 
-pub const WordFunction = *const fn (forth: *Forth, body: [*]u64, offset: u64, header: *Header) ForthError!i64;
+pub const WordFunction = *const fn (forth: *Forth, header: *Header) ForthError!void;
 
 const parser = @import("parser.zig");
 const ForthTokenIterator = parser.ForthTokenIterator;
@@ -46,7 +51,8 @@ pub const Forth = struct {
     console: *MainConsole = undefined,
     char_buffer: *CharBuffer = undefined,
     stack: DataStack = undefined,
-    rstack: ReturnStack = undefined,
+    istack: IntermediateStack = undefined,
+    call_stack: CallStack = undefined,
     input: InputStack = undefined,
     buffer: []u8 = undefined,
     ibase: u64 = 10,
@@ -55,16 +61,6 @@ pub const Forth = struct {
     memory: Memory = undefined,
     last_word: ?*Header = null,
     new_word: ?*Header = null,
-    push_u64: *Header = undefined,
-    push_string: *Header = undefined,
-    drop: *Header = undefined,
-    r_drop: *Header = undefined,
-    to_rstack: *Header = undefined,
-    to_dstack: *Header = undefined,
-    jump_if_rle: *Header = undefined,
-    inc_rstack: *Header = undefined,
-    jump: *Header = undefined,
-    jump_if_not: *Header = undefined,
     compiling: u64 = 0,
     line_buffer: *string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
@@ -81,25 +77,14 @@ pub const Forth = struct {
         this.console = c;
         this.char_buffer = cb;
         this.stack = DataStack.init(&a);
-        this.rstack = ReturnStack.init(&a);
+        this.istack = IntermediateStack.init(&a);
+        this.call_stack = CallStack.init(&a);
         this.buffer = try a.alloc(u8, MemSize); // TBD make size a parameter.
         this.memory = Memory.init(this.buffer.ptr, this.buffer.len);
         this.line_buffer = try a.create(string.LineBuffer);
 
-        this.push_string = try this.definePrimitive("*push-string", &wordPushString, false);
-        this.push_u64 = try this.definePrimitive("*push-u64", &wordPushU64, false);
-        this.jump = try this.definePrimitive("*jump", &wordJump, false);
-        this.jump_if_not = try this.definePrimitive("*jump-if-not", &wordJumpIfNot, false);
-        this.drop = try this.definePrimitiveDesc("drop", " n -- : Drop the top stack value", &wordDrop, false);
-        this.r_drop = try this.definePrimitiveDesc("rdrop", " n -- : Drop the top rstack value", &wordRDrop, false);
-        this.to_rstack = try this.definePrimitiveDesc("->rstack", " n -- : Push the data TOS onto the rstack, doen't pop stack.", &wordToRStack, false);
-        this.to_dstack = try this.definePrimitiveDesc("->stack", " -- n : Copies the rstack TOS onto the data stack, doesn't pop rstack", &wordToDStack, false);
-        this.jump_if_rle = try this.definePrimitive("*jump-if-rle", &wordJumpIfRLE, false);
-        this.inc_rstack = try this.definePrimitive("rstack-inc", &wordIncRStack, false);
-
         _ = try this.defineBuffer("cmd-buffer", 20);
         try this.defineConstant("inner", @intFromPtr(&inner));
-        try this.defineConstant("*stop", 0);
         try this.defineConstant("forth", @intFromPtr(this));
         try this.defineConstant("this", @intFromPtr(this));
         try this.defineStruct("forth", Forth);
@@ -122,7 +107,8 @@ pub const Forth = struct {
 
     pub fn deinit(this: *Forth) !void {
         this.stack.deinit();
-        this.rstack.deinit();
+        this.istack.deinit();
+        this.call_stack.deinit();
     }
 
     pub inline fn popAs(this: *Forth, comptime T: type) !T {
@@ -170,7 +156,8 @@ pub const Forth = struct {
     // Clears the stacks and aborts a new word definition.
     pub fn reset(this: *Forth) !void {
         try this.stack.reset();
-        try this.rstack.reset();
+        try this.istack.reset();
+        try this.call_stack.reset();
         this.new_word = null;
         this.compiling = 0;
     }
@@ -235,10 +222,9 @@ pub const Forth = struct {
     }
 
     // Push the address of the word body onto the stack.
-    pub fn pushBodyAddress(self: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!i64 {
+    pub fn pushBodyAddress(self: *Forth, header: *Header) ForthError!void {
         var body = header.bodyOfType([*]u8);
         try self.stack.push(@intFromPtr(body));
-        return 0;
     }
 
     // Define a primitive w/o a description.
@@ -252,10 +238,8 @@ pub const Forth = struct {
     // Define a constant with a single u64 value. What we really end up with
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
-        _ = try this.startWord(name, "A constant", &inner, false);
-        try this.addCall(this.push_u64);
+        _ = try this.startWord(name, "A constant", &compiler.pushBodyValue, false);
         try this.addNumber(v);
-        try this.addStop();
         try this.completeWord();
     }
 
@@ -350,112 +334,6 @@ pub const Forth = struct {
         this.compiling = 0;
     }
 
-    // This is the inner interpreter, effectively the word
-    // that runs all the secondary words.
-    pub fn inner(forth: *Forth, _: [*]u64, _: u64, header: *Header) ForthError!i64 {
-        var body = header.bodyOfType([*]u64);
-        var i: usize = 0;
-        while (true) {
-            try forth.trace("{:4}: {x:4}: ", .{ i, body[i] });
-            if (body[i] == 0) {
-                break;
-            }
-            const p: *Header = @ptrFromInt(body[i]);
-            try forth.trace("Call: {x} {s}\n", .{ body[i], p.name });
-            try forth.trace("{:4}: Stack: ", .{i});
-            for (forth.stack.items()) |item| {
-                try forth.trace("{}\t", .{item});
-            }
-            try forth.trace("\n", .{});
-            const delta = try p.func(forth, body, i, p);
-            var new_i: i64 = @intCast(i);
-            new_i = new_i + 1 + delta;
-            i = @intCast(new_i);
-        }
-        return 0;
-    }
-
-    // This is the word that pushes ints onto the stack.
-    fn wordPushU64(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
-        try this.stack.push(body[i + 1]);
-        return 1;
-    }
-
-    // This is the word that pushes strings onto the stack.
-    fn wordPushString(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
-        try this.trace("Push string len: {}\n", .{body[i + 1]});
-        const data_size = body[i + 1];
-        var p_string: [*]u8 = @ptrCast(body + i + 2);
-        try this.stack.push(@intFromPtr(p_string));
-        return @intCast(data_size + 1);
-    }
-
-    // This is the word that does an unconditional jump, used in loops and if's etc.
-    fn wordJump(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
-        const delta: i64 = @as(i64, @bitCast(body[i + 1]));
-        try this.trace("Jump -> {}\n", .{i});
-        return delta - 1;
-    }
-
-    // This is the word that does a conditional jump, used in loops and if's etc.
-    fn wordJumpIfNot(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
-        var c: u64 = try this.stack.pop();
-        const delta: i64 = @as(i64, @bitCast(body[i + 1]));
-        try this.trace("JumpIfNot cond: {} target {} ", .{ c, delta });
-
-        if (c == 0) {
-            return delta - 1;
-        } else {
-            return 1;
-        }
-    }
-
-    // This is the word that does a conditional jump if the top of the rstack
-    // is <= 0. *Does not pop the rstack*.
-    fn wordJumpIfRLE(this: *Forth, body: [*]u64, i: u64, _: *Header) ForthError!i64 {
-        var first: u64 = try this.rstack.pop();
-        var second: u64 = try this.rstack.pop();
-        try this.rstack.push(second);
-        try this.rstack.push(first);
-
-        const delta: i64 = @as(i64, @bitCast(body[i + 1]));
-        try this.trace("JumpIfRNP first {} second {} target {} ", .{ first, second, delta });
-
-        if (second <= first) {
-            return delta - 1;
-        } else {
-            return 1;
-        }
-    }
-
-    pub fn wordDrop(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-        _ = try this.stack.pop();
-        return 0;
-    }
-
-    pub fn wordRDrop(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-        _ = try this.rstack.pop();
-        return 0;
-    }
-
-    pub fn wordIncRStack(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-        const v = try this.rstack.pop();
-        try this.rstack.push(v + 1);
-        return 0;
-    }
-
-    pub fn wordToRStack(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-        const v = try this.stack.peek();
-        try this.rstack.push(v);
-        return 0;
-    }
-
-    pub fn wordToDStack(this: *Forth, _: [*]u64, _: u64, _: *Header) ForthError!i64 {
-        const v = try this.rstack.peek();
-        try this.stack.push(v);
-        return 0;
-    }
-
     // Evaluate a command, a string containing zero or more words.
     pub fn evalCommand(this: *Forth, cmd: []const u8) !void {
         const savedWords = this.words;
@@ -483,6 +361,7 @@ pub const Forth = struct {
     // or a reference to a word and either compile it or execute
     // directly. Note that this is the place where we ignore comments.
     pub fn evalToken(this: *Forth, token: []const u8) !void {
+        //try this.serial_print("EvalToken {s}\n", .{token});
         var header = this.findWord(token);
 
         if (header) |h| {
@@ -505,7 +384,7 @@ pub const Forth = struct {
         const i: u64 = @intFromPtr(header);
 
         if (this.compiling != 0) {
-            try this.addCall(this.push_u64);
+            try this.addOpCode(OpCode.PushU64);
             try this.addNumber(i);
         } else {
             try this.stack.push(i);
@@ -516,7 +395,7 @@ pub const Forth = struct {
     // If we are not compiling, just push the numnber onto the stack.
     fn evalNumber(this: *Forth, i: u64) !void {
         if (this.compiling != 0) {
-            try this.addCall(this.push_u64);
+            try this.addOpCode(OpCode.PushU64);
             try this.addNumber(i);
         } else {
             try this.stack.push(i);
@@ -529,7 +408,7 @@ pub const Forth = struct {
     fn evalString(this: *Forth, token: []const u8) !void {
         const s = try parser.parseString(token);
         if (this.compiling != 0) {
-            try this.addCall(this.push_string);
+            try this.addOpCode(OpCode.PushString);
             try this.addString(s);
         } else {
             const allocated_s = try this.temp_allocator.dupeZ(u8, s);
@@ -542,8 +421,10 @@ pub const Forth = struct {
     // Otherwise just execute it.
     fn evalHeader(this: *Forth, header: *Header) !void {
         if ((this.compiling == 0) or header.immediate) {
-            var fake_body: [1]u64 = .{0};
-            _ = try header.func(this, &fake_body, 0, header);
+            try header.func(this, header);
+        } else if (header.func == inner) {
+            try this.addOpCode(OpCode.CallSecondary);
+            try this.addNumber(@intFromPtr(header));
         } else {
             try this.addCall(header);
         }
@@ -559,9 +440,9 @@ pub const Forth = struct {
         _ = try this.memory.addBytes(@constCast(@ptrCast(&v)), @alignOf(u64), @sizeOf(u64));
     }
 
-    // Add a stop command to memory.
-    pub inline fn addStop(this: *Forth) !void {
-        try this.addNumber(0);
+    // Add an opcode to memory.
+    pub inline fn addOpCode(this: *Forth, oc: OpCode) !void {
+        try this.addNumber(@intFromEnum(oc));
     }
 
     // Copy a call to a word into memory.
