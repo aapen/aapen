@@ -45,7 +45,8 @@ Currently supports Raspberry Pi 3b only.
 We are currently using Zig build: 0.12.0-dev.494+a8d2ed806
 
 - Linux download: https://ziglang.org/builds/zig-linux-x86_64-0.12.0-dev.494+a8d2ed806.tar.xz
-- Mac download: https://ziglang.org/builds/zig-macos-aarch64-0.12.0-dev.494+a8d2ed806.tar.xz
+- Mac (on Apple Silicon) download: https://ziglang.org/builds/zig-macos-aarch64-0.12.0-dev.494+a8d2ed806.tar.xz
+- Mac (on Intel) download: https://ziglang.org/builds/zig-macos-x86_64-0.12.0-dev.494+a8d2ed806.tar.xz
 
 ### One-time project setup for firmware
 
