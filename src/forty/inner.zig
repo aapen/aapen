@@ -42,6 +42,16 @@ pub fn isOpCode(i: u64) bool {
     return true;
 }
 
+pub fn executeHeader(forth: *Forth, header: *Header) !void {
+    try forth.call_stack.push(@intFromPtr(header));
+    try forth.call_stack.push(0);
+    defer {
+        _ = forth.call_stack.pop() catch {};
+        _ = forth.call_stack.pop() catch {};
+    }
+    try header.func(forth, header);
+}
+
 // Run the secondary word pointed at by head. Iterate thru the body
 // of head, executing each instruction in turn.
 // Generally this function only gets called by the outter (i.e. command line)
@@ -65,7 +75,7 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
                 try forth.call_stack.push(@intFromPtr(header));
                 try forth.call_stack.push(i + 2);
                 const p: *Header = @ptrFromInt(body[i + 1]);
-                //try forth.trace("Call Secondary: from {s} -> {*} {s}\n", .{ header.name, p, p.name });
+                try forth.trace("Call Secondary: from {s} -> {*} {s}\n", .{ header.name, p, p.name });
                 i = 0;
                 header = p;
                 body = header.bodyOfType([*]u64);
@@ -83,7 +93,7 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
                 i = try forth.call_stack.pop();
                 header = @as(*Header, @ptrFromInt(try forth.call_stack.pop()));
                 body = header.bodyOfType([*]u64);
-                //try forth.trace("back in {s}, header: {*} i {}\n", .{ header.name, header, i });
+                try forth.trace("back in {s}, header: {*} i {}\n", .{ header.name, header, i });
             },
 
             @intFromEnum(OpCode.PushU64) => {
