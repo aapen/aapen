@@ -164,10 +164,10 @@ const HostConfig = packed struct {
         undefined = 3,
     }, // 0..1
     fs_ls_support_only: u1, // 2
-    _unknown_0: u4, // 3..6
+    _reserved_0: u4, // 3..6
     enable_32khz: u1, // 7
     resume_valid: u8, // 8 .. 15
-    _unknown_1: u7, // 16..22
+    _reserved_1: u7, // 16..22
     desc_dma: u1, // 23
     frame_list_entries: enum(u2) {
         list_entries_8 = 0,
@@ -176,7 +176,7 @@ const HostConfig = packed struct {
         list_entries_64 = 3,
     }, // 24..25
     per_sched_enable: u1, //26
-    _unknown_2: u4, // 27..30
+    _reserved_2: u4, // 27..30
     mode_ch_tim_en: u1, // 31
 };
 
@@ -341,12 +341,13 @@ const RxStatus = packed struct {
         mdata = 0b11,
     }, // 15..16
     packet_status: enum(u4) {
-        in = 0b0010,
-        transfer_complete = 0b0011,
+        in_packet_received = 0b0010,
+        in_transfer_complete = 0b0011,
         data_toggle_error = 0b0101,
         channel_halted = 0b0111,
     }, // 17..20
-    _unknown_0: u11, // 21..31
+    frame_number: u4, // 21..24
+    _reserved_0: u7, // 25..31
 };
 
 const NonPeriodicTxFifoSize = packed struct {
@@ -601,20 +602,23 @@ fn connectInterruptHandler(self: *Self) !void {
 }
 
 fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
-    root.debug.kernelMessage("HCI+!");
-
     var self = @fieldParentPtr(Self, "irq_handler", this);
 
     const intr_status = self.core_registers.core_interrupt_status;
 
+    // check if one of the channels raised the interrupt
     if (intr_status.host_channel_intr == 1) {
         const all_intrs = self.host_registers.all_channel_interrupts;
         self.host_registers.all_channel_interrupts = all_intrs;
 
+        // Find the channel that has something to say
         var channel_mask: u32 = 1;
+        // TODO consider using @ctz to find the lowest bit that's set,
+        // instead of looping over all 16 channels.
         for (0..dwc_max_channels) |channel| {
             if ((all_intrs & channel_mask) != 0) {
-                // Mask the channel's interrupt
+                // Mask the channel's interrupt, then call the
+                // channel-specific handler
                 self.channel_registers[channel].channel_int_mask = @bitCast(@as(u32, 0));
                 self.irqHandleChannel(@truncate(channel));
             }
@@ -628,8 +632,7 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
 
 fn irqHandleChannel(self: *Self, which_channel: u5) void {
     var buf: [32]u8 = [_]u8{0} ** 32;
-    _ = std.fmt.bufPrintZ(&buf, "{s} {d}", .{ "CHint", which_channel }) catch 0;
-    root.debug.kernelMessage(&buf);
+    root.debug.kernelMessage(std.fmt.bufPrintZ(&buf, "{s} {d}", .{ "CHint", which_channel }) catch "");
 
     var stage = self.stage_data[which_channel];
 
@@ -637,6 +640,8 @@ fn irqHandleChannel(self: *Self, which_channel: u5) void {
         root.debug.kernelMessage("Spurious interrupt");
         return;
     }
+
+    root.debug.kernelMessage(std.fmt.bufPrintZ(&buf, "{s} {x:0>8}", .{ "HCINTR", @as(u32, @bitCast(self.channel_registers[which_channel].channel_int)) }) catch "");
 
     var request = stage.request;
 
@@ -719,8 +724,9 @@ fn initializeControllerCore(self: *Self) !void {
 
     try self.resetControllerCore();
 
-    self.core_registers.usb_config.ulpi_utmi_sel = 0;
-    self.core_registers.usb_config.phy_if = 0;
+    config.ulpi_utmi_sel = 0;
+    config.phy_if = 0;
+    self.core_registers.usb_config = config;
 
     const hw2 = self.core_registers.hardware_config_2;
     config = self.core_registers.usb_config;
@@ -741,10 +747,10 @@ fn initializeControllerCore(self: *Self) !void {
     ahb.max_axi_burst = 0;
     self.core_registers.ahb_config = ahb;
 
-    var negotiation = self.core_registers.usb_config;
-    negotiation.hnp_capable = 0;
-    negotiation.srp_capable = 0;
-    self.core_registers.usb_config = negotiation;
+    config = self.core_registers.usb_config;
+    config.hnp_capable = 0;
+    config.srp_capable = 0;
+    self.core_registers.usb_config = config;
 }
 
 fn enableCommonInterrupts(self: *Self) !void {
@@ -772,6 +778,18 @@ fn resetControllerCore(self: *Self) !void {
 
 fn initializeHost(self: *Self) !void {
     self.power_and_clock_control.* = 0;
+
+    var config = self.host_registers.config;
+
+    if (self.core_registers.hardware_config_2.hs_phy_type == .ulpi and
+        self.core_registers.hardware_config_2.fs_phy_type == .dedicated and
+        self.core_registers.usb_config.ulpi_fsls == 1)
+    {
+        config.fsls_pclk_sel = .sel_48_mhz;
+    } else {
+        config.fsls_pclk_sel = .sel_30_60_mhz;
+    }
+    self.host_registers.config = config;
 
     try self.flushTxFifo();
     self.delayMicros(1);
@@ -818,9 +836,12 @@ fn powerHostPort(self: *Self) !void {
 }
 
 fn enableHostInterrupts(self: *Self) !void {
-    self.core_registers.core_interrupt_mask = @bitCast(@as(u32, 0));
+    var int_mask: InterruptMask = @bitCast(@as(u32, 0));
+    int_mask.host_channel_intr = 1;
+    self.core_registers.core_interrupt_mask = int_mask;
+
+    // clear all pending interrupts
     self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffffffff));
-    self.core_registers.core_interrupt_mask.host_channel_intr = 1;
 }
 
 fn initializeRootPort(self: *Self) !void {
@@ -1364,6 +1385,7 @@ const RootPort = struct {
 
             self.host.delayMillis(100);
 
+            // assert the reset bit for 50 millis
             var port = self.host.host_registers.port;
             port.connect_changed = 0;
             port.enabled = 0;

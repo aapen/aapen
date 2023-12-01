@@ -41,6 +41,20 @@ We currently do not handle:
 1. The host controller has multiple Channels. These have no independent representation and are strictly contained within the host controller driver.
 1. A Transfer is performed on a Channel. The HCD runs an interrupt-driven state machine to execute the Transfer on a Channel.
 
+## Device initialization
+
+When a device is connected (or detected on power-up scan) we have to take multiple steps before it is ready for use:
+
+1. Device is initially detected with device address zero. Its function is unknown. Its maximum packet size is unknown.
+   2. System action: Send a Reset command to the device, then waits for a period of time (how long?)
+   3. System action: Perform a control transfer to device address 0 and request `get_descriptor` with decscriptor type `device`. Read the device class, subclass, protocol, max packet size.
+   3. System action: Pick an unused device address (call it A1) to assign to the new device. Perform a control transfer to the device address 0, endpoint 0 with a `set_address` request.
+2. Device now has an assigned address. Its function is still unknown.
+   3. System action: Perform control transfers to A1 to get the Configuration descriptor. Use the interface count to get all interface descriptors. If we find an interface that we support, instantiate a class driver for it.
+   4. Class driver: For the given device address and interface descriptor, use the endpoint count to get all endpoint descriptors.
+   4. For HID class drivers: find the interrupt endpoints, read and parse the report descriptor(s)
+   5. For HID class drivers: start the initial `IN` request
+
 ## Hardware Model - RPi3
 
 1. The DWC OTG USB host controller (HC) operates at the level of USB Transactions.
@@ -49,14 +63,13 @@ We currently do not handle:
 4. It's up to the application (our operating system) to keep track of which channels are busy.
 5. The application (our operating system) sets up a description of the transaction:
    1. Configure the `channel_transfer_size` register, with both the number of packets and the number of bytes.)
-   2. The `channel_transfer_size` register is also where the initial PID goes. (I.e., `SETUP`, `DATA0`, etc.)
+   2. The `channel_transfer_size` register is also where the initial PID goes. (I.e., `SETUP`, `DATA0`, etc.) It seems that the host controller updates each successive packet's PID.
    2. Configure the `channel_dma_addr` to point at the data to be sent or where the data will be received.
    3. Configure the `channel_int_mask` according to the expected interrupts.
    4. Configure the `channel_character` with the endpoint number, direction, address, "odd frame" bit, low-speed device bit, disable flag (set to 0), and enable flag (set to 1).
 6. It's up to the application to handle NAK, NYET, Stall, and error interrupts.
 5. During the transaction, the HCD will update the transfer size and `channel_dma_buffer` address (I think this means `channel_dma_addr` stays the same)
 6. A "split" transfer deals with low speed devices on a full- or high-speed bus. There's a lot I don't understand about split transfers, so I hope that we don't actually need to deal with them for the keyboard and mouse.
-
 
 ## Packet IDs (PIDs)
 
