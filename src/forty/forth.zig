@@ -481,7 +481,7 @@ pub const Forth = struct {
     // Print stuff out only if debug is non-zero.
     pub inline fn trace(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
         if (this.debug > 0) {
-            try this.print(fmt, args);
+            try serial.writer.print(fmt, args);
         }
     }
 

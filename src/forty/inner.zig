@@ -43,12 +43,6 @@ pub fn isOpCode(i: u64) bool {
 }
 
 pub fn executeHeader(forth: *Forth, header: *Header) !void {
-    try forth.call_stack.push(@intFromPtr(header));
-    try forth.call_stack.push(0);
-    defer {
-        _ = forth.call_stack.pop() catch {};
-        _ = forth.call_stack.pop() catch {};
-    }
     try header.func(forth, header);
 }
 

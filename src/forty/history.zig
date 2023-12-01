@@ -31,10 +31,8 @@ pub const History = struct {
 
     pub fn add(self: *History, cmd: []u8) !void {
         self.make_room();
-        //const s_copy = try self.allocator.dupe(u8, cmd);
-        const new_buf = try self.allocator.alloc(u8, cmd.len);
-        @memcpy(new_buf, cmd);
-        try self.contents.append(new_buf);
+        const s_copy = try self.allocator.dupe(u8, cmd);
+        try self.contents.append(s_copy);
     }
 
     fn make_room(self: *History) void {
