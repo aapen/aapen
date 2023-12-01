@@ -29,6 +29,9 @@ const inner_module = @import("inner.zig");
 const inner = inner_module.inner;
 const OpCode = inner_module.OpCode;
 
+const history = @import("history.zig");
+const History = history.History;
+
 pub const init_f = @embedFile("init.f");
 var initBuffer = buffer.BufferSource{};
 
@@ -55,6 +58,7 @@ pub const Forth = struct {
     call_stack: CallStack = undefined,
     input: InputStack = undefined,
     buffer: []u8 = undefined,
+    history: History = undefined,
     ibase: u64 = 10,
     obase: u64 = 10,
     debug: u64 = 0,
@@ -82,6 +86,7 @@ pub const Forth = struct {
         this.buffer = try a.alloc(u8, MemSize); // TBD make size a parameter.
         this.memory = Memory.init(this.buffer.ptr, this.buffer.len);
         this.line_buffer = try a.create(string.LineBuffer);
+        this.history = History.init(a, 15);
 
         _ = try this.defineBuffer("cmd-buffer", 20);
         try this.defineConstant("inner", @intFromPtr(&inner));
@@ -421,7 +426,8 @@ pub const Forth = struct {
     // Otherwise just execute it.
     fn evalHeader(this: *Forth, header: *Header) !void {
         if ((this.compiling == 0) or header.immediate) {
-            try header.func(this, header);
+            //try header.func(this, header);
+            try inner_module.executeHeader(this, header);
         } else if (header.func == inner) {
             try this.addOpCode(OpCode.CallSecondary);
             try this.addNumber(@intFromPtr(header));
@@ -475,7 +481,7 @@ pub const Forth = struct {
     // Print stuff out only if debug is non-zero.
     pub inline fn trace(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
         if (this.debug > 0) {
-            try this.print(fmt, args);
+            try serial.writer.print(fmt, args);
         }
     }
 

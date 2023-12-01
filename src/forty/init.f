@@ -319,6 +319,10 @@ finish
 : newline-handler (ch -- : Handle a newline. Echos the char, eval, reset buffer.)
   drop
   repl-buffer -1 get-scr-text
+  dup dup "history" s= not   swap "" s= not   and
+  if
+    dup history-add
+  endif
   dup s~
   cr
   eval-command

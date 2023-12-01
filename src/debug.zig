@@ -28,8 +28,6 @@ pub fn log(
 }
 
 pub fn kprint(comptime fmt: []const u8, args: anytype) void {
-    serial.writer.print(fmt, args) catch {};
-
     if (root.main_console_valid) {
         root.main_console.print(fmt, args) catch {};
     } else {

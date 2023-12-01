@@ -31,7 +31,8 @@ const inner = inner_module.inner;
 pub fn wordExec(forth: *Forth, _: *Header) ForthError!void {
     const p = try forth.popAs(*Header);
     //try p.func(forth, p);
-    try inner(forth, p);
+    try inner_module.executeHeader(forth, p);
+    //try inner(forth, p);
 }
 
 /// *[]u8  --  <results>
@@ -506,14 +507,25 @@ pub fn wordGetScreenText(forth: *Forth, _: *Header) ForthError!void {
     const pStr = try forth.popAs([*]u8);
     const line_no: u64 = if (n < 0) @intCast(forth.char_buffer.current_row) else @intCast(n);
 
-    //const num_cols = forth.char_buffer.num_cols;
-
     forth.char_buffer.rowTextGet(line_no, pStr);
-    //const trimmed = std.mem.trimRight(u8, pStr[0..num_cols], " ");
-    pStr[forth.char_buffer.current_col + 1] = 0;
+    pStr[forth.char_buffer.current_col] = 0;
     try forth.pushAny(pStr);
 }
 
+pub fn wordHistoryAdd(forth: *Forth, _: *Header) ForthError!void {
+    const pStr = try forth.popAs([*]u8);
+    const str = string.asSlice(pStr);
+    forth.history.add(str) catch |e| {
+        forth.print("Exception: {any}\n", .{e}) catch {};
+    };
+}
+
+pub fn wordHistoryPrint(forth: *Forth, _: *Header) ForthError!void {
+    const items = forth.history.items();
+    for (items) |item| {
+        try forth.print("{s}\n", .{item});
+    }
+}
 pub fn wordSerialSDot(forth: *Forth, _: *Header) ForthError!void {
     const p = try forth.popAs([*]u8);
     const s = string.asSlice(p);
@@ -613,5 +625,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, false);
 
     _ = try forth.definePrimitiveDesc("get-scr-text", "nline -- str : Get the text of the given line.", &wordGetScreenText, false);
-    _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, false);
+
+    _ = try forth.definePrimitiveDesc("history-add", "str -- : Add a string to the command history.", &wordHistoryAdd, false);
+    _ = try forth.definePrimitiveDesc("history", " -- : Print the command history.", &wordHistoryPrint, false);
 }
