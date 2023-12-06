@@ -142,11 +142,11 @@ fn kernelInit() void {
         debug.kernelError("diagnostics init error", err);
     }
 
-    if (hal.usb_hci.initialize()) {
-        debug.kernelMessage("USB host init");
-    } else |err| {
-        debug.kernelError("USB host init error", err);
-    }
+    // if (hal.usb_hci.initialize()) {
+    //     debug.kernelMessage("USB host init");
+    // } else |err| {
+    //     debug.kernelError("USB host init error", err);
+    // }
 
     if (interpreter.init(heap.allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
@@ -157,6 +157,7 @@ fn kernelInit() void {
     hal.system_timer.schedule(heartbeat_interval, &heartbeat);
 
     // TODO should this move to forty/core.zig?
+    supplyAddress("usb", @intFromPtr(&hal.usb_hci));
     supplyAddress("fb", @intFromPtr(fb));
     supplyAddress("char-buffer", @intFromPtr(char_buffer));
     supplyAddress("console", @intFromPtr(main_console));

@@ -556,8 +556,8 @@ pub fn defineCore(forth: *Forth) !void {
 
     // Hal
     try forth.defineStruct("hal", HAL);
-    try forth.defineStruct("usb", HAL.USBHCI);
-    try forth.defineStruct("usb.vtable", HAL.USBHCI.VTable);
+    try forth.defineStruct("USB", HAL.USBHCI);
+    try forth.defineStruct("USB.VTable", HAL.USBHCI.VTable);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);

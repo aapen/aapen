@@ -68,6 +68,13 @@ finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
 
+( USB hardware control)
+: usb-init
+  [[ hal hal.usb_hci +]]                                    ( Address of HCD )
+  [[ hal hal.usb_hci USB.vtable USB.VTable.initialize +]] @ ( Address of initialize function )
+  invoke-1r                                                 ( Call instance function, 0 return means failed )
+;
+
 (Drawing)
 : draw-char (bg fg y x c -- : Draw character at position)
   fb

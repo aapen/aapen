@@ -485,6 +485,7 @@ const CoreRegisters = extern struct {
 };
 
 pub const VTable = struct {
+    initialize: *const fn (usb_controller: u64) u64,
     dumpStatus: *const fn (usb_controller: u64) void,
 };
 
@@ -509,8 +510,19 @@ stage_data: [dwc_max_channels]*TransferStageData,
 wait_block_allocations: ChannelSet,
 wait_blocks: [dwc_wait_blocks]bool,
 vtable: VTable = .{
+    .initialize = initializeShim,
     .dumpStatus = dumpStatusInteropShim,
 },
+
+fn initializeShim(usb_controller: u64) u64 {
+    var self: *Self = @ptrFromInt(usb_controller);
+    if (self.initialize()) {
+        return 1;
+    } else |err| {
+        root.debug.kernelError("USB init error", err);
+        return 0;
+    }
+}
 
 fn dumpStatusInteropShim(usb_controller: u64) void {
     var self: *Self = @ptrFromInt(usb_controller);
@@ -668,15 +680,15 @@ fn irqHandleChannel(self: *Self, which_channel: u5) void {
             // transaction
             //
 
-            // restart halted transaction
-            if (channel_intr.halted == 1) {
-                // TODO should this enqueue the transaction for later?
-                // self.transactionStart(stage) catch {
-                //     root.debug.kernelMessage("Error starting txn");
-                //     // TODO clean up, this transaction will never finish
-                // };
-                return;
-            }
+            // // restart halted transaction
+            // if (channel_intr.halted == 1) {
+            //     // TODO should this enqueue the transaction for later?
+            //     // self.transactionStart(stage) catch {
+            //     //     root.debug.kernelMessage("Error starting txn");
+            //     //     // TODO clean up, this transaction will never finish
+            //     // };
+            //     return;
+            // }
 
             stage.transactionComplete(
                 channel_intr,
@@ -957,6 +969,7 @@ const TransferStageSubstate = enum(u8) {
 };
 
 const TransferStageData = struct {
+    owner: *Self,
     channel: ChannelId,
     endpoint: *Endpoint,
     request: *Request,
@@ -972,6 +985,7 @@ const TransferStageData = struct {
     interrupt_mask: u32,
     temp_buffer: []u32,
     buffer_pointer: [*]u8,
+    wait_block_assigned: u5,
 
     state: TransferStageState = .not_set,
     substate: TransferStageSubstate = .not_set,
@@ -1017,38 +1031,48 @@ const TransferStageData = struct {
     }
 
     fn transactionComplete(self: *TransferStageData, status: ChannelInterrupt, packets_left: u10, bytes_left: u19) void {
+        _ = bytes_left;
+        _ = packets_left;
         self.transaction_status = status;
 
         // TODO check for NAK/NYET, see if the request should complete
         // when NAK/NYET. (Should only happen for Bulk endpoints)
 
-        var packets_transferred: u10 = self.packets_per_transaction - packets_left;
-        var bytes_transferred: u19 = self.bytes_per_transaction - bytes_left;
+        // var packets_transferred: u10 = self.packets_per_transaction - packets_left;
+        // var bytes_transferred: u19 = self.bytes_per_transaction - bytes_left;
 
-        self.total_bytes_transferred += bytes_transferred;
-        self.buffer_pointer += bytes_transferred;
+        // self.total_bytes_transferred += bytes_transferred;
+        // self.buffer_pointer += bytes_transferred;
 
-        // TODO this only happens if a) it's not a split transaction
-        // or b) it _is_ a split and this is the last transaction in
-        // the split
-        self.endpoint.pidSkip(packets_transferred, self.status_stage);
+        // // TODO this only happens if a) it's not a split transaction
+        // // or b) it _is_ a split and this is the last transaction in
+        // // the split
+        // self.endpoint.pidSkip(packets_transferred, self.status_stage);
 
-        self.packets -= packets_transferred;
+        // self.packets -= packets_transferred;
 
-        if (self.transfer_size - self.total_bytes_transferred < self.bytes_per_transaction) {
-            self.bytes_per_transaction = self.transfer_size - self.total_bytes_transferred;
-        }
+        // if (self.transfer_size - self.total_bytes_transferred < self.bytes_per_transaction) {
+        //     self.bytes_per_transaction = self.transfer_size - self.total_bytes_transferred;
+        // }
+
+        self.owner.wait_blocks[self.wait_block_assigned] = false;
+        self.owner.wait_block_allocations.free(self.wait_block_assigned);
+
+        var buf: [32]u8 = [_]u8{0} ** 32;
+        root.debug.kernelMessage(std.fmt.bufPrintZ(&buf, "{s} {d}", .{ "XFERDONE", self.wait_block_assigned }) catch "");
     }
 };
 
-fn createStageData(self: *Self, channel: ChannelId, request: *Request, in: bool, status_stage: bool) !*TransferStageData {
+fn createStageData(self: *Self, channel: ChannelId, request: *Request, in: bool, status_stage: bool, wait_block_assigned: u5) !*TransferStageData {
     const packet_size = request.endpoint.max_packet_size;
 
     const stage = try self.allocator.create(TransferStageData);
+    stage.owner = self;
     stage.channel = channel;
     stage.request = request;
     stage.endpoint = request.endpoint;
     stage.device = request.endpoint.device;
+    stage.wait_block_assigned = wait_block_assigned;
     stage.in = in;
     stage.status_stage = status_stage;
     stage.max_packet_size = packet_size;
@@ -1104,10 +1128,10 @@ fn channelInterruptDisable(self: *Self, channel: ChannelId) void {
     self.host_registers.all_channel_interrupts_mask &= ~(@as(u32, 1) << channel);
 }
 
-fn transferStageAsync(self: *Self, request: *Request, in: bool, status_stage: bool) !void {
+fn transferStageAsync(self: *Self, request: *Request, in: bool, status_stage: bool, wait_block_assigned: u5) !void {
     const channel = try self.channelAllocate();
 
-    const stage_data = try self.createStageData(channel, request, in, status_stage);
+    const stage_data = try self.createStageData(channel, request, in, status_stage, wait_block_assigned);
     self.stage_data[channel] = stage_data;
 
     self.channelInterruptEnable(channel);
@@ -1197,17 +1221,13 @@ fn transferStage(self: *Self, request: *Request, in: bool, status_stage: bool) !
     const wait_until = self.deadline(request.timeout);
 
     const wait_block_assigned = try self.wait_block_allocations.allocate();
-    defer {
-        self.wait_blocks[wait_block_assigned] = false;
-        self.wait_block_allocations.free(wait_block_assigned);
-    }
 
     if (self.wait_blocks[wait_block_assigned]) {
         return Error.ConfigurationError;
     }
 
     self.wait_blocks[wait_block_assigned] = true;
-    try self.transferStageAsync(request, in, status_stage);
+    try self.transferStageAsync(request, in, status_stage, wait_block_assigned);
 
     while (self.clock.ticks() < wait_until and self.wait_blocks[wait_block_assigned] == true) {
         // do nothing
@@ -1216,6 +1236,8 @@ fn transferStage(self: *Self, request: *Request, in: bool, status_stage: bool) !
     if (self.wait_blocks[wait_block_assigned] == true) {
         // timeout elapsed... complain
         root.debug.kernelMessage("USB request timeout");
+        self.wait_blocks[wait_block_assigned] = false;
+        self.wait_block_allocations.free(wait_block_assigned);
     }
 }
 
@@ -1482,7 +1504,7 @@ const Request = struct {
             .request_data_size = request_data_size,
             .status = 0,
             .result_length = 0,
-            .timeout = 0,
+            .timeout = 100,
         };
         return request;
     }
