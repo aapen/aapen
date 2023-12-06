@@ -65,6 +65,23 @@ pub fn wordDump(forth: *Forth, _: *Header) ForthError!void {
     }
 }
 
+/// addr len -- : Dump memory as text.
+pub fn wordTDump(forth: *Forth, _: *Header) ForthError!void {
+    const len = try forth.stack.pop();
+    const iAddr = try forth.stack.pop();
+    const addr: [*]u8 = @ptrFromInt(iAddr);
+
+    var offset: usize = 0;
+    while (offset < len) {
+        try forth.print("{x:16}   ", .{iAddr + offset});
+        for (0..100) |iByte| {
+            try forth.print("{c}", .{string.toPrintable(addr[offset + iByte])});
+        }
+        try forth.print("\n", .{});
+        offset += 100;
+    }
+}
+
 /// --
 pub fn wordStack(forth: *Forth, _: *Header) ForthError!void {
     try forth.print("Stack: ", .{});
@@ -158,6 +175,7 @@ pub fn wordDumpWord(forth: *Forth, _: *Header) ForthError!void {
 pub fn defineInspect(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("stacktrace", " -- : Dump the current forth stacktrace", &wordStackTrace, false);
     _ = try forth.definePrimitiveDesc("dump", "addr len -- : Dump an arbitrary area of memory", &wordDump, false);
+    _ = try forth.definePrimitiveDesc("tdump", "addr len -- : Dump an arbitrary area of memory as text", &wordTDump, false);
 
     _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, false);
     _ = try forth.definePrimitiveDesc("?", " -- :Print description of word.", &wordDesc, false);
