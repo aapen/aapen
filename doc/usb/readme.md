@@ -109,3 +109,9 @@ Special
 
 ![](transfer_state_machine.png)
 
+# References
+
+[RiscOS implementation of DWC driver](https://gitlab.riscosopen.org/RiscOS/Sources/HWSupport/USB/Controllers/DWCDriver/-/tree/master)
+
+
+
