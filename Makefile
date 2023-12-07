@@ -21,8 +21,8 @@ QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
 QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd 
 QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd 
 
-# Use this to get endless USB tracing from the emulator.
-#QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -trace 'enable=*usb*'
+# Use this to get USB tracing from the emulator.
+QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -trace 'events=trace_events.txt'
 
 OS              = $(shell uname)
 ifeq ($(OS), Darwin)
