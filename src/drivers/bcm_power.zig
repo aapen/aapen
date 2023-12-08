@@ -65,8 +65,8 @@ pub fn init(mailbox: *Mailbox) Self {
 }
 
 fn decode(state: u32) PowerResult {
-    var no_device = (state & 0x02) != 0;
-    var actual_state = (state & 0x01) != 0;
+    const no_device = (state & 0x02) != 0;
+    const actual_state = (state & 0x01) != 0;
 
     if (no_device) {
         return .no_such_device;

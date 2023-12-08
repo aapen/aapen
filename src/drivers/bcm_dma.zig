@@ -161,7 +161,7 @@ fn channelRegisters(self: *Self, channel_id: ChannelId) *volatile ChannelRegiste
 }
 
 pub fn reserveChannel(self: *Self) DMAError!Channel {
-    var channel_id = try self.channelClaimUnused();
+    const channel_id = try self.channelClaimUnused();
     var channel_registers = self.channelRegisters(channel_id);
 
     self.transfer_enabled.* = @as(u32, 1) << channel_id;

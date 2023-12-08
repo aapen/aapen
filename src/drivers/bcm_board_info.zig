@@ -93,11 +93,11 @@ const board_types = [_]BoardType{
 
 fn decode_revision_new_scheme(revision: u32, info: *BoardInfo) void {
     // var warranty: u2 = (revision >> 24) & 0b11;
-    var memsize: u32 = (revision >> 20) & 0b111;
-    var manufacturer: u32 = (revision >> 16) & 0b1111;
-    var processor: u32 = (revision >> 12) & 0b1111;
-    var board: u32 = (revision >> 4) & 0b11111111;
-    var pcb_revision: u32 = revision & 0b1111;
+    const memsize: u32 = (revision >> 20) & 0b111;
+    const manufacturer: u32 = (revision >> 16) & 0b1111;
+    const processor: u32 = (revision >> 12) & 0b1111;
+    const board: u32 = (revision >> 4) & 0b11111111;
+    const pcb_revision: u32 = revision & 0b1111;
 
     info.model = BoardInfo.Model{
         .name = if (board < board_types.len) board_types[board].name else "Unknown",

@@ -46,7 +46,7 @@ var ring: RingBuffer = undefined;
 
 pub fn init() !void {
     var fba = FixedBufferAllocator.init(&mring_storage);
-    var allocator = fba.allocator();
+    const allocator = fba.allocator();
     ring = try RingBuffer.init(allocator, mring_storage.len);
 }
 
