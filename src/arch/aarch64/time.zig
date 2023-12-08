@@ -37,17 +37,16 @@ fn read_cntpct() u32 {
 }
 
 pub fn uptime() Duration {
-    var current_count = read_cntpct();
+    const current_count = read_cntpct();
 
     // TODO: seems like overflow is possible?
     return Duration.from_u64_nanos((current_count * nanos_per_second) / frequency());
 }
 
 pub fn spin(duration: Duration) !void {
-    var freq = frequency(); // hertz
-    var target_nanos = duration.as_u64_nanos(); // seconds * nanos_per_second
-
-    var target_ticks = (target_nanos * freq) / nanos_per_second;
+    const freq = frequency(); // hertz
+    const target_nanos = duration.as_u64_nanos(); // seconds * nanos_per_second
+    const target_ticks = (target_nanos * freq) / nanos_per_second;
 
     if (target_ticks == 0)
         return;

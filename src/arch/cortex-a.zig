@@ -43,7 +43,7 @@ pub const MAX_CORES = 8;
 
 /// Return core # for the currently executing PE
 pub inline fn coreId() u8 {
-    var mpidr = asm (
+    const mpidr = asm (
         \\ mrs %[ret], MPIDR_EL1
         : [ret] "=r" (-> u64),
     );
@@ -121,7 +121,7 @@ pub fn currentInterruptLevel() InterruptLevel {
     const FIQ_flag = @as(u32, 1 << 6);
     const IRQ_flag = @as(u32, 1 << 7);
 
-    var flags: u32 = asm volatile (
+    const flags: u32 = asm volatile (
         \\ mrs %[f], daif
         : [f] "=r" (-> u32),
     );
@@ -143,7 +143,7 @@ pub const ExecutionLevel = enum(u2) {
 };
 
 pub fn currentExecutionLevel() ExecutionLevel {
-    var el = asm volatile (
+    const el = asm volatile (
         \\ mrs %[el], CurrentEL
         : [el] "=r" (-> u64),
     );
