@@ -114,7 +114,7 @@ fn flush(self: *Self) void {
 fn write(self: *Self, channel: MailboxChannel, data: u32) void {
     while (self.mailFull()) {}
 
-    var val = (data & 0xfffffff0) | @intFromEnum(channel);
+    const val = (data & 0xfffffff0) | @intFromEnum(channel);
     self.registers.mailbox_0_write = val;
 }
 
@@ -125,8 +125,8 @@ fn read(self: *Self, channel_expected: MailboxChannel) u32 {
     while (true) {
         while (self.mailEmpty()) {}
 
-        var data: u32 = self.registers.mailbox_0_read;
-        var channel_read: MailboxChannel = @enumFromInt(data & 0xf);
+        const data: u32 = self.registers.mailbox_0_read;
+        const channel_read: MailboxChannel = @enumFromInt(data & 0xf);
 
         if (channel_read == channel_expected) {
             return data & 0xfffffff0;
@@ -144,7 +144,7 @@ pub fn sendReceive(self: *Self, data_location: u32, channel: MailboxChannel) !vo
 
     self.write(channel, data_location);
 
-    var result = self.read(channel);
+    const result = self.read(channel);
 
     if (result != data_location) {
         return MailboxError.UnexpectedResponse;

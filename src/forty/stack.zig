@@ -83,13 +83,13 @@ test "Basic stack operation" {
     }
 
     while (!dstack.isEmpty()) {
-        var v = try dstack.pop();
+        const v = try dstack.pop();
         _ = v;
         //        print("pop: {}\n", .{v});
     }
 
     while (!rstack.isEmpty()) {
-        var v = try rstack.pop();
+        const v = try rstack.pop();
         _ = v;
         //        print("rop: {}\n", .{v});
     }

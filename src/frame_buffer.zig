@@ -91,40 +91,40 @@ vtable: VTable = .{
 },
 
 fn charInteropShim(fb: u64, ch: u64, x: u64, y: u64, fg: u64, bg: u64) void {
-    var self: *Self = @ptrFromInt(fb);
-    var c: u8 = @truncate(ch);
-    var fg8: u8 = @truncate(fg);
-    var bg8: u8 = @truncate(bg);
+    const self: *Self = @ptrFromInt(fb);
+    const c: u8 = @truncate(ch);
+    const fg8: u8 = @truncate(fg);
+    const bg8: u8 = @truncate(bg);
     self.drawChar(x, y, c, fg8, bg8);
 }
 
 fn textInteropShim(fb: u64, str: u64, x: u64, y: u64, fg: u64, bg: u64) void {
-    var self: *Self = @ptrFromInt(fb);
-    var s: [*:0]u8 = @ptrFromInt(str);
-    var fg8: u8 = @truncate(fg);
-    var bg8: u8 = @truncate(bg);
+    const self: *Self = @ptrFromInt(fb);
+    const s: [*:0]u8 = @ptrFromInt(str);
+    const fg8: u8 = @truncate(fg);
+    const bg8: u8 = @truncate(bg);
     self.text(s, x, y, fg8, bg8);
 }
 
 fn lineInteropShim(fb: u64, x0: u64, y0: u64, x1: u64, y1: u64, color: u64) void {
-    var self: *Self = @ptrFromInt(fb);
-    var c: u8 = @truncate(color);
+    const self: *Self = @ptrFromInt(fb);
+    const c: u8 = @truncate(color);
     self.line(x0, y0, x1, y1, c);
 }
 
 fn fillInteropShim(fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void {
-    var self: *Self = @ptrFromInt(fb);
-    var c: u8 = @truncate(color);
+    const self: *Self = @ptrFromInt(fb);
+    const c: u8 = @truncate(color);
     self.fill(left, top, right, bottom, c);
 }
 
 fn blitInteropShim(fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void {
-    var self: *Self = @ptrFromInt(fb);
+    const self: *Self = @ptrFromInt(fb);
     self.blit(src_x, src_y, src_w, src_h, dest_x, dest_y);
 }
 
 pub fn init(allocator: Allocator, hal: *root.HAL) !*Self {
-    var self = try allocator.create(Self);
+    const self = try allocator.create(Self);
 
     self.* = .{};
 
@@ -139,7 +139,7 @@ pub fn drawPixel(self: *Self, x: usize, y: usize, color: u8) void {
     if (y < 0) return;
     if (y >= self.yres) return;
 
-    var idx: usize = x + (y * self.pitch);
+    const idx: usize = x + (y * self.pitch);
 
     assert(idx < self.buffer_size);
 
@@ -162,7 +162,7 @@ pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8, fg: u8, bg: u8) void {
     if (romidx + self.font_height_px >= character_rom.len)
         return;
 
-    var line_stride = self.pitch;
+    const line_stride = self.pitch;
     var fbidx = x + (y * line_stride);
 
     const backgv: CharRow = @splat(bg);
@@ -178,8 +178,8 @@ pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8, fg: u8, bg: u8) void {
 }
 
 pub fn text(self: *Self, str: [*:0]u8, x_start: usize, y_start: usize, fg: u8, bg: u8) void {
+    const y = y_start;
     var x = x_start;
-    var y = y_start;
     var i: usize = 0;
     while (str[i] != 0) : (i += 1) {
         self.drawChar(x, y, str[i], fg, bg);
@@ -188,7 +188,7 @@ pub fn text(self: *Self, str: [*:0]u8, x_start: usize, y_start: usize, fg: u8, b
 }
 
 pub fn eraseChar(self: *Self, x: usize, y: usize, color: u8) void {
-    var line_stride = self.pitch;
+    const line_stride = self.pitch;
     var fbidx = x + (y * line_stride);
 
     inline for (0..DEFAULT_FONT_HEIGHT) |_| {
@@ -218,12 +218,12 @@ pub inline fn colToX(self: *Self, col: usize) usize {
 }
 
 pub fn blit(fb: *Self, src_x: usize, src_y: usize, src_w: usize, src_h: usize, dest_x: usize, dest_y: usize) void {
-    var sx = clamp(usize, 0, src_x, fb.xres);
-    var sy = clamp(usize, 0, src_y, fb.yres);
-    var w = clamp(usize, 0, src_w, fb.xres);
-    var h = clamp(usize, 0, src_h, fb.yres);
-    var dx = clamp(usize, 0, dest_x, fb.xres);
-    var dy = clamp(usize, 0, dest_y, fb.yres);
+    const sx = clamp(usize, 0, src_x, fb.xres);
+    const sy = clamp(usize, 0, src_y, fb.yres);
+    const w = clamp(usize, 0, src_w, fb.xres);
+    const h = clamp(usize, 0, src_h, fb.yres);
+    const dx = clamp(usize, 0, dest_x, fb.xres);
+    const dy = clamp(usize, 0, dest_y, fb.yres);
 
     if (fb.dma_channel) |ch| {
         const fb_base: usize = @intFromPtr(fb.base);
@@ -261,10 +261,10 @@ inline fn abs(comptime T: type, val: T) T {
 }
 
 pub fn fill(fb: *Self, left: usize, top: usize, right: usize, bottom: usize, color: u8) void {
-    var l = clamp(usize, 0, left, fb.xres);
-    var r = clamp(usize, 0, right, fb.xres);
-    var t = clamp(usize, 0, top, fb.yres);
-    var b = clamp(usize, 0, bottom, fb.yres);
+    const l = clamp(usize, 0, left, fb.xres);
+    const r = clamp(usize, 0, right, fb.xres);
+    const t = clamp(usize, 0, top, fb.yres);
+    const b = clamp(usize, 0, bottom, fb.yres);
 
     if (fb.dma_channel) |ch| {
         if (fb.dma.createRequest()) |req| {
@@ -314,14 +314,14 @@ fn fillDMA(fb: *Self, ch: DMAChannel, req: *DMARequest, l: usize, t: usize, r: u
 }
 
 fn fillPixels(fb: *Self, l: usize, t: usize, r: usize, b: usize, color: u8) void {
-    var cvec: @Vector(16, u8) = @splat(color);
+    const cvec: @Vector(16, u8) = @splat(color);
+    const line_stride = fb.pitch;
+    const gap = line_stride - (r - l);
+    const row_vecs = (r - l) / 16;
+    const row_leftover = (r - l) % 16;
+    const rows = (b - t);
 
-    var line_stride = fb.pitch;
-    var gap = line_stride - (r - l);
     var fbidx = l + (t * line_stride);
-    var row_vecs = (r - l) / 16;
-    var row_leftover = (r - l) % 16;
-    var rows = (b - t);
 
     for (0..rows) |_| {
         for (0..row_vecs) |_| {
@@ -336,16 +336,16 @@ fn fillPixels(fb: *Self, l: usize, t: usize, r: usize, b: usize, color: u8) void
 }
 
 pub fn line(fb: *Self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) void {
-    var x_start = boundsCheck(usize, 0, x0, fb.xres) catch {
+    const x_start = boundsCheck(usize, 0, x0, fb.xres) catch {
         return;
     };
-    var y_start = boundsCheck(usize, 0, y0, fb.yres) catch {
+    const y_start = boundsCheck(usize, 0, y0, fb.yres) catch {
         return;
     };
-    var x_end = boundsCheck(usize, 0, x1, fb.xres) catch {
+    const x_end = boundsCheck(usize, 0, x1, fb.xres) catch {
         return;
     };
-    var y_end = boundsCheck(usize, 0, y1, fb.yres) catch {
+    const y_end = boundsCheck(usize, 0, y1, fb.yres) catch {
         return;
     };
 
@@ -362,7 +362,7 @@ pub fn line(fb: *Self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) vo
         var iy0: isize = @bitCast(y_start);
         var iy1: isize = @bitCast(y_end);
 
-        var steep = abs(isize, iy1 - iy0) > abs(isize, ix1 - ix0);
+        const steep = abs(isize, iy1 - iy0) > abs(isize, ix1 - ix0);
 
         if (steep) {
             var t = ix0;
@@ -384,12 +384,13 @@ pub fn line(fb: *Self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) vo
             iy1 = t;
         }
 
-        var dx = ix1 - ix0;
-        var dy = abs(isize, iy1 - iy0);
-        var err: isize = 0;
-        var ystep: isize = if (iy0 < iy1) 1 else -1;
+        const ystep: isize = if (iy0 < iy1) 1 else -1;
+        const dx = ix1 - ix0;
+        const dy = abs(isize, iy1 - iy0);
         var y_cur = iy0;
         var x_cur = ix0;
+        var err: isize = 0;
+
         while (x_cur <= ix1) {
             if (steep) {
                 fb.base[@as(usize, @intCast(y_cur)) + @as(usize, @intCast(x_cur)) * fb.pitch] = color;
@@ -438,7 +439,7 @@ fn lineVertical(fb: *Self, x: usize, y0: usize, y1: usize, color: u8) void {
         end = y1;
     }
 
-    var step = fb.pitch;
+    const step = fb.pitch;
     var pixel: [*]u8 = fb.base;
     pixel += start * step + x;
     pixel[0] = color;

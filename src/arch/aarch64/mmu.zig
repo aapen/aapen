@@ -99,8 +99,8 @@ pub fn init() void {
 fn tableEntryCreate(table: u64, next_level_table: u64, virtual_address: u64, chosen_table_shift: u6, flags: u64) void {
     var table_index = virtual_address >> chosen_table_shift;
     table_index &= (entries_per_table - 1);
-    var descriptor: u64 = next_level_table | flags;
-    var word: *u64 = @ptrFromInt(table + (table_index << 3));
+    const descriptor: u64 = next_level_table | flags;
+    const word: *u64 = @ptrFromInt(table + (table_index << 3));
     word.* = descriptor;
 }
 
@@ -125,9 +125,9 @@ fn blockMappingCreate(page_middle_directory: u64, virtual_addr_start: u64, virtu
             entry |= kernel_block_flags;
         }
 
-        var word: *u64 = @ptrFromInt(page_middle_directory + (vstart << 3));
+        const word: *u64 = @ptrFromInt(page_middle_directory + (vstart << 3));
         word.* = entry;
-        var ss = section_size;
+        const ss = section_size;
         pa += ss;
         vstart += 1;
     }
@@ -158,7 +158,7 @@ fn pageTablesCreate() void {
         map_base += page_upper_directory_entry_map_size;
 
         block_table += page_size;
-        var offset: u64 = block_size * i;
+        const offset: u64 = block_size * i;
 
         // Level 2
         blockMappingCreate(block_table, offset, offset + block_size, offset);

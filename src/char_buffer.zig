@@ -246,8 +246,8 @@ pub fn clearScreen(self: *Self) void {
 /// last column with a blank. Note that the char at (col, row) is overwritter
 /// by it's rightmost neighbor.
 pub fn textShiftLeft(self: *Self, col: usize, row: usize) void {
-    var start_i = self.charIndexGet(col, row);
-    var end_i = self.charIndexGet(self.num_cols - 1, row);
+    const start_i = self.charIndexGet(col, row);
+    const end_i = self.charIndexGet(self.num_cols - 1, row);
 
     for (start_i..end_i) |i| {
         self.text[i] = self.text[i + 1];
@@ -260,8 +260,8 @@ pub fn textShiftLeft(self: *Self, col: usize, row: usize) void {
 /// Shift the text on a row one character to the right, starting with the given
 /// column.
 pub fn textShiftRight(self: *Self, col: usize, row: usize) void {
-    var start_i = self.charIndexGet(self.num_cols - 1, row);
-    var end_i = self.charIndexGet(col, row);
+    const start_i = self.charIndexGet(self.num_cols - 1, row);
+    const end_i = self.charIndexGet(col, row);
 
     var i: usize = start_i;
     while (i > end_i) {

@@ -572,7 +572,7 @@ pub fn initialize(self: *Self) !void {
 }
 
 fn powerOn(self: *Self) !void {
-    var power_result = try self.power_controller.powerOn(.usb_hcd);
+    const power_result = try self.power_controller.powerOn(.usb_hcd);
 
     if (power_result != .power_on) {
         std.log.err("Failed to power on USB device: {any}\n", .{power_result});
@@ -581,7 +581,7 @@ fn powerOn(self: *Self) !void {
 }
 
 fn powerOff(self: *Self) !void {
-    var power_result = try self.power_controller.powerOff(.usb_hcd);
+    const power_result = try self.power_controller.powerOff(.usb_hcd);
 
     if (power_result != .power_off) {
         std.log.err("Failed to power off USB device: {any}\n", .{power_result});

@@ -19,7 +19,7 @@ update_depth: u64 = 0,
 tab_width: u8 = 8,
 
 pub fn init(allocator: Allocator, char_buffer: *CharBuffer) !*Self {
-    var self: *Self = try allocator.create(Self);
+    const self: *Self = try allocator.create(Self);
 
     self.* = .{
         .char_buffer = char_buffer,
@@ -122,7 +122,7 @@ fn nextTab(self: *Self) void {
     self.begin_update();
     defer self.end_update();
 
-    var positions = self.tab_width - (self.char_buffer.current_col % self.tab_width);
+    const positions = self.tab_width - (self.char_buffer.current_col % self.tab_width);
     self.char_buffer.current_col += positions;
     if (self.char_buffer.current_col >= self.char_buffer.num_cols) {
         self.nextLine();

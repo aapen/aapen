@@ -38,18 +38,15 @@ const Pin = struct {
 };
 
 fn pin(physical_id: u8, broadcom_id: u8) Pin {
-    var fsel_bitstart: u5 = @truncate(@mod(broadcom_id * 3, 30));
-    var fsel_register_index: u8 = broadcom_id / 10;
-    var data_register_index: u8 = broadcom_id / 32;
-    var data_register_shift: u5 = @truncate(@mod(broadcom_id, 32));
-    var getset_mask: u32 = @as(u32, 1) << data_register_shift;
+    const data_register_shift: u5 = @truncate(@mod(broadcom_id, 32));
+    const getset_mask: u32 = @as(u32, 1) << data_register_shift;
 
     return .{
         .physical_id = physical_id,
         .broadcom_id = broadcom_id,
-        .function_select_register_index = fsel_register_index,
-        .function_select_register_shift = fsel_bitstart,
-        .data_register_index = data_register_index,
+        .function_select_register_index = broadcom_id / 10,
+        .function_select_register_shift = @truncate(@mod(broadcom_id * 3, 30)),
+        .data_register_index = broadcom_id / 32,
         .data_register_shift = data_register_shift,
         .getset_mask = getset_mask,
     };
@@ -124,6 +121,6 @@ pub fn clear(self: *Self, p: *const Pin) void {
 }
 
 pub fn get(self: *Self, p: *const Pin) bool {
-    var levels = self.registers.level[p.data_register_index];
+    const levels = self.registers.level[p.data_register_index];
     return (levels & p.getset_mask) != 0;
 }

@@ -26,7 +26,7 @@ pub fn allocFrameBuffer(self: *Self, fb: *FrameBuffer) !void {
     var setup = PropertyVideoSetup.init(fb.xres, fb.yres, fb.bpp, &fb.palette);
     try self.mailbox.getTags(&setup, @sizeOf(PropertyVideoSetup) / 4);
 
-    var base_in_arm_address_space = setup.allocate.base & 0x3fffffff;
+    const base_in_arm_address_space = setup.allocate.base & 0x3fffffff;
     fb.base = @ptrFromInt(base_in_arm_address_space);
     fb.buffer_size = setup.allocate.buffer_size;
     fb.pitch = setup.pitch.pitch;

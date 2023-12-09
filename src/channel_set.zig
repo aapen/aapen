@@ -43,7 +43,7 @@ pub fn free(channel_set: *Self, channel: u5) void {
     channel_set.lock.acquire();
     defer channel_set.lock.release();
 
-    var mask: u32 = @as(u32, 1) << channel;
+    const mask: u32 = @as(u32, 1) << channel;
 
     if (channel_set.allocated & mask == 0) {
         std.log.err("Attempt to free a channel that was not allocated.", .{});

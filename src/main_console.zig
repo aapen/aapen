@@ -16,7 +16,7 @@ pub const Writer = std.io.Writer(*Self, error{}, write);
 char_buffer_console: *CharBufferConsole = undefined,
 
 pub fn init(allocator: Allocator, fbc: *CharBufferConsole) !*Self {
-    var self: *Self = try allocator.create(Self);
+    const self: *Self = try allocator.create(Self);
 
     self.* = .{
         .char_buffer_console = fbc,
@@ -73,7 +73,7 @@ pub fn readLine(self: *Self, prompt: []const u8, buffer: []u8) usize {
 
 pub fn getc(self: *Self) u8 {
     _ = self;
-    var ch = Serial.getc();
+    const ch = Serial.getc();
     return if (ch == '\r') '\n' else ch;
 }
 

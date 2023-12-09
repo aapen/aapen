@@ -73,14 +73,14 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
     // Check if this was a breakpoint due to std.builtin.default_panic
     if (context.esr.ec == .brk) {
         // Breakpoint number is the lower 16 bits of ESR's ISS
-        var breakpoint_number: u16 = @truncate(context.esr.iss & 0xffff);
+        const breakpoint_number: u16 = @truncate(context.esr.iss & 0xffff);
 
         // Zig uses 0xf000 to indicate a panic
         if (breakpoint_number == 0xf000) {
             // Could we get the panic string and arguments from the
             // stack?
             panicDisplay(context.elr);
-            var unwind = unwindPointLocate(context);
+            const unwind = unwindPointLocate(context);
             if (unwind.sp != undefined) {
                 context.elr = unwind.pc;
                 context.force_sp = unwind.sp;
@@ -136,7 +136,7 @@ fn stackTraceDisplay(from_addr: u64) void {
     kprint("\nStack trace\n", .{});
     kprint("Frame\tPC\n", .{});
     for (0..40) |i| {
-        var addr = it.next() orelse {
+        const addr = it.next() orelse {
             kprint(".\n", .{});
             return;
         };
