@@ -26,6 +26,8 @@ const Spinlock = synchronize.Spinlock;
 
 const ChannelSet = @import("../channel_set.zig");
 
+const reg = @import("dwc/registers.zig");
+
 const usb = @import("../usb.zig");
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
@@ -49,440 +51,44 @@ pub const Error = error{
     NoChannelAvailable,
 };
 
-const VendorId = packed struct {
-    device_minor_rev: u12 = 0,
-    device_series: u4 = 0,
-    device_vendor_id: u16 = 0, // (maybe this is the vendor id?)
-};
-
 // ----------------------------------------------------------------------
 // Channel Registers
 // ----------------------------------------------------------------------
-
-const ChannelCharacteristics = packed struct {
-    max_packet_size: u11, // 0..10
-    endpoint_number: u4, // 11..14
-    endpoint_direction: enum(u1) {
-        out = 0,
-        in = 1,
-    }, // 15
-    _reserved_16: u1, // 16
-    low_speed_device: u1, // 17
-    endpoint_type: EndpointType, // 18..19
-    multi_count: u2, // 20..21
-    device_address: u7, // 22..28
-    odd_frame: u1, // 29
-    disable: u1, // 30
-    enable: u1, // 31
-};
-
-const ChannelSplitControl = packed struct {
-    port_address: u7, // 0 .. 6
-    hub_address: u7, // 7..13
-    transaction_position: u2, // 14..15
-    complete_split: u1, // 16
-    _reserved_17_30: u14, // 17..30
-    split_enable: u1, // 31
-};
-
-const ChannelInterrupt = packed struct {
-    transfer_completed: u1 = 0, // 0
-    halted: u1 = 0, // 1
-    ahb_error: u1 = 0, // 2
-    stall_response_received: u1 = 0, // 3
-    nak_response_received: u1 = 0, // 4
-    ack_response_received: u1 = 0, // 5
-    nyet_response_received: u1 = 0, // 6
-    transaction_error: u1 = 0, // 7
-    babble_error: u1 = 0, // 8
-    frame_overrun: u1 = 0, // 9
-    data_toggle_error: u1 = 0, // 10
-    buffer_not_available: u1 = 0, // 11
-    excess_transaction_error: u1 = 0, // 12
-    frame_list_rollover: u1 = 0, // 13
-    _reserved_18_31: u18 = 0, // 14..31
-
-    fn isStatusNakNyet(self: *ChannelInterrupt) bool {
-        const st: u32 = @bitCast(self.*);
-        const nak_mask: u32 = @bitCast(ChannelInterrupt{
-            .nak_response_received = 1,
-            .nyet_response_received = 1,
-        });
-        return (st & nak_mask) != 0;
-    }
-
-    fn isStatusError(self: *ChannelInterrupt) bool {
-        const st: u32 = @bitCast(self.*);
-        const error_mask: u32 = @bitCast(ChannelInterrupt{
-            .ahb_error = 1,
-            .stall_response_received = 1,
-            .transaction_error = 1,
-            .babble_error = 1,
-            .frame_overrun = 1,
-            .data_toggle_error = 1,
-        });
-
-        return (st & error_mask) != 0;
-    }
-};
-
-const DwcTransferSizePid = enum(u2) {
-    // These are defined by the DWC2 chip itself
-    Data0 = 0,
-    Data1 = 2,
-    Data2 = 1,
-    Setup = 3,
-};
-
-const TransferSize = packed struct {
-    transfer_size_bytes: u19, // 0..18
-    transfer_size_packets: u10, // 19..28
-    pid: DwcTransferSizePid, // 29..30
-    do_ping: u1, // 31
-};
-
-const ChannelRegisters = extern struct {
-    channel_character: ChannelCharacteristics, // 0x00
-    channel_split_control: ChannelSplitControl, // 0x04
-    channel_int: ChannelInterrupt, // 0x08
-    channel_int_mask: ChannelInterrupt, // 0x0c
-    channel_transfer_size: TransferSize, // 0x10
-    channel_dma_addr: u32 = 0, // 0x14
-    _reserved: u32 = 0, // 0x18
-    channel_dma_buf: u32 = 0, // 0x1c
-};
+pub const ChannelCharacteristics = reg.ChannelCharacteristics;
+pub const ChannelSplitControl = reg.ChannelSplitControl;
+pub const ChannelInterrupt = reg.ChannelInterrupt;
+pub const DwcTransferSizePid = reg.DwcTransferSizePid;
+pub const TransferSize = reg.TransferSize;
+pub const ChannelRegisters = reg.ChannelRegisters;
 
 // ----------------------------------------------------------------------
 // Host Registers
 // ----------------------------------------------------------------------
-
-const HostConfig = packed struct {
-    fsls_pclk_sel: enum(u2) {
-        sel_30_60_mhz = 0,
-        sel_48_mhz = 1,
-        sel_6_mhz = 2,
-        undefined = 3,
-    }, // 0..1
-    fs_ls_support_only: u1, // 2
-    _reserved_0: u4, // 3..6
-    enable_32khz: u1, // 7
-    resume_valid: u8, // 8 .. 15
-    _reserved_1: u7, // 16..22
-    desc_dma: u1, // 23
-    frame_list_entries: enum(u2) {
-        list_entries_8 = 0,
-        list_entries_16 = 1,
-        list_entries_32 = 2,
-        list_entries_64 = 3,
-    }, // 24..25
-    per_sched_enable: u1, //26
-    _reserved_2: u4, // 27..30
-    mode_ch_tim_en: u1, // 31
-};
-
-const HostFrameInterval = packed struct {
-    interval: u16,
-    _reserved: u16,
-};
-
-const HostFrames = packed struct {
-    number: u16,
-    remaining: u16,
-};
-
-const HostPeriodicFifo = packed struct {
-    fifo_space_available: u16,
-    request_queue_space_available: u8,
-    request_queue_top: u8,
-};
-
-const HostPort = packed struct {
-    connect: u1, // 0
-    connect_changed: u1, // 1
-    enabled: u1, // 2
-    enabled_changed: u1, // 3
-    overcurrent: u1, // 4
-    overcurrent_changed: u1, // 5
-    status_resume: u1, // 6
-    suspended: u1, // 7
-    reset: u1, // 8
-    _reserved_9: u1, // 9
-    line_status: u2, // 10..11
-    power: u1, // 12
-    test_control: u4, // 13..16
-    speed: enum(u2) {
-        high = 0,
-        full = 1,
-        low = 2,
-        undefined = 3,
-    }, // 17..18
-    _reserved_19_32: u13, // 19..31
-};
-
-const HostRegisters = extern struct {
-    config: HostConfig, // 0x00
-    frame_interval: HostFrameInterval, // 0x04
-    frame_num: HostFrames, // 0x08
-    _reserved_0x0c: u32 = 0, // 0x0c
-    periodic_tx_fifo_status: HostPeriodicFifo, // 0x10
-    all_channel_interrupts: u32 = 0, // 0x14
-    all_channel_interrupts_mask: u32 = 0, // 0x18
-    frame_list_base_addr: u32 = 0, // 0x1c
-    _unused_padding_1: [8]u32, // 0x20 .. 0x3c
-    port: HostPort, // 0x40
-};
+pub const HostConfig = reg.HostConfig;
+pub const HostFrameInterval = reg.HostFrameInterval;
+pub const HostFrames = reg.HostFrames;
+pub const HostPeriodicFifo = reg.HostPeriodicFifo;
+pub const HostPort = reg.HostPort;
+pub const HostRegisters = reg.HostRegisters;
 
 // ----------------------------------------------------------------------
 // Core Registers
 // ----------------------------------------------------------------------
-
-const OtgControl = packed struct {
-    _unknown: u9 = 0,
-    hnp_enable: u1 = 0,
-    _unknown_2: u22 = 0,
-};
-
-const AhbConfig = packed struct {
-    global_interrupt_mask: u1, // 0
-    max_axi_burst: u2, // 1..2
-    _unknown_0: u1 = 0, // 3
-    wait_axi_writes: u1, // 4
-    dma_enable: u1, // 5
-    _unknown_1: u17, // 6..22
-    ahb_single: u1, // 23
-    _unknown_2: u8, // 24 .. 31
-};
-
-const UsbConfig = packed struct {
-    toutcal: u3, // 0..3
-    phy_if: u1, // 3
-    ulpi_utmi_sel: u1, // 4
-    fs_intf: u1, // 5
-    phy_sel: u1, // 6
-    ddr_sel: u1, // 7
-    srp_capable: u1, // 8
-    hnp_capable: u1, // 9
-    usb_trdtim: u4, // 10..13
-    _reserved_14: u1, // 14
-    phy_low_pwr_clk_sel: u1, // 15
-    otg_utmi_fs_sel: u1, // 16
-    ulpi_fsls: u1, // 17
-    ulpi_auto_res: u1, // 18
-    ulpi_clk_sus_m: u1, // 19
-    ulpi_ext_vbus_drv: u1, // 20
-    ulpi_int_vbus_indicator: u1, // 21
-    term_sel_dl_pulse: u1, // 22
-    indicator_complement: u1, //23
-    indicator_passthrough: u1, // 24
-    ulpi_int_prot_dis: u1, // 25
-    ic_usb_cap: u1, // 26
-    ic_traffic_pull_remove: u1, // 27
-    tx_end_delay: u1, // 28
-    force_host_mode: u1, // 29
-    force_device_mode: u1, // 30
-    _reserved_31: u1, // 31
-};
-
-const Reset = packed struct {
-    soft_reset: u1, // 0 (rs)
-    hclk_soft_reset: u1, // 1 (rs)
-    frame_counter_reset: u1, // 2 (rs)
-    _reserved_0: u1, // 3
-    rx_fifo_flush: u1, // 4 (rs)
-    tx_fifo_flush: u1, // 5 (rs)
-    tx_fifo_flush_num: u5, // 6..10 (rw)
-    _unknown_1: u19, // 11..29
-    dma_request_in_progress: u1, // 30 (ro)
-    ahb_idle: u1, // 31 (ro)
-};
-
-const InterruptStatus = packed struct {
-    current_mode: u1, // 0
-    mode_mismatch: u1, // 1
-    otg_intr: u1, // 2
-    sof_intr: u1, // 3
-    rx_fifo_level: u1, // 4
-    non_periodic_tx_fifo_empty: u1, // 5
-    global_in_non_periodic_effective: u1, // 6
-    global_out_nak_effective: u1, // 7
-    _reserved_0: u2, // 8..9
-    early_suspend: u1, // 10
-    usb_suspend: u1, // 11
-    usb_reset: u1, // 12
-    enumeration_done: u1, // 13
-    isochronous_out_packet_dropped: u1, // 14
-    end_of_periodic_frame: u1, // 15
-    _reserved_1: u2, // 16..17
-    in_endpoint: u1, // 18
-    out_endpoint: u1, // 19
-    incomplete_isochronous_transfer: u1, // 20
-    incomplete_periodic_transfer: u1, // 21
-    data_fetch_suspended: u1, // 22
-    _reserved_2: u1, // 23
-    port_intr: u1, // 24
-    host_channel_intr: u1, // 25
-    periodic_tx_fifo_empty: u1, // 26
-    _reserved_3: u1, // 27
-    connector_id_status: u1, // 28
-    disconnect: u1, // 29
-    session_request: u1, // 30
-    remote_wakeup: u1, // 31
-};
-
-const InterruptMask = InterruptStatus;
-
-const RxStatus = packed struct {
-    channel_number: u4, // 0..3
-    byte_count: u11, // 4..14
-    received_pid: enum(u2) {
-        data0 = 0b00,
-        data2 = 0b01,
-        data1 = 0b10,
-        mdata = 0b11,
-    }, // 15..16
-    packet_status: enum(u4) {
-        in_packet_received = 0b0010,
-        in_transfer_complete = 0b0011,
-        data_toggle_error = 0b0101,
-        channel_halted = 0b0111,
-    }, // 17..20
-    frame_number: u4, // 21..24
-    _reserved_0: u7, // 25..31
-};
-
-const NonPeriodicTxFifoSize = packed struct {
-    transmit_ram_start: u16,
-    fifo_depth: u16,
-};
-
-const NonPeriodicTxFifoStatus = packed struct {
-    tx_space_available: u16,
-    rx_space_available: u8,
-    tx_queue_top: u7,
-    _reserved: u1,
-};
-
-const GeneralCoreConfig = packed struct {
-    _reserved_0: u16, // 0..15
-    power_down: enum(u1) {
-        active = 0,
-        deactivated = 1,
-    }, // 16
-    i2c_enable: enum(u1) {
-        disabled = 0,
-        enabled = 1,
-    }, // 17
-    vbus_sense_a: enum(u1) {
-        disabled = 0,
-        enabled = 1,
-    }, // 18
-    vbus_sense_b: enum(u1) {
-        disabled = 0,
-        enabled = 1,
-    }, // 19
-    sof_output_enable: enum(u1) {
-        not_available = 0,
-        available = 1,
-    }, // 20
-    vbus_sense_disable: enum(u1) {
-        sense_available = 0,
-        sense_unavailable = 1,
-    }, // 21
-    _reserved_1: u10, // 22..31
-};
-
-const HwConfig2 = packed struct {
-    operating_mode: enum(u3) {
-        hnp_srp_capable_otg = 0,
-        srp_only_capable_otg = 1,
-        no_hnp_src_capable_otg = 2,
-        srp_capable_device = 3,
-        no_srp_capable_device = 4,
-        srp_capable_host = 5,
-        no_srp_capable_host = 6,
-        undefined = 7,
-    }, // 0..2
-    architecture: enum(u2) {
-        slave_only = 0,
-        ext_dma = 1,
-        int_dma = 2,
-        undefined = 3,
-    }, // 3..4
-    point_to_point: u1, // 5
-    hs_phy_type: enum(u2) {
-        not_supported = 0,
-        utmi = 1,
-        ulpi = 2,
-        utmi_ulpi = 3,
-    }, // 6..8
-    fs_phy_type: enum(u2) {
-        unknown_0 = 0,
-        dedicated = 1,
-        unknown_2 = 2,
-        unknown_3 = 3,
-    }, // 8..9
-    num_device_endpoints: u4, // 10..13
-    num_host_channels: u4, // 14..17
-    periodic_endpoint_supported: u1, // 18
-    dynamic_fifo: u1, // 19
-    multi_proc_int: u1, // 20
-    _reserved_21: u1, // 21
-    non_periodic_tx_queue_depth: u2, // 22..23
-    host_periodic_tx_queue_depth: u2, //24..25
-    device_token_queue_depth: u5, // 26..30
-    otg_enable_ic_usb: u1, // 31
-};
-
-const HwConfig3 = packed struct {
-    _unknown: u16, // 0..15
-    dynamic_fifo_total_size: u16, // 16..31
-};
-
-const HwConfig4 = packed struct {
-    _unknown_0: u25, // 0..24
-    ded_fifo_enable: u1, // 25
-    num_in_eps: u4, // 26..29
-    _unknown_1: u2, // 30..31
-};
-
-const PeriodicTxFifoSize = NonPeriodicTxFifoSize;
-
-const CoreRegisters = extern struct {
-    otg_control: OtgControl, // 0x00
-    otg_interrupt: u32 = 0, // 0x04
-    ahb_config: AhbConfig, // 0x08
-    usb_config: UsbConfig, // 0x0c
-    reset: Reset, // 0x10
-    core_interrupt_status: InterruptStatus, // 0x14
-    core_interrupt_mask: InterruptMask, // 0x18
-    rx_status_read: RxStatus, // 0x1c
-    rx_status_pop: RxStatus, // 0x20
-    rx_fifo_size: u32 = 0, // 0x24
-    nonperiodic_tx_fifo_size: NonPeriodicTxFifoSize, // 0x28
-    nonperiodic_tx_status: NonPeriodicTxFifoStatus, // 0x2c
-    i2c_control: u32 = 0, // 0x30
-    phy_vendor_control: u32 = 0, // 0x34
-    general_config: GeneralCoreConfig, // 0x38
-    application_id: u32 = 0, // 0x3c
-    vendor_id: VendorId, // 0x40
-    hardware_config_1: u32 = 0, // 0x44
-    hardware_config_2: HwConfig2, // 0x48
-    hardware_config_3: HwConfig3, // 0x4c
-    hardware_config_4: HwConfig4, // 0x50
-    lpm_config: u32 = 0, // 0x54
-    global_power_down: u32 = 0, // 0x58
-    global_fifo_config: u32 = 0, // 0x5c
-    adp_control: u32 = 0, // 0x60
-    _pad_0x64_0x9c: [39]u32, // 0x64 .. 0x9c
-    host_periodic_tx_fifo_size: PeriodicTxFifoSize, // 0x100
-    device_in_periodic_tx_fifo_size: [7]u32, // 0x104 .. 0x118
-
-    // host_registers: HostRegisters, // 0x400..0x440
-    // _pad_0x444_0x4fc: [47]u32, // 0x444..0x4fc
-    // channel_registers: [dwc_max_channels]ChannelRegisters, // 0x500 .. 0x6ff
-    // _pad_0x700_0xdfc: [448]u32, // 0x700 - 0xdfc
-    // power_clock_control: u32 = 0, // 0xe00
-};
+pub const OtgControl = reg.OtgControl;
+pub const AhbConfig = reg.AhbConfig;
+pub const UsbConfig = reg.UsbConfig;
+pub const Reset = reg.Reset;
+pub const InterruptStatus = reg.InterruptStatus;
+pub const InterruptMask = reg.InterruptMask;
+pub const RxStatus = reg.RxStatus;
+pub const NonPeriodicTxFifoSize = reg.NonPeriodicTxFifoSize;
+pub const NonPeriodicTxFifoStatus = reg.NonPeriodicTxFifoStatus;
+pub const GeneralCoreConfig = reg.GeneralCoreConfig;
+pub const HwConfig2 = reg.HwConfig2;
+pub const HwConfig3 = reg.HwConfig3;
+pub const HwConfig4 = reg.HwConfig4;
+pub const PeriodicTxFifoSize = reg.PeriodicTxFifoSize;
+pub const CoreRegisters = reg.CoreRegisters;
 
 pub const VTable = struct {
     initialize: *const fn (usb_controller: u64) u64,
@@ -884,11 +490,11 @@ fn initializeRootPort(self: *Self) !void {
     std.log.info("root port init end", .{});
 }
 
-pub fn getPortSpeed(self: *Self) !UsbSpeed {
+pub fn getPortSpeed(self: *Self) !usb.UsbSpeed {
     return switch (self.host_registers.port.speed) {
-        .high => UsbSpeed.High,
-        .full => UsbSpeed.Full,
-        .low => UsbSpeed.Low,
+        .high => .High,
+        .full => .Full,
+        .low => .Low,
         else => Error.ConfigurationError,
     };
 }
@@ -943,7 +549,7 @@ fn dumpRegister(field_name: []const u8, v: u32) void {
 fn controlMessage(
     self: *Self,
     endpoint: *Endpoint,
-    request_type: RequestType,
+    request_type: usb.RequestType,
     request: u8,
     value: u16,
     index: u16,
@@ -1000,7 +606,7 @@ const TransferStageData = struct {
     device: *Device,
     in: bool,
     status_stage: bool,
-    speed: UsbSpeed,
+    speed: usb.UsbSpeed,
     max_packet_size: u11,
     transfer_size: u16,
     bytes_per_transaction: u19,
@@ -1034,7 +640,7 @@ const TransferStageData = struct {
         return self.device.address;
     }
 
-    fn endpointType(self: *TransferStageData) EndpointType {
+    fn endpointType(self: *TransferStageData) usb.EndpointType {
         return self.endpoint.type;
     }
 
@@ -1044,9 +650,9 @@ const TransferStageData = struct {
 
     fn controllerPid(self: *TransferStageData) !DwcTransferSizePid {
         return switch (self.endpoint.pidNext(self.status_stage)) {
-            PID.Setup => .Setup,
-            PID.Data0 => .Data0,
-            PID.Data1 => .Data1,
+            .Setup => .Setup,
+            .Data0 => .Data0,
+            .Data1 => .Data1,
         };
     }
 
@@ -1114,7 +720,7 @@ fn createStageData(self: *Self, channel: ChannelId, request: *Request, in: bool,
     };
 
     if (!status_stage) {
-        if (request.endpoint.pidNext(status_stage) == PID.Setup) {
+        if (request.endpoint.pidNext(status_stage) == .Setup) {
             stage.buffer_pointer = @ptrCast(request.setup_data);
             stage.transfer_size = @sizeOf(SetupPacket);
         } else {
@@ -1220,10 +826,9 @@ fn channelStart(self: *Self, stage: *TransferStageData) void {
         channel_characteristics.endpoint_direction = .out;
     }
 
-    if (stage.speed == UsbSpeed.Low) {
-        channel_characteristics.low_speed_device = 1;
-    } else {
-        channel_characteristics.low_speed_device = 0;
+    switch (stage.speed) {
+        .Low => channel_characteristics.low_speed_device = 1,
+        else => channel_characteristics.low_speed_device = 0,
     }
 
     channel_characteristics.device_address = @truncate(stage.addressDevice());
@@ -1277,7 +882,7 @@ fn transferStage(self: *Self, request: *Request, in: bool, status_stage: bool) !
 fn requestSubmitBlocking(self: *Self, request: *Request) !void {
     request.status = 0;
 
-    if (request.endpoint.type == EndpointType.Control) {
+    if (request.endpoint.type == usb.EndpointType.Control) {
         if (request.setup_data.request_type.transfer_direction == .device_to_host) {
             try self.transferStage(request, false, false);
             try self.transferStage(request, true, false);
@@ -1290,11 +895,11 @@ fn requestSubmitBlocking(self: *Self, request: *Request) !void {
 fn descriptorQuery(
     self: *Self,
     endpoint: *Endpoint,
-    descriptor_type: DescriptorType,
-    which: DescriptorIndex,
-    result: *align(64) Descriptor,
+    descriptor_type: usb.DescriptorType,
+    which: usb.DescriptorIndex,
+    result: *align(64) usb.Descriptor,
     buffer_size: u16,
-    request_type: RequestType,
+    request_type: usb.RequestType,
     index: u16,
 ) !void {
     std.log.debug("descriptor query for {any} on endpoint {d}", .{ descriptor_type, endpoint.number });
@@ -1302,7 +907,7 @@ fn descriptorQuery(
     const returned = try self.controlMessage(
         endpoint,
         request_type,
-        @intFromEnum(StandardDeviceRequests.get_descriptor),
+        @intFromEnum(usb.StandardDeviceRequests.get_descriptor),
         @as(u16, @intFromEnum(descriptor_type)) << 8 | @as(u8, which),
         index,
         result,
@@ -1311,7 +916,7 @@ fn descriptorQuery(
 
     std.log.debug("descriptor query returned {any}", .{returned});
 
-    if (returned != DEFAULT_MAX_PACKET_SIZE) {
+    if (returned != usb.DEFAULT_MAX_PACKET_SIZE) {
         return Error.InvalidResponse;
     }
 }
@@ -1330,15 +935,15 @@ const Endpoint = struct {
 
     device: *Device,
     number: u4,
-    type: EndpointType = .Control,
+    type: usb.EndpointType = .Control,
     direction: EndpointDirection = .Out,
-    max_packet_size: u11 = DEFAULT_MAX_PACKET_SIZE,
+    max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
     interval: u16 = DEFAULT_INTERVAL, // milliseconds
-    next_pid: PID = PID.Setup,
+    next_pid: usb.PID = usb.PID.Setup,
 
-    fn pidNext(self: *Endpoint, status_stage: bool) PID {
+    fn pidNext(self: *Endpoint, status_stage: bool) usb.PID {
         if (status_stage) {
-            return PID.Data1;
+            return usb.PID.Data1;
         } else {
             return self.next_pid;
         }
@@ -1363,7 +968,7 @@ const Endpoint = struct {
             }
         } else {
             // TODO should only occur with a Control endpoint
-            self.next_pid = PID.Setup;
+            self.next_pid = usb.PID.Setup;
         }
     }
 };
@@ -1371,37 +976,37 @@ const Endpoint = struct {
 const Device = struct {
     host: *Self,
     port: *RootPort,
-    speed: UsbSpeed,
-    address: Address,
+    speed: usb.UsbSpeed,
+    address: usb.Address,
     endpoint_0: Endpoint,
-    function: [MAX_FUNCTIONS]Function,
+    function: [usb.MAX_FUNCTIONS]Function,
     hub_device: *Device,
     hub_address: u8,
     hub_port_number: u8,
-    device_descriptor: DeviceDescriptor,
-    config_descriptor: ConfigurationDescriptor,
+    device_descriptor: usb.DeviceDescriptor,
+    config_descriptor: usb.ConfigurationDescriptor,
     descriptor_buffer: DescriptorPtr,
 
     pub fn init(allocator: Allocator) !*Device {
         var device = try allocator.create(Device);
 
-        device.address = DEFAULT_ADDRESS;
+        device.address = usb.DEFAULT_ADDRESS;
         device.hub_address = 0;
         device.hub_port_number = 1;
         device.endpoint_0 = Endpoint{ .number = 0, .device = device };
 
-        const raw_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(Descriptor));
+        const raw_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(usb.Descriptor));
         device.descriptor_buffer = @ptrCast(raw_buffer);
 
         return device;
     }
 
-    pub fn initialize(self: *Device, host: *Self, port: *RootPort, speed: UsbSpeed) !void {
+    pub fn initialize(self: *Device, host: *Self, port: *RootPort, speed: usb.UsbSpeed) !void {
         self.host = host;
         self.port = port;
         self.speed = speed;
 
-        try host.descriptorQuery(&self.endpoint_0, .device, DEFAULT_DESCRIPTOR_INDEX, self.descriptor_buffer, DEFAULT_MAX_PACKET_SIZE, request_type_in, 0);
+        try host.descriptorQuery(&self.endpoint_0, .device, usb.DEFAULT_DESCRIPTOR_INDEX, self.descriptor_buffer, usb.DEFAULT_MAX_PACKET_SIZE, usb.request_type_in, 0);
         try self.descriptor_buffer.expectDeviceDescriptor();
     }
 };
@@ -1491,23 +1096,6 @@ const RootPort = struct {
 };
 
 // ----------------------------------------------------------------------
-// Host, Device, Endpoint, Transfers
-// ----------------------------------------------------------------------
-
-// TODO all of it
-
-pub const EndpointType = enum(u2) {
-    Control = 0,
-    Isochronous = 1,
-    Bulk = 2,
-    Interrupt = 3,
-};
-
-// ----------------------------------------------------------------------
-// Functions
-// ----------------------------------------------------------------------
-
-// ----------------------------------------------------------------------
 // Requests
 // ----------------------------------------------------------------------
 
@@ -1547,234 +1135,15 @@ const Request = struct {
 // Definitions from USB spec: Constants, Structures, and Packet Definitions
 // ----------------------------------------------------------------------
 
-pub const DEFAULT_MAX_PACKET_SIZE = 8;
-pub const FIRST_DEDICATED_ADDRESS = 1;
-pub const MAX_FUNCTIONS = 10;
-
-pub const Address = u8;
-pub const DEFAULT_ADDRESS: Address = 0;
-pub const MAX_ADDRESS: Address = 63;
-
 pub const DEFAULT_INTERVAL = 1;
 
-/// Index of a descriptor
-pub const DescriptorIndex = u8;
-pub const DEFAULT_DESCRIPTOR_INDEX = 0;
-
-/// Index of a string descriptor
-pub const StringIndex = u8;
-
-/// BCD coded number
-pub const BCD = u16;
-
-/// Assigned ID number
-pub const ID = u16;
-
-pub const PID = enum(u8) {
-    Setup,
-    Data0,
-    Data1,
-};
-
-pub const UsbSpeed = enum {
-    Low,
-    Full,
-    High,
-    Super,
-};
-
 pub const SetupPacket = extern struct {
-    request_type: RequestType,
+    request_type: usb.RequestType,
     request: u8,
     value: u16,
     index: u16,
     length: u16,
 };
 
-pub const RequestType = packed struct {
-    recipient: enum(u5) {
-        device = 0b00000,
-        interface = 0b00001,
-        endpoint = 0b00010,
-        other = 0b00011,
-        // all other bit patterns are reserved
-    }, // 0 .. 4
-    type: enum(u2) {
-        standard = 0b00,
-        class = 0b01,
-        vendor = 0b10,
-        reserved = 0b11,
-    }, // 5..6
-    transfer_direction: enum(u1) {
-        host_to_device = 0b0,
-        device_to_host = 0b1,
-    },
-};
-
-pub const request_type_in: RequestType = .{
-    .recipient = .device,
-    .type = .standard,
-    .transfer_direction = .device_to_host,
-};
-
-pub const StandardDeviceRequests = enum(u8) {
-    get_status = 0x00,
-    clear_feature = 0x01,
-    set_feature = 0x03,
-    set_address = 0x05,
-    get_descriptor = 0x06,
-    set_descriptor = 0x07,
-    get_configuration = 0x08,
-    set_configuration = 0x09,
-};
-
-pub const StandardInterfaceRequests = enum(u8) {
-    get_status = 0x00,
-    clear_feature = 0x01,
-    set_feature = 0x03,
-    get_interface = 0x0a,
-    set_interface = 0x11,
-};
-
-pub const StandardEndpointRequests = enum(u8) {
-    get_status = 0x00,
-    clear_feature = 0x01,
-    set_feature = 0x03,
-    synch_frame = 0x12,
-};
-
-pub const DescriptorType = enum(u8) {
-    // not for use
-    unknown = 0,
-
-    // general
-    device = 1,
-    configuration = 2,
-    string = 3,
-    interface = 4,
-    endpoint = 5,
-
-    // class specific
-    class_interface = 36,
-    class_endpoint = 37,
-};
-
-pub const DeviceDescriptor = extern struct {
-    length: u8 = 0,
-    descriptor_type: DescriptorType = .unknown,
-    usb_standard_compliance: BCD = 0,
-    device_class: u8 = 0,
-    device_subclass: u8 = 0,
-    device_protocol: u8 = 0,
-    max_packet_size: u8 = 0,
-    vendor: ID = 0,
-    product: ID = 0,
-    device_release: BCD = 0,
-    manufacturer_name: StringIndex = 0,
-    product_name: StringIndex = 0,
-    serial_number: StringIndex = 0,
-    configuration_count: u8 = 0,
-};
-
-pub const ConfigurationDescriptor = extern struct {
-    length: u8,
-    descriptor_type: DescriptorType,
-    total_length: u16,
-    interface_count: u8,
-    configuration_value: u8,
-    configuration: StringIndex,
-    attributes: packed struct {
-        _reserved_0: u5 = 0, // 0..5
-        remote_wakeup: u1 = 0, // 5
-        self_powered: u1 = 0, // 6
-        _reserved_1: u1 = 1, // unused since USB 2.0
-    },
-    power_max: u8,
-};
-
-pub const InterfaceDescriptor = extern struct {
-    length: u8,
-    descriptor_type: DescriptorType,
-    interface_number: u8,
-    alternate_setting: u8,
-    endpoint_count: u8,
-    interface_class: u8,
-    interface_subclass: u8,
-    interface_protocol: u8,
-    interface_string: StringIndex,
-};
-
-pub const TransferType = enum(u2) {
-    control = 0b00,
-    isochronous = 0b01,
-    bulk = 0b10,
-    interrupt = 0b11,
-};
-
-pub const IsoSynchronizationType = enum(u2) {
-    none = 0b00,
-    asynchronous = 0b01,
-    adaptive = 0b10,
-    synchronous = 0b11,
-};
-
-pub const IsoUsageType = enum(u2) {
-    data = 0b00,
-    feedback = 0b01,
-    explicit_feedback = 0b10,
-    reserved = 0b11,
-};
-
-pub const EndpointDescriptor = extern struct {
-    length: u8,
-    descriptor_type: DescriptorType,
-    endpoint_address: u8,
-    attributes: packed struct {
-        transfer_type: TransferType, // 0..1
-        iso_synch_type: IsoSynchronizationType, // 2..3
-        usage_type: IsoUsageType, // 4..5
-        _reserved_0: u2 = 0,
-    },
-    max_packet_size: u16,
-    interval: u8, // polling interval in frames
-};
-
-pub const StringDescriptor = extern struct {
-    length: u8,
-    descriptor_type: DescriptorType,
-
-    // For string descriptor 0, the remaining bytes (length - 2 / 2)
-    // contain an array of u16's with the language codes of each
-    // language this string is available in. The index of the
-    // desired language in the array will be the `index` field in a request
-    // to get string decriptor. That response will contain a unicode
-    // encoded string of `length` bytes.
-};
-
-pub const Descriptor = extern union {
-    header: packed struct {
-        length: u8,
-        descriptor_type: DescriptorType,
-    },
-    device: DeviceDescriptor,
-    configuration: ConfigurationDescriptor,
-    interface: InterfaceDescriptor,
-    endpoint: EndpointDescriptor,
-    string: StringDescriptor,
-
-    const Error = error{
-        LengthMismatch,
-        UnexpectedType,
-    };
-
-    fn expectDeviceDescriptor(desc: *Descriptor) !void {
-        if (desc.header.length != @sizeOf(DeviceDescriptor))
-            return Descriptor.Error.LengthMismatch;
-
-        if (desc.header.descriptor_type != DescriptorType.device)
-            return Descriptor.Error.UnexpectedType;
-    }
-};
-
 pub const DMA_ALIGNMENT = 64;
-pub const DescriptorPtr = *align(DMA_ALIGNMENT) Descriptor;
+pub const DescriptorPtr = *align(DMA_ALIGNMENT) usb.Descriptor;
