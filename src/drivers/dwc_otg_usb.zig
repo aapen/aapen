@@ -657,29 +657,26 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
 }
 
 fn irqHandleChannel(self: *Self, which_channel: u5) void {
-    var buf: [32]u8 = [_]u8{0} ** 32;
-    root.debug.kernelMessage(std.fmt.bufPrintZ(&buf, "{s} {d}", .{ "CHint", which_channel }) catch "");
+    std.log.debug("channel intr on {d}", .{which_channel});
 
     var stage = self.stage_data[which_channel];
 
     if (stage == undefined) {
-        root.debug.kernelMessage("Spurious interrupt");
+        std.log.debug("spurious interrupt", .{});
         return;
     }
 
-    root.debug.kernelMessage(std.fmt.bufPrintZ(&buf, "{s} {x:0>8}", .{ "HCINTR", @as(u32, @bitCast(self.channel_registers[which_channel].channel_int)) }) catch "");
+    std.log.debug("ch {d} interrupt status {x:0>8}", .{ which_channel, @as(u32, @bitCast(self.channel_registers[which_channel].channel_int)) });
 
     var request = stage.request;
 
     switch (stage.substate) {
         .not_set => {
-            root.debug.kernelMessage("Unexpected interrupt");
+            std.log.debug("Unexpected interrupt", .{});
         },
         .wait_for_channel_disable => {
-            self.channelStart(stage) catch {
-                root.debug.kernelMessage("Error starting channel");
-                // TODO clean up, this transaction will never finish
-            };
+            std.log.info("channel {d}, was waiting for disable to finish", .{which_channel});
+            self.channelStart(stage);
             return;
         },
         .wait_for_transaction_complete => {
@@ -687,6 +684,7 @@ fn irqHandleChannel(self: *Self, which_channel: u5) void {
             const transfer_size = self.channel_registers[which_channel].channel_transfer_size;
             const channel_intr = self.channel_registers[which_channel].channel_int;
 
+            std.log.info("channel {d}, waiting for transaction complete, intr {x:0>8}", .{ which_channel, @as(u32, @bitCast(channel_intr)) });
             // should check for done transaction here... remaining
             // transfer zero, and complete bit set
             //
@@ -705,26 +703,32 @@ fn irqHandleChannel(self: *Self, which_channel: u5) void {
             // }
 
             stage.transactionComplete(
+                which_channel,
                 channel_intr,
                 transfer_size.transfer_size_packets,
                 transfer_size.transfer_size_bytes,
             );
-            return;
+            //            return;
         },
     }
 
     switch (stage.state) {
         .not_set => {
-            root.debug.kernelMessage("Unexpected state");
+            std.log.warn("unexpected state", .{});
         },
         .no_split_transfer => {
+            std.log.debug("status stage (i think?)", .{});
+
             var status: ChannelInterrupt = stage.transaction_status;
 
             // TOOD handle nak / nyet status with periodic transaction
             if (status.isStatusError()) {
-                std.log.err("usb txn failed (status 0x{x})", .{@as(u32, @bitCast(status))});
+                std.log.err("usb txn failed (status 0x{x:0>8})", .{@as(u32, @bitCast(status))});
             } else {
+                std.log.debug("maybe request is complete", .{});
+
                 if (stage.status_stage) {
+                    std.log.debug("status stage returned {d} bytes", .{stage.resultLength()});
                     request.result_length = stage.resultLength();
                 }
                 request.status = 1;
@@ -1050,7 +1054,7 @@ const TransferStageData = struct {
         return @min(self.total_bytes_transferred, self.transfer_size);
     }
 
-    fn transactionComplete(self: *TransferStageData, status: ChannelInterrupt, packets_left: u10, bytes_left: u19) void {
+    fn transactionComplete(self: *TransferStageData, which_channel: u5, status: ChannelInterrupt, packets_left: u10, bytes_left: u19) void {
         _ = bytes_left;
         _ = packets_left;
         self.transaction_status = status;
@@ -1077,9 +1081,10 @@ const TransferStageData = struct {
 
         self.owner.wait_blocks[self.wait_block_assigned] = false;
         self.owner.wait_block_allocations.free(self.wait_block_assigned);
+        self.owner.channelStop(which_channel);
+        self.owner.channelFree(which_channel);
 
-        var buf: [32]u8 = [_]u8{0} ** 32;
-        root.debug.kernelMessage(std.fmt.bufPrintZ(&buf, "{s} {d}", .{ "XFERDONE", self.wait_block_assigned }) catch "");
+        std.log.info("channel {d} transfer complete, signalled waitblock {d}", .{ which_channel, self.wait_block_assigned });
     }
 };
 
@@ -1151,6 +1156,8 @@ fn channelInterruptDisable(self: *Self, channel: ChannelId) void {
 fn transferStageAsync(self: *Self, request: *Request, in: bool, status_stage: bool, wait_block_assigned: u5) !void {
     const channel = try self.channelAllocate();
 
+    std.log.debug("transfer stage async: in? {}, status? {}, ch {d}, waitblock {d}", .{ in, status_stage, channel, wait_block_assigned });
+
     const stage_data = try self.createStageData(channel, request, in, status_stage, wait_block_assigned);
     self.stage_data[channel] = stage_data;
 
@@ -1163,25 +1170,24 @@ fn transferStageAsync(self: *Self, request: *Request, in: bool, status_stage: bo
 }
 
 fn transactionStart(self: *Self, stage_data: *TransferStageData) !void {
+    std.log.debug("transaction start on ch {d}", .{stage_data.channel});
+
     const channel = stage_data.channel;
-    var channel_characteristics = self.channel_registers[channel].channel_character;
+    const channel_characteristics = self.channel_registers[channel].channel_character;
 
     // if the channel is enabled, we must disable it (and wait for
     // that to complete
     if (channel_characteristics.enable == 1) {
+        std.log.debug("channel was enabled, must wait for disable", .{});
         stage_data.substate = .wait_for_channel_disable;
-        channel_characteristics.enable = 0;
-        channel_characteristics.disable = 1;
-        self.channel_registers[channel].channel_character = channel_characteristics;
-        self.channel_registers[channel].channel_int_mask.halted = 1;
-
+        self.channelStop(channel);
         // the rest happens when the interrupt fires
     } else {
-        try self.channelStart(stage_data);
+        self.channelStart(stage_data);
     }
 }
 
-fn channelStart(self: *Self, stage: *TransferStageData) !void {
+fn channelStart(self: *Self, stage: *TransferStageData) void {
     const channel = stage.channel;
 
     stage.substate = .wait_for_transaction_complete;
@@ -1235,6 +1241,15 @@ fn channelStart(self: *Self, stage: *TransferStageData) !void {
     self.channel_registers[channel].channel_character = channel_characteristics;
 }
 
+fn channelStop(self: *Self, channel: u5) void {
+    std.log.debug("stopping channel {d}", .{channel});
+    var channel_characteristics = self.channel_registers[channel].channel_character;
+    channel_characteristics.enable = 0;
+    channel_characteristics.disable = 1;
+    self.channel_registers[channel].channel_character = channel_characteristics;
+    self.channel_registers[channel].channel_int_mask = @bitCast(@as(u32, 0));
+}
+
 fn transferStage(self: *Self, request: *Request, in: bool, status_stage: bool) !void {
     const wait_until = self.deadline(request.timeout);
 
@@ -1253,7 +1268,7 @@ fn transferStage(self: *Self, request: *Request, in: bool, status_stage: bool) !
 
     if (self.wait_blocks[wait_block_assigned] == true) {
         // timeout elapsed... complain
-        root.debug.kernelMessage("USB request timeout");
+        std.log.info("USB request timeout", .{});
         self.wait_blocks[wait_block_assigned] = false;
         self.wait_block_allocations.free(wait_block_assigned);
     }

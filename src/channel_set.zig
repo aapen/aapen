@@ -46,7 +46,7 @@ pub fn free(channel_set: *Self, channel: u5) void {
     const mask: u32 = @as(u32, 1) << channel;
 
     if (channel_set.allocated & mask == 0) {
-        std.log.err("Attempt to free a channel that was not allocated.", .{});
+        std.log.err("Attempt to free channel {d} but it was not allocated.", .{channel});
     }
 
     channel_set.allocated &= ~mask;
