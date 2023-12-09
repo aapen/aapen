@@ -30,7 +30,7 @@ pub const HAL = switch (config.board) {
 const diagnostics = @import("hal/diagnostics.zig");
 
 pub const std_options = struct {
-    pub const log_level = .warn;
+    pub const log_level = .debug;
     pub const logFn = debug.log;
 };
 

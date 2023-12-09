@@ -486,6 +486,7 @@ const CoreRegisters = extern struct {
 
 pub const VTable = struct {
     initialize: *const fn (usb_controller: u64) u64,
+    initializeRootPort: *const fn (usb_controller: u64) u64,
     dumpStatus: *const fn (usb_controller: u64) void,
 };
 
@@ -511,6 +512,7 @@ wait_block_allocations: ChannelSet,
 wait_blocks: [dwc_wait_blocks]bool,
 vtable: VTable = .{
     .initialize = initializeShim,
+    .initializeRootPort = initializeRootPortShim,
     .dumpStatus = dumpStatusInteropShim,
 },
 
@@ -519,7 +521,17 @@ fn initializeShim(usb_controller: u64) u64 {
     if (self.initialize()) {
         return 1;
     } else |err| {
-        root.debug.kernelError("USB init error", err);
+        std.log.err("USB init error: {any}", .{err});
+        return 0;
+    }
+}
+
+fn initializeRootPortShim(usb_controller: u64) u64 {
+    var self: *Self = @ptrFromInt(usb_controller);
+    if (self.initializeRootPort()) {
+        return 1;
+    } else |err| {
+        std.log.err("USB init root port error: {any}", .{err});
         return 0;
     }
 }
@@ -568,7 +580,9 @@ pub fn initialize(self: *Self) !void {
     try self.enableCommonInterrupts();
     try self.enableGlobalInterrupts();
     try self.initializeHost();
-    try self.initializeRootPort();
+    // NOTE: I'm extracting this to a separate step which will build a
+    // device on a port
+    //    try self.initializeRootPort();
 }
 
 fn powerOn(self: *Self) !void {
@@ -670,8 +684,8 @@ fn irqHandleChannel(self: *Self, which_channel: u5) void {
         },
         .wait_for_transaction_complete => {
             // TODO clean and invalidate dcache for packet range
-            var transfer_size = self.channel_registers[which_channel].channel_transfer_size;
-            var channel_intr = self.channel_registers[which_channel].channel_int;
+            const transfer_size = self.channel_registers[which_channel].channel_transfer_size;
+            const channel_intr = self.channel_registers[which_channel].channel_int;
 
             // should check for done transaction here... remaining
             // transfer zero, and complete bit set
@@ -789,6 +803,8 @@ fn resetControllerCore(self: *Self) !void {
 }
 
 fn initializeHost(self: *Self) !void {
+    std.log.info("host init start", .{});
+
     self.power_and_clock_control.* = 0;
 
     var config = self.host_registers.config;
@@ -811,6 +827,8 @@ fn initializeHost(self: *Self) !void {
 
     try self.powerHostPort();
     try self.enableHostInterrupts();
+
+    std.log.info("host init end", .{});
 }
 
 fn configPhyClockSpeed(self: *Self) !void {
@@ -857,7 +875,9 @@ fn enableHostInterrupts(self: *Self) !void {
 }
 
 fn initializeRootPort(self: *Self) !void {
+    std.log.info("root port init start", .{});
     try self.root_port.initialize(self);
+    std.log.info("root port init end", .{});
 }
 
 pub fn getPortSpeed(self: *Self) !UsbSpeed {
@@ -927,7 +947,7 @@ fn controlMessage(
     data_size: u16,
 ) !u19 {
     const raw_setup_data: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(SetupPacket));
-    var setup: *align(DMA_ALIGNMENT) SetupPacket = @ptrCast(@alignCast(raw_setup_data));
+    const setup: *align(DMA_ALIGNMENT) SetupPacket = @ptrCast(@alignCast(raw_setup_data));
 
     setup.* = .{
         .request_type = @bitCast(request_type),
@@ -936,7 +956,7 @@ fn controlMessage(
         .index = index,
         .length = data_size,
     };
-    var rq = try Request.init(self.allocator, endpoint, data, data_size, setup);
+    const rq = try Request.init(self.allocator, endpoint, data, data_size, setup);
 
     try self.requestSubmitBlocking(rq);
 
@@ -944,7 +964,7 @@ fn controlMessage(
 }
 
 fn channelAllocate(self: *Self) !ChannelId {
-    var chan = try self.channels.allocate();
+    const chan = try self.channels.allocate();
     errdefer self.channels.free(chan);
 
     if (chan >= self.num_host_channels) {
@@ -1142,8 +1162,6 @@ fn transferStageAsync(self: *Self, request: *Request, in: bool, status_stage: bo
     try self.transactionStart(stage_data);
 }
 
-fn transactionQueue(_: *Self, _: *TransferStageData) !void {}
-
 fn transactionStart(self: *Self, stage_data: *TransferStageData) !void {
     const channel = stage_data.channel;
     var channel_characteristics = self.channel_registers[channel].channel_character;
@@ -1164,7 +1182,7 @@ fn transactionStart(self: *Self, stage_data: *TransferStageData) !void {
 }
 
 fn channelStart(self: *Self, stage: *TransferStageData) !void {
-    var channel = stage.channel;
+    const channel = stage.channel;
 
     stage.substate = .wait_for_transaction_complete;
 
@@ -1264,6 +1282,8 @@ fn descriptorQuery(
     request_type: RequestType,
     index: u16,
 ) !void {
+    std.log.debug("descriptor query for {any} on endpoint {d}", .{ descriptor_type, endpoint.number });
+
     const returned = try self.controlMessage(
         endpoint,
         request_type,
@@ -1273,6 +1293,8 @@ fn descriptorQuery(
         result,
         buffer_size,
     );
+
+    std.log.debug("descriptor query returned {any}", .{returned});
 
     if (returned != DEFAULT_MAX_PACKET_SIZE) {
         return Error.InvalidResponse;
@@ -1364,15 +1386,8 @@ const Device = struct {
         self.port = port;
         self.speed = speed;
 
-        root.debug.kernelMessage("Device.initialize:1");
-
         try host.descriptorQuery(&self.endpoint_0, .device, DEFAULT_DESCRIPTOR_INDEX, self.descriptor_buffer, DEFAULT_MAX_PACKET_SIZE, request_type_in, 0);
-
-        root.debug.kernelMessage("Device.initialize:2");
-
         try self.descriptor_buffer.expectDeviceDescriptor();
-
-        root.debug.kernelMessage("Device.initialize:3");
     }
 };
 
@@ -1436,13 +1451,16 @@ const RootPort = struct {
     }
 
     fn configureDevice(self: *RootPort) !void {
+        std.log.info("configure device start", .{});
         const speed = try self.host.getPortSpeed();
 
         self.device = try Device.init(self.allocator);
         self.device.initialize(self.host, self, speed) catch |err| {
             self.device = undefined;
+            std.log.err("configure device error: {any}", .{err});
             return err;
         };
+        std.log.info("configure device end", .{});
     }
 
     fn overcurrentShutdownCheck(self: *RootPort) !void {
@@ -1495,7 +1513,7 @@ const Request = struct {
         request_data_size: u16,
         setup_data: *align(DMA_ALIGNMENT) SetupPacket,
     ) !*Request {
-        var request: *Request = try allocator.create(Request);
+        const request: *Request = try allocator.create(Request);
 
         request.* = .{
             .setup_data = setup_data,
