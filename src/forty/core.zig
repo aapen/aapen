@@ -75,7 +75,7 @@ pub fn wordSetMemory(forth: *Forth, _: *Header) ForthError!void {
 /// a -- ()
 pub fn wordEmit(forth: *Forth, _: *Header) ForthError!void {
     const a = try forth.stack.pop();
-    var ch: u8 = @intCast(a);
+    const ch: u8 = @intCast(a);
     try forth.emit(ch);
 }
 
@@ -87,13 +87,13 @@ pub fn wordKey(forth: *Forth, _: *Header) ForthError!void {
 
 // -- bool
 pub fn wordKeyMaybe(forth: *Forth, _: *Header) ForthError!void {
-    var byte_available = forth.console.char_available();
+    const byte_available = forth.console.char_available();
     try forth.stack.push(if (byte_available) 1 else 0);
 }
 
 /// -- n
 pub fn wordTicks(forth: *Forth, _: *Header) ForthError!void {
-    var ticks = root.hal.clock.ticks();
+    const ticks = root.hal.clock.ticks();
     try forth.stack.push(ticks);
 }
 
@@ -121,19 +121,19 @@ pub fn wordToDStack(forth: *Forth, _: *Header) ForthError!void {
 
 /// n --
 pub fn wordDot(forth: *Forth, _: *Header) ForthError!void {
-    var v = try forth.popAs(i64);
+    const v = try forth.popAs(i64);
     try std.fmt.formatInt(v, @intCast(forth.obase), .lower, .{}, forth.writer());
 }
 
 /// n --
 pub fn wordSignedDot(forth: *Forth, _: *Header) ForthError!void {
-    var v: i64 = @bitCast(try forth.stack.pop());
+    const v: i64 = @bitCast(try forth.stack.pop());
     try std.fmt.formatInt(v, @intCast(forth.obase), .lower, .{}, forth.writer());
 }
 
 /// n --
 pub fn wordSDecimalDot(forth: *Forth, _: *Header) ForthError!void {
-    var v: i64 = @bitCast(try forth.stack.pop());
+    const v: i64 = @bitCast(try forth.stack.pop());
     try std.fmt.formatInt(v, 10, .lower, .{}, forth.writer());
 }
 
@@ -156,13 +156,13 @@ pub fn wordSEqual(forth: *Forth, _: *Header) ForthError!void {
 
 /// n --
 pub fn wordHexDot(forth: *Forth, _: *Header) ForthError!void {
-    var v: u64 = try forth.stack.pop();
+    const v: u64 = try forth.stack.pop();
     try forth.print("{x} ", .{v});
 }
 
 /// n --
 pub fn wordDecimalDot(forth: *Forth, _: *Header) ForthError!void {
-    var v: u64 = try forth.stack.pop();
+    const v: u64 = try forth.stack.pop();
     try std.fmt.formatInt(v, 10, .lower, .{}, forth.writer());
 }
 
@@ -181,11 +181,11 @@ pub fn wordSwap(forth: *Forth, _: *Header) ForthError!void {
 
 /// w1 w2 w3 w4 -- w3 w4 w1 w2
 pub fn word2Swap(forth: *Forth, _: *Header) ForthError!void {
-    var s = &forth.stack;
-    var w4 = try s.pop();
-    var w3 = try s.pop();
-    var w2 = try s.pop();
-    var w1 = try s.pop();
+    const s = &forth.stack;
+    const w4 = try s.pop();
+    const w3 = try s.pop();
+    const w2 = try s.pop();
+    const w1 = try s.pop();
     try s.push(w3);
     try s.push(w4);
     try s.push(w1);
@@ -472,7 +472,7 @@ pub fn wordStore(comptime T: type, forth: *Forth, _: *Header) ForthError!void {
     const v = try forth.stack.pop();
 
     const p: *T = @ptrFromInt(a);
-    var nv: T = @truncate(v);
+    const nv: T = @truncate(v);
     p.* = nv;
 }
 
@@ -490,9 +490,9 @@ const Comparison = enum { eq, lt, lteq, gt, gteq };
 fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, forth: *Forth, _: *Header) ForthError!void {
     const a = try forth.stack.pop();
     const b = try forth.stack.pop();
-    var lhs: T = @truncate(b);
-    var rhs: T = @truncate(a);
-    var result = switch (comparison) {
+    const lhs: T = @truncate(b);
+    const rhs: T = @truncate(a);
+    const result = switch (comparison) {
         .eq => lhs == rhs,
         .lt => lhs < rhs,
         .lteq => lhs <= rhs,
@@ -503,7 +503,7 @@ fn wordArithmeticComparison(comptime T: type, comptime comparison: Comparison, f
 }
 
 pub fn wordGetScreenText(forth: *Forth, _: *Header) ForthError!void {
-    var n = try forth.popAs(i64);
+    const n = try forth.popAs(i64);
     const pStr = try forth.popAs([*]u8);
     const line_no: u64 = if (n < 0) @intCast(forth.char_buffer.current_row) else @intCast(n);
 
@@ -533,7 +533,7 @@ pub fn wordSerialSDot(forth: *Forth, _: *Header) ForthError!void {
 }
 
 pub fn wordSerialDot(forth: *Forth, _: *Header) ForthError!void {
-    var v = try forth.popAs(i64);
+    const v = try forth.popAs(i64);
     try forth.serial_print("{}", .{v});
 }
 pub fn wordTest2(forth: *Forth, _: *Header) ForthError!void {

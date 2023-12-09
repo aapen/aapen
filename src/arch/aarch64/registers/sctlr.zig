@@ -265,7 +265,7 @@ pub const LayoutEl2 = packed struct {
     enals: types.TrapEnableBitN,
     // Enhanced privileged access never
     epan: u1 = 0,
-    _unused_reserved_2: u3 = 0,
+    _unused_reserved_4: u3 = 0,
     // Non-maskable interrupt enable
     nmi: u1 = 0,
     // SP interrupt mask enable
@@ -303,32 +303,32 @@ pub const LayoutEl3 = packed struct {
     _unused_reserved_5: u1 = 1,
     // Write permission implies execute-never (NX)
     wxn: u1,
-    _unused_reserved_5: u1 = 0,
+    _unused_reserved_6: u1 = 0,
     // Implicit error synchronization event enable
     iesb: u1 = 0,
     // Exception Entry is Context Switching
     eis: u1 = 1,
-    _unused_reserved_6: u1 = 1,
-    _unused_reserved_7: u1 = 0,
+    _unused_reserved_7: u1 = 1,
+    _unused_reserved_8: u1 = 0,
     // Endianness at EL3
     ee: enum(u1) {
         little_endian = 0,
         big_endian = 1,
     },
-    _unused_reserved_8: u1 = 0,
+    _unused_reserved_9: u1 = 0,
     // Enable pointer authentication using APDAKey_EL1
     enda: u1 = 0,
-    _unused_reserved_9: u2 = 0b11,
+    _unused_reserved_10: u2 = 0b11,
     // Enable pointer auth using APIBKey_EL1
     enib: u1 = 0,
     // Enable pointer auth using APIAKey_EL1 of instr addresses
     enia: u1 = 0,
-    _unused_reserved_10: u4 = 0,
+    _unused_reserved_11: u4 = 0,
     // PAC branch type compatibility at EL3
     bt: u1 = 0,
     // Instuction tag fault synchronization bit
     itfsb: u1 = 0,
-    _unused_reserved_11: u2 = 0,
+    _unused_reserved_12: u2 = 0,
     // Tag check fault in EL3
     tcf: enum(u2) {
         no_effect = 0b00,
@@ -336,7 +336,7 @@ pub const LayoutEl3 = packed struct {
         asynchronous_accumulate = 0b10,
         exception_on_read_accumulate_on_writes = 0b11,
     } = .no_effect,
-    _unused_reserved_12: u1 = 0,
+    _unused_reserved_13: u1 = 0,
     // Allocation tag access in EL1
     ata: enum(u1) {
         not_allowed = 0,
@@ -344,5 +344,5 @@ pub const LayoutEl3 = packed struct {
     } = 0,
     // Default SSBS value on exception entry
     dssbs: u1 = 0,
-    _unused_reserved_13: u20 = 0,
+    _unused_reserved_14: u20 = 0,
 };

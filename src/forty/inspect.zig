@@ -92,7 +92,7 @@ fn listDictionary(forth: *Forth, pat: []const u8) ForthError!void {
         if (std.mem.startsWith(u8, entry.name, pat)) {
             const immed = if (entry.immediate) "^" else " ";
             i += 1;
-            var sep: u8 = if ((i % 4) == 0) '\n' else '\t';
+            const sep: u8 = if ((i % 4) == 0) '\n' else '\t';
             try forth.print("{s} {s: <25}{c}", .{ immed, entry.name, sep });
         }
         e = entry.previous;
@@ -101,8 +101,8 @@ fn listDictionary(forth: *Forth, pat: []const u8) ForthError!void {
 }
 
 pub fn wordDesc(forth: *Forth, _: *Header) ForthError!void {
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var header = forth.findWord(name) orelse return ForthError.NotFound;
+    const name = forth.words.next() orelse return ForthError.WordReadError;
+    const header = forth.findWord(name) orelse return ForthError.NotFound;
     try forth.print("{s}: {s}\n", .{ header.name, header.desc });
 }
 
@@ -116,8 +116,8 @@ pub fn wordDescAll(forth: *Forth, _: *Header) ForthError!void {
 }
 
 pub fn wordDumpWord(forth: *Forth, _: *Header) ForthError!void {
-    var name = forth.words.next() orelse return ForthError.WordReadError;
-    var header = forth.findWord(name) orelse return ForthError.NotFound;
+    const name = forth.words.next() orelse return ForthError.WordReadError;
+    const header = forth.findWord(name) orelse return ForthError.NotFound;
 
     // Dump info about a primitive word.
 
@@ -132,13 +132,13 @@ pub fn wordDumpWord(forth: *Forth, _: *Header) ForthError!void {
 
     // Word is a secondary, dump the meta info first.
 
-    var len = header.bodyLen();
+    const len = header.bodyLen();
     try forth.print("Word name: {s} len: {} immed: {}\n", .{ header.name, len, header.immediate });
     try forth.print("Description: {s}\n\n", .{header.desc});
 
     // Followed by a byte dump.
 
-    var ubody = header.bodyOfType([*]u64);
+    const ubody = header.bodyOfType([*]u64);
 
     const wLen = len / @sizeOf(u64);
     for (0..wLen) |j| {

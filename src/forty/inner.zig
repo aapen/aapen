@@ -98,7 +98,7 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
 
             @intFromEnum(OpCode.PushString) => {
                 const data_size = body[i + 1];
-                var p_string: [*]u8 = @ptrCast(body + i + 2);
+                const p_string: [*]u8 = @ptrCast(body + i + 2);
                 try forth.stack.push(@intFromPtr(p_string));
                 i = i + data_size + 2;
             },
@@ -111,7 +111,7 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
             },
 
             @intFromEnum(OpCode.JumpIfNot) => {
-                var c: u64 = try forth.stack.pop();
+                const c: u64 = try forth.stack.pop();
                 const delta: i64 = @as(i64, @bitCast(body[i + 1]));
                 try forth.trace("JumpIfNot cond: {} delta {} ", .{ c, delta });
                 if (c == 0) {
@@ -126,8 +126,8 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
             // Jump if top value of the loop stack is <= the 2nd value.
             // Does not modify the loop stack.
             @intFromEnum(OpCode.JumpIfRLE) => {
-                var first: u64 = try forth.istack.pop();
-                var second: u64 = try forth.istack.pop();
+                const first: u64 = try forth.istack.pop();
+                const second: u64 = try forth.istack.pop();
                 try forth.istack.push(second);
                 try forth.istack.push(first);
 

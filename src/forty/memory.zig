@@ -19,7 +19,7 @@ pub const Header = struct {
     immediate: bool = false,
 
     pub fn init(name: []const u8, desc: []const u8, func: WordFunction, immediate: bool, previous: ?*Header) Header {
-        var this = Header{
+        const this = Header{
             .name = name,
             .func = func,
             .desc = desc,
@@ -55,7 +55,7 @@ pub fn alignBy(p: [*]u8, alignment: usize) [*]u8 {
 }
 
 pub fn intAlignBy(i: u64, alignment: usize) u64 {
-    var words = (i + alignment - 1) / alignment;
+    const words = (i + alignment - 1) / alignment;
     return words * alignment;
 }
 

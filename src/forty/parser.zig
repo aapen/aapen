@@ -47,7 +47,7 @@ pub fn parseNumber(token: []const u8, base: u64) !u64 {
     }
 
     if (token.len >= 3 and token[0] == '0' and token[1] == 'x') {
-        var sNumber = token[2..];
+        const sNumber = token[2..];
         const uValue = std.fmt.parseInt(u64, sNumber, 16) catch {
             return ForthError.ParseError;
         };
@@ -55,15 +55,15 @@ pub fn parseNumber(token: []const u8, base: u64) !u64 {
     }
 
     if (token.len >= 3 and token[0] == '0' and token[1] == '#') {
-        var sNumber = token[2..];
+        const sNumber = token[2..];
         const iValue = std.fmt.parseInt(i64, sNumber, 10) catch {
             return ForthError.ParseError;
         };
         return @bitCast(iValue);
     }
 
-    var iValue = std.fmt.parseInt(i64, token, @intCast(base)) catch {
-        var fValue = std.fmt.parseFloat(f64, token) catch {
+    const iValue = std.fmt.parseInt(i64, token, @intCast(base)) catch {
+        const fValue = std.fmt.parseFloat(f64, token) catch {
             return ForthError.ParseError;
         };
         return @bitCast(fValue);
@@ -79,7 +79,7 @@ pub const ForthTokenIterator = struct {
         return .{ .buffer = buffer, .index = 0 };
     }
     pub fn create(allocator: *Allocator, buffer: []const u8) *ForthTokenIterator {
-        var result = allocator.create(ForthTokenIterator);
+        const result = allocator.create(ForthTokenIterator);
         setup(result, buffer);
         return result;
     }

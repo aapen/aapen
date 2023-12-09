@@ -49,7 +49,7 @@ inline fn wordOffset(a: anytype, b: anytype) i64 {
 }
 
 pub fn pushBodyValue(forth: *Forth, header: *Header) ForthError!void {
-    var body = header.bodyOfType([*]u64);
+    const body = header.bodyOfType([*]u64);
     try forth.stack.push(body[0]);
 }
 
@@ -69,9 +69,9 @@ pub fn wordLet(forth: *Forth, _: *Header) ForthError!void {
 // This is a fairly low level word.
 pub fn wordCreate(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertNotCompiling();
-    var pName = try forth.popAs([*:0]u8);
-    var lName = string.strlen(pName);
-    var name = pName[0..lName];
+    const pName = try forth.popAs([*:0]u8);
+    const lName = string.strlen(pName);
+    const name = pName[0..lName];
 
     _ = try forth.create(name, "", Forth.pushBodyAddress, false);
 }
@@ -127,8 +127,8 @@ pub fn wordRBrace(forth: *Forth, _: *Header) ForthError!void {
 pub fn wordColon(forth: *Forth, _: *Header) ForthError!void {
     try forth.assertNotCompiling();
 
-    var name = try forth.readWord();
-    var token = forth.peekWord();
+    const name = try forth.readWord();
+    const token = forth.peekWord();
 
     var desc: []const u8 = "";
     if (token) |t| {
