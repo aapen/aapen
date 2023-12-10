@@ -70,15 +70,17 @@ finish
 
 ( USB hardware control)
 : usb-init-hcd
-  [[ hal hal.usb_hci +]]                                    ( Address of HCD )
-  [[ hal hal.usb_hci USB.vtable USB.VTable.initialize +]] @ ( Address of initialize function )
+  [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
+  dup
+  USB.vtable USB.VTable.initialize + + @                    ( Address of initialize function )
   invoke-1r                                                 ( Call instance function, 0 return means failed )
 ;
 
 : usb-init-root-port
-  [[ hal hal.usb_hci +]]                                            ( Address of HCD )
-  [[ hal hal.usb_hci USB.vtable USB.VTable.initializeRootPort +]] @ ( Address of initialize function )
-  invoke-1r                                                         ( Call instance function, 0 return means failed )
+  [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
+  dup
+  USB.vtable USB.VTable.initializeRootPort + + @            ( Address of initialize function )
+  invoke-1r                                                 ( Call instance function, 0 return means failed )
 ;
 
 (Drawing)

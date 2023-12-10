@@ -27,6 +27,7 @@ const Spinlock = synchronize.Spinlock;
 const ChannelSet = @import("../channel_set.zig");
 
 const reg = @import("dwc/registers.zig");
+const Channel = @import("dwc/channel.zig");
 
 const usb = @import("../usb.zig");
 
@@ -34,7 +35,6 @@ const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 const dwc_max_channels = 16;
 const dwc_wait_blocks = dwc_max_channels;
-const ChannelId = u5;
 
 const Self = @This();
 
@@ -113,6 +113,7 @@ clock: *Clock,
 root_port: RootPort,
 num_host_channels: u4,
 channels: ChannelSet,
+channels2: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
 stage_data: [dwc_max_channels]*TransferStageData,
 wait_block_allocations: ChannelSet,
 wait_blocks: [dwc_wait_blocks]bool,
@@ -155,8 +156,10 @@ pub fn init(
     translations: *AddressTranslations,
     power: *PowerController,
     clock: *Clock,
-) Self {
-    return .{
+) !*Self {
+    const self = try allocator.create(Self);
+
+    self.* = .{
         .allocator = allocator,
         .core_registers = @ptrFromInt(register_base),
         .host_registers = @ptrFromInt(register_base + 0x400),
@@ -175,6 +178,12 @@ pub fn init(
         .wait_blocks = [_]bool{false} ** dwc_wait_blocks,
         .stage_data = undefined,
     };
+
+    for (0..dwc_max_channels) |chid| {
+        self.channels2[chid].init(@truncate(chid), register_base + 0x500);
+    }
+
+    return self;
 }
 
 pub fn initialize(self: *Self) !void {
@@ -573,7 +582,7 @@ fn controlMessage(
     return rq.result_length;
 }
 
-fn channelAllocate(self: *Self) !ChannelId {
+fn channelAllocate(self: *Self) !Channel.ChannelId {
     const chan = try self.channels.allocate();
     errdefer self.channels.free(chan);
 
@@ -583,7 +592,7 @@ fn channelAllocate(self: *Self) !ChannelId {
     return chan;
 }
 
-fn channelFree(self: *Self, channel: ChannelId) void {
+fn channelFree(self: *Self, channel: Channel.ChannelId) void {
     self.channels.free(channel);
 }
 
@@ -600,7 +609,7 @@ const TransferStageSubstate = enum(u8) {
 
 const TransferStageData = struct {
     owner: *Self,
-    channel: ChannelId,
+    channel: Channel.ChannelId,
     endpoint: *Endpoint,
     request: *Request,
     device: *Device,
@@ -694,7 +703,7 @@ const TransferStageData = struct {
     }
 };
 
-fn createStageData(self: *Self, channel: ChannelId, request: *Request, in: bool, status_stage: bool, wait_block_assigned: u5) !*TransferStageData {
+fn createStageData(self: *Self, channel: Channel.ChannelId, request: *Request, in: bool, status_stage: bool, wait_block_assigned: u5) !*TransferStageData {
     const packet_size = request.endpoint.max_packet_size;
 
     const stage = try self.allocator.create(TransferStageData);
@@ -751,11 +760,11 @@ fn createStageData(self: *Self, channel: ChannelId, request: *Request, in: bool,
     return stage;
 }
 
-fn channelInterruptEnable(self: *Self, channel: ChannelId) void {
+fn channelInterruptEnable(self: *Self, channel: Channel.ChannelId) void {
     self.host_registers.all_channel_interrupts_mask |= @as(u32, 1) << channel;
 }
 
-fn channelInterruptDisable(self: *Self, channel: ChannelId) void {
+fn channelInterruptDisable(self: *Self, channel: Channel.ChannelId) void {
     self.host_registers.all_channel_interrupts_mask &= ~(@as(u32, 1) << channel);
 }
 
