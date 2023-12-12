@@ -30,6 +30,15 @@ const reg = @import("dwc/registers.zig");
 const Channel = @import("dwc/channel.zig");
 
 const usb = @import("../usb.zig");
+pub const DeviceAddress = usb.DeviceAddress;
+pub const TransactionStage = usb.TransactionStage;
+pub const EndpointDirection = usb.EndpointDirection;
+pub const EndpointNumber = usb.EndpointNumber;
+pub const EndpointType = usb.EndpointType;
+pub const PacketSize = usb.PacketSize;
+pub const PID = usb.PID2;
+pub const TransferBytes = usb.TransferBytes;
+pub const UsbSpeed = usb.UsbSpeed;
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
@@ -99,7 +108,6 @@ pub const VTable = struct {
 allocator: Allocator,
 core_registers: *volatile CoreRegisters,
 host_registers: *volatile HostRegisters,
-channel_registers: *volatile [dwc_max_channels]ChannelRegisters,
 power_and_clock_control: *volatile u32,
 all_channel_intmask_lock: Spinlock,
 intc: *InterruptController,
@@ -112,11 +120,8 @@ power_controller: *PowerController,
 clock: *Clock,
 root_port: RootPort,
 num_host_channels: u4,
-channels: ChannelSet,
-channels2: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
-stage_data: [dwc_max_channels]*TransferStageData,
-wait_block_allocations: ChannelSet,
-wait_blocks: [dwc_wait_blocks]bool,
+channel_assignments: ChannelSet = ChannelSet.init("dwc_otg_usb channels", dwc_max_channels),
+channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
 vtable: VTable = .{
     .initialize = initializeShim,
     .initializeRootPort = initializeRootPortShim,
@@ -163,7 +168,6 @@ pub fn init(
         .allocator = allocator,
         .core_registers = @ptrFromInt(register_base),
         .host_registers = @ptrFromInt(register_base + 0x400),
-        .channel_registers = @ptrFromInt(register_base + 0x500),
         .power_and_clock_control = @ptrFromInt(register_base + 0xe00),
         .all_channel_intmask_lock = Spinlock.init("all channels interrupt mask", true),
         .intc = intc,
@@ -173,14 +177,10 @@ pub fn init(
         .clock = clock,
         .root_port = RootPort.init(allocator),
         .num_host_channels = 0,
-        .channels = ChannelSet.init("DWC OTG Host controller channels", dwc_max_channels),
-        .wait_block_allocations = ChannelSet.init("Wait blocks", dwc_wait_blocks),
-        .wait_blocks = [_]bool{false} ** dwc_wait_blocks,
-        .stage_data = undefined,
     };
 
     for (0..dwc_max_channels) |chid| {
-        self.channels2[chid].init(@truncate(chid), register_base + 0x500);
+        self.channels[chid].init(@truncate(chid), register_base + 0x500);
     }
 
     return self;
@@ -189,11 +189,11 @@ pub fn init(
 pub fn initialize(self: *Self) !void {
     try self.powerOn();
     try self.verifyHostControllerDevice();
-    try self.disableGlobalInterrupts();
+    try self.globalInterruptDisable();
     try self.connectInterruptHandler();
     try self.initializeControllerCore();
     try self.enableCommonInterrupts();
-    try self.enableGlobalInterrupts();
+    try self.globalInterruptEnable();
     try self.initializeHost();
     // NOTE: I'm extracting this to a separate step which will build a
     // device on a port
@@ -229,11 +229,13 @@ fn verifyHostControllerDevice(self: *Self) !void {
     }
 }
 
-fn disableGlobalInterrupts(self: *Self) !void {
+fn globalInterruptDisable(self: *Self) !void {
+    std.log.debug("global interrupt disable", .{});
     self.core_registers.ahb_config.global_interrupt_mask = 0;
 }
 
-fn enableGlobalInterrupts(self: *Self) !void {
+fn globalInterruptEnable(self: *Self) !void {
+    std.log.debug("global interrupt enable", .{});
     self.core_registers.ahb_config.global_interrupt_mask = 1;
 }
 
@@ -256,12 +258,9 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
         var channel_mask: u32 = 1;
         // TODO consider using @ctz to find the lowest bit that's set,
         // instead of looping over all 16 channels.
-        for (0..dwc_max_channels) |channel| {
+        for (0..dwc_max_channels) |chid| {
             if ((all_intrs & channel_mask) != 0) {
-                // Mask the channel's interrupt, then call the
-                // channel-specific handler
-                self.channel_registers[channel].channel_int_mask = @bitCast(@as(u32, 0));
-                self.irqHandleChannel(@truncate(channel));
+                self.channels[chid].channelInterrupt();
             }
             channel_mask <<= 1;
         }
@@ -269,95 +268,6 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
 
     // clear the interrupt bits
     self.core_registers.core_interrupt_status = intr_status;
-}
-
-fn irqHandleChannel(self: *Self, which_channel: u5) void {
-    std.log.debug("channel intr on {d}", .{which_channel});
-
-    var stage = self.stage_data[which_channel];
-
-    if (stage == undefined) {
-        std.log.debug("spurious interrupt", .{});
-        return;
-    }
-
-    std.log.debug("ch {d} interrupt status {x:0>8}", .{ which_channel, @as(u32, @bitCast(self.channel_registers[which_channel].channel_int)) });
-
-    var request = stage.request;
-
-    switch (stage.substate) {
-        .not_set => {
-            std.log.debug("Unexpected interrupt", .{});
-        },
-        .wait_for_channel_disable => {
-            std.log.info("channel {d}, was waiting for disable to finish", .{which_channel});
-            self.channelStart(stage);
-            return;
-        },
-        .wait_for_transaction_complete => {
-            // TODO clean and invalidate dcache for packet range
-            const transfer_size = self.channel_registers[which_channel].channel_transfer_size;
-            const channel_intr = self.channel_registers[which_channel].channel_int;
-
-            std.log.info("channel {d}, waiting for transaction complete, intr {x:0>8}", .{ which_channel, @as(u32, @bitCast(channel_intr)) });
-            // should check for done transaction here... remaining
-            // transfer zero, and complete bit set
-            //
-            // ... without that, this infinitely restarts the
-            // transaction
-            //
-
-            // // restart halted transaction
-            // if (channel_intr.halted == 1) {
-            //     // TODO should this enqueue the transaction for later?
-            //     // self.transactionStart(stage) catch {
-            //     //     root.debug.kernelMessage("Error starting txn");
-            //     //     // TODO clean up, this transaction will never finish
-            //     // };
-            //     return;
-            // }
-
-            stage.transactionComplete(
-                which_channel,
-                channel_intr,
-                transfer_size.transfer_size_packets,
-                transfer_size.transfer_size_bytes,
-            );
-            //            return;
-        },
-    }
-
-    switch (stage.state) {
-        .not_set => {
-            std.log.warn("unexpected state", .{});
-        },
-        .no_split_transfer => {
-            std.log.debug("status stage (i think?)", .{});
-
-            var status: ChannelInterrupt = stage.transaction_status;
-
-            // TOOD handle nak / nyet status with periodic transaction
-            if (status.isStatusError()) {
-                std.log.err("usb txn failed (status 0x{x:0>8})", .{@as(u32, @bitCast(status))});
-            } else {
-                std.log.debug("maybe request is complete", .{});
-
-                if (stage.status_stage) {
-                    std.log.debug("status stage returned {d} bytes", .{stage.resultLength()});
-                    request.result_length = stage.resultLength();
-                }
-                request.status = 1;
-            }
-
-            self.channelInterruptDisable(which_channel);
-            self.allocator.destroy(stage);
-            self.stage_data[which_channel] = undefined;
-            self.channelFree(which_channel);
-
-            // TODO call completion routine on the request.
-        },
-        // TODO case for start split, case for finish split
-    }
 }
 
 fn initializeControllerCore(self: *Self) !void {
@@ -564,9 +474,13 @@ fn controlMessage(
     index: u16,
     data: *align(DMA_ALIGNMENT) anyopaque,
     data_size: u16,
-) !u19 {
-    const raw_setup_data: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(SetupPacket));
-    const setup: *align(DMA_ALIGNMENT) SetupPacket = @ptrCast(@alignCast(raw_setup_data));
+) !TransferBytes {
+    _ = data;
+    var channel = try self.channelAllocate();
+    defer self.channelFree(channel);
+
+    const aligned_setup_data: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(SetupPacket));
+    const setup: *align(DMA_ALIGNMENT) SetupPacket = @ptrCast(@alignCast(aligned_setup_data));
 
     setup.* = .{
         .request_type = @bitCast(request_type),
@@ -575,331 +489,145 @@ fn controlMessage(
         .index = index,
         .length = data_size,
     };
-    const rq = try Request.init(self.allocator, endpoint, data, data_size, setup);
 
-    try self.requestSubmitBlocking(rq);
+    // TODO this is too simplistic... it will fail if all channels are
+    // occupied. A better way would be to enqueue a Request and have a
+    // timer- or interrupt-driven dispatcher place transactions on
+    // channels as when they are available.
+    const device = endpoint.device;
 
-    return rq.result_length;
+    // TODO check return value, should equal max_packet_size (8) for
+    // a Setup token packet to a Control endpoint
+    return self.transactionOnChannel(
+        device.address,
+        device.speed,
+        endpoint.number,
+        endpoint.type,
+        endpoint.direction,
+        endpoint.max_packet_size,
+        .token_setup,
+        aligned_setup_data,
+        100,
+    );
+
+    // const rq = try Request.init(self.allocator, endpoint, data, data_size, setup);
+
+    // try self.requestSubmitBlocking(rq);
+
+    // return rq.result_length;
 }
 
-fn channelAllocate(self: *Self) !Channel.ChannelId {
-    const chan = try self.channels.allocate();
-    errdefer self.channels.free(chan);
+fn channelAllocate(self: *Self) !*Channel {
+    const chid = try self.channel_assignments.allocate();
+    errdefer self.channel_assignments.free(chid);
 
-    if (chan >= self.num_host_channels) {
+    if (chid >= self.num_host_channels) {
         return Error.NoChannelAvailable;
     }
-    return chan;
+    return &self.channels[chid];
 }
 
-fn channelFree(self: *Self, channel: Channel.ChannelId) void {
-    self.channels.free(channel);
-}
-
-const TransferStageState = enum(u8) {
-    not_set = 0,
-    no_split_transfer = 1,
-};
-
-const TransferStageSubstate = enum(u8) {
-    not_set = 0,
-    wait_for_channel_disable = 1,
-    wait_for_transaction_complete = 2,
-};
-
-const TransferStageData = struct {
-    owner: *Self,
-    channel: Channel.ChannelId,
-    endpoint: *Endpoint,
-    request: *Request,
-    device: *Device,
-    in: bool,
-    status_stage: bool,
-    speed: usb.UsbSpeed,
-    max_packet_size: u11,
-    transfer_size: u16,
-    bytes_per_transaction: u19,
-    packets: u10,
-    packets_per_transaction: u10,
-    interrupt_mask: u32,
-    temp_buffer: []u32,
-    buffer_pointer: [*]u8,
-    wait_block_assigned: u5,
-
-    state: TransferStageState = .not_set,
-    substate: TransferStageSubstate = .not_set,
-
-    total_bytes_transferred: u19 = 0,
-    status_mask: ChannelInterrupt,
-    transaction_status: ChannelInterrupt,
-
-    fn transferBytesRemaining(self: *TransferStageData) u19 {
-        return self.bytes_per_transaction;
-    }
-
-    fn transferPacketsRemaining(self: *TransferStageData) u10 {
-        return self.packets_per_transaction;
-    }
-
-    fn addressDMA(self: *TransferStageData) [*]u8 {
-        return self.buffer_pointer;
-    }
-
-    fn addressDevice(self: *TransferStageData) u8 {
-        return self.device.address;
-    }
-
-    fn endpointType(self: *TransferStageData) usb.EndpointType {
-        return self.endpoint.type;
-    }
-
-    fn endpointNumber(self: *TransferStageData) u4 {
-        return self.endpoint.number;
-    }
-
-    fn controllerPid(self: *TransferStageData) !DwcTransferSizePid {
-        return switch (self.endpoint.pidNext(self.status_stage)) {
-            .Setup => .Setup,
-            .Data0 => .Data0,
-            .Data1 => .Data1,
-        };
-    }
-
-    fn resultLength(self: *TransferStageData) u19 {
-        return @min(self.total_bytes_transferred, self.transfer_size);
-    }
-
-    fn transactionComplete(self: *TransferStageData, which_channel: u5, status: ChannelInterrupt, packets_left: u10, bytes_left: u19) void {
-        _ = bytes_left;
-        _ = packets_left;
-        self.transaction_status = status;
-
-        // TODO check for NAK/NYET, see if the request should complete
-        // when NAK/NYET. (Should only happen for Bulk endpoints)
-
-        // var packets_transferred: u10 = self.packets_per_transaction - packets_left;
-        // var bytes_transferred: u19 = self.bytes_per_transaction - bytes_left;
-
-        // self.total_bytes_transferred += bytes_transferred;
-        // self.buffer_pointer += bytes_transferred;
-
-        // // TODO this only happens if a) it's not a split transaction
-        // // or b) it _is_ a split and this is the last transaction in
-        // // the split
-        // self.endpoint.pidSkip(packets_transferred, self.status_stage);
-
-        // self.packets -= packets_transferred;
-
-        // if (self.transfer_size - self.total_bytes_transferred < self.bytes_per_transaction) {
-        //     self.bytes_per_transaction = self.transfer_size - self.total_bytes_transferred;
-        // }
-
-        self.owner.wait_blocks[self.wait_block_assigned] = false;
-        self.owner.wait_block_allocations.free(self.wait_block_assigned);
-        self.owner.channelStop(which_channel);
-        self.owner.channelFree(which_channel);
-
-        std.log.info("channel {d} transfer complete, signalled waitblock {d}", .{ which_channel, self.wait_block_assigned });
-    }
-};
-
-fn createStageData(self: *Self, channel: Channel.ChannelId, request: *Request, in: bool, status_stage: bool, wait_block_assigned: u5) !*TransferStageData {
-    const packet_size = request.endpoint.max_packet_size;
-
-    const stage = try self.allocator.create(TransferStageData);
-    stage.owner = self;
-    stage.channel = channel;
-    stage.request = request;
-    stage.endpoint = request.endpoint;
-    stage.device = request.endpoint.device;
-    stage.wait_block_assigned = wait_block_assigned;
-    stage.in = in;
-    stage.status_stage = status_stage;
-    stage.max_packet_size = packet_size;
-    stage.speed = stage.device.speed;
-    stage.status_mask = ChannelInterrupt{
-        .transfer_completed = 1,
-        .halted = 1,
-        .ahb_error = 1,
-        .stall_response_received = 1,
-        .transaction_error = 1,
-        .babble_error = 1,
-        .frame_overrun = 1,
-        .data_toggle_error = 1,
-    };
-
-    if (!status_stage) {
-        if (request.endpoint.pidNext(status_stage) == .Setup) {
-            stage.buffer_pointer = @ptrCast(request.setup_data);
-            stage.transfer_size = @sizeOf(SetupPacket);
-        } else {
-            stage.buffer_pointer = @ptrCast(request.request_data);
-            stage.transfer_size = request.request_data_size;
-        }
-
-        stage.packets = @truncate((stage.transfer_size + packet_size - 1) / packet_size);
-        stage.bytes_per_transaction = stage.transfer_size;
-        stage.packets_per_transaction = stage.packets;
-    } else {
-        const temp_buffer = try self.allocator.alignedAlloc(u32, DMA_ALIGNMENT, 1);
-        stage.buffer_pointer = @ptrCast(temp_buffer);
-        stage.transfer_size = 0;
-        stage.bytes_per_transaction = 0;
-        stage.packets = 1;
-        stage.packets_per_transaction = 1;
-    }
-
-    stage.state = @enumFromInt(0);
-    stage.substate = @enumFromInt(0);
-
-    // TODO consider frame schedulers for split/non-split,
-    // periodic/non-periodic
-
-    // TODO set a deadline on the stage_data for the transfer timeout
-
-    return stage;
+fn channelFree(self: *Self, channel: *Channel) void {
+    self.channel_assignments.free(channel.id);
 }
 
 fn channelInterruptEnable(self: *Self, channel: Channel.ChannelId) void {
+    std.log.debug("channel interrupt enable {d}", .{channel});
+
+    self.all_channel_intmask_lock.acquire();
+    defer self.all_channel_intmask_lock.release();
     self.host_registers.all_channel_interrupts_mask |= @as(u32, 1) << channel;
 }
 
 fn channelInterruptDisable(self: *Self, channel: Channel.ChannelId) void {
+    std.log.debug("channel interrupt disable {d}", .{channel});
+
+    self.all_channel_intmask_lock.acquire();
+    defer self.all_channel_intmask_lock.release();
     self.host_registers.all_channel_interrupts_mask &= ~(@as(u32, 1) << channel);
 }
 
-fn transferStageAsync(self: *Self, request: *Request, in: bool, status_stage: bool, wait_block_assigned: u5) !void {
-    const channel = try self.channelAllocate();
+// fn requestSubmitBlocking(self: *Self, request: *Request) !void {
+//     request.status = 0;
 
-    std.log.debug("transfer stage async: in? {}, status? {}, ch {d}, waitblock {d}", .{ in, status_stage, channel, wait_block_assigned });
+//     if (request.endpoint.type == usb.EndpointType.Control) {
+//         if (request.setup_data.request_type.transfer_direction == .device_to_host) {
+//             try self.transferStage(request, false, false);
+//             try self.transferStage(request, true, false);
+//             try self.transferStage(request, false, true);
+//             return;
+//         }
+//     }
+// }
 
-    const stage_data = try self.createStageData(channel, request, in, status_stage, wait_block_assigned);
-    self.stage_data[channel] = stage_data;
-
-    self.channelInterruptEnable(channel);
-
-    // TODO handle split transfers
-    stage_data.state = .no_split_transfer;
-
-    try self.transactionStart(stage_data);
-}
-
-fn transactionStart(self: *Self, stage_data: *TransferStageData) !void {
-    std.log.debug("transaction start on ch {d}", .{stage_data.channel});
-
-    const channel = stage_data.channel;
-    const channel_characteristics = self.channel_registers[channel].channel_character;
-
-    // if the channel is enabled, we must disable it (and wait for
-    // that to complete
-    if (channel_characteristics.enable == 1) {
-        std.log.debug("channel was enabled, must wait for disable", .{});
-        stage_data.substate = .wait_for_channel_disable;
-        self.channelStop(channel);
-        // the rest happens when the interrupt fires
-    } else {
-        self.channelStart(stage_data);
-    }
-}
-
-fn channelStart(self: *Self, stage: *TransferStageData) void {
-    const channel = stage.channel;
-
-    stage.substate = .wait_for_transaction_complete;
-
-    // reset all pending channel interrupts
-    self.channel_registers[channel].channel_int = @bitCast(@as(u32, 0xffff_ffff));
-
-    // set transfer size, packet count, and pid
-    const transfer_size: TransferSize = .{
-        .transfer_size_bytes = stage.transferBytesRemaining(),
-        .transfer_size_packets = stage.transferPacketsRemaining(),
-        .pid = try stage.controllerPid(),
-        .do_ping = 0,
+fn transactionOnChannel(
+    self: *Self,
+    device: DeviceAddress,
+    device_speed: UsbSpeed,
+    endpoint_number: EndpointNumber,
+    endpoint_type: EndpointType,
+    endpoint_direction: EndpointDirection,
+    max_packet_size: PacketSize,
+    initial_pid: usb.PID2,
+    buffer: []u8,
+    timeout: u32,
+) !TransferBytes {
+    var transaction = Transaction{
+        .host = self,
+        .deadline = if (timeout == 0) 0 else self.deadline(timeout),
+        .actual_length = 0,
     };
-    self.channel_registers[channel].channel_transfer_size = transfer_size;
 
-    // set DMA address
-    self.channel_registers[channel].channel_dma_addr = @truncate(@intFromPtr(stage.addressDMA()));
+    std.log.debug("Acquiring channel", .{});
+    var channel = try self.channelAllocate();
+    defer self.channelFree(channel);
 
-    // TODO clear & inval data cache for [stage_data.addressDMA()..stage_data.addressDMA()+stage_data.transferBytesRemaining()]
+    std.log.debug("Received channel {d}", .{channel.id});
 
-    // set channel parameters
-    var channel_characteristics = self.channel_registers[channel].channel_character;
-    channel_characteristics.max_packet_size = stage.max_packet_size;
-    channel_characteristics.multi_count = 1;
+    self.channelInterruptEnable(channel.id);
+    defer self.channelInterruptDisable(channel.id);
 
-    if (stage.in) {
-        channel_characteristics.endpoint_direction = .in;
-    } else {
-        channel_characteristics.endpoint_direction = .out;
-    }
+    try channel.transactionBegin(device, device_speed, endpoint_number, endpoint_type, endpoint_direction, max_packet_size, initial_pid, buffer, &transaction.completion_handler);
 
-    switch (stage.speed) {
-        .Low => channel_characteristics.low_speed_device = 1,
-        else => channel_characteristics.low_speed_device = 0,
-    }
+    // wait for transaction.completed to be true, or deadline elapsed.
+    if (channel.waitForState(self.clock, .Idle, timeout)) {
+        return transaction.actual_length;
+    } else |err| {
+        switch (err) {
+            Channel.Error.Timeout => {
+                std.log.warn("Transaction timed out on channel {d}", .{channel.id});
+                // if timeout, abort the transaction
+                channel.channelAbort();
 
-    channel_characteristics.device_address = @truncate(stage.addressDevice());
-    channel_characteristics.endpoint_type = stage.endpointType();
-    channel_characteristics.endpoint_number = stage.endpointNumber();
+                try channel.waitForState(self.clock, .Idle, 100);
 
-    // TODO setup for periodic and split transactions
-    channel_characteristics.odd_frame = 0;
-
-    self.channel_registers[channel].channel_int_mask = @bitCast(stage.status_mask);
-
-    channel_characteristics.enable = 1;
-    channel_characteristics.disable = 0;
-
-    self.channel_registers[channel].channel_character = channel_characteristics;
-}
-
-fn channelStop(self: *Self, channel: u5) void {
-    std.log.debug("stopping channel {d}", .{channel});
-    var channel_characteristics = self.channel_registers[channel].channel_character;
-    channel_characteristics.enable = 0;
-    channel_characteristics.disable = 1;
-    self.channel_registers[channel].channel_character = channel_characteristics;
-    self.channel_registers[channel].channel_int_mask = @bitCast(@as(u32, 0));
-}
-
-fn transferStage(self: *Self, request: *Request, in: bool, status_stage: bool) !void {
-    const wait_until = self.deadline(request.timeout);
-
-    const wait_block_assigned = try self.wait_block_allocations.allocate();
-
-    if (self.wait_blocks[wait_block_assigned]) {
-        return Error.ConfigurationError;
-    }
-
-    self.wait_blocks[wait_block_assigned] = true;
-    try self.transferStageAsync(request, in, status_stage, wait_block_assigned);
-
-    while (self.clock.ticks() < wait_until and self.wait_blocks[wait_block_assigned] == true) {
-        // do nothing
-    }
-
-    if (self.wait_blocks[wait_block_assigned] == true) {
-        // timeout elapsed... complain
-        std.log.info("USB request timeout", .{});
-        self.wait_blocks[wait_block_assigned] = false;
-        self.wait_block_allocations.free(wait_block_assigned);
-    }
-}
-
-fn requestSubmitBlocking(self: *Self, request: *Request) !void {
-    request.status = 0;
-
-    if (request.endpoint.type == usb.EndpointType.Control) {
-        if (request.setup_data.request_type.transfer_direction == .device_to_host) {
-            try self.transferStage(request, false, false);
-            try self.transferStage(request, true, false);
-            try self.transferStage(request, false, true);
-            return;
+                return 0;
+            },
+            else => {
+                std.log.err("Unexpected error waiting for channel {d}: {any}", .{ channel.id, err });
+                return 0;
+            },
         }
     }
 }
+
+const Transaction = struct {
+    host: *Self,
+    deadline: u64 = 0,
+    completed: bool = false,
+    actual_length: TransferBytes = 0,
+
+    completion_handler: Channel.CompletionHandler = .{ .callback = onChannelComplete },
+
+    // Callback invoked by `Channel.channelInterrupt`
+    fn onChannelComplete(handler: *const Channel.CompletionHandler, channel: *Channel, data: []u8) void {
+        std.log.debug("onChannelComplete for {d}", .{channel.id});
+
+        var transaction: *Transaction = @constCast(@fieldParentPtr(Transaction, "completion_handler", handler));
+        transaction.actual_length = @truncate(data.len);
+        transaction.completed = true;
+    }
+};
 
 fn descriptorQuery(
     self: *Self,
@@ -936,62 +664,19 @@ fn descriptorQuery(
 const Function = struct {};
 
 const Endpoint = struct {
-    const EndpointDirection = enum {
-        In,
-        Out,
-        InOut,
-    };
-
     device: *Device,
     number: u4,
     type: usb.EndpointType = .Control,
-    direction: EndpointDirection = .Out,
+    direction: EndpointDirection = .out,
     max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
-    interval: u16 = DEFAULT_INTERVAL, // milliseconds
-    next_pid: usb.PID = usb.PID.Setup,
-
-    fn pidNext(self: *Endpoint, status_stage: bool) usb.PID {
-        if (status_stage) {
-            return usb.PID.Data1;
-        } else {
-            return self.next_pid;
-        }
-    }
-
-    fn pidSkip(self: *Endpoint, packets: u16, status_stage: bool) void {
-        // TODO should never occur with an Isochronous endpoint
-
-        if (!status_stage) {
-            switch (self.next_pid) {
-                .Setup => self.next_pid = .Data1,
-                .Data0 => {
-                    if ((packets & 0x1) == 1) {
-                        self.next_pid = .Data1;
-                    }
-                },
-                .Data1 => {
-                    if ((packets & 0x1) == 1) {
-                        self.next_pid = .Data0;
-                    }
-                },
-            }
-        } else {
-            // TODO should only occur with a Control endpoint
-            self.next_pid = usb.PID.Setup;
-        }
-    }
 };
 
 const Device = struct {
     host: *Self,
     port: *RootPort,
     speed: usb.UsbSpeed,
-    address: usb.Address,
+    address: usb.DeviceAddress,
     endpoint_0: Endpoint,
-    function: [usb.MAX_FUNCTIONS]Function,
-    hub_device: *Device,
-    hub_address: u8,
-    hub_port_number: u8,
     device_descriptor: usb.DeviceDescriptor,
     config_descriptor: usb.ConfigurationDescriptor,
     descriptor_buffer: DescriptorPtr,
@@ -1000,8 +685,6 @@ const Device = struct {
         var device = try allocator.create(Device);
 
         device.address = usb.DEFAULT_ADDRESS;
-        device.hub_address = 0;
-        device.hub_port_number = 1;
         device.endpoint_0 = Endpoint{ .number = 0, .device = device };
 
         const raw_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(usb.Descriptor));
@@ -1016,7 +699,7 @@ const Device = struct {
         self.speed = speed;
 
         try host.descriptorQuery(&self.endpoint_0, .device, usb.DEFAULT_DESCRIPTOR_INDEX, self.descriptor_buffer, usb.DEFAULT_MAX_PACKET_SIZE, usb.request_type_in, 0);
-        try self.descriptor_buffer.expectDeviceDescriptor();
+        //        try self.descriptor_buffer.expectDeviceDescriptor();
     }
 };
 
@@ -1101,42 +784,6 @@ const RootPort = struct {
 
     fn overcurrentDetected(self: *RootPort) bool {
         return self.host.host_registers.port.overcurrent == 1;
-    }
-};
-
-// ----------------------------------------------------------------------
-// Requests
-// ----------------------------------------------------------------------
-
-const Request = struct {
-    setup_data: *align(DMA_ALIGNMENT) SetupPacket,
-    endpoint: *Endpoint,
-    request_data: *align(DMA_ALIGNMENT) anyopaque,
-    request_data_size: u16,
-
-    status: u32,
-    result_length: u19,
-    timeout: u16,
-
-    fn init(
-        allocator: Allocator,
-        endpoint: *Endpoint,
-        data: *align(DMA_ALIGNMENT) anyopaque,
-        request_data_size: u16,
-        setup_data: *align(DMA_ALIGNMENT) SetupPacket,
-    ) !*Request {
-        const request: *Request = try allocator.create(Request);
-
-        request.* = .{
-            .setup_data = setup_data,
-            .endpoint = endpoint,
-            .request_data = data,
-            .request_data_size = request_data_size,
-            .status = 0,
-            .result_length = 0,
-            .timeout = 100,
-        };
-        return request;
     }
 };
 
