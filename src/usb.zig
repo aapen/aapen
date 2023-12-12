@@ -25,6 +25,7 @@ pub const DescriptorIndex = descriptor.DescriptorIndex;
 pub const DEFAULT_DESCRIPTOR_INDEX = descriptor.DEFAULT_DESCRIPTOR_INDEX;
 pub const DescriptorType = descriptor.DescriptorType;
 pub const Descriptor = descriptor.Descriptor;
+pub const descriptorExpectedSize = descriptor.descriptorExpectedSize;
 pub const DeviceDescriptor = descriptor.DeviceDescriptor;
 pub const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
 pub const InterfaceDescriptor = descriptor.InterfaceDescriptor;

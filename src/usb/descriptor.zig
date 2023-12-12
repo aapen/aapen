@@ -139,3 +139,14 @@ pub const StringDescriptor = extern struct {
     // to get string decriptor. That response will contain a unicode
     // encoded string of `length` bytes.
 };
+
+pub fn descriptorExpectedSize(descriptor_type: DescriptorType) u16 {
+    return switch (descriptor_type) {
+        .device => @sizeOf(DeviceDescriptor),
+        .configuration => @sizeOf(ConfigurationDescriptor),
+        .string => @sizeOf(StringDescriptor),
+        .interface => @sizeOf(InterfaceDescriptor),
+        .endpoint => @sizeOf(EndpointDescriptor),
+        else => 0,
+    };
+}

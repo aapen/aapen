@@ -197,7 +197,7 @@ pub fn transactionBegin(
         .data_data0 => .Data0,
         .data_data1 => .Data1,
         .data_data2 => .Data2,
-        else => return Error.UnsupportedInitialPid,
+        else => .Data0, // TODO what should we really put here?
     };
 
     self.registers.channel_transfer_size = .{
@@ -276,6 +276,19 @@ pub fn channelInterrupt(self: *Self) void {
                 }
 
                 self.idle();
+                return;
+            }
+            if (int_status.halted == 1) {
+                std.log.debug("channel {d} halted", .{self.id});
+
+                // TODO what should we do here? restart? call the
+                // completion handler with a failed status?
+
+                self.disable();
+                self.interruptsClearPending();
+                self.interruptDisableAll();
+                self.idle();
+
                 return;
             }
             std.log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });

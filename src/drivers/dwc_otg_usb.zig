@@ -57,6 +57,7 @@ pub const Error = error{
     ConfigurationError,
     OvercurrentDetected,
     InvalidResponse,
+    DataLengthMismatch,
     NoChannelAvailable,
 };
 
@@ -472,10 +473,9 @@ fn controlMessage(
     request: u8,
     value: u16,
     index: u16,
-    data: *align(DMA_ALIGNMENT) anyopaque,
+    data: []align(DMA_ALIGNMENT) u8,
     data_size: u16,
 ) !TransferBytes {
-    _ = data;
     var channel = try self.channelAllocate();
     defer self.channelFree(channel);
 
@@ -498,23 +498,56 @@ fn controlMessage(
 
     // TODO check return value, should equal max_packet_size (8) for
     // a Setup token packet to a Control endpoint
-    return self.transactionOnChannel(
+    const setup_response = try self.transactionOnChannel(
         device.address,
         device.speed,
         endpoint.number,
         endpoint.type,
-        endpoint.direction,
+        EndpointDirection.out,
         endpoint.max_packet_size,
         .token_setup,
         aligned_setup_data,
         100,
     );
 
-    // const rq = try Request.init(self.allocator, endpoint, data, data_size, setup);
+    self.allocator.free(aligned_setup_data);
 
-    // try self.requestSubmitBlocking(rq);
+    if (setup_response != usb.DEFAULT_MAX_PACKET_SIZE) {
+        return Error.InvalidResponse;
+    }
 
-    // return rq.result_length;
+    const in_data_response = try self.transactionOnChannel(
+        device.address,
+        device.speed,
+        endpoint.number,
+        endpoint.type,
+        EndpointDirection.in,
+        endpoint.max_packet_size,
+        .data_data0,
+        data,
+        100,
+    );
+
+    if (in_data_response != data.len) {
+        return Error.DataLengthMismatch;
+    }
+
+    const aligned_handshake_data: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, 0);
+
+    const handshake_response = try self.transactionOnChannel(
+        device.address,
+        device.speed,
+        endpoint.number,
+        endpoint.type,
+        EndpointDirection.out,
+        endpoint.max_packet_size,
+        .handshake_ack,
+        aligned_handshake_data,
+        100,
+    );
+    _ = handshake_response;
+
+    return in_data_response;
 }
 
 fn channelAllocate(self: *Self) !*Channel {
@@ -589,25 +622,19 @@ fn transactionOnChannel(
 
     try channel.transactionBegin(device, device_speed, endpoint_number, endpoint_type, endpoint_direction, max_packet_size, initial_pid, buffer, &transaction.completion_handler);
 
+    while (self.clock.ticks() < transaction.deadline and !transaction.completed) {}
+
     // wait for transaction.completed to be true, or deadline elapsed.
-    if (channel.waitForState(self.clock, .Idle, timeout)) {
+    if (transaction.completed) {
         return transaction.actual_length;
-    } else |err| {
-        switch (err) {
-            Channel.Error.Timeout => {
-                std.log.warn("Transaction timed out on channel {d}", .{channel.id});
-                // if timeout, abort the transaction
-                channel.channelAbort();
+    } else {
+        std.log.warn("Transaction timed out on channel {d}", .{channel.id});
+        // if timeout, abort the transaction
+        channel.channelAbort();
 
-                try channel.waitForState(self.clock, .Idle, 100);
+        try channel.waitForState(self.clock, .Idle, 100);
 
-                return 0;
-            },
-            else => {
-                std.log.err("Unexpected error waiting for channel {d}: {any}", .{ channel.id, err });
-                return 0;
-            },
-        }
+        return 0;
     }
 }
 
@@ -634,16 +661,15 @@ fn descriptorQuery(
     endpoint: *Endpoint,
     descriptor_type: usb.DescriptorType,
     which: usb.DescriptorIndex,
-    result: *align(64) usb.Descriptor,
+    result: []align(64) u8,
     buffer_size: u16,
-    request_type: usb.RequestType,
     index: u16,
 ) !void {
     std.log.debug("descriptor query for {any} on endpoint {d}", .{ descriptor_type, endpoint.number });
 
     const returned = try self.controlMessage(
         endpoint,
-        request_type,
+        usb.request_type_in,
         @intFromEnum(usb.StandardDeviceRequests.get_descriptor),
         @as(u16, @intFromEnum(descriptor_type)) << 8 | @as(u8, which),
         index,
@@ -653,7 +679,8 @@ fn descriptorQuery(
 
     std.log.debug("descriptor query returned {any}", .{returned});
 
-    if (returned != usb.DEFAULT_MAX_PACKET_SIZE) {
+    if (returned != buffer_size) {
+        std.log.debug("expected {d}, got {d}", .{ buffer_size, returned });
         return Error.InvalidResponse;
     }
 }
@@ -679,7 +706,7 @@ const Device = struct {
     endpoint_0: Endpoint,
     device_descriptor: usb.DeviceDescriptor,
     config_descriptor: usb.ConfigurationDescriptor,
-    descriptor_buffer: DescriptorPtr,
+    descriptor_buffer: []align(DMA_ALIGNMENT) u8,
 
     pub fn init(allocator: Allocator) !*Device {
         var device = try allocator.create(Device);
@@ -687,10 +714,14 @@ const Device = struct {
         device.address = usb.DEFAULT_ADDRESS;
         device.endpoint_0 = Endpoint{ .number = 0, .device = device };
 
-        const raw_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(usb.Descriptor));
-        device.descriptor_buffer = @ptrCast(raw_buffer);
+        device.descriptor_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(usb.Descriptor));
 
         return device;
+    }
+
+    pub fn deinit(self: *Device) void {
+        self.allocator.free(self.descriptor_buffer);
+        self.descriptor_buffer = null;
     }
 
     pub fn initialize(self: *Device, host: *Self, port: *RootPort, speed: usb.UsbSpeed) !void {
@@ -698,7 +729,9 @@ const Device = struct {
         self.port = port;
         self.speed = speed;
 
-        try host.descriptorQuery(&self.endpoint_0, .device, usb.DEFAULT_DESCRIPTOR_INDEX, self.descriptor_buffer, usb.DEFAULT_MAX_PACKET_SIZE, usb.request_type_in, 0);
+        const expected_size = usb.descriptorExpectedSize(.device);
+
+        try host.descriptorQuery(&self.endpoint_0, .device, usb.DEFAULT_DESCRIPTOR_INDEX, self.descriptor_buffer, expected_size, 0);
         //        try self.descriptor_buffer.expectDeviceDescriptor();
     }
 };
