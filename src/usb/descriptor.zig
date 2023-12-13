@@ -30,11 +30,13 @@ pub const DescriptorType = enum(u8) {
     class_endpoint = 37,
 };
 
+const Header = packed struct {
+    length: u8,
+    descriptor_type: DescriptorType,
+};
+
 pub const Descriptor = extern union {
-    header: packed struct {
-        length: u8,
-        descriptor_type: DescriptorType,
-    },
+    header: Header,
     device: DeviceDescriptor,
     configuration: ConfigurationDescriptor,
     interface: InterfaceDescriptor,
@@ -45,19 +47,10 @@ pub const Descriptor = extern union {
         LengthMismatch,
         UnexpectedType,
     };
-
-    pub fn expectDeviceDescriptor(desc: *Descriptor) !void {
-        if (desc.header.length != @sizeOf(DeviceDescriptor))
-            return Descriptor.Error.LengthMismatch;
-
-        if (desc.header.descriptor_type != DescriptorType.device)
-            return Descriptor.Error.UnexpectedType;
-    }
 };
 
 pub const DeviceDescriptor = extern struct {
-    length: u8 = 0,
-    descriptor_type: DescriptorType = .unknown,
+    header: Header,
     usb_standard_compliance: BCD = 0,
     device_class: u8 = 0,
     device_subclass: u8 = 0,
@@ -70,6 +63,18 @@ pub const DeviceDescriptor = extern struct {
     product_name: StringIndex = 0,
     serial_number: StringIndex = 0,
     configuration_count: u8 = 0,
+
+    pub fn fromSlice(buffer: []u8) !*DeviceDescriptor {
+        const maybe_device_descriptor: *DeviceDescriptor = @ptrCast(@alignCast(buffer.ptr));
+        if (maybe_device_descriptor.header.length != @sizeOf(DeviceDescriptor)) {
+            return Descriptor.Error.LengthMismatch;
+        }
+
+        if (maybe_device_descriptor.header.descriptor_type != DescriptorType.device)
+            return Descriptor.Error.UnexpectedType;
+
+        return maybe_device_descriptor;
+    }
 };
 
 pub const ConfigurationDescriptor = extern struct {

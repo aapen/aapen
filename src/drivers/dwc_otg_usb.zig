@@ -31,6 +31,7 @@ const Channel = @import("dwc/channel.zig");
 
 const usb = @import("../usb.zig");
 pub const DeviceAddress = usb.DeviceAddress;
+pub const DeviceDescriptor = usb.DeviceDescriptor;
 pub const TransactionStage = usb.TransactionStage;
 pub const EndpointDirection = usb.EndpointDirection;
 pub const EndpointNumber = usb.EndpointNumber;
@@ -141,8 +142,8 @@ fn initializeShim(usb_controller: u64) u64 {
 
 fn initializeRootPortShim(usb_controller: u64) u64 {
     var self: *Self = @ptrFromInt(usb_controller);
-    if (self.initializeRootPort()) {
-        return 1;
+    if (self.initializeRootPort()) |dev| {
+        return @intFromPtr(dev);
     } else |err| {
         std.log.err("USB init root port error: {any}", .{err});
         return 0;
@@ -196,9 +197,6 @@ pub fn initialize(self: *Self) !void {
     try self.enableCommonInterrupts();
     try self.globalInterruptEnable();
     try self.initializeHost();
-    // NOTE: I'm extracting this to a separate step which will build a
-    // device on a port
-    //    try self.initializeRootPort();
 }
 
 fn powerOn(self: *Self) !void {
@@ -404,10 +402,11 @@ fn enableHostInterrupts(self: *Self) !void {
     self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffffffff));
 }
 
-fn initializeRootPort(self: *Self) !void {
+fn initializeRootPort(self: *Self) !*Device {
     std.log.info("root port init start", .{});
-    try self.root_port.initialize(self);
-    std.log.info("root port init end", .{});
+    defer std.log.info("root port init end", .{});
+
+    return self.root_port.initialize(self);
 }
 
 pub fn getPortSpeed(self: *Self) !usb.UsbSpeed {
@@ -698,7 +697,8 @@ const Endpoint = struct {
     max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
 };
 
-const Device = struct {
+pub const Device = struct {
+    allocator: Allocator,
     host: *Self,
     port: *RootPort,
     speed: usb.UsbSpeed,
@@ -706,22 +706,22 @@ const Device = struct {
     endpoint_0: Endpoint,
     device_descriptor: usb.DeviceDescriptor,
     config_descriptor: usb.ConfigurationDescriptor,
-    descriptor_buffer: []align(DMA_ALIGNMENT) u8,
 
     pub fn init(allocator: Allocator) !*Device {
         var device = try allocator.create(Device);
 
-        device.address = usb.DEFAULT_ADDRESS;
-        device.endpoint_0 = Endpoint{ .number = 0, .device = device };
-
-        device.descriptor_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(usb.Descriptor));
+        device.* = .{
+            .allocator = allocator,
+            .host = undefined,
+            .port = undefined,
+            .speed = undefined,
+            .address = usb.DEFAULT_ADDRESS,
+            .endpoint_0 = .{ .number = 0, .device = device },
+            .device_descriptor = undefined,
+            .config_descriptor = undefined,
+        };
 
         return device;
-    }
-
-    pub fn deinit(self: *Device) void {
-        self.allocator.free(self.descriptor_buffer);
-        self.descriptor_buffer = null;
     }
 
     pub fn initialize(self: *Device, host: *Self, port: *RootPort, speed: usb.UsbSpeed) !void {
@@ -730,9 +730,22 @@ const Device = struct {
         self.speed = speed;
 
         const expected_size = usb.descriptorExpectedSize(.device);
+        var descriptor_buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, expected_size);
+        defer self.allocator.free(descriptor_buffer);
 
-        try host.descriptorQuery(&self.endpoint_0, .device, usb.DEFAULT_DESCRIPTOR_INDEX, self.descriptor_buffer, expected_size, 0);
-        //        try self.descriptor_buffer.expectDeviceDescriptor();
+        std.log.debug("Device descriptor query, buffer at 0x{x:0>8}", .{@intFromPtr(descriptor_buffer.ptr)});
+
+        try host.descriptorQuery(&self.endpoint_0, .device, usb.DEFAULT_DESCRIPTOR_INDEX, descriptor_buffer, expected_size, 0);
+
+        // sanity check the response,
+        if (DeviceDescriptor.fromSlice(descriptor_buffer)) |desc| {
+            // copy the struct contents (it's still in the []u8
+            // allocated above)
+            self.device_descriptor = desc.*;
+        } else |err| {
+            std.log.err("descriptorQuery returned something unexpected {any}", .{err});
+            return err;
+        }
     }
 };
 
@@ -750,12 +763,14 @@ const RootPort = struct {
         };
     }
 
-    pub fn initialize(self: *RootPort, host: *Self) !void {
+    pub fn initialize(self: *RootPort, host: *Self) !*Device {
         self.host = host;
 
         try self.enable();
         try self.configureDevice();
         try self.overcurrentShutdownCheck();
+
+        return self.device;
     }
 
     fn enable(self: *RootPort) !void {
