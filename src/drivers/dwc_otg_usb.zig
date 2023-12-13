@@ -465,90 +465,6 @@ fn dumpRegister(field_name: []const u8, v: u32) void {
     kprint("{s: >28}: {x:0>8}\n", .{ field_name, v });
 }
 
-fn controlMessage(
-    self: *Self,
-    endpoint: *Endpoint,
-    request_type: usb.RequestType,
-    request: u8,
-    value: u16,
-    index: u16,
-    data: []align(DMA_ALIGNMENT) u8,
-    data_size: u16,
-) !TransferBytes {
-    var channel = try self.channelAllocate();
-    defer self.channelFree(channel);
-
-    const aligned_setup_data: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(SetupPacket));
-    const setup: *align(DMA_ALIGNMENT) SetupPacket = @ptrCast(@alignCast(aligned_setup_data));
-
-    setup.* = .{
-        .request_type = @bitCast(request_type),
-        .request = request,
-        .value = value,
-        .index = index,
-        .length = data_size,
-    };
-
-    // TODO this is too simplistic... it will fail if all channels are
-    // occupied. A better way would be to enqueue a Request and have a
-    // timer- or interrupt-driven dispatcher place transactions on
-    // channels as when they are available.
-    const device = endpoint.device;
-
-    // TODO check return value, should equal max_packet_size (8) for
-    // a Setup token packet to a Control endpoint
-    const setup_response = try self.transactionOnChannel(
-        device.address,
-        device.speed,
-        endpoint.number,
-        endpoint.type,
-        EndpointDirection.out,
-        endpoint.max_packet_size,
-        .token_setup,
-        aligned_setup_data,
-        100,
-    );
-
-    self.allocator.free(aligned_setup_data);
-
-    if (setup_response != usb.DEFAULT_MAX_PACKET_SIZE) {
-        return Error.InvalidResponse;
-    }
-
-    const in_data_response = try self.transactionOnChannel(
-        device.address,
-        device.speed,
-        endpoint.number,
-        endpoint.type,
-        EndpointDirection.in,
-        endpoint.max_packet_size,
-        .data_data0,
-        data,
-        100,
-    );
-
-    if (in_data_response != data.len) {
-        return Error.DataLengthMismatch;
-    }
-
-    const aligned_handshake_data: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, 0);
-
-    const handshake_response = try self.transactionOnChannel(
-        device.address,
-        device.speed,
-        endpoint.number,
-        endpoint.type,
-        EndpointDirection.out,
-        endpoint.max_packet_size,
-        .handshake_ack,
-        aligned_handshake_data,
-        100,
-    );
-    _ = handshake_response;
-
-    return in_data_response;
-}
-
 fn channelAllocate(self: *Self) !*Channel {
     const chid = try self.channel_assignments.allocate();
     errdefer self.channel_assignments.free(chid);
@@ -654,6 +570,86 @@ const Transaction = struct {
         transaction.completed = true;
     }
 };
+
+fn controlMessage(
+    self: *Self,
+    endpoint: *Endpoint,
+    request_type: usb.RequestType,
+    request: u8,
+    value: u16,
+    index: u16,
+    data: []align(DMA_ALIGNMENT) u8,
+    data_size: u16,
+) !TransferBytes {
+    var channel = try self.channelAllocate();
+    defer self.channelFree(channel);
+
+    const setup_slice: []SetupPacket = try self.allocator.alignedAlloc(SetupPacket, DMA_ALIGNMENT, 1);
+
+    setup_slice[0] = .{
+        .request_type = @bitCast(request_type),
+        .request = request,
+        .value = value,
+        .index = index,
+        .data_size = data_size,
+    };
+
+    // TODO this is too simplistic... it will fail if all channels are
+    // occupied. A better way would be to enqueue a Request and have a
+    // timer- or interrupt-driven dispatcher place transactions on
+    // channels as when they are available.
+    const device = endpoint.device;
+
+    // TODO check return value, should equal max_packet_size (8) for
+    // a Setup token packet to a Control endpoint
+    const setup_response = try self.transactionOnChannel(
+        device.address,
+        device.speed,
+        endpoint.number,
+        endpoint.type,
+        EndpointDirection.out,
+        endpoint.max_packet_size,
+        .token_setup,
+        std.mem.sliceAsBytes(setup_slice),
+        100,
+    );
+
+    self.allocator.free(setup_slice);
+
+    if (setup_response != usb.DEFAULT_MAX_PACKET_SIZE) {
+        return Error.InvalidResponse;
+    }
+
+    const in_data_response = try self.transactionOnChannel(
+        device.address,
+        device.speed,
+        endpoint.number,
+        endpoint.type,
+        EndpointDirection.in,
+        endpoint.max_packet_size,
+        .data_data0,
+        data,
+        100,
+    );
+
+    if (in_data_response != data.len) {
+        return Error.DataLengthMismatch;
+    }
+
+    _ = try self.transactionOnChannel(
+        device.address,
+        device.speed,
+        endpoint.number,
+        endpoint.type,
+        EndpointDirection.out,
+        endpoint.max_packet_size,
+        .handshake_ack,
+        &.{},
+        100,
+    );
+
+    return in_data_response;
+}
 
 fn descriptorQuery(
     self: *Self,
@@ -848,7 +844,7 @@ pub const SetupPacket = extern struct {
     request: u8,
     value: u16,
     index: u16,
-    length: u16,
+    data_size: u16,
 };
 
 pub const DMA_ALIGNMENT = 64;
