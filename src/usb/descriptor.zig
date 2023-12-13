@@ -1,13 +1,19 @@
+const std = @import("std");
+
 const request = @import("request.zig");
 
 /// Index of a string descriptor
 pub const StringIndex = u8;
 
+pub const BCD = u16;
+pub const SpecRelease = enum(BCD) {
+    usb1_0 = 0x0100,
+    usb1_1 = 0x0110,
+    usb2_0 = 0x0200,
+};
+
 /// Assigned ID number
 pub const ID = u16;
-
-/// BCD coded number
-pub const BCD = u16;
 
 /// Index of a descriptor
 pub const DescriptorIndex = u8;
@@ -63,6 +69,17 @@ pub const DeviceDescriptor = extern struct {
     product_name: StringIndex = 0,
     serial_number: StringIndex = 0,
     configuration_count: u8 = 0,
+
+    pub fn dump(self: *const DeviceDescriptor) void {
+        std.log.debug("DeviceDescriptor [", .{});
+        std.log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ self.device_class, self.device_subclass, self.device_protocol });
+        std.log.debug("  vendor = 0x{x:0>4}", .{self.vendor});
+        std.log.debug("  product = 0x{x:0>4}", .{self.product});
+        std.log.debug("  max_packet_size = 0x{d}", .{self.max_packet_size});
+        std.log.debug("  usb_standard_compliance = {s}", .{@tagName(@as(SpecRelease, @enumFromInt(self.usb_standard_compliance)))});
+        std.log.debug("  configuration_count = 0x{d}", .{self.configuration_count});
+        std.log.debug("]", .{});
+    }
 
     pub fn fromSlice(buffer: []u8) !*DeviceDescriptor {
         const maybe_device_descriptor: *DeviceDescriptor = @ptrCast(@alignCast(buffer.ptr));

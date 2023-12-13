@@ -742,6 +742,8 @@ pub const Device = struct {
             // copy the struct contents (it's still in the []u8
             // allocated above)
             self.device_descriptor = desc.*;
+
+            self.device_descriptor.dump();
         } else |err| {
             std.log.err("descriptorQuery returned something unexpected {any}", .{err});
             return err;
