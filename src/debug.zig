@@ -18,7 +18,10 @@ pub fn log(
 ) void {
     if (comptime !std.log.logEnabled(level, scope)) return;
 
-    const prefix = "[" ++ comptime level.asText() ++ "] (" ++ @tagName(scope) ++ "): ";
+    const prefix = switch (scope) {
+        std.log.default_log_scope => "",
+        else => @tagName(scope) ++ " ",
+    } ++ "[" ++ comptime level.asText() ++ "]: ";
 
     if (root.main_console_valid) {
         root.main_console.print(prefix ++ format ++ "\n", args) catch {};

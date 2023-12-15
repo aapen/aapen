@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const log = std.log.scoped(.dwc_otg_usb);
 
 const root = @import("root");
 const kprint = root.kprint;
@@ -135,7 +136,7 @@ fn initializeShim(usb_controller: u64) u64 {
     if (self.initialize()) {
         return 1;
     } else |err| {
-        std.log.err("USB init error: {any}", .{err});
+        log.err("USB init error: {any}", .{err});
         return 0;
     }
 }
@@ -145,7 +146,7 @@ fn initializeRootPortShim(usb_controller: u64) u64 {
     if (self.initializeRootPort()) |dev| {
         return @intFromPtr(dev);
     } else |err| {
-        std.log.err("USB init root port error: {any}", .{err});
+        log.err("USB init root port error: {any}", .{err});
         return 0;
     }
 }
@@ -203,7 +204,7 @@ fn powerOn(self: *Self) !void {
     const power_result = try self.power_controller.powerOn(.usb_hcd);
 
     if (power_result != .power_on) {
-        std.log.err("Failed to power on USB device: {any}\n", .{power_result});
+        log.err("Failed to power on USB device: {any}\n", .{power_result});
         return Error.PowerFailure;
     }
 }
@@ -212,7 +213,7 @@ fn powerOff(self: *Self) !void {
     const power_result = try self.power_controller.powerOff(.usb_hcd);
 
     if (power_result != .power_off) {
-        std.log.err("Failed to power off USB device: {any}\n", .{power_result});
+        log.err("Failed to power off USB device: {any}\n", .{power_result});
         return Error.PowerFailure;
     }
 }
@@ -223,18 +224,18 @@ fn verifyHostControllerDevice(self: *Self) !void {
     kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
 
     if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
-        std.log.warn(" gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
+        log.warn(" gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
         return Error.IncorrectDevice;
     }
 }
 
 fn globalInterruptDisable(self: *Self) !void {
-    std.log.debug("global interrupt disable", .{});
+    log.debug("global interrupt disable", .{});
     self.core_registers.ahb_config.global_interrupt_mask = 0;
 }
 
 fn globalInterruptEnable(self: *Self) !void {
-    std.log.debug("global interrupt enable", .{});
+    log.debug("global interrupt enable", .{});
     self.core_registers.ahb_config.global_interrupt_mask = 1;
 }
 
@@ -331,7 +332,7 @@ fn resetControllerCore(self: *Self) !void {
 }
 
 fn initializeHost(self: *Self) !void {
-    std.log.info("host init start", .{});
+    log.info("host init start", .{});
 
     self.power_and_clock_control.* = 0;
 
@@ -356,7 +357,7 @@ fn initializeHost(self: *Self) !void {
     try self.powerHostPort();
     try self.enableHostInterrupts();
 
-    std.log.info("host init end", .{});
+    log.info("host init end", .{});
 }
 
 fn configPhyClockSpeed(self: *Self) !void {
@@ -403,8 +404,8 @@ fn enableHostInterrupts(self: *Self) !void {
 }
 
 fn initializeRootPort(self: *Self) !*Device {
-    std.log.info("root port init start", .{});
-    defer std.log.info("root port init end", .{});
+    log.info("root port init start", .{});
+    defer log.info("root port init end", .{});
 
     return self.root_port.initialize(self);
 }
@@ -480,7 +481,7 @@ fn channelFree(self: *Self, channel: *Channel) void {
 }
 
 fn channelInterruptEnable(self: *Self, channel: Channel.ChannelId) void {
-    std.log.debug("channel interrupt enable {d}", .{channel});
+    log.debug("channel interrupt enable {d}", .{channel});
 
     self.all_channel_intmask_lock.acquire();
     defer self.all_channel_intmask_lock.release();
@@ -488,7 +489,7 @@ fn channelInterruptEnable(self: *Self, channel: Channel.ChannelId) void {
 }
 
 fn channelInterruptDisable(self: *Self, channel: Channel.ChannelId) void {
-    std.log.debug("channel interrupt disable {d}", .{channel});
+    log.debug("channel interrupt disable {d}", .{channel});
 
     self.all_channel_intmask_lock.acquire();
     defer self.all_channel_intmask_lock.release();
@@ -526,11 +527,11 @@ fn transactionOnChannel(
         .actual_length = 0,
     };
 
-    std.log.debug("Acquiring channel", .{});
+    log.debug("Acquiring channel", .{});
     var channel = try self.channelAllocate();
     defer self.channelFree(channel);
 
-    std.log.debug("Received channel {d}", .{channel.id});
+    log.debug("Received channel {d}", .{channel.id});
 
     self.channelInterruptEnable(channel.id);
     defer self.channelInterruptDisable(channel.id);
@@ -543,7 +544,7 @@ fn transactionOnChannel(
     if (transaction.completed) {
         return transaction.actual_length;
     } else {
-        std.log.warn("Transaction timed out on channel {d}", .{channel.id});
+        log.warn("Transaction timed out on channel {d}", .{channel.id});
         // if timeout, abort the transaction
         channel.channelAbort();
 
@@ -563,7 +564,7 @@ const Transaction = struct {
 
     // Callback invoked by `Channel.channelInterrupt`
     fn onChannelComplete(handler: *const Channel.CompletionHandler, channel: *Channel, data: []u8) void {
-        std.log.debug("onChannelComplete for {d}", .{channel.id});
+        log.debug("onChannelComplete for {d}", .{channel.id});
 
         var transaction: *Transaction = @constCast(@fieldParentPtr(Transaction, "completion_handler", handler));
         transaction.actual_length = @truncate(data.len);
@@ -660,7 +661,7 @@ fn descriptorQuery(
     buffer_size: u16,
     index: u16,
 ) !void {
-    std.log.debug("descriptor query for {any} on endpoint {d}", .{ descriptor_type, endpoint.number });
+    log.debug("descriptor query for {any} on endpoint {d}", .{ descriptor_type, endpoint.number });
 
     const returned = try self.controlMessage(
         endpoint,
@@ -672,10 +673,10 @@ fn descriptorQuery(
         buffer_size,
     );
 
-    std.log.debug("descriptor query returned {any}", .{returned});
+    log.debug("descriptor query returned {any}", .{returned});
 
     if (returned != buffer_size) {
-        std.log.debug("expected {d}, got {d}", .{ buffer_size, returned });
+        log.debug("expected {d}, got {d}", .{ buffer_size, returned });
         return Error.InvalidResponse;
     }
 }
@@ -729,7 +730,7 @@ pub const Device = struct {
         var descriptor_buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, expected_size);
         defer self.allocator.free(descriptor_buffer);
 
-        std.log.debug("Device descriptor query, buffer at 0x{x:0>8}", .{@intFromPtr(descriptor_buffer.ptr)});
+        log.debug("Device descriptor query, buffer at 0x{x:0>8}", .{@intFromPtr(descriptor_buffer.ptr)});
 
         try host.descriptorQuery(&self.endpoint_0, .device, usb.DEFAULT_DESCRIPTOR_INDEX, descriptor_buffer, expected_size, 0);
 
@@ -741,7 +742,7 @@ pub const Device = struct {
 
             self.device_descriptor.dump();
         } else |err| {
-            std.log.err("descriptorQuery returned something unexpected {any}", .{err});
+            log.err("descriptorQuery returned something unexpected {any}", .{err});
             return err;
         }
     }
@@ -809,16 +810,16 @@ const RootPort = struct {
     }
 
     fn configureDevice(self: *RootPort) !void {
-        std.log.info("configure device start", .{});
+        log.info("configure device start", .{});
         const speed = try self.host.getPortSpeed();
 
         self.device = try Device.init(self.allocator);
         self.device.initialize(self.host, self, speed) catch |err| {
             self.device = undefined;
-            std.log.err("configure device error: {any}", .{err});
+            log.err("configure device error: {any}", .{err});
             return err;
         };
-        std.log.info("configure device end", .{});
+        log.info("configure device end", .{});
     }
 
     fn overcurrentShutdownCheck(self: *RootPort) !void {

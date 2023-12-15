@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.usb);
 
 const request = @import("request.zig");
 
@@ -71,14 +72,14 @@ pub const DeviceDescriptor = extern struct {
     configuration_count: u8 = 0,
 
     pub fn dump(self: *const DeviceDescriptor) void {
-        std.log.debug("DeviceDescriptor [", .{});
-        std.log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ self.device_class, self.device_subclass, self.device_protocol });
-        std.log.debug("  vendor = 0x{x:0>4}", .{self.vendor});
-        std.log.debug("  product = 0x{x:0>4}", .{self.product});
-        std.log.debug("  max_packet_size = 0x{d}", .{self.max_packet_size});
-        std.log.debug("  usb_standard_compliance = {s}", .{@tagName(@as(SpecRelease, @enumFromInt(self.usb_standard_compliance)))});
-        std.log.debug("  configuration_count = 0x{d}", .{self.configuration_count});
-        std.log.debug("]", .{});
+        log.debug("DeviceDescriptor [", .{});
+        log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ self.device_class, self.device_subclass, self.device_protocol });
+        log.debug("  vendor = 0x{x:0>4}", .{self.vendor});
+        log.debug("  product = 0x{x:0>4}", .{self.product});
+        log.debug("  max_packet_size = 0x{d}", .{self.max_packet_size});
+        log.debug("  usb_standard_compliance = {s}", .{@tagName(@as(SpecRelease, @enumFromInt(self.usb_standard_compliance)))});
+        log.debug("  configuration_count = 0x{d}", .{self.configuration_count});
+        log.debug("]", .{});
     }
 
     pub fn fromSlice(buffer: []u8) !*DeviceDescriptor {

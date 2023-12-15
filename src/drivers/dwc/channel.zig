@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.dwc_otg_usb_channel);
 
 const synchronize = @import("../../synchronize.zig");
 const Spinlock = synchronize.Spinlock;
@@ -146,12 +147,12 @@ fn interruptsClearPending(self: *Self) void {
 const all_zero_bits: ChannelInterrupt = @bitCast(@as(u32, 0));
 
 fn interruptDisableAll(self: *Self) void {
-    std.log.debug("channel {d} interrupt disable all", .{self.id});
+    log.debug("channel {d} interrupt disable all", .{self.id});
     self.registers.channel_int_mask = all_zero_bits;
 }
 
 fn interruptsEnableActiveTransaction(self: *Self) void {
-    std.log.debug("channel {d} interrupt enable active transaction", .{self.id});
+    log.debug("channel {d} interrupt enable active transaction", .{self.id});
     self.registers.channel_int_mask = .{
         .transfer_completed = 1,
         .halted = 1,
@@ -200,12 +201,17 @@ pub fn transactionBegin(
         else => .Data0, // TODO what should we really put here?
     };
 
-    self.registers.channel_transfer_size = .{
+    // We build the struct in a stack variable first, then assign it
+    // atomically to the chip's register. Otherwise we get 4 separate
+    // read-modify-write operations.
+    const tsize: TransferSize = .{
         .transfer_size_bytes = self.active_transfer.bytes_remaining,
         .transfer_size_packets = self.active_transfer.packets_remaining,
         .pid = dwc_pid,
         .do_ping = 0,
     };
+
+    self.registers.channel_transfer_size = tsize;
 
     self.registers.channel_dma_addr = @truncate(@intFromPtr(buffer.ptr));
 
@@ -241,10 +247,10 @@ pub fn transactionBegin(
 }
 
 pub fn channelInterrupt(self: *Self) void {
-    std.log.debug("channel {d} interrupt intr 0x{x:0>8} intmsk 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_int)), @as(u32, @bitCast(self.registers.channel_int_mask)) });
+    log.debug("channel {d} interrupt intr 0x{x:0>8} intmsk 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_int)), @as(u32, @bitCast(self.registers.channel_int_mask)) });
 
     if (self.state != .Active and self.state != .Terminating) {
-        std.log.warn("channel {d} spurious interrupt while in state {any}. ignoring.", .{ self.id, self.state });
+        log.warn("channel {d} spurious interrupt while in state {any}. ignoring.", .{ self.id, self.state });
         return;
     }
 
@@ -261,8 +267,8 @@ pub fn channelInterrupt(self: *Self) void {
             // transfer_completed interrupt
             if (int_status.transfer_completed == 1) {
                 self.state = .Finalizing;
-                std.log.debug("channel {d} transfer complete", .{self.id});
-                std.log.debug("channel {d} tsize 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_transfer_size)) });
+                log.debug("channel {d} transfer complete", .{self.id});
+                log.debug("channel {d} tsize 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_transfer_size)) });
                 self.disable();
                 self.interruptsClearPending();
                 self.interruptDisableAll();
@@ -279,7 +285,7 @@ pub fn channelInterrupt(self: *Self) void {
                 return;
             }
             if (int_status.halted == 1) {
-                std.log.debug("channel {d} halted", .{self.id});
+                log.debug("channel {d} halted", .{self.id});
 
                 // TODO what should we do here? restart? call the
                 // completion handler with a failed status?
@@ -291,7 +297,7 @@ pub fn channelInterrupt(self: *Self) void {
 
                 return;
             }
-            std.log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
+            log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
         },
         .Terminating => {
             // We are waiting for the controller to confirm the
@@ -300,13 +306,13 @@ pub fn channelInterrupt(self: *Self) void {
             if (int_status.halted == 1) {
                 self.registers.channel_int_mask.halted = 0;
                 self.state = .Finalizing;
-                std.log.debug("channel {d} abort complete", .{self.id});
+                log.debug("channel {d} abort complete", .{self.id});
                 self.idle();
             }
-            std.log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
+            log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
         },
         else => {
-            std.log.err("channel {d} erroneous interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
+            log.err("channel {d} erroneous interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
         },
     }
 
@@ -320,14 +326,14 @@ fn idle(self: *Self) void {
 
 pub fn channelAbort(self: *Self) void {
     if (self.state != .Active) {
-        std.log.warn("channel {d} attempt to abort, but channel is not active (state is {any})", .{ self.id, self.state });
+        log.warn("channel {d} attempt to abort, but channel is not active (state is {any})", .{ self.id, self.state });
         return;
     }
 
     self.state_spinlock.acquire();
     defer self.state_spinlock.release();
 
-    std.log.debug("channel {d} abort requested", .{self.id});
+    log.debug("channel {d} abort requested", .{self.id});
 
     // listen for only the halted interrupt that tells us the disable
     // request is completed
@@ -338,15 +344,15 @@ pub fn channelAbort(self: *Self) void {
 }
 
 pub fn waitForState(self: *Self, clock: *Clock, desired_state: ChannelState, timeout_millis: u32) !void {
-    std.log.debug("channel {d} wait {d} ms for state {any}", .{ self.id, timeout_millis, desired_state });
+    log.debug("channel {d} wait {d} ms for state {any}", .{ self.id, timeout_millis, desired_state });
 
     const start_ticks = clock.ticks();
     const elapsed_ticks = timeout_millis * 1_000; // clock freq is 1Mhz
     const deadline = start_ticks + elapsed_ticks;
     while (self.state != desired_state and clock.ticks() < deadline) {}
     if (self.state != desired_state) {
-        std.log.debug("channel {d} timeout waiting for state {any}", .{ self.id, desired_state });
+        log.debug("channel {d} timeout waiting for state {any}", .{ self.id, desired_state });
         return Error.Timeout;
     }
-    std.log.debug("channel {d} state {any} observed", .{ self.id, desired_state });
+    log.debug("channel {d} state {any} observed", .{ self.id, desired_state });
 }
