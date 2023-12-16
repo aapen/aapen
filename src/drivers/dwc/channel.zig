@@ -1,8 +1,12 @@
 const std = @import("std");
 const log = std.log.scoped(.dwc_otg_usb_channel);
 
+const arch = @import("../../architecture.zig");
+const cpu = arch.cpu;
+
 const synchronize = @import("../../synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+const criticalEnter = synchronize.criticalEnter;
+const criticalLeave = synchronize.criticalLeave;
 
 const local_timer = @import("../arm_local_timer.zig");
 const Clock = local_timer.Clock;
@@ -56,7 +60,6 @@ pub const CompletionHandler = struct {
 id: ChannelId = undefined,
 registers: *volatile reg.ChannelRegisters = undefined,
 state: ChannelState = undefined,
-state_spinlock: Spinlock = Spinlock.init("channel state", false),
 completion_handler: ?*CompletionHandler = null,
 active_transfer: Transfer = .{},
 
@@ -105,13 +108,11 @@ pub fn init(self: *Self, id: ChannelId, channel_register_base: u64) void {
         .registers = @ptrFromInt(channel_register_base + (@sizeOf(ChannelRegisters) * @as(usize, id))),
     };
     self.state = .Idle;
-    self.state_spinlock.enabled = true;
-    self.state_spinlock.target_level = .IRQ;
 }
 
 pub fn claim(self: *Self) !void {
-    self.state_spinlock.acquire();
-    defer self.state_spinlock.release();
+    criticalEnter(.FIQ);
+    defer criticalLeave();
 
     if (self.state != .Idle) {
         return Error.ChannelBusy;
@@ -183,10 +184,11 @@ pub fn transactionBegin(
         return Error.ChannelBusy;
     }
 
-    self.state_spinlock.acquire();
-    defer self.state_spinlock.release();
-
+    // Don't allow IRQs while we're configuring the channel
+    criticalEnter(.IRQ);
+    defer criticalLeave();
     self.state = .Configuring;
+
     self.completion_handler = completion_handler;
 
     self.interruptsClearPending();
@@ -243,6 +245,7 @@ pub fn transactionBegin(
 
     // trigger the transaction
     self.registers.channel_character = channel_characteristics;
+
     self.state = .Active;
 }
 
@@ -254,8 +257,10 @@ pub fn channelInterrupt(self: *Self) void {
         return;
     }
 
-    self.state_spinlock.acquire();
-    defer self.state_spinlock.release();
+    log.debug("channel {d} ISR, current interrupt level {s}", .{ self.id, @tagName(cpu.currentInterruptLevel()) });
+
+    criticalEnter(.FIQ);
+    defer criticalLeave();
 
     const int_status: ChannelInterrupt = @bitCast(@as(u32, @bitCast(self.registers.channel_int)) &
         @as(u32, @bitCast(self.registers.channel_int_mask)));
@@ -268,7 +273,7 @@ pub fn channelInterrupt(self: *Self) void {
             if (int_status.transfer_completed == 1) {
                 self.state = .Finalizing;
                 log.debug("channel {d} transfer complete", .{self.id});
-                log.debug("channel {d} tsize 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_transfer_size)) });
+
                 self.disable();
                 self.interruptsClearPending();
                 self.interruptDisableAll();
@@ -308,6 +313,7 @@ pub fn channelInterrupt(self: *Self) void {
                 self.state = .Finalizing;
                 log.debug("channel {d} abort complete", .{self.id});
                 self.idle();
+                return;
             }
             log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
         },
@@ -330,8 +336,8 @@ pub fn channelAbort(self: *Self) void {
         return;
     }
 
-    self.state_spinlock.acquire();
-    defer self.state_spinlock.release();
+    criticalEnter(.FIQ);
+    defer criticalLeave();
 
     log.debug("channel {d} abort requested", .{self.id});
 
@@ -346,6 +352,7 @@ pub fn channelAbort(self: *Self) void {
 pub fn waitForState(self: *Self, clock: *Clock, desired_state: ChannelState, timeout_millis: u32) !void {
     log.debug("channel {d} wait {d} ms for state {any}", .{ self.id, timeout_millis, desired_state });
 
+    // TODO should probably use a critical section here.
     const start_ticks = clock.ticks();
     const elapsed_ticks = timeout_millis * 1_000; // clock freq is 1Mhz
     const deadline = start_ticks + elapsed_ticks;

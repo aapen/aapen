@@ -15,6 +15,7 @@ pub const EndpointType = endpoint.EndpointType;
 const request = @import("usb/request.zig");
 pub const RequestType = request.RequestType;
 pub const request_type_in = request.request_type_in;
+pub const request_type_out = request.request_type_out;
 pub const StandardDeviceRequests = request.StandardDeviceRequests;
 pub const StandardInterfaceRequests = request.StandardInterfaceRequests;
 pub const StandardEndpointRequests = request.StandardEndpointRequests;

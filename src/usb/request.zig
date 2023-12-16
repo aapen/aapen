@@ -24,6 +24,12 @@ pub const request_type_in: RequestType = .{
     .transfer_direction = .device_to_host,
 };
 
+pub const request_type_out: RequestType = .{
+    .recipient = .device,
+    .type = .standard,
+    .transfer_direction = .host_to_device,
+};
+
 pub const StandardDeviceRequests = enum(u8) {
     get_status = 0x00,
     clear_feature = 0x01,

@@ -45,7 +45,6 @@ pub const UsbSpeed = usb.UsbSpeed;
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 const dwc_max_channels = 16;
-const dwc_wait_blocks = dwc_max_channels;
 
 const Self = @This();
 
@@ -125,6 +124,8 @@ root_port: RootPort,
 num_host_channels: u4,
 channel_assignments: ChannelSet = ChannelSet.init("dwc_otg_usb channels", dwc_max_channels),
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
+address_spinlock: Spinlock = Spinlock.init("usb address", true),
+next_available_address: DeviceAddress = 1,
 vtable: VTable = .{
     .initialize = initializeShim,
     .initializeRootPort = initializeRootPortShim,
@@ -572,7 +573,7 @@ const Transaction = struct {
     }
 };
 
-fn controlMessage(
+fn controlTransfer(
     self: *Self,
     endpoint: *Endpoint,
     request_type: usb.RequestType,
@@ -588,7 +589,7 @@ fn controlMessage(
     const setup_slice: []SetupPacket = try self.allocator.alignedAlloc(SetupPacket, DMA_ALIGNMENT, 1);
 
     setup_slice[0] = .{
-        .request_type = @bitCast(request_type),
+        .request_type = request_type,
         .request = request,
         .value = value,
         .index = index,
@@ -601,9 +602,11 @@ fn controlMessage(
     // channels as when they are available.
     const device = endpoint.device;
 
+    log.debug("controlTransfer: performing 'setup' transaction", .{});
+
     // TODO check return value, should equal max_packet_size (8) for
     // a Setup token packet to a Control endpoint
-    const setup_response = try self.transactionOnChannel(
+    const maybe_setup_response = self.transactionOnChannel(
         device.address,
         device.speed,
         endpoint.number,
@@ -617,37 +620,62 @@ fn controlMessage(
 
     self.allocator.free(setup_slice);
 
+    log.debug("controlTransfer: 'setup' transaction returned {any}", .{maybe_setup_response});
+
+    const setup_response = try maybe_setup_response;
+
     if (setup_response != usb.DEFAULT_MAX_PACKET_SIZE) {
         return Error.InvalidResponse;
     }
 
-    const in_data_response = try self.transactionOnChannel(
+    // Some requests don't have a data stage
+    var in_data_response: u19 = 0;
+    if (data.len > 0) {
+        log.debug("controlTransfer: performing 'data' transaction with {any}", .{request_type.transfer_direction});
+
+        const data_direction = switch (request_type.transfer_direction) {
+            .host_to_device => EndpointDirection.out,
+            .device_to_host => EndpointDirection.in,
+        };
+
+        const maybe_in_data_response = self.transactionOnChannel(
+            device.address,
+            device.speed,
+            endpoint.number,
+            endpoint.type,
+            data_direction,
+            endpoint.max_packet_size,
+            .data_data0,
+            data,
+            100,
+        );
+
+        log.debug("controlTransfer: 'data' transaction returned {any}", .{maybe_in_data_response});
+
+        in_data_response = try maybe_in_data_response;
+
+        if (in_data_response != data.len) {
+            return Error.DataLengthMismatch;
+        }
+    }
+
+    log.debug("controlTransfer: performing 'status' transaction", .{});
+
+    const maybe_status_response = self.transactionOnChannel(
         device.address,
         device.speed,
         endpoint.number,
         endpoint.type,
         EndpointDirection.in,
         endpoint.max_packet_size,
-        .data_data0,
-        data,
-        100,
-    );
-
-    if (in_data_response != data.len) {
-        return Error.DataLengthMismatch;
-    }
-
-    _ = try self.transactionOnChannel(
-        device.address,
-        device.speed,
-        endpoint.number,
-        endpoint.type,
-        EndpointDirection.out,
-        endpoint.max_packet_size,
         .handshake_ack,
         &.{},
         100,
     );
+
+    log.debug("controlTransfer: 'status' transaction returned {any}", .{maybe_status_response});
+
+    _ = try maybe_status_response;
 
     return in_data_response;
 }
@@ -661,9 +689,9 @@ fn descriptorQuery(
     buffer_size: u16,
     index: u16,
 ) !void {
-    log.debug("descriptor query for {any} on endpoint {d}", .{ descriptor_type, endpoint.number });
+    log.debug("descriptor query for {any} on device {d} endpoint {d}", .{ descriptor_type, endpoint.device.address, endpoint.number });
 
-    const returned = try self.controlMessage(
+    const returned = try self.controlTransfer(
         endpoint,
         usb.request_type_in,
         @intFromEnum(usb.StandardDeviceRequests.get_descriptor),
@@ -679,6 +707,30 @@ fn descriptorQuery(
         log.debug("expected {d}, got {d}", .{ buffer_size, returned });
         return Error.InvalidResponse;
     }
+}
+
+fn addressSet(
+    self: *Self,
+    endpoint: *Endpoint,
+    address: DeviceAddress,
+) !u19 {
+    log.debug("set address {d} on endpoint {d}", .{ address, endpoint.number });
+
+    const unused: []align(DMA_ALIGNMENT) u8 = &.{};
+
+    const ret = self.controlTransfer(
+        endpoint,
+        usb.request_type_out,
+        @intFromEnum(usb.StandardDeviceRequests.set_address),
+        address,
+        0,
+        unused,
+        0,
+    );
+
+    log.debug("set address {d} on endpoint {d} returned {any}", .{ address, endpoint.number, ret });
+
+    return ret;
 }
 
 // ----------------------------------------------------------------------
@@ -741,6 +793,23 @@ pub const Device = struct {
             self.device_descriptor = desc.*;
 
             self.device_descriptor.dump();
+
+            var my_address: DeviceAddress = undefined;
+            {
+                host.address_spinlock.acquire();
+                defer host.address_spinlock.release();
+
+                my_address = host.next_available_address;
+                host.next_available_address += 1;
+
+                log.debug("Claimed address {d}", .{my_address});
+            }
+
+            _ = try host.addressSet(&self.endpoint_0, my_address);
+            self.address = my_address;
+
+            // wait 2 ms for the device to actually change its address
+            host.delayMillis(2);
         } else |err| {
             log.err("descriptorQuery returned something unexpected {any}", .{err});
             return err;
