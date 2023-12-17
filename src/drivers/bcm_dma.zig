@@ -121,6 +121,7 @@ const ChannelRegisters = extern struct {
 const ChannelId = u5;
 
 const max_channel_id: ChannelId = 14;
+const DmaChannels = ChannelSet.init("bcm_dma channels", u5, max_channel_id);
 
 //    clock: *Clock = undefined,
 allocator: Allocator,
@@ -129,7 +130,7 @@ translations: *const AddressTranslations,
 interrupt_status: *volatile u32,
 transfer_enabled: *volatile u32,
 intc: *InterruptController,
-channels: ChannelSet,
+channels: DmaChannels,
 in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
 
 pub fn init(
@@ -145,7 +146,7 @@ pub fn init(
         .interrupt_status = @ptrFromInt(register_base + 0xfe0),
         .transfer_enabled = @ptrFromInt(register_base + 0xff0),
         .translations = translations,
-        .channels = ChannelSet.init("DMA channels", max_channel_id),
+        .channels = .{},
     };
 }
 

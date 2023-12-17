@@ -108,6 +108,9 @@ pub const VTable = struct {
     dumpStatus: *const fn (usb_controller: u64) void,
 };
 
+const HcdChannels = ChannelSet.init("dwc_otg_usb channels", u5, dwc_max_channels);
+const UsbAddresses = ChannelSet.init("dwc_otg_usb addresses", u7, std.math.maxInt(u7));
+
 allocator: Allocator,
 core_registers: *volatile CoreRegisters,
 host_registers: *volatile HostRegisters,
@@ -123,11 +126,9 @@ power_controller: *PowerController,
 clock: *Clock,
 root_port: RootPort,
 num_host_channels: u4,
-channel_assignments: ChannelSet = ChannelSet.init("dwc_otg_usb channels", dwc_max_channels),
+channel_assignments: HcdChannels = .{},
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
-//  !!! !!! !!!
-address_assignments: ChannelSet = ChannelSet.init("dwc_otg_usb addresses", 16),
-// !!! !!! !!!
+address_assignments: UsbAddresses = .{},
 vtable: VTable = .{
     .initialize = initializeShim,
     .initializeRootPort = initializeRootPortShim,
@@ -725,7 +726,7 @@ const Endpoint = struct {
     max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
 };
 
-fn claimAddress(self: *Self) !u5 {
+fn claimAddress(self: *Self) !DeviceAddress {
     return self.address_assignments.allocate();
 }
 
