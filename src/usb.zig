@@ -16,10 +16,11 @@ const request = @import("usb/request.zig");
 pub const RequestType = request.RequestType;
 pub const request_type_in = request.request_type_in;
 pub const request_type_out = request.request_type_out;
+pub const setupDescriptorQuery = request.setupDescriptorQuery;
+pub const setupSetAddress = request.setupSetAddress;
 pub const StandardDeviceRequests = request.StandardDeviceRequests;
 pub const StandardInterfaceRequests = request.StandardInterfaceRequests;
 pub const StandardEndpointRequests = request.StandardEndpointRequests;
-pub const TransferType = request.TransferType;
 
 const descriptor = @import("usb/descriptor.zig");
 pub const DescriptorIndex = descriptor.DescriptorIndex;
@@ -36,7 +37,9 @@ pub const EndpointDescriptor = descriptor.EndpointDescriptor;
 pub const StringDescriptor = descriptor.StringDescriptor;
 
 const transaction = @import("usb/transaction.zig");
+pub const SetupPacket = transaction.SetupPacket;
 pub const TransactionStage = transaction.TransactionStage;
+pub const TransferType = transaction.TransferType;
 
 pub const TransferBytes = u19;
 pub const PacketSize = u11;

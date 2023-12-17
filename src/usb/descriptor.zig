@@ -1,7 +1,10 @@
 const std = @import("std");
 const log = std.log.scoped(.usb);
 
-const request = @import("request.zig");
+const transaction = @import("transaction.zig");
+const setup = transaction.setup;
+const SetupPacket = transaction.SetupPacket;
+const TransferType = transaction.TransferType;
 
 /// Index of a string descriptor
 pub const StringIndex = u8;
@@ -31,6 +34,9 @@ pub const DescriptorType = enum(u8) {
     string = 3,
     interface = 4,
     endpoint = 5,
+
+    // device classes
+    hub = 0x29, // descriptor layout is in hub.zig
 
     // class specific
     class_interface = 36,
@@ -142,7 +148,7 @@ pub const EndpointDescriptor = extern struct {
     descriptor_type: DescriptorType,
     endpoint_address: u8,
     attributes: packed struct {
-        transfer_type: request.TransferType, // 0..1
+        transfer_type: TransferType, // 0..1
         iso_synch_type: IsoSynchronizationType, // 2..3
         usage_type: IsoUsageType, // 4..5
         _reserved_0: u2 = 0,

@@ -39,6 +39,7 @@ pub const EndpointNumber = usb.EndpointNumber;
 pub const EndpointType = usb.EndpointType;
 pub const PacketSize = usb.PacketSize;
 pub const PID = usb.PID2;
+pub const SetupPacket = usb.SetupPacket;
 pub const TransferBytes = usb.TransferBytes;
 pub const UsbSpeed = usb.UsbSpeed;
 
@@ -124,8 +125,9 @@ root_port: RootPort,
 num_host_channels: u4,
 channel_assignments: ChannelSet = ChannelSet.init("dwc_otg_usb channels", dwc_max_channels),
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
-address_spinlock: Spinlock = Spinlock.init("usb address", true),
-next_available_address: DeviceAddress = 1,
+//  !!! !!! !!!
+address_assignments: ChannelSet = ChannelSet.init("dwc_otg_usb addresses", 16),
+// !!! !!! !!!
 vtable: VTable = .{
     .initialize = initializeShim,
     .initializeRootPort = initializeRootPortShim,
@@ -186,6 +188,10 @@ pub fn init(
     for (0..dwc_max_channels) |chid| {
         self.channels[chid].init(@truncate(chid), register_base + 0x500);
     }
+
+    // address 0 needs to be marked as "claimed" so we don't assign it
+    // to any actual device
+    _ = try self.address_assignments.allocate();
 
     return self;
 }
@@ -576,25 +582,15 @@ const Transaction = struct {
 fn controlTransfer(
     self: *Self,
     endpoint: *Endpoint,
-    request_type: usb.RequestType,
-    request: u8,
-    value: u16,
-    index: u16,
+    setup: *const SetupPacket,
     data: []align(DMA_ALIGNMENT) u8,
-    data_size: u16,
 ) !TransferBytes {
     var channel = try self.channelAllocate();
     defer self.channelFree(channel);
 
     const setup_slice: []SetupPacket = try self.allocator.alignedAlloc(SetupPacket, DMA_ALIGNMENT, 1);
 
-    setup_slice[0] = .{
-        .request_type = request_type,
-        .request = request,
-        .value = value,
-        .index = index,
-        .data_size = data_size,
-    };
+    setup_slice[0] = setup.*;
 
     // TODO this is too simplistic... it will fail if all channels are
     // occupied. A better way would be to enqueue a Request and have a
@@ -631,9 +627,9 @@ fn controlTransfer(
     // Some requests don't have a data stage
     var in_data_response: u19 = 0;
     if (data.len > 0) {
-        log.debug("controlTransfer: performing 'data' transaction with {any}", .{request_type.transfer_direction});
+        log.debug("controlTransfer: performing 'data' transaction with {any}", .{setup.request_type.transfer_direction});
 
-        const data_direction = switch (request_type.transfer_direction) {
+        const data_direction = switch (setup.request_type.transfer_direction) {
             .host_to_device => EndpointDirection.out,
             .device_to_host => EndpointDirection.in,
         };
@@ -680,36 +676,26 @@ fn controlTransfer(
     return in_data_response;
 }
 
-fn descriptorQuery(
-    self: *Self,
-    endpoint: *Endpoint,
-    descriptor_type: usb.DescriptorType,
-    which: usb.DescriptorIndex,
-    result: []align(64) u8,
-    buffer_size: u16,
-    index: u16,
-) !void {
-    log.debug("descriptor query for {any} on device {d} endpoint {d}", .{ descriptor_type, endpoint.device.address, endpoint.number });
+pub fn deviceDescriptorQuery(self: *Self, endpoint: *Endpoint, descriptor_index: usb.DescriptorIndex, lang_id: u16) !DeviceDescriptor {
+    const expected_size = @sizeOf(DeviceDescriptor);
 
-    const returned = try self.controlTransfer(
-        endpoint,
-        usb.request_type_in,
-        @intFromEnum(usb.StandardDeviceRequests.get_descriptor),
-        @as(u16, @intFromEnum(descriptor_type)) << 8 | @as(u8, which),
-        index,
-        result,
-        buffer_size,
-    );
+    log.debug("device descriptor query on device {d} endpoint {d}", .{ endpoint.device.address, endpoint.number });
 
-    log.debug("descriptor query returned {any}", .{returned});
+    const desc_slice: []align(DMA_ALIGNMENT) DeviceDescriptor = try self.allocator.alignedAlloc(DeviceDescriptor, DMA_ALIGNMENT, 1);
+    defer self.allocator.free(desc_slice);
 
-    if (returned != buffer_size) {
-        log.debug("expected {d}, got {d}", .{ buffer_size, returned });
+    const setup = usb.setupDescriptorQuery(.device, descriptor_index, lang_id, expected_size);
+    const returned = try self.controlTransfer(endpoint, &setup, std.mem.sliceAsBytes(desc_slice));
+
+    if (returned != expected_size) {
+        log.debug("expected {d}, got {d}", .{ expected_size, returned });
         return Error.InvalidResponse;
     }
+
+    return desc_slice[0];
 }
 
-fn addressSet(
+pub fn addressSet(
     self: *Self,
     endpoint: *Endpoint,
     address: DeviceAddress,
@@ -718,15 +704,8 @@ fn addressSet(
 
     const unused: []align(DMA_ALIGNMENT) u8 = &.{};
 
-    const ret = self.controlTransfer(
-        endpoint,
-        usb.request_type_out,
-        @intFromEnum(usb.StandardDeviceRequests.set_address),
-        address,
-        0,
-        unused,
-        0,
-    );
+    const setup = usb.setupSetAddress(address);
+    const ret = self.controlTransfer(endpoint, &setup, unused);
 
     log.debug("set address {d} on endpoint {d} returned {any}", .{ address, endpoint.number, ret });
 
@@ -745,6 +724,10 @@ const Endpoint = struct {
     direction: EndpointDirection = .out,
     max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
 };
+
+fn claimAddress(self: *Self) !u5 {
+    return self.address_assignments.allocate();
+}
 
 pub const Device = struct {
     allocator: Allocator,
@@ -778,42 +761,16 @@ pub const Device = struct {
         self.port = port;
         self.speed = speed;
 
-        const expected_size = usb.descriptorExpectedSize(.device);
-        var descriptor_buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, expected_size);
-        defer self.allocator.free(descriptor_buffer);
+        self.device_descriptor = try host.deviceDescriptorQuery(&self.endpoint_0, usb.DEFAULT_DESCRIPTOR_INDEX, 0);
+        self.device_descriptor.dump();
 
-        log.debug("Device descriptor query, buffer at 0x{x:0>8}", .{@intFromPtr(descriptor_buffer.ptr)});
+        var my_address: DeviceAddress = try host.claimAddress();
 
-        try host.descriptorQuery(&self.endpoint_0, .device, usb.DEFAULT_DESCRIPTOR_INDEX, descriptor_buffer, expected_size, 0);
+        _ = try host.addressSet(&self.endpoint_0, my_address);
+        self.address = my_address;
 
-        // sanity check the response,
-        if (DeviceDescriptor.fromSlice(descriptor_buffer)) |desc| {
-            // copy the struct contents (it's still in the []u8
-            // allocated above)
-            self.device_descriptor = desc.*;
-
-            self.device_descriptor.dump();
-
-            var my_address: DeviceAddress = undefined;
-            {
-                host.address_spinlock.acquire();
-                defer host.address_spinlock.release();
-
-                my_address = host.next_available_address;
-                host.next_available_address += 1;
-
-                log.debug("Claimed address {d}", .{my_address});
-            }
-
-            _ = try host.addressSet(&self.endpoint_0, my_address);
-            self.address = my_address;
-
-            // wait 2 ms for the device to actually change its address
-            host.delayMillis(2);
-        } else |err| {
-            log.err("descriptorQuery returned something unexpected {any}", .{err});
-            return err;
-        }
+        // wait 2 ms for the device to actually change its address
+        host.delayMillis(2);
     }
 };
 
@@ -908,14 +865,6 @@ const RootPort = struct {
 // ----------------------------------------------------------------------
 
 pub const DEFAULT_INTERVAL = 1;
-
-pub const SetupPacket = extern struct {
-    request_type: usb.RequestType,
-    request: u8,
-    value: u16,
-    index: u16,
-    data_size: u16,
-};
 
 pub const DMA_ALIGNMENT = 64;
 pub const DescriptorPtr = *align(DMA_ALIGNMENT) usb.Descriptor;
