@@ -566,6 +566,7 @@ fn transactionOnChannel(
     };
 
     log.debug("Acquiring channel", .{});
+
     var channel = try self.channelAllocate();
     defer self.channelFree(channel);
 
@@ -616,9 +617,6 @@ fn controlTransfer(
     setup: *const SetupPacket,
     data: []align(DMA_ALIGNMENT) u8,
 ) !TransferBytes {
-    var channel = try self.channelAllocate();
-    defer self.channelFree(channel);
-
     const setup_slice: []SetupPacket = try self.allocator.alignedAlloc(SetupPacket, DMA_ALIGNMENT, 1);
 
     setup_slice[0] = setup.*;
