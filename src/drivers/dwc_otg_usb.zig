@@ -62,6 +62,7 @@ pub const Error = error{
     InvalidResponse,
     DataLengthMismatch,
     NoChannelAvailable,
+    NoDevice,
 };
 
 // ----------------------------------------------------------------------
@@ -105,7 +106,8 @@ pub const CoreRegisters = reg.CoreRegisters;
 
 pub const VTable = struct {
     initialize: *const fn (usb_controller: u64) u64,
-    initializeRootPort: *const fn (usb_controller: u64) u64,
+    rootPortInitialize: *const fn (usb_controller: u64) u64,
+    deviceGet: *const fn (usb_controller: u64, usb_address: u64) u64,
     dumpStatus: *const fn (usb_controller: u64) void,
 };
 
@@ -130,10 +132,12 @@ num_host_channels: u4,
 channel_assignments: HcdChannels = .{},
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
 address_assignments: UsbAddresses = .{},
+attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
 vtable: VTable = .{
     .initialize = initializeShim,
-    .initializeRootPort = initializeRootPortShim,
-    .dumpStatus = dumpStatusInteropShim,
+    .rootPortInitialize = rootPortInitializeShim,
+    .deviceGet = deviceGetShim,
+    .dumpStatus = dumpStatusShim,
 },
 
 fn initializeShim(usb_controller: u64) u64 {
@@ -146,9 +150,9 @@ fn initializeShim(usb_controller: u64) u64 {
     }
 }
 
-fn initializeRootPortShim(usb_controller: u64) u64 {
+fn rootPortInitializeShim(usb_controller: u64) u64 {
     var self: *Self = @ptrFromInt(usb_controller);
-    if (self.initializeRootPort()) |dev| {
+    if (self.rootPortInitialize()) |dev| {
         return @intFromPtr(dev);
     } else |err| {
         log.err("USB init root port error: {any}", .{err});
@@ -156,7 +160,23 @@ fn initializeRootPortShim(usb_controller: u64) u64 {
     }
 }
 
-fn dumpStatusInteropShim(usb_controller: u64) void {
+fn deviceGetShim(usb_controller: u64, usb_address: u64) u64 {
+    var self: *Self = @ptrFromInt(usb_controller);
+
+    if (usb_address > usb.MAX_ADDRESS) {
+        log.err("USB addresses only go up to {d}", .{usb.MAX_ADDRESS});
+        return 0;
+    }
+
+    if (self.deviceGet(@truncate(usb_address))) |dev| {
+        return @intFromPtr(dev);
+    } else |err| {
+        log.err("USB init root port error: {any}", .{err});
+        return 0;
+    }
+}
+
+fn dumpStatusShim(usb_controller: u64) void {
     var self: *Self = @ptrFromInt(usb_controller);
     self.dumpStatus();
 }
@@ -185,6 +205,7 @@ pub fn init(
         .clock = clock,
         .root_port = RootPort.init(allocator),
         .num_host_channels = 0,
+        .attached_devices = undefined,
     };
 
     for (0..dwc_max_channels) |chid| {
@@ -196,6 +217,14 @@ pub fn init(
     _ = try self.address_assignments.allocate();
 
     return self;
+}
+
+pub fn deviceGet(self: *Self, address: DeviceAddress) !*Device {
+    if (self.address_assignments.isAllocated(address)) {
+        return self.attached_devices[address];
+    } else {
+        return Error.NoDevice;
+    }
 }
 
 pub fn initialize(self: *Self) !void {
@@ -412,7 +441,7 @@ fn enableHostInterrupts(self: *Self) !void {
     self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffffffff));
 }
 
-fn initializeRootPort(self: *Self) !*Device {
+fn rootPortInitialize(self: *Self) !*Device {
     log.info("root port init start", .{});
     defer log.info("root port init end", .{});
 
@@ -802,10 +831,19 @@ pub const Device = struct {
         self.device_descriptor = try host.deviceDescriptorQuery(&self.endpoint_0, usb.DEFAULT_DESCRIPTOR_INDEX, 0);
         self.device_descriptor.dump();
 
+        // assigning an address is a 3 step process
+
+        // TODO - if the addressSet fails, should release the address assignment
+
+        // 1. reserve an address (in memory)
         var my_address: DeviceAddress = try host.claimAddress();
 
+        // 2. tell the actual device what address it should use (on device)
         _ = try host.addressSet(&self.endpoint_0, my_address);
         self.address = my_address;
+
+        // 3. associate the address with the device struct (in memory)
+        host.attached_devices[my_address] = self;
 
         // wait 2 ms for the device to actually change its address
         host.delayMillis(2);

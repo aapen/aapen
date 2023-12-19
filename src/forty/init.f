@@ -79,8 +79,16 @@ finish
 : usb-init-root-port
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
-  USB.vtable USB.VTable.initializeRootPort + + @            ( Address of initialize function )
+  USB.vtable USB.VTable.rootPortInitialize + + @            ( Address of initialize function )
   invoke-1r                                                 ( Call instance function, 0 return means failed )
+;
+
+
+: usb-device ( n -- addr : USB address -> device pointer )
+  [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
+  dup
+  USB.vtable USB.VTable.deviceGet + + @                     ( Address of device lookup function )
+  invoke-2r                                                 ( Call instance function, 0 return means failed )
 ;
 
 (Drawing)
