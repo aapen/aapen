@@ -561,7 +561,6 @@ fn transactionOnChannel(
 ) !TransferBytes {
     var transaction = Transaction{
         .host = self,
-        .deadline = if (timeout == 0) 0 else self.deadline(timeout),
         .actual_length = 0,
     };
 
@@ -574,6 +573,8 @@ fn transactionOnChannel(
 
     self.channelInterruptEnable(channel.id);
     defer self.channelInterruptDisable(channel.id);
+
+    transaction.deadline = if (timeout == 0) 0 else self.deadline(timeout);
 
     try channel.transactionBegin(device, device_speed, endpoint_number, endpoint_type, endpoint_direction, max_packet_size, initial_pid, buffer, &transaction.completion_handler);
 
