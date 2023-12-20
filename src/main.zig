@@ -1,4 +1,5 @@
 const std = @import("std");
+const ScopeLevel = std.log.ScopeLevel;
 
 const arch = @import("architecture.zig");
 const qemu = @import("qemu.zig");
@@ -30,8 +31,12 @@ pub const HAL = switch (config.board) {
 const diagnostics = @import("hal/diagnostics.zig");
 
 pub const std_options = struct {
-    pub const log_level = .debug;
     pub const logFn = debug.log;
+    pub const log_level = .warn;
+    pub const log_scope_levels = &[_]ScopeLevel{
+        .{ .scope = .dwc_otg_usb, .level = .info },
+        .{ .scope = .dwc_otg_usb_channel, .level = .info },
+    };
 };
 
 const Freestanding = struct {

@@ -3,7 +3,6 @@ const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.dwc_otg_usb);
 
 const root = @import("root");
-const kprint = root.kprint;
 const InterruptController = root.HAL.InterruptController;
 const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
@@ -259,7 +258,7 @@ fn powerOff(self: *Self) !void {
 fn verifyHostControllerDevice(self: *Self) !void {
     const id = self.core_registers.vendor_id;
 
-    kprint("   DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
+    log.info("DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
 
     if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
         log.warn(" gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
@@ -370,7 +369,7 @@ fn resetControllerCore(self: *Self) !void {
 }
 
 fn initializeHost(self: *Self) !void {
-    log.info("host init start", .{});
+    log.debug("host init start", .{});
 
     self.power_and_clock_control.* = 0;
 
@@ -395,7 +394,7 @@ fn initializeHost(self: *Self) !void {
     try self.powerHostPort();
     try self.enableHostInterrupts();
 
-    log.info("host init end", .{});
+    log.debug("host init end", .{});
 }
 
 fn configPhyClockSpeed(self: *Self) !void {
@@ -442,8 +441,8 @@ fn enableHostInterrupts(self: *Self) !void {
 }
 
 fn rootPortInitialize(self: *Self) !*Device {
-    log.info("root port init start", .{});
-    defer log.info("root port init end", .{});
+    log.debug("root port init start", .{});
+    defer log.debug("root port init end", .{});
 
     return self.root_port.initialize(self);
 }
@@ -477,7 +476,7 @@ fn delayMicros(self: *Self, count: u32) void {
 }
 
 pub fn dumpStatus(self: *Self) void {
-    kprint("{s: >28}\n", .{"Core registers"});
+    log.info("{s: >28}", .{"Core registers"});
     dumpRegister("otg_control", @bitCast(self.core_registers.otg_control));
     dumpRegister("ahb_config", @bitCast(self.core_registers.ahb_config));
     dumpRegister("usb_config", @bitCast(self.core_registers.usb_config));
@@ -488,8 +487,8 @@ pub fn dumpStatus(self: *Self) void {
     dumpRegister("nonperiodic_tx_fifo_size", @bitCast(self.core_registers.nonperiodic_tx_fifo_size));
     dumpRegister("nonperiodic_tx_status", @bitCast(self.core_registers.nonperiodic_tx_status));
 
-    kprint("{s: >28}\n", .{""});
-    kprint("{s: >28}\n", .{"Host registers"});
+    log.info("{s: >28}", .{""});
+    log.info("{s: >28}", .{"Host registers"});
     dumpRegister("config", @bitCast(self.host_registers.config));
     dumpRegister("frame_interval", @bitCast(self.host_registers.frame_interval));
     dumpRegister("frame_num", @bitCast(self.host_registers.frame_num));
@@ -501,7 +500,7 @@ pub fn dumpStatus(self: *Self) void {
 }
 
 fn dumpRegister(field_name: []const u8, v: u32) void {
-    kprint("{s: >28}: {x:0>8}\n", .{ field_name, v });
+    log.info("{s: >28}: {x:0>8}", .{ field_name, v });
 }
 
 fn channelAllocate(self: *Self) !*Channel {
@@ -911,16 +910,19 @@ const RootPort = struct {
     }
 
     fn configureDevice(self: *RootPort) !void {
-        log.info("configure device start", .{});
+        log.debug("configure device start", .{});
+        defer log.debug("configure device end", .{});
+        errdefer |err| {
+            log.err("configure device error: {any}", .{err});
+        }
+
         const speed = try self.host.getPortSpeed();
 
         self.device = try Device.init(self.allocator);
         self.device.initialize(self.host, self, speed) catch |err| {
             self.device = undefined;
-            log.err("configure device error: {any}", .{err});
             return err;
         };
-        log.info("configure device end", .{});
     }
 
     fn overcurrentShutdownCheck(self: *RootPort) !void {
