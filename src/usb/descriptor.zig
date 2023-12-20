@@ -187,7 +187,6 @@ pub const StringDescriptor = extern struct {
             const ascii_char: u8 = @truncate(unicode_char);
             result[i] = ascii_char;
         }
-        log.warn("string descriptor: had {d} unicode chars, converted to {s}", .{ actual_length, result });
         return result;
     }
 };
