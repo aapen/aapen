@@ -1,4 +1,6 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const log = std.log.scoped(.usb);
 
 const transaction = @import("transaction.zig");
@@ -43,7 +45,7 @@ pub const DescriptorType = enum(u8) {
     class_endpoint = 37,
 };
 
-const Header = packed struct {
+pub const Header = packed struct {
     length: u8,
     descriptor_type: DescriptorType,
 };
@@ -158,24 +160,34 @@ pub const EndpointDescriptor = extern struct {
 };
 
 pub const StringDescriptor = extern struct {
-    length: u8,
-    descriptor_type: DescriptorType,
+    header: Header,
 
-    // For string descriptor 0, the remaining bytes (length - 2 / 2)
+    // For string descriptor 0, the remaining bytes (header.length - 2)
     // contain an array of u16's with the language codes of each
     // language this string is available in. The index of the
     // desired language in the array will be the `index` field in a request
     // to get string decriptor. That response will contain a unicode
     // encoded string of `length` bytes.
-};
+    //
+    // For all other string descriptors, the body will be the unicode
+    // bytes of the string itself.
+    //
+    // For simplicity, we only read up to the first 62 bytes of this
+    // descriptor. Otherwise we have to do one control transfer to
+    // find the length then another to read the actual contents.
+    body: [31]u16,
 
-pub fn descriptorExpectedSize(descriptor_type: DescriptorType) u16 {
-    return switch (descriptor_type) {
-        .device => @sizeOf(DeviceDescriptor),
-        .configuration => @sizeOf(ConfigurationDescriptor),
-        .string => @sizeOf(StringDescriptor),
-        .interface => @sizeOf(InterfaceDescriptor),
-        .endpoint => @sizeOf(EndpointDescriptor),
-        else => 0,
-    };
-}
+    pub fn asSlice(self: *const StringDescriptor, allocator: Allocator) ![]u8 {
+        const actual_length = (self.header.length - 2) / 2;
+        const result = try allocator.alloc(u8, actual_length + 1);
+        @memset(result, 0);
+
+        for (0..actual_length) |i| {
+            const unicode_char = self.body[i];
+            const ascii_char: u8 = @truncate(unicode_char);
+            result[i] = ascii_char;
+        }
+        log.warn("string descriptor: had {d} unicode chars, converted to {s}", .{ actual_length, result });
+        return result;
+    }
+};

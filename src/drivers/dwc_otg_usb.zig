@@ -37,9 +37,12 @@ pub const TransactionStage = usb.TransactionStage;
 pub const EndpointDirection = usb.EndpointDirection;
 pub const EndpointNumber = usb.EndpointNumber;
 pub const EndpointType = usb.EndpointType;
+pub const LangID = usb.LangID;
 pub const PacketSize = usb.PacketSize;
 pub const PID = usb.PID2;
 pub const SetupPacket = usb.SetupPacket;
+pub const StringDescriptor = usb.StringDescriptor;
+pub const StringIndex = usb.StringIndex;
 pub const TransferBytes = usb.TransferBytes;
 pub const UsbSpeed = usb.UsbSpeed;
 
@@ -103,6 +106,16 @@ pub const HwConfig4 = reg.HwConfig4;
 pub const PeriodicTxFifoSize = reg.PeriodicTxFifoSize;
 pub const CoreRegisters = reg.CoreRegisters;
 
+// ----------------------------------------------------------------------
+// Definitions from USB spec: Constants, Structures, and Packet Definitions
+// ----------------------------------------------------------------------
+
+pub const DEFAULT_INTERVAL = 1;
+pub const DMA_ALIGNMENT = 64;
+
+// ----------------------------------------------------------------------
+// Forty interop table
+// ----------------------------------------------------------------------
 pub const VTable = struct {
     initialize: *const fn (usb_controller: u64) u64,
     rootPortInitialize: *const fn (usb_controller: u64) u64,
@@ -113,6 +126,9 @@ pub const VTable = struct {
 const HcdChannels = ChannelSet.init("dwc_otg_usb channels", u5, dwc_max_channels);
 const UsbAddresses = ChannelSet.init("dwc_otg_usb addresses", u7, std.math.maxInt(u7));
 
+// ----------------------------------------------------------------------
+// HCD state
+// ----------------------------------------------------------------------
 allocator: Allocator,
 core_registers: *volatile CoreRegisters,
 host_registers: *volatile HostRegisters,
@@ -132,6 +148,10 @@ channel_assignments: HcdChannels = .{},
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
 address_assignments: UsbAddresses = .{},
 attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
+
+// ----------------------------------------------------------------------
+// Interop shims
+// ----------------------------------------------------------------------
 vtable: VTable = .{
     .initialize = initializeShim,
     .rootPortInitialize = rootPortInitializeShim,
@@ -180,6 +200,9 @@ fn dumpStatusShim(usb_controller: u64) void {
     self.dumpStatus();
 }
 
+// ----------------------------------------------------------------------
+// Core interface layer: Initialization
+// ----------------------------------------------------------------------
 pub fn init(
     allocator: Allocator,
     register_base: u64,
@@ -216,14 +239,6 @@ pub fn init(
     _ = try self.address_assignments.allocate();
 
     return self;
-}
-
-pub fn deviceGet(self: *Self, address: DeviceAddress) !*Device {
-    if (self.address_assignments.isAllocated(address)) {
-        return self.attached_devices[address];
-    } else {
-        return Error.NoDevice;
-    }
 }
 
 pub fn initialize(self: *Self) !void {
@@ -279,32 +294,6 @@ fn globalInterruptEnable(self: *Self) !void {
 fn connectInterruptHandler(self: *Self) !void {
     self.intc.connect(self.irq_id, &self.irq_handler);
     self.intc.enable(self.irq_id);
-}
-
-fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
-    var self = @fieldParentPtr(Self, "irq_handler", this);
-
-    const intr_status = self.core_registers.core_interrupt_status;
-
-    // check if one of the channels raised the interrupt
-    if (intr_status.host_channel_intr == 1) {
-        const all_intrs = self.host_registers.all_channel_interrupts;
-        self.host_registers.all_channel_interrupts = all_intrs;
-
-        // Find the channel that has something to say
-        var channel_mask: u32 = 1;
-        // TODO consider using @ctz to find the lowest bit that's set,
-        // instead of looping over all 16 channels.
-        for (0..dwc_max_channels) |chid| {
-            if ((all_intrs & channel_mask) != 0) {
-                self.channels[chid].channelInterrupt();
-            }
-            channel_mask <<= 1;
-        }
-    }
-
-    // clear the interrupt bits
-    self.core_registers.core_interrupt_status = intr_status;
 }
 
 fn initializeControllerCore(self: *Self) !void {
@@ -447,6 +436,161 @@ fn rootPortInitialize(self: *Self) !*Device {
     return self.root_port.initialize(self);
 }
 
+// ----------------------------------------------------------------------
+// Device registry
+// ----------------------------------------------------------------------
+pub fn deviceGet(self: *Self, address: DeviceAddress) !*Device {
+    if (self.address_assignments.isAllocated(address)) {
+        return self.attached_devices[address];
+    } else {
+        return Error.NoDevice;
+    }
+}
+
+fn claimAddress(self: *Self) !DeviceAddress {
+    return self.address_assignments.allocate();
+}
+
+pub fn assignAddress(self: *Self, device: *Device) !void {
+    // assigning an address is a 3 step process
+
+    // TODO - if the addressSet fails, should release the address assignment
+
+    // 1. reserve an address (in memory)
+    var my_address: DeviceAddress = try self.claimAddress();
+
+    // 2. tell the actual device what address it should use (on device)
+    _ = try self.addressSet(&device.endpoint_0, my_address);
+    device.address = my_address;
+
+    // 3. associate the address with the device struct (in memory)
+    self.attached_devices[my_address] = device;
+
+    // wait 2 ms for the device to actually change its address
+    self.delayMillis(2);
+}
+
+// ----------------------------------------------------------------------
+// Embedded port interface
+// ----------------------------------------------------------------------
+const RootPort = struct {
+    allocator: Allocator,
+    host: *Self = undefined,
+    device: *Device = undefined,
+    enabled: bool = false,
+
+    pub fn init(allocator: Allocator) RootPort {
+        return .{
+            .allocator = allocator,
+            .host = undefined,
+            .device = undefined,
+        };
+    }
+
+    pub fn initialize(self: *RootPort, host: *Self) !*Device {
+        self.host = host;
+
+        try self.enable();
+        try self.configureDevice();
+        try self.overcurrentShutdownCheck();
+
+        return self.device;
+    }
+
+    fn enable(self: *RootPort) !void {
+        if (!self.enabled) {
+            // We should see the connect bit become true within 510 ms of
+            // power on
+            const connect_end = self.host.deadline(510);
+            while (self.host.clock.ticks() <= connect_end and self.host.host_registers.port.connect == 0) {}
+
+            self.host.delayMillis(100);
+
+            // assert the reset bit for 50 millis
+            var port = self.host.host_registers.port;
+            port.connect_changed = 0;
+            port.enabled = 0;
+            port.enabled_changed = 0;
+            port.overcurrent_changed = 0;
+            port.reset = 1;
+            self.host.host_registers.port = port;
+
+            self.host.delayMillis(50);
+
+            port = self.host.host_registers.port;
+            port.connect_changed = 0;
+            port.enabled = 0;
+            port.enabled_changed = 0;
+            port.overcurrent_changed = 0;
+            port.reset = 0;
+            self.host.host_registers.port = port;
+
+            self.host.delayMillis(20);
+            self.enabled = true;
+        }
+    }
+
+    fn disable(self: *RootPort) !void {
+        self.enabled = false;
+    }
+
+    fn configureDevice(self: *RootPort) !void {
+        log.debug("configure device start", .{});
+        defer log.debug("configure device end", .{});
+        errdefer |err| {
+            log.err("configure device error: {any}", .{err});
+        }
+
+        const speed = try self.host.getPortSpeed();
+
+        self.device = try Device.init(self.allocator);
+        self.device.initialize(self.host, self, speed) catch |err| {
+            self.device = undefined;
+            return err;
+        };
+    }
+
+    fn overcurrentShutdownCheck(self: *RootPort) !void {
+        if (self.overcurrentDetected()) {
+            self.disable() catch {};
+            return Error.OvercurrentDetected;
+        }
+    }
+
+    fn overcurrentDetected(self: *RootPort) bool {
+        return self.host.host_registers.port.overcurrent == 1;
+    }
+};
+
+// ----------------------------------------------------------------------
+// Interrupt handling
+// ----------------------------------------------------------------------
+fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
+    var self = @fieldParentPtr(Self, "irq_handler", this);
+
+    const intr_status = self.core_registers.core_interrupt_status;
+
+    // check if one of the channels raised the interrupt
+    if (intr_status.host_channel_intr == 1) {
+        const all_intrs = self.host_registers.all_channel_interrupts;
+        self.host_registers.all_channel_interrupts = all_intrs;
+
+        // Find the channel that has something to say
+        var channel_mask: u32 = 1;
+        // TODO consider using @ctz to find the lowest bit that's set,
+        // instead of looping over all 16 channels.
+        for (0..dwc_max_channels) |chid| {
+            if ((all_intrs & channel_mask) != 0) {
+                self.channels[chid].channelInterrupt();
+            }
+            channel_mask <<= 1;
+        }
+    }
+
+    // clear the interrupt bits
+    self.core_registers.core_interrupt_status = intr_status;
+}
+
 pub fn getPortSpeed(self: *Self) !usb.UsbSpeed {
     return switch (self.host_registers.port.speed) {
         .high => .High,
@@ -455,6 +599,10 @@ pub fn getPortSpeed(self: *Self) !usb.UsbSpeed {
         else => Error.ConfigurationError,
     };
 }
+
+// ----------------------------------------------------------------------
+// Clock handling
+// ----------------------------------------------------------------------
 
 // TODO migrate this to the clock
 fn deadline(self: *Self, millis: u32) u64 {
@@ -503,6 +651,9 @@ fn dumpRegister(field_name: []const u8, v: u32) void {
     log.info("{s: >28}: {x:0>8}", .{ field_name, v });
 }
 
+// ----------------------------------------------------------------------
+// Channel handling
+// ----------------------------------------------------------------------
 fn channelAllocate(self: *Self) !*Channel {
     const chid = try self.channel_assignments.allocate();
     errdefer self.channel_assignments.free(chid);
@@ -532,19 +683,6 @@ fn channelInterruptDisable(self: *Self, channel: Channel.ChannelId) void {
     defer self.all_channel_intmask_lock.release();
     self.host_registers.all_channel_interrupts_mask &= ~(@as(u32, 1) << channel);
 }
-
-// fn requestSubmitBlocking(self: *Self, request: *Request) !void {
-//     request.status = 0;
-
-//     if (request.endpoint.type == usb.EndpointType.Control) {
-//         if (request.setup_data.request_type.transfer_direction == .device_to_host) {
-//             try self.transferStage(request, false, false);
-//             try self.transferStage(request, true, false);
-//             try self.transferStage(request, false, true);
-//             return;
-//         }
-//     }
-// }
 
 fn transactionOnChannel(
     self: *Self,
@@ -593,6 +731,9 @@ fn transactionOnChannel(
     }
 }
 
+// ----------------------------------------------------------------------
+// Transfer interface
+// ----------------------------------------------------------------------
 const Transaction = struct {
     host: *Self,
     deadline: u64 = 0,
@@ -729,7 +870,11 @@ fn AlignedAllocator(comptime T: type) type {
 const empty_slice: []align(DMA_ALIGNMENT) u8 = &.{};
 const DeviceDescriptorAllocator = AlignedAllocator(DeviceDescriptor);
 const ConfigurationDescriptorAllocator = AlignedAllocator(ConfigurationDescriptor);
+const StringDescriptorAllocator = AlignedAllocator(StringDescriptor);
 
+// ----------------------------------------------------------------------
+// Endpoint interactions
+// ----------------------------------------------------------------------
 pub fn deviceDescriptorQuery(self: *Self, endpoint: *Endpoint, descriptor_index: usb.DescriptorIndex, lang_id: u16) !DeviceDescriptor {
     const expected_size = @sizeOf(DeviceDescriptor);
 
@@ -751,7 +896,7 @@ pub fn configurationDescriptorQuery(self: *Self, endpoint: *Endpoint) !Configura
 
     log.debug("configuration descriptor query on device {d} endpoint {d}", .{ endpoint.device.address, endpoint.number });
 
-    const configuration_slice = try ConfigurationDescriptorAllocator(self.allocator);
+    const configuration_slice = try ConfigurationDescriptorAllocator.alloc(self.allocator);
     defer self.allocator.free(configuration_slice);
 
     const setup = usb.setupConfigurationDescriptorQuery();
@@ -762,11 +907,7 @@ pub fn configurationDescriptorQuery(self: *Self, endpoint: *Endpoint) !Configura
     return configuration_slice[0];
 }
 
-pub fn addressSet(
-    self: *Self,
-    endpoint: *Endpoint,
-    address: DeviceAddress,
-) !u19 {
+pub fn addressSet(self: *Self, endpoint: *Endpoint, address: DeviceAddress) !u19 {
     log.debug("set address {d} on endpoint {d}", .{ address, endpoint.number });
 
     const setup = usb.setupSetAddress(address);
@@ -775,6 +916,20 @@ pub fn addressSet(
     log.debug("set address {d} on endpoint {d} returned {any}", .{ address, endpoint.number, ret });
 
     return ret;
+}
+
+pub fn stringDescriptorQuery(self: *Self, endpoint: *Endpoint, index: StringIndex, language: LangID) !StringDescriptor {
+    const expected_size = @sizeOf(StringDescriptor);
+
+    const string_slice = try StringDescriptorAllocator.alloc(self.allocator);
+    defer self.allocator.free(string_slice);
+
+    const setup = usb.setupDescriptorQuery(.string, index, @intFromEnum(language), expected_size);
+    const returned = try self.controlTransfer(endpoint, &setup, std.mem.sliceAsBytes(string_slice));
+
+    try sizeCheck(expected_size, returned);
+
+    return string_slice[0];
 }
 
 // ----------------------------------------------------------------------
@@ -790,10 +945,6 @@ const Endpoint = struct {
     max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
 };
 
-fn claimAddress(self: *Self) !DeviceAddress {
-    return self.address_assignments.allocate();
-}
-
 pub const Device = struct {
     allocator: Allocator,
     host: *Self,
@@ -802,7 +953,8 @@ pub const Device = struct {
     address: usb.DeviceAddress,
     endpoint_0: Endpoint,
     device_descriptor: usb.DeviceDescriptor,
-    config_descriptor: usb.ConfigurationDescriptor,
+    manufacturer: []u8,
+    product_name: []u8,
 
     pub fn init(allocator: Allocator) !*Device {
         var device = try allocator.create(Device);
@@ -815,7 +967,8 @@ pub const Device = struct {
             .address = usb.DEFAULT_ADDRESS,
             .endpoint_0 = .{ .number = 0, .device = device },
             .device_descriptor = undefined,
-            .config_descriptor = undefined,
+            .manufacturer = undefined,
+            .product_name = undefined,
         };
 
         return device;
@@ -829,119 +982,18 @@ pub const Device = struct {
         self.device_descriptor = try host.deviceDescriptorQuery(&self.endpoint_0, usb.DEFAULT_DESCRIPTOR_INDEX, 0);
         self.device_descriptor.dump();
 
-        // assigning an address is a 3 step process
+        try host.assignAddress(self);
 
-        // TODO - if the addressSet fails, should release the address assignment
-
-        // 1. reserve an address (in memory)
-        var my_address: DeviceAddress = try host.claimAddress();
-
-        // 2. tell the actual device what address it should use (on device)
-        _ = try host.addressSet(&self.endpoint_0, my_address);
-        self.address = my_address;
-
-        // 3. associate the address with the device struct (in memory)
-        host.attached_devices[my_address] = self;
-
-        // wait 2 ms for the device to actually change its address
-        host.delayMillis(2);
-    }
-};
-
-const RootPort = struct {
-    allocator: Allocator,
-    host: *Self = undefined,
-    device: *Device = undefined,
-    enabled: bool = false,
-
-    pub fn init(allocator: Allocator) RootPort {
-        return .{
-            .allocator = allocator,
-            .host = undefined,
-            .device = undefined,
+        self.determineProductName() catch |err| {
+            log.warn("Could not read manufacturer and product name: {any}", .{err});
         };
     }
 
-    pub fn initialize(self: *RootPort, host: *Self) !*Device {
-        self.host = host;
+    fn determineProductName(self: *Device) !void {
+        const mfg = try self.host.stringDescriptorQuery(&self.endpoint_0, self.device_descriptor.manufacturer_name, LangID.en_US);
+        self.manufacturer = try mfg.asSlice(self.host.allocator);
 
-        try self.enable();
-        try self.configureDevice();
-        try self.overcurrentShutdownCheck();
-
-        return self.device;
-    }
-
-    fn enable(self: *RootPort) !void {
-        if (!self.enabled) {
-            // We should see the connect bit become true within 510 ms of
-            // power on
-            const connect_end = self.host.deadline(510);
-            while (self.host.clock.ticks() <= connect_end and self.host.host_registers.port.connect == 0) {}
-
-            self.host.delayMillis(100);
-
-            // assert the reset bit for 50 millis
-            var port = self.host.host_registers.port;
-            port.connect_changed = 0;
-            port.enabled = 0;
-            port.enabled_changed = 0;
-            port.overcurrent_changed = 0;
-            port.reset = 1;
-            self.host.host_registers.port = port;
-
-            self.host.delayMillis(50);
-
-            port = self.host.host_registers.port;
-            port.connect_changed = 0;
-            port.enabled = 0;
-            port.enabled_changed = 0;
-            port.overcurrent_changed = 0;
-            port.reset = 0;
-            self.host.host_registers.port = port;
-
-            self.host.delayMillis(20);
-            self.enabled = true;
-        }
-    }
-
-    fn disable(self: *RootPort) !void {
-        self.enabled = false;
-    }
-
-    fn configureDevice(self: *RootPort) !void {
-        log.debug("configure device start", .{});
-        defer log.debug("configure device end", .{});
-        errdefer |err| {
-            log.err("configure device error: {any}", .{err});
-        }
-
-        const speed = try self.host.getPortSpeed();
-
-        self.device = try Device.init(self.allocator);
-        self.device.initialize(self.host, self, speed) catch |err| {
-            self.device = undefined;
-            return err;
-        };
-    }
-
-    fn overcurrentShutdownCheck(self: *RootPort) !void {
-        if (self.overcurrentDetected()) {
-            self.disable() catch {};
-            return Error.OvercurrentDetected;
-        }
-    }
-
-    fn overcurrentDetected(self: *RootPort) bool {
-        return self.host.host_registers.port.overcurrent == 1;
+        const prod = try self.host.stringDescriptorQuery(&self.endpoint_0, self.device_descriptor.product_name, LangID.en_US);
+        self.product_name = try prod.asSlice(self.host.allocator);
     }
 };
-
-// ----------------------------------------------------------------------
-// Definitions from USB spec: Constants, Structures, and Packet Definitions
-// ----------------------------------------------------------------------
-
-pub const DEFAULT_INTERVAL = 1;
-
-pub const DMA_ALIGNMENT = 64;
-pub const DescriptorPtr = *align(DMA_ALIGNMENT) usb.Descriptor;
