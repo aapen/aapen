@@ -7,13 +7,11 @@ pub const RichChar = struct {
     fg: u8,
     bg: u8,
 
-    pub fn init(ch: u8, fg: u8, bg: u8, x: usize, y: usize) RichChar {
+    pub fn init(ch: u8, fg: u8, bg: u8) RichChar {
         return RichChar{
             .ch = ch,
             .fg = fg,
             .bg = bg,
-            .x = x,
-            .y = y,
         };
     }
 
