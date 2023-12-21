@@ -11,13 +11,13 @@ We currently do not handle:
 ## Software Model
 
 1. The USB subsystem is generic. It is found under `/usb.zig`. It provides an API for a Class Driver.
-1. At least two classes will be needed, a HID mouse and a HID keyboard.
+1. At least three classes will be needed: Hub, HID mouse, and HID keyboard.
 1. A Class Driver may be synchronous or asynchronous. How an application communicates with a Class Driver is TBD.
-1. The USB host controller driver (HCD) is hardware-specific. It is found under `/drivers`. For Raspberry Pi3, it is `/drivers/dwc/hcd.zig`.
+1. The USB host controller driver (HCD) is hardware-specific. It is found under `/drivers`. For Raspberry Pi3, it is `/drivers/dwc_otg_usb.zig`.
 1. A USB Device is generic. It is found under `/usb/device.zig`.
 1. A Device has at least one Endpoint.
-1. A USB Endpoint is generic. It is found together with Device in `/usb/device.zig`
-2. A USB Function is generic. It is found teogether with Device and Endpoint in `/usb/device.zig`
+1. A USB Endpoint is generic. It is found in `/usb/endpoint.zig`
+2. A USB Function is generic. It is found in `/usb/function.zig`
 3. A USB Function has at least one Endpoint. Multiple Endpoints work together to supply the capabilities of the Function.
 1. A USB Request is generic. It is found under `/usb/request.zig`
 1. The generic structs have references to hardware-specific structs and functions supplied by the host controller driver. These are comptime resolved via type aliases in HAL.
@@ -101,13 +101,11 @@ Special
 
 ![](device_state_machine.png)
 
-## Transfer Model
+## Transfer Logical Model
+
+This is meant to depict the relationships of the actions. Not all of these are reified as structures.
 
 ![](transfer_model.png)
-
-## Internal State Machine
-
-![](transfer_state_machine.png)
 
 # References
 
