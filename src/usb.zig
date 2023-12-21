@@ -1,26 +1,9 @@
-// Placeholder for when I know how to separate the controller-specific
-// portions of USB from the generic device model and protocol.
-
-const device = @import("usb/device.zig");
-pub const DeviceAddress = device.DeviceAddress;
-pub const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
-pub const FIRST_DEDICATED_ADDRESS = device.FIRST_DEDICATED_ADDRESS;
-pub const MAX_ADDRESS = device.MAX_ADDRESS;
-
-const endpoint = @import("usb/endpoint.zig");
-pub const EndpointDirection = endpoint.EndpointDirection;
-pub const EndpointNumber = endpoint.EndpointNumber;
-pub const EndpointType = endpoint.EndpointType;
-
-const request = @import("usb/request.zig");
-pub const RequestType = request.RequestType;
-pub const request_type_in = request.request_type_in;
-pub const request_type_out = request.request_type_out;
-pub const setupDescriptorQuery = request.setupDescriptorQuery;
-pub const setupSetAddress = request.setupSetAddress;
-pub const StandardDeviceRequests = request.StandardDeviceRequests;
-pub const StandardInterfaceRequests = request.StandardInterfaceRequests;
-pub const StandardEndpointRequests = request.StandardEndpointRequests;
+/// USB subsystem, hardware agnostic.
+///
+/// This module contains two things: definitions that come from the
+/// USB specification, and the hardware-agnostic portion of USB
+/// handling for the kernel.
+pub const Bus = @import("usb/bus.zig");
 
 const descriptor = @import("usb/descriptor.zig");
 pub const DescriptorIndex = descriptor.DescriptorIndex;
@@ -37,46 +20,52 @@ pub const EndpointDescriptor = descriptor.EndpointDescriptor;
 pub const StringDescriptor = descriptor.StringDescriptor;
 pub const StringIndex = descriptor.StringIndex;
 
+const device = @import("usb/device.zig");
+pub const DeviceAddress = device.DeviceAddress;
+pub const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
+pub const FIRST_DEDICATED_ADDRESS = device.FIRST_DEDICATED_ADDRESS;
+pub const MAX_ADDRESS = device.MAX_ADDRESS;
+pub const UsbSpeed = device.UsbSpeed;
+
+const endpoint = @import("usb/endpoint.zig");
+pub const EndpointDirection = endpoint.EndpointDirection;
+pub const EndpointNumber = endpoint.EndpointNumber;
+pub const EndpointType = endpoint.EndpointType;
+
+const function = @import("usb/function.zig");
+pub const MAX_FUNCTIONS = function.MAX_FUNCTIONS;
+
+const hub = @import("usb/hub.zig");
+pub const Characteristics = hub.Characteristics;
+pub const ChangeStatusP = hub.ChangeStatusP;
+pub const OvercurrentStatusP = hub.OvercurrentStatusP;
+pub const Hub = hub.Hub;
+pub const HubStatusAndChangeStatus = hub.HubStatusAndChangeStatus;
+pub const PortStatus = hub.PortStatus;
+pub const HubDescriptor = hub.HubDescriptor;
+pub const ClassRequestCode = hub.ClassRequestCode;
+pub const FeatureSelector = hub.FeatureSelector;
+pub const TTDirection = hub.TTDirection;
+
 const language = @import("usb/language.zig");
 pub const LangID = language.LangID;
 
+const request = @import("usb/request.zig");
+pub const RequestType = request.RequestType;
+pub const request_type_in = request.request_type_in;
+pub const request_type_out = request.request_type_out;
+pub const setupDescriptorQuery = request.setupDescriptorQuery;
+pub const setupSetAddress = request.setupSetAddress;
+pub const StandardDeviceRequests = request.StandardDeviceRequests;
+pub const StandardInterfaceRequests = request.StandardInterfaceRequests;
+pub const StandardEndpointRequests = request.StandardEndpointRequests;
+
 const transaction = @import("usb/transaction.zig");
+pub const DEFAULT_MAX_PACKET_SIZE = transaction.DEFAULT_MAX_PACKET_SIZE;
 pub const SetupPacket = transaction.SetupPacket;
 pub const TransactionStage = transaction.TransactionStage;
+pub const TransferBytes = transaction.TransferBytes;
 pub const TransferType = transaction.TransferType;
-
-pub const TransferBytes = u19;
-pub const PacketSize = u11;
-pub const DEFAULT_MAX_PACKET_SIZE = 8;
-pub const MAX_FUNCTIONS = 10;
-
-pub const PID = enum(u8) {
-    Setup,
-    Data0,
-    Data1,
-};
-
-pub const PID2 = enum(u4) {
-    token_out = 0b0001,
-    token_in = 0b1001,
-    token_sof = 0b0101,
-    token_setup = 0b1101,
-    data_data0 = 0b0011,
-    data_data1 = 0b1011,
-    data_data2 = 0b0111,
-    data_mdata = 0b1111,
-    handshake_ack = 0b0010,
-    handshake_nak = 0b1010,
-    handshake_stall = 0b1110,
-    handshake_nyet = 0b0110,
-    special_preamble_or_err = 0b1100,
-    special_split = 0b1000,
-    special_ping = 0b0100,
-};
-
-pub const UsbSpeed = enum {
-    Low,
-    Full,
-    High,
-    Super,
-};
+pub const PacketSize = transaction.PacketSize;
+pub const PID = transaction.PID;
+pub const PID2 = transaction.PID2;

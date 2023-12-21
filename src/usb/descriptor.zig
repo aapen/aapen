@@ -3,6 +3,9 @@ const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.usb);
 
+const device = @import("device.zig");
+const DeviceClass = device.DeviceClass;
+
 const transaction = @import("transaction.zig");
 const setup = transaction.setup;
 const SetupPacket = transaction.SetupPacket;
@@ -101,11 +104,14 @@ pub const DeviceDescriptor = extern struct {
 
         return maybe_device_descriptor;
     }
+
+    pub fn isHub(self: *const DeviceDescriptor) bool {
+        return self.device_class == @intFromEnum(DeviceClass.hub);
+    }
 };
 
 pub const ConfigurationDescriptor = extern struct {
-    length: u8,
-    descriptor_type: DescriptorType,
+    header: Header,
     total_length: u16,
     interface_count: u8,
     configuration_value: u8,
@@ -120,8 +126,7 @@ pub const ConfigurationDescriptor = extern struct {
 };
 
 pub const InterfaceDescriptor = extern struct {
-    length: u8,
-    descriptor_type: DescriptorType,
+    header: Header,
     interface_number: u8,
     alternate_setting: u8,
     endpoint_count: u8,
@@ -146,8 +151,7 @@ pub const IsoUsageType = enum(u2) {
 };
 
 pub const EndpointDescriptor = extern struct {
-    length: u8,
-    descriptor_type: DescriptorType,
+    header: Header,
     endpoint_address: u8,
     attributes: packed struct {
         transfer_type: TransferType, // 0..1

@@ -30,6 +30,7 @@ const reg = @import("dwc/registers.zig");
 const Channel = @import("dwc/channel.zig");
 
 const usb = @import("../usb.zig");
+pub const Bus = usb.Bus;
 pub const ConfigurationDescriptor = usb.ConfigurationDescriptor;
 pub const DeviceAddress = usb.DeviceAddress;
 pub const DeviceDescriptor = usb.DeviceDescriptor;
@@ -37,6 +38,7 @@ pub const TransactionStage = usb.TransactionStage;
 pub const EndpointDirection = usb.EndpointDirection;
 pub const EndpointNumber = usb.EndpointNumber;
 pub const EndpointType = usb.EndpointType;
+pub const Hub = usb.Hub;
 pub const LangID = usb.LangID;
 pub const PacketSize = usb.PacketSize;
 pub const PID = usb.PID2;
@@ -119,6 +121,7 @@ pub const DMA_ALIGNMENT = 64;
 pub const VTable = struct {
     initialize: *const fn (usb_controller: u64) u64,
     rootPortInitialize: *const fn (usb_controller: u64) u64,
+    busInitialize: *const fn (usb_controller: u64) u64,
     deviceGet: *const fn (usb_controller: u64, usb_address: u64) u64,
     dumpStatus: *const fn (usb_controller: u64) void,
 };
@@ -155,6 +158,7 @@ attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
 vtable: VTable = .{
     .initialize = initializeShim,
     .rootPortInitialize = rootPortInitializeShim,
+    .busInitialize = busInitializeShim,
     .deviceGet = deviceGetShim,
     .dumpStatus = dumpStatusShim,
 },
@@ -175,6 +179,16 @@ fn rootPortInitializeShim(usb_controller: u64) u64 {
         return @intFromPtr(dev);
     } else |err| {
         log.err("USB init root port error: {any}", .{err});
+        return 0;
+    }
+}
+
+fn busInitializeShim(usb_controller: u64) u64 {
+    var self: *Self = @ptrFromInt(usb_controller);
+    if (self.busInitialize()) |bus| {
+        return @intFromPtr(bus);
+    } else |err| {
+        log.err("USB bus init error: {any}", .{err});
         return 0;
     }
 }
@@ -239,6 +253,13 @@ pub fn init(
     _ = try self.address_assignments.allocate();
 
     return self;
+}
+
+// Ugly: this reaches up to the generic layer
+pub fn busInitialize(self: *Self) !*Bus {
+    const bus: *Bus = try self.allocator.create(Bus);
+    try bus.init(self, self.root_port.device);
+    return bus;
 }
 
 pub fn initialize(self: *Self) !void {
@@ -541,10 +562,10 @@ const RootPort = struct {
             log.err("configure device error: {any}", .{err});
         }
 
-        const speed = try self.host.getPortSpeed();
+        const speed = try self.host.getRootPortSpeed();
 
         self.device = try Device.init(self.allocator);
-        self.device.initialize(self.host, self, speed) catch |err| {
+        self.device.initialize(self.host, speed) catch |err| {
             self.device = undefined;
             return err;
         };
@@ -591,7 +612,7 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
     self.core_registers.core_interrupt_status = intr_status;
 }
 
-pub fn getPortSpeed(self: *Self) !usb.UsbSpeed {
+pub fn getRootPortSpeed(self: *Self) !usb.UsbSpeed {
     return switch (self.host_registers.port.speed) {
         .high => .High,
         .full => .Full,
@@ -875,6 +896,19 @@ const StringDescriptorAllocator = AlignedAllocator(StringDescriptor);
 // ----------------------------------------------------------------------
 // Endpoint interactions
 // ----------------------------------------------------------------------
+pub fn descriptorQuery(self: *Self, endpoint: *Endpoint, setup_packet: *const SetupPacket, comptime T: type) !T {
+    const expected_size: u16 = @sizeOf(T);
+    var buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, setup_packet.data_size);
+    defer self.allocator.free(buffer);
+
+    const returned = try self.controlTransfer(endpoint, setup_packet, buffer);
+
+    try sizeCheck(expected_size, returned);
+
+    const result: *T = std.mem.bytesAsValue(T, buffer[0..expected_size]);
+    return result.*;
+}
+
 pub fn deviceDescriptorQuery(self: *Self, endpoint: *Endpoint, descriptor_index: usb.DescriptorIndex, lang_id: u16) !DeviceDescriptor {
     const expected_size = @sizeOf(DeviceDescriptor);
 
@@ -899,7 +933,7 @@ pub fn configurationDescriptorQuery(self: *Self, endpoint: *Endpoint) !Configura
     const configuration_slice = try ConfigurationDescriptorAllocator.alloc(self.allocator);
     defer self.allocator.free(configuration_slice);
 
-    const setup = usb.setupConfigurationDescriptorQuery();
+    const setup = usb.setupDescriptorQuery(.configuration, 0, 0, expected_size);
     const returned = try self.controlTransfer(endpoint, &setup, std.mem.sliceAsBytes(configuration_slice));
 
     try sizeCheck(expected_size, returned);
@@ -948,7 +982,6 @@ const Endpoint = struct {
 pub const Device = struct {
     allocator: Allocator,
     host: *Self,
-    port: *RootPort,
     speed: usb.UsbSpeed,
     address: usb.DeviceAddress,
     endpoint_0: Endpoint,
@@ -962,7 +995,6 @@ pub const Device = struct {
         device.* = .{
             .allocator = allocator,
             .host = undefined,
-            .port = undefined,
             .speed = undefined,
             .address = usb.DEFAULT_ADDRESS,
             .endpoint_0 = .{ .number = 0, .device = device },
@@ -974,9 +1006,8 @@ pub const Device = struct {
         return device;
     }
 
-    pub fn initialize(self: *Device, host: *Self, port: *RootPort, speed: usb.UsbSpeed) !void {
+    pub fn initialize(self: *Device, host: *Self, speed: usb.UsbSpeed) !void {
         self.host = host;
-        self.port = port;
         self.speed = speed;
 
         self.device_descriptor = try host.deviceDescriptorQuery(&self.endpoint_0, usb.DEFAULT_DESCRIPTOR_INDEX, 0);

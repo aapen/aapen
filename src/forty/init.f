@@ -69,22 +69,28 @@ finish
 : +]] 0 while swap dup [[ = not do + done drop ;
 
 ( USB hardware control)
-: usb-init-hcd
+: usb-init-hcd                                              ( -- bool : initialize the host controller driver )
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
   USB.vtable USB.VTable.initialize + + @                    ( Address of initialize function )
   invoke-1r                                                 ( Call instance function, 0 return means failed )
 ;
 
-: usb-init-root-port
+: usb-init-root-port                                        ( -- addr : init and return *Device )
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
   USB.vtable USB.VTable.rootPortInitialize + + @            ( Address of initialize function )
   invoke-1r                                                 ( Call instance function, 0 return means failed )
 ;
 
+: usb-init-bus                                              ( -- addr : init and return *Bus )
+  [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
+  dup
+  USB.vtable USB.VTable.busInitialize + + @                 ( Address of busInitialize function )
+  invoke-1r                                                 ( Call instance function, 0 return means failed )
+;
 
-: usb-device ( n -- addr : USB address -> device pointer )
+: usb-device                                                ( n -- addr : USB address -> device pointer )
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
   USB.vtable USB.VTable.deviceGet + + @                     ( Address of device lookup function )

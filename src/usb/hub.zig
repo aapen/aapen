@@ -2,10 +2,16 @@
 ///
 /// See USB 2.0 specification, revision 2.0 (dated April 27, 2000),
 /// chapter 11 for all the details
-///
-/// This is not the class driver, it contains data structures and
-/// constants defined by the protocol.
+const std = @import("std");
+const log = std.log.scoped(.usb);
+
+const root = @import("root");
+const HCI = root.HAL.USBHCI;
+// this is odd... should probably move Device to usb/device.zig
+const Device = HCI.Device;
+
 const descriptor = @import("descriptor.zig");
+const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
 const DescriptorIndex = descriptor.DescriptorIndex;
 const DescriptorType = descriptor.DescriptorType;
 const Header = descriptor.Header;
@@ -21,16 +27,47 @@ const request = @import("request.zig");
 const RequestTypeDirection = request.RequestTypeDirection;
 const RequestTypeRecipient = request.RequestTypeRecipient;
 const RequestTypeType = request.RequestTypeType;
+const StandardDeviceRequests = request.StandardDeviceRequests;
 
 const transaction = @import("transaction.zig");
 const SetupPacket = transaction.SetupPacket;
 const setup = transaction.setup;
+
+pub const Hub = struct {
+    const Error = error{
+        InvalidResponse,
+    };
+
+    host: *HCI,
+    device: *Device,
+    descriptor: HubDescriptor = undefined,
+    port_count: u8 = undefined,
+    configuration_descriptor: ConfigurationDescriptor = undefined,
+
+    pub fn initialize(self: *Hub) !void {
+        // get configuration descriptor
+        self.configuration_descriptor = try self.host.configurationDescriptorQuery(&self.device.endpoint_0);
+
+        // get hub descriptor
+        const setup_packet = setupGetHubDescriptor(0, @sizeOf(HubDescriptor));
+        const desc = try self.host.descriptorQuery(&self.device.endpoint_0, &setup_packet, HubDescriptor);
+
+        if (desc.header.descriptor_type != .hub) {
+            return Error.InvalidResponse;
+        }
+
+        self.descriptor = desc;
+        self.descriptor.dump();
+    }
+};
 
 /// See USB 2.0 specification, revision 2.0, section 11.23.2.1
 pub const Characteristics = packed struct {
     power_switching_mode: enum(u2) {
         ganged = 0b00,
         individual = 0b01,
+        _unused_in_usb2_0b10 = 0b10,
+        _unused_in_usb2_0b11 = 0b11,
     },
     compound: enum(u1) {
         not_compound = 0b0,
@@ -147,6 +184,22 @@ pub const HubDescriptor = packed struct {
     // following the device removable bitmap is _another_ bitmap for
     // "port power control". it remains for compatibility but should
     // be set to all 1s.
+
+    pub fn dump(self: *const HubDescriptor) void {
+        log.debug("HubDescriptor [", .{});
+        log.debug("  ports = {d}", .{self.number_ports});
+        log.debug("  characteristics = [", .{});
+        log.debug("    power_switching_mode = {s}", .{@tagName(self.characteristics.power_switching_mode)});
+
+        log.debug("    compound = {s}", .{@tagName(self.characteristics.compound)});
+        log.debug("    overcurrent mode = {s}", .{@tagName(self.characteristics.overcurrent_protection_mode)});
+        log.debug("    tt_think_time = {s}", .{@tagName(self.characteristics.tt_think_time)});
+        log.debug("    port indicators = {s}", .{@tagName(self.characteristics.port_indicators)});
+        log.debug("  ]", .{});
+        log.debug("  power on to power good = {d} ms", .{self.power_on_to_power_good});
+        log.debug("  max current = {d} mA", .{self.controller_current});
+        log.debug("]", .{});
+    }
 };
 
 /// See USB 2.0 specification, revision 2.0, section 11.24.2
@@ -215,7 +268,7 @@ pub fn setupClearTTBuffer(device_address: DeviceAddress, endpoint_number: Endpoi
 
 pub fn setupGetHubDescriptor(descriptor_index: u8, descriptor_length: u16) SetupPacket {
     const val: u16 = @as(u16, @intFromEnum(DescriptorType.hub)) << 8 | @as(u8, descriptor_index);
-    return setup(.device, .class, .device_to_host, .get_descriptor, val, 0, descriptor_length);
+    return setup(.device, .class, .device_to_host, @intFromEnum(StandardDeviceRequests.get_descriptor), val, 0, descriptor_length);
 }
 
 pub fn setupGetHubStatus() SetupPacket {
