@@ -878,6 +878,8 @@ fn sizeCheck(expected: TransferBytes, actual: TransferBytes) !void {
 // Endpoint interactions
 // ----------------------------------------------------------------------
 pub fn descriptorQuery(self: *Self, endpoint: *Endpoint, setup_packet: *const SetupPacket, comptime T: type) !T {
+    log.debug("descriptor query (type {d}) on device {d} endpoint {d}", .{ setup_packet.value >> 8, endpoint.device.address, endpoint.number });
+
     const expected_size: u16 = @sizeOf(T);
     var buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, setup_packet.data_size);
     defer self.allocator.free(buffer);
@@ -891,8 +893,6 @@ pub fn descriptorQuery(self: *Self, endpoint: *Endpoint, setup_packet: *const Se
 }
 
 pub fn deviceDescriptorQuery(self: *Self, endpoint: *Endpoint, descriptor_index: usb.DescriptorIndex, lang_id: u16) !DeviceDescriptor {
-    log.debug("device descriptor query on device {d} endpoint {d}", .{ endpoint.device.address, endpoint.number });
-
     const expected_size = @sizeOf(DeviceDescriptor);
     const setup = usb.setupDescriptorQuery(.device, descriptor_index, lang_id, expected_size);
 
@@ -900,12 +900,17 @@ pub fn deviceDescriptorQuery(self: *Self, endpoint: *Endpoint, descriptor_index:
 }
 
 pub fn configurationDescriptorQuery(self: *Self, endpoint: *Endpoint) !ConfigurationDescriptor {
-    log.debug("configuration descriptor query on device {d} endpoint {d}", .{ endpoint.device.address, endpoint.number });
-
     const expected_size = @sizeOf(ConfigurationDescriptor);
     const setup = usb.setupDescriptorQuery(.configuration, 0, 0, expected_size);
 
     return self.descriptorQuery(endpoint, &setup, ConfigurationDescriptor);
+}
+
+pub fn stringDescriptorQuery(self: *Self, endpoint: *Endpoint, index: StringIndex, language: LangID) !StringDescriptor {
+    const expected_size = @sizeOf(StringDescriptor);
+    const setup = usb.setupDescriptorQuery(.string, index, @intFromEnum(language), expected_size);
+
+    return self.descriptorQuery(endpoint, &setup, StringDescriptor);
 }
 
 pub fn addressSet(self: *Self, endpoint: *Endpoint, address: DeviceAddress) !u19 {
@@ -918,13 +923,6 @@ pub fn addressSet(self: *Self, endpoint: *Endpoint, address: DeviceAddress) !u19
     log.debug("set address {d} on endpoint {d} returned {any}", .{ address, endpoint.number, ret });
 
     return ret;
-}
-
-pub fn stringDescriptorQuery(self: *Self, endpoint: *Endpoint, index: StringIndex, language: LangID) !StringDescriptor {
-    const expected_size = @sizeOf(StringDescriptor);
-    const setup = usb.setupDescriptorQuery(.string, index, @intFromEnum(language), expected_size);
-
-    return self.descriptorQuery(endpoint, &setup, StringDescriptor);
 }
 
 // ----------------------------------------------------------------------
