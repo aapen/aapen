@@ -874,25 +874,6 @@ fn sizeCheck(expected: TransferBytes, actual: TransferBytes) !void {
     }
 }
 
-/// Buffers used for transfers must be aligned to DMA_ALIGNMENT bytes.
-/// Zig makes it easy to allocate a slice with that alignment but not
-/// a single item.
-/// This little wrapper does the ugly type syntax.
-fn AlignedAllocator(comptime T: type) type {
-    return struct {
-        const Slice = []align(DMA_ALIGNMENT) T;
-
-        pub fn alloc(allocator: Allocator) !Slice {
-            return try allocator.alignedAlloc(T, DMA_ALIGNMENT, 1);
-        }
-    };
-}
-
-const empty_slice: []align(DMA_ALIGNMENT) u8 = &.{};
-const DeviceDescriptorAllocator = AlignedAllocator(DeviceDescriptor);
-const ConfigurationDescriptorAllocator = AlignedAllocator(ConfigurationDescriptor);
-const StringDescriptorAllocator = AlignedAllocator(StringDescriptor);
-
 // ----------------------------------------------------------------------
 // Endpoint interactions
 // ----------------------------------------------------------------------
@@ -910,40 +891,27 @@ pub fn descriptorQuery(self: *Self, endpoint: *Endpoint, setup_packet: *const Se
 }
 
 pub fn deviceDescriptorQuery(self: *Self, endpoint: *Endpoint, descriptor_index: usb.DescriptorIndex, lang_id: u16) !DeviceDescriptor {
-    const expected_size = @sizeOf(DeviceDescriptor);
-
     log.debug("device descriptor query on device {d} endpoint {d}", .{ endpoint.device.address, endpoint.number });
 
-    const desc_slice = try DeviceDescriptorAllocator.alloc(self.allocator);
-    defer self.allocator.free(desc_slice);
-
+    const expected_size = @sizeOf(DeviceDescriptor);
     const setup = usb.setupDescriptorQuery(.device, descriptor_index, lang_id, expected_size);
-    const returned = try self.controlTransfer(endpoint, &setup, std.mem.sliceAsBytes(desc_slice));
 
-    try sizeCheck(expected_size, returned);
-
-    return desc_slice[0];
+    return self.descriptorQuery(endpoint, &setup, DeviceDescriptor);
 }
 
 pub fn configurationDescriptorQuery(self: *Self, endpoint: *Endpoint) !ConfigurationDescriptor {
-    const expected_size = @sizeOf(ConfigurationDescriptor);
-
     log.debug("configuration descriptor query on device {d} endpoint {d}", .{ endpoint.device.address, endpoint.number });
 
-    const configuration_slice = try ConfigurationDescriptorAllocator.alloc(self.allocator);
-    defer self.allocator.free(configuration_slice);
-
+    const expected_size = @sizeOf(ConfigurationDescriptor);
     const setup = usb.setupDescriptorQuery(.configuration, 0, 0, expected_size);
-    const returned = try self.controlTransfer(endpoint, &setup, std.mem.sliceAsBytes(configuration_slice));
 
-    try sizeCheck(expected_size, returned);
-
-    return configuration_slice[0];
+    return self.descriptorQuery(endpoint, &setup, ConfigurationDescriptor);
 }
 
 pub fn addressSet(self: *Self, endpoint: *Endpoint, address: DeviceAddress) !u19 {
     log.debug("set address {d} on endpoint {d}", .{ address, endpoint.number });
 
+    const empty_slice: []align(DMA_ALIGNMENT) u8 = &.{};
     const setup = usb.setupSetAddress(address);
     const ret = self.controlTransfer(endpoint, &setup, empty_slice);
 
@@ -954,16 +922,9 @@ pub fn addressSet(self: *Self, endpoint: *Endpoint, address: DeviceAddress) !u19
 
 pub fn stringDescriptorQuery(self: *Self, endpoint: *Endpoint, index: StringIndex, language: LangID) !StringDescriptor {
     const expected_size = @sizeOf(StringDescriptor);
-
-    const string_slice = try StringDescriptorAllocator.alloc(self.allocator);
-    defer self.allocator.free(string_slice);
-
     const setup = usb.setupDescriptorQuery(.string, index, @intFromEnum(language), expected_size);
-    const returned = try self.controlTransfer(endpoint, &setup, std.mem.sliceAsBytes(string_slice));
 
-    try sizeCheck(expected_size, returned);
-
-    return string_slice[0];
+    return self.descriptorQuery(endpoint, &setup, StringDescriptor);
 }
 
 // ----------------------------------------------------------------------
