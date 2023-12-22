@@ -3,6 +3,8 @@
 /// See USB 2.0 specification, revision 2.0 (dated April 27, 2000),
 /// chapter 11 for all the details
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const log = std.log.scoped(.usb);
 
 const root = @import("root");
@@ -18,6 +20,7 @@ const Header = descriptor.Header;
 
 const device = @import("device.zig");
 const DeviceAddress = device.DeviceAddress;
+const UsbSpeed = device.UsbSpeed;
 
 const endpoint = @import("endpoint.zig");
 const EndpointNumber = endpoint.EndpointNumber;
@@ -34,17 +37,31 @@ const SetupPacket = transaction.SetupPacket;
 const setup = transaction.setup;
 
 pub const Hub = struct {
+    const Port = struct {
+        connected: bool,
+        enabled: bool,
+        suspended: bool,
+        overcurrent: bool,
+        reset: bool,
+        powered: bool,
+        device_speed: UsbSpeed,
+    };
+
     const Error = error{
         InvalidResponse,
     };
 
+    allocator: Allocator = undefined,
     host: *HCI,
     device: *Device,
     descriptor: HubDescriptor = undefined,
     port_count: u8 = undefined,
     configuration_descriptor: ConfigurationDescriptor = undefined,
+    port: []Port = undefined,
 
-    pub fn initialize(self: *Hub) !void {
+    pub fn initialize(self: *Hub, allocator: Allocator) !void {
+        self.allocator = allocator;
+
         // get configuration descriptor
         self.configuration_descriptor = try self.host.configurationDescriptorQuery(&self.device.endpoint_0);
 
@@ -58,6 +75,52 @@ pub const Hub = struct {
 
         self.descriptor = desc;
         self.descriptor.dump();
+
+        self.port_count = desc.number_ports;
+
+        self.port = try self.allocator.alloc(Port, self.port_count);
+
+        for (1..self.port_count + 1) |i| {
+            log.debug("Port status check {d}", .{i});
+            try self.checkPort(@truncate(i));
+        }
+
+        self.dump();
+    }
+
+    pub fn deinit(self: *Hub) void {
+        self.allocator.free(self.port);
+        self.port = undefined;
+    }
+
+    pub fn checkPort(self: *Hub, port_number: u8) !void {
+        // ports are numbered from 1, arrays count from 0
+        const i = port_number - 1;
+        const setup_packet = setupGetPortStatus(port_number);
+        const ret = try self.host.descriptorQuery(&self.device.endpoint_0, &setup_packet, PortStatus);
+        self.port[i].connected = ret.isConnected();
+        self.port[i].enabled = ret.isEnabled();
+        self.port[i].suspended = ret.isSuspended();
+        self.port[i].overcurrent = ret.isOvercurrent();
+        self.port[i].reset = ret.isReset();
+        self.port[i].powered = ret.isPowered();
+        self.port[i].device_speed = ret.deviceSpeed();
+    }
+
+    pub fn dump(self: *const Hub) void {
+        log.info("#\tConn\tEna\tSusp\tOverc\tReset\tPower\tSpeed", .{});
+        for (0..self.port_count) |i| {
+            log.info("{d}\t{}\t{}\t{}\t{}\t{}\t{}\t{s}", .{
+                i + 1,
+                self.port[i].connected,
+                self.port[i].enabled,
+                self.port[i].suspended,
+                self.port[i].overcurrent,
+                self.port[i].reset,
+                self.port[i].powered,
+                @tagName(self.port[i].device_speed),
+            });
+        }
     }
 };
 
@@ -144,11 +207,11 @@ pub const PortStatus = packed struct {
             on = 0b1,
         },
         low_speed_device: enum(u1) {
-            full_or_high = 0b0,
+            not_low_speed = 0b0,
             low_speed = 0b1,
         },
         high_speed_device: enum(u1) {
-            full_speed = 0b0,
+            not_high_speed = 0b0,
             high_speed = 0b1,
         },
         test_mode: enum(u1) {
@@ -169,6 +232,41 @@ pub const PortStatus = packed struct {
         reset_changed: ChangeStatusP,
         _reserved: u11 = 0,
     },
+
+    pub fn isConnected(self: *const PortStatus) bool {
+        return self.port_status.connected == .connected;
+    }
+
+    pub fn isEnabled(self: *const PortStatus) bool {
+        return self.port_status.enabled == .enabled;
+    }
+
+    pub fn isSuspended(self: *const PortStatus) bool {
+        return self.port_status.suspended == .suspended;
+    }
+
+    pub fn isOvercurrent(self: *const PortStatus) bool {
+        return self.port_status.overcurrent == .detected;
+    }
+
+    pub fn isReset(self: *const PortStatus) bool {
+        return self.port_status.reset == .asserted;
+    }
+
+    pub fn isPowered(self: *const PortStatus) bool {
+        return self.port_status.power == .on;
+    }
+
+    pub fn deviceSpeed(self: *const PortStatus) UsbSpeed {
+        if (self.port_status.low_speed_device == .low_speed) {
+            return UsbSpeed.Low;
+        } else if (self.port_status.high_speed_device == .high_speed) {
+            return UsbSpeed.High;
+        } else {
+            // This may not be correct for USB 3
+            return UsbSpeed.Full;
+        }
+    }
 };
 
 pub const HubDescriptor = packed struct {
@@ -272,40 +370,40 @@ pub fn setupGetHubDescriptor(descriptor_index: u8, descriptor_length: u16) Setup
 }
 
 pub fn setupGetHubStatus() SetupPacket {
-    return setup(.device, .class, .device_to_host, .get_status, 0, 0, 4);
+    return setup(.device, .class, .device_to_host, @intFromEnum(ClassRequestCode.get_status), 0, 0, 4);
 }
 
 pub fn setupGetPortStatus(port_number: u8) SetupPacket {
-    return setup(.other, .class, .device_to_host, .get_status, 0, port_number, 4);
+    return setup(.other, .class, .device_to_host, @intFromEnum(ClassRequestCode.get_status), 0, port_number, 4);
 }
 
 pub fn setupGetTTState(tt_flags: u16, tt_port: u16, tt_state_length: u16) SetupPacket {
-    return setup(.other, .class, .device_to_host, .get_tt_state, tt_flags, tt_port, tt_state_length);
+    return setup(.other, .class, .device_to_host, @intFromEnum(ClassRequestCode.get_tt_state), tt_flags, tt_port, tt_state_length);
 }
 
 pub fn setupResetTT(tt_port: u16) SetupPacket {
-    return setup(.other, .class, .host_to_device, .reset_tt, 0, tt_port, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.reset_tt), 0, tt_port, 0);
 }
 
 pub fn setupSetHubDescriptor(descriptor_type: DescriptorType, descriptor_index: DescriptorIndex, length: u16) SetupPacket {
     const val: u16 = @as(u16, descriptor_type) << 8 | descriptor_index;
-    return setup(.device, .class, .host_to_device, .set_descriptor, val, 0, length);
+    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_descriptor), val, 0, length);
 }
 
 pub fn setupStopTT(tt_port: u16) SetupPacket {
-    return setup(.other, .class, .host_to_device, .stop_tt, 0, tt_port, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.stop_tt), 0, tt_port, 0);
 }
 
 pub fn setupSetHubFeature(selector: FeatureSelector) SetupPacket {
-    return setup(.device, .class, .host_to_device, .set_feature, selector, 0, 0);
+    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_feature), selector, 0, 0);
 }
 
 pub fn setupClearPortFeature(selector: FeatureSelector, port_number: u8, port_indicator: u8) SetupPacket {
     const index: u16 = @as(u16, port_indicator) << 8 | port_number;
-    return setup(.other, .class, .host_to_device, .clear_feature, selector, index, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.clear_feature), selector, index, 0);
 }
 
 pub fn setupSetPortFeature(feature: FeatureSelector, port_number: u8, port_indicator: u8) SetupPacket {
     const index: u16 = @as(u16, port_indicator) | port_number;
-    return setup(.other, .class, .host_to_device, .set_feature, feature, index, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_feature), feature, index, 0);
 }

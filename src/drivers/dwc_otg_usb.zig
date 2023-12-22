@@ -258,7 +258,7 @@ pub fn init(
 // Ugly: this reaches up to the generic layer
 pub fn busInitialize(self: *Self) !*Bus {
     const bus: *Bus = try self.allocator.create(Bus);
-    try bus.init(self, self.root_port.device);
+    try bus.init(self.allocator, self, self.root_port.device);
     return bus;
 }
 
@@ -789,7 +789,7 @@ fn controlTransfer(
     // channels as when they are available.
     const device = endpoint.device;
 
-    log.debug("controlTransfer: performing 'setup' transaction", .{});
+    log.debug("controlTransfer: performing 'setup' transaction with rt = {b}, rq = {d}", .{ @as(u8, @bitCast(setup.request_type)), setup.request });
 
     // TODO check return value, should equal max_packet_size (8) for
     // a Setup token packet to a Control endpoint

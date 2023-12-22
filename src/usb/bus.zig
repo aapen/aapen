@@ -1,5 +1,7 @@
 /// A USB bus is a tree of devices rooted at the built-in hub.
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const log = std.log.scoped(.usb_bus);
 
 // This pair of definitions connects the generic USB subsystem in
@@ -25,7 +27,7 @@ const Error = error{
 hub: Hub = undefined,
 
 // Call this after the hardware is initialized.
-pub fn init(self: *Self, hci: *HCI, root_device: *Device) !void {
+pub fn init(self: *Self, allocator: Allocator, hci: *HCI, root_device: *Device) !void {
     if (root_device == undefined) {
         log.err("Root device is not defined, HCD may not be initialized", .{});
         return Error.NotInitialized;
@@ -41,5 +43,7 @@ pub fn init(self: *Self, hci: *HCI, root_device: *Device) !void {
         .device = root_device,
     };
 
-    try self.hub.initialize();
+    log.debug("Initialize builtin hub", .{});
+
+    try self.hub.initialize(allocator);
 }
