@@ -346,7 +346,6 @@ pub fn getTags(self: *Self, tags: *align(4) anyopaque, tag_words: usize) !void {
 
     // Make sure changes from the GPU are visible to us
     synchronize.dataCacheRangeInvalidate(@intFromPtr(property_buffer), payload_size);
-
     barriers.barrierMemory();
 
     if (property_buffer.code != PropertyRequestHeader.code_response_success) {

@@ -137,7 +137,7 @@ pub const HostPeriodicFifo = packed struct {
     request_queue_top: u8,
 };
 
-pub const HostPort = packed struct {
+pub const HostPortStatusAndControl = packed struct {
     connect: u1, // 0
     connect_changed: u1, // 1
     enabled: u1, // 2
@@ -170,7 +170,7 @@ pub const HostRegisters = extern struct {
     all_channel_interrupts_mask: u32 = 0, // 0x18
     frame_list_base_addr: u32 = 0, // 0x1c
     _unused_padding_1: [8]u32, // 0x20 .. 0x3c
-    port: HostPort, // 0x40
+    port: HostPortStatusAndControl, // 0x40
 };
 
 // ----------------------------------------------------------------------

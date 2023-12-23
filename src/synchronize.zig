@@ -189,3 +189,23 @@ pub fn dataCacheRangeInvalidate(address: u64, length: u64) void {
         remaining_length -= data_cache_line_length;
     }
 }
+
+pub fn dataCacheRangeCleanAndInvalidate(address: u64, length: u64) void {
+    var next_location = address;
+    var remaining_length = length + data_cache_line_length;
+
+    while (true) {
+        asm volatile (
+            \\ dc civac, %[addr]
+            :
+            : [addr] "r" (next_location),
+        );
+
+        if (remaining_length < data_cache_line_length) {
+            break;
+        }
+
+        next_location += data_cache_line_length;
+        remaining_length -= data_cache_line_length;
+    }
+}

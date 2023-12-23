@@ -39,6 +39,7 @@ pub const EndpointDirection = usb.EndpointDirection;
 pub const EndpointNumber = usb.EndpointNumber;
 pub const EndpointType = usb.EndpointType;
 pub const Hub = usb.Hub;
+pub const InterfaceDescriptor = usb.InterfaceDescriptor;
 pub const LangID = usb.LangID;
 pub const PacketSize = usb.PacketSize;
 pub const PID = usb.PID2;
@@ -86,7 +87,7 @@ pub const HostConfig = reg.HostConfig;
 pub const HostFrameInterval = reg.HostFrameInterval;
 pub const HostFrames = reg.HostFrames;
 pub const HostPeriodicFifo = reg.HostPeriodicFifo;
-pub const HostPort = reg.HostPort;
+pub const HostPort = reg.HostPortStatusAndControl;
 pub const HostRegisters = reg.HostRegisters;
 
 // ----------------------------------------------------------------------
@@ -608,6 +609,23 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
         }
     }
 
+    // check if the host port raised the interrupt
+    if (intr_status.port_intr == 1) {
+        const port_status = self.host_registers.port;
+
+        if (port_status.connect_changed == 1) {
+            log.debug("irqHandle: Host port connected changed", .{});
+        }
+
+        if (port_status.enabled_changed == 1) {
+            log.debug("irqHandle: Host port enabled changed", .{});
+        }
+
+        if (port_status.overcurrent_changed == 1) {
+            log.debug("irqHandle: Host port overcurrent changed", .{});
+        }
+    }
+
     // clear the interrupt bits
     self.core_registers.core_interrupt_status = intr_status;
 }
@@ -626,7 +644,7 @@ pub fn getRootPortSpeed(self: *Self) !usb.UsbSpeed {
 // ----------------------------------------------------------------------
 
 // TODO migrate this to the clock
-fn deadline(self: *Self, millis: u32) u64 {
+pub fn deadline(self: *Self, millis: u32) u64 {
     const start_ticks = self.clock.ticks();
     const elapsed_ticks = millis * 1_000; // clock freq is 1Mhz
     return start_ticks + elapsed_ticks;
@@ -773,7 +791,9 @@ const Transaction = struct {
     }
 };
 
-fn controlTransfer(
+pub const empty_slice: []align(DMA_ALIGNMENT) u8 = &.{};
+
+pub fn controlTransfer(
     self: *Self,
     endpoint: *Endpoint,
     setup: *const SetupPacket,
@@ -877,16 +897,21 @@ fn sizeCheck(expected: TransferBytes, actual: TransferBytes) !void {
 // ----------------------------------------------------------------------
 // Endpoint interactions
 // ----------------------------------------------------------------------
-pub fn descriptorQuery(self: *Self, endpoint: *Endpoint, setup_packet: *const SetupPacket, comptime T: type) !T {
+fn descriptorQueryUntyped(self: *Self, endpoint: *Endpoint, setup_packet: *const SetupPacket, expected_size: u16) ![]align(DMA_ALIGNMENT) u8 {
     log.debug("descriptor query (type {d}) on device {d} endpoint {d}", .{ setup_packet.value >> 8, endpoint.device.address, endpoint.number });
-
-    const expected_size: u16 = @sizeOf(T);
     var buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, setup_packet.data_size);
-    defer self.allocator.free(buffer);
 
     const returned = try self.controlTransfer(endpoint, setup_packet, buffer);
 
     try sizeCheck(expected_size, returned);
+
+    return buffer;
+}
+
+pub fn descriptorQuery(self: *Self, endpoint: *Endpoint, setup_packet: *const SetupPacket, comptime T: type) !T {
+    const expected_size: u16 = @sizeOf(T);
+    const buffer = try self.descriptorQueryUntyped(endpoint, setup_packet, @sizeOf(T));
+    defer self.allocator.free(buffer);
 
     const result: *T = std.mem.bytesAsValue(T, buffer[0..expected_size]);
     return result.*;
@@ -899,11 +924,24 @@ pub fn deviceDescriptorQuery(self: *Self, endpoint: *Endpoint, descriptor_index:
     return self.descriptorQuery(endpoint, &setup, DeviceDescriptor);
 }
 
-pub fn configurationDescriptorQuery(self: *Self, endpoint: *Endpoint) !ConfigurationDescriptor {
+pub fn configurationDescriptorQuery(self: *Self, endpoint: *Endpoint, configuration_index: usb.DescriptorIndex) !ConfigurationDescriptor {
     const expected_size = @sizeOf(ConfigurationDescriptor);
-    const setup = usb.setupDescriptorQuery(.configuration, 0, 0, expected_size);
+    const setup = usb.setupDescriptorQuery(.configuration, configuration_index, 0, expected_size);
 
     return self.descriptorQuery(endpoint, &setup, ConfigurationDescriptor);
+}
+
+// This returns the entire configuration hierarchy, including all
+// interfaces and endpoints. In order to construct a buffer big enough
+// you should first use configurationDescriptorQuery and allocate
+// space according to the `total_length` field.
+pub fn configurationTreeGet(self: *Self, endpoint: *Endpoint, configuration_index: usb.DescriptorIndex, expected_size: u16) ![]align(DMA_ALIGNMENT) u8 {
+    log.info("configurationTreeGet: looking for {d} bytes from configuration {d}", .{ expected_size, configuration_index });
+
+    const setup = usb.setupDescriptorQuery(.configuration, configuration_index, 0, expected_size);
+    // The buffer will be populated, but we don't need the
+    // ConfigurationDescriptor constructed from it.
+    return self.descriptorQueryUntyped(endpoint, &setup, expected_size);
 }
 
 pub fn stringDescriptorQuery(self: *Self, endpoint: *Endpoint, index: StringIndex, language: LangID) !StringDescriptor {
@@ -913,10 +951,14 @@ pub fn stringDescriptorQuery(self: *Self, endpoint: *Endpoint, index: StringInde
     return self.descriptorQuery(endpoint, &setup, StringDescriptor);
 }
 
+pub fn stringQuery(self: *Self, endpoint: *Endpoint, index: StringIndex, language: LangID) ![]u8 {
+    const desc = try self.stringDescriptorQuery(endpoint, index, language);
+    return desc.asSlice(self.allocator);
+}
+
 pub fn addressSet(self: *Self, endpoint: *Endpoint, address: DeviceAddress) !u19 {
     log.debug("set address {d} on endpoint {d}", .{ address, endpoint.number });
 
-    const empty_slice: []align(DMA_ALIGNMENT) u8 = &.{};
     const setup = usb.setupSetAddress(address);
     const ret = self.controlTransfer(endpoint, &setup, empty_slice);
 
@@ -945,8 +987,12 @@ pub const Device = struct {
     address: usb.DeviceAddress,
     endpoint_0: Endpoint,
     device_descriptor: usb.DeviceDescriptor,
+    configuration_descriptor: usb.ConfigurationDescriptor,
+    interface_descriptor: usb.InterfaceDescriptor,
     manufacturer: []u8,
     product_name: []u8,
+    configuration: []u8,
+    interface: []u8,
 
     pub fn init(allocator: Allocator) !*Device {
         var device = try allocator.create(Device);
@@ -958,8 +1004,12 @@ pub const Device = struct {
             .address = usb.DEFAULT_ADDRESS,
             .endpoint_0 = .{ .number = 0, .device = device },
             .device_descriptor = undefined,
-            .manufacturer = undefined,
-            .product_name = undefined,
+            .configuration_descriptor = undefined,
+            .interface_descriptor = undefined,
+            .manufacturer = "",
+            .product_name = "",
+            .configuration = "",
+            .interface = "",
         };
 
         return device;
@@ -977,13 +1027,52 @@ pub const Device = struct {
         self.determineProductName() catch |err| {
             log.warn("Could not read manufacturer and product name: {any}", .{err});
         };
+
+        if (self.device_descriptor.configuration_count >= 1) {
+            self.configuration_descriptor = try host.configurationDescriptorQuery(&self.endpoint_0, 0);
+
+            if (self.configuration_descriptor.configuration > 0) {
+                self.determineConfiguration() catch |err| {
+                    log.warn("Could not read configuration value for index {d}: {any}", .{ self.configuration_descriptor.configuration, err });
+                };
+            }
+
+            self.configuration_descriptor.dump(self.configuration);
+
+            if (self.configuration_descriptor.interface_count >= 1) {
+                const config_tree_size = self.configuration_descriptor.total_length;
+                const buffer = try self.host.configurationTreeGet(&self.endpoint_0, 0, config_tree_size);
+                root.debug.kernelMessage(buffer);
+                //                self.allocator.free(buffer);
+
+                // self.interface_descriptor = try host.interfaceDescriptorQuery(&self.endpoint_0, 0);
+
+                // if (self.interface_descriptor.interface_string > 0) {
+                //     self.determineInterface() catch |err| {
+                //         log.warn("Could not read interface name for index {d}: {any}", .{ self.interface_descriptor.interface_string, err });
+                //     };
+                // }
+
+                // self.interface_descriptor.dump(self.interface);
+            }
+        }
     }
 
     fn determineProductName(self: *Device) !void {
         const mfg = try self.host.stringDescriptorQuery(&self.endpoint_0, self.device_descriptor.manufacturer_name, LangID.en_US);
-        self.manufacturer = try mfg.asSlice(self.host.allocator);
+        self.manufacturer = try mfg.asSlice(self.allocator);
 
         const prod = try self.host.stringDescriptorQuery(&self.endpoint_0, self.device_descriptor.product_name, LangID.en_US);
-        self.product_name = try prod.asSlice(self.host.allocator);
+        self.product_name = try prod.asSlice(self.allocator);
+    }
+
+    fn determineConfiguration(self: *Device) !void {
+        const val = try self.host.stringDescriptorQuery(&self.endpoint_0, self.configuration_descriptor.configuration, LangID.en_US);
+        self.configuration = try val.asSlice(self.allocator);
+    }
+
+    fn determineInterface(self: *Device) !void {
+        const val = try self.host.stringDescriptorQuery(&self.endpoint_0, self.interface_descriptor.interface_string, LangID.en_US);
+        self.interface = try val.asSlice(self.allocator);
     }
 };

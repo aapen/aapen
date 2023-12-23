@@ -37,6 +37,8 @@ const SetupPacket = transaction.SetupPacket;
 const setup = transaction.setup;
 
 pub const Hub = struct {
+    const reset_timeout = 100;
+
     const Port = struct {
         connected: bool,
         enabled: bool,
@@ -45,10 +47,12 @@ pub const Hub = struct {
         reset: bool,
         powered: bool,
         device_speed: UsbSpeed,
+        device: *Device,
     };
 
     const Error = error{
         InvalidResponse,
+        Timeout,
     };
 
     allocator: Allocator = undefined,
@@ -56,14 +60,10 @@ pub const Hub = struct {
     device: *Device,
     descriptor: HubDescriptor = undefined,
     port_count: u8 = undefined,
-    configuration_descriptor: ConfigurationDescriptor = undefined,
     port: []Port = undefined,
 
     pub fn initialize(self: *Hub, allocator: Allocator) !void {
         self.allocator = allocator;
-
-        // get configuration descriptor
-        self.configuration_descriptor = try self.host.configurationDescriptorQuery(&self.device.endpoint_0);
 
         // get hub descriptor
         const setup_packet = setupGetHubDescriptor(0, @sizeOf(HubDescriptor));
@@ -80,9 +80,14 @@ pub const Hub = struct {
 
         self.port = try self.allocator.alloc(Port, self.port_count);
 
-        for (1..self.port_count + 1) |i| {
-            log.debug("Port status check {d}", .{i});
-            try self.checkPort(@truncate(i));
+        for (0..self.port_count) |i| {
+            const port_number: u8 = @truncate(i + 1);
+            log.debug("Port status check {d}", .{port_number});
+            try self.checkPort(port_number);
+
+            if (self.port[i].connected) {
+                try self.initializePortDevice(port_number);
+            }
         }
 
         self.dump();
@@ -96,15 +101,63 @@ pub const Hub = struct {
     pub fn checkPort(self: *Hub, port_number: u8) !void {
         // ports are numbered from 1, arrays count from 0
         const i = port_number - 1;
+        const status = try self.getPortStatus(port_number);
+        self.port[i].connected = status.isConnected();
+        self.port[i].enabled = status.isEnabled();
+        self.port[i].suspended = status.isSuspended();
+        self.port[i].overcurrent = status.isOvercurrent();
+        self.port[i].reset = status.isReset();
+        self.port[i].powered = status.isPowered();
+        self.port[i].device_speed = status.deviceSpeed();
+
+        log.debug("Port {d} status 0x{x:0>16}, change 0x{x:0>16}", .{ port_number, @as(u16, @bitCast(status.port_status)), @as(u16, @bitCast(status.port_change)) });
+    }
+
+    fn getPortStatus(self: *Hub, port_number: u8) !PortStatus {
         const setup_packet = setupGetPortStatus(port_number);
-        const ret = try self.host.descriptorQuery(&self.device.endpoint_0, &setup_packet, PortStatus);
-        self.port[i].connected = ret.isConnected();
-        self.port[i].enabled = ret.isEnabled();
-        self.port[i].suspended = ret.isSuspended();
-        self.port[i].overcurrent = ret.isOvercurrent();
-        self.port[i].reset = ret.isReset();
-        self.port[i].powered = ret.isPowered();
-        self.port[i].device_speed = ret.deviceSpeed();
+        return self.host.descriptorQuery(&self.device.endpoint_0, &setup_packet, PortStatus);
+    }
+
+    fn initializePortDevice(self: *Hub, port_number: u8) !void {
+        const i = port_number - 1;
+        var port_device = try Device.init(self.allocator);
+
+        // Reset the device, so it will appear with address 0
+        try self.resetPort(port_number);
+
+        // Initialize the device, this will assign it an address
+        try port_device.initialize(self.host, self.port[i].device_speed);
+        self.port[i].device = port_device;
+    }
+
+    fn resetPort(self: *Hub, port_number: u8) !void {
+        // set port feature PORT_RESET
+        const feature = PortFeature.port_reset;
+        try self.setPortFeature(port_number, feature);
+
+        // it will be turned off by the hub
+        // poll port feature until PORT_RESET is observed as 0
+        const expected_change: PortStatus = .{ .port_change = .{ .reset_changed = .changed } };
+        return self.waitForPortStatus(port_number, expected_change, Hub.reset_timeout);
+    }
+
+    fn setPortFeature(self: *Hub, port_number: u8, feature: PortFeature) !void {
+        const setup_packet = setupSetPortFeature(feature, port_number, 0);
+        const ret = try self.host.controlTransfer(&self.device.endpoint_0, &setup_packet, HCI.empty_slice);
+        log.debug("setPortFeature {d} with feature {any} returned {d}", .{ port_number, feature, ret });
+    }
+
+    fn waitForPortStatus(self: *Hub, port_number: u8, expected: PortStatus, timeout: u16) !void {
+        const expected_bits: u32 = @as(u32, @bitCast(expected));
+        const deadline = self.host.deadline(timeout);
+        while (self.host.clock.ticks() < deadline) {
+            const status = try self.getPortStatus(port_number);
+            const actual_bits: u32 = @as(u32, @bitCast(status));
+            if (expected_bits & actual_bits != 0) {
+                return;
+            }
+        }
+        return Error.Timeout;
     }
 
     pub fn dump(self: *const Hub) void {
@@ -187,49 +240,49 @@ pub const PortStatus = packed struct {
         connected: enum(u1) {
             not_connected = 0b0,
             connected = 0b1,
-        },
+        } = .not_connected,
         enabled: enum(u1) {
             disabled = 0b0,
             enabled = 0b1,
-        },
+        } = .disabled,
         suspended: enum(u1) {
             not_suspended = 0b0,
             suspended = 0b1,
-        },
-        overcurrent: OvercurrentStatusP,
+        } = .not_suspended,
+        overcurrent: OvercurrentStatusP = .not_detected,
         reset: enum(u1) {
             not_asserted = 0b0,
             asserted = 0b1,
-        },
+        } = .not_asserted,
         _reserved_0: u3 = 0,
         power: enum(u1) {
             off = 0b0,
             on = 0b1,
-        },
+        } = .off,
         low_speed_device: enum(u1) {
             not_low_speed = 0b0,
             low_speed = 0b1,
-        },
+        } = .not_low_speed,
         high_speed_device: enum(u1) {
             not_high_speed = 0b0,
             high_speed = 0b1,
-        },
+        } = .not_high_speed,
         test_mode: enum(u1) {
             disabled = 0b0,
             enabled = 0b1,
-        },
+        } = .disabled,
         indicator_control: enum(u1) {
             default_colors = 0b0,
             controllable_colors = 0b1,
-        },
-        _reserved_1: u3,
-    },
+        } = .default_colors,
+        _reserved_1: u3 = 0,
+    } = .{},
     port_change: packed struct {
-        connected_changed: ChangeStatusP,
-        enabled_changed: ChangeStatusP,
-        suspended_changed: ChangeStatusP,
-        overcurrent_changed: ChangeStatusP,
-        reset_changed: ChangeStatusP,
+        connected_changed: ChangeStatusP = .not_changed,
+        enabled_changed: ChangeStatusP = .not_changed,
+        suspended_changed: ChangeStatusP = .not_changed,
+        overcurrent_changed: ChangeStatusP = .not_changed,
+        reset_changed: ChangeStatusP = .not_changed,
         _reserved: u11 = 0,
     },
 
@@ -313,31 +366,30 @@ pub const ClassRequestCode = enum(u8) {
     stop_tt = 11,
 };
 
-pub const FeatureSelector = union {
-    hub_feature: enum(u16) {
-        c_hub_local_power = 0,
-        c_hub_over_current = 1,
-    },
-    port_feature: enum(u16) {
-        port_connection = 0,
-        port_enable = 1,
-        port_suspend = 2,
-        port_over_current = 3,
-        port_reset = 4,
-        port_power = 8,
-        port_low_speed = 9,
-        c_port_connection = 16,
-        c_port_enable = 17,
-        c_port_suspend = 18,
-        c_port_over_current = 19,
-        c_port_reset = 20,
-        port_test = 21,
-        port_indicator = 22,
-    },
+pub const HubFeature = enum(u16) {
+    c_hub_local_power = 0,
+    c_hub_over_current = 1,
 };
 
-pub fn setupClearHubFeature(selector: FeatureSelector) SetupPacket {
-    return setup(.device, .class, .host_to_device, .clear_feature, selector, 0, 0);
+pub const PortFeature = enum(u16) {
+    port_connection = 0,
+    port_enable = 1,
+    port_suspend = 2,
+    port_over_current = 3,
+    port_reset = 4,
+    port_power = 8,
+    port_low_speed = 9,
+    c_port_connection = 16,
+    c_port_enable = 17,
+    c_port_suspend = 18,
+    c_port_over_current = 19,
+    c_port_reset = 20,
+    port_test = 21,
+    port_indicator = 22,
+};
+
+pub fn setupClearHubFeature(selector: HubFeature) SetupPacket {
+    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequestCode.clear_feature), @bitCast(selector), 0, 0);
 }
 
 pub const TTDirection = enum(u1) {
@@ -394,16 +446,16 @@ pub fn setupStopTT(tt_port: u16) SetupPacket {
     return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.stop_tt), 0, tt_port, 0);
 }
 
-pub fn setupSetHubFeature(selector: FeatureSelector) SetupPacket {
-    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_feature), selector, 0, 0);
+pub fn setupSetHubFeature(selector: HubFeature) SetupPacket {
+    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_feature), @bitCast(selector), 0, 0);
 }
 
-pub fn setupClearPortFeature(selector: FeatureSelector, port_number: u8, port_indicator: u8) SetupPacket {
+pub fn setupClearPortFeature(selector: PortFeature, port_number: u8, port_indicator: u8) SetupPacket {
     const index: u16 = @as(u16, port_indicator) << 8 | port_number;
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.clear_feature), selector, index, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.clear_feature), @intFromEnum(selector), index, 0);
 }
 
-pub fn setupSetPortFeature(feature: FeatureSelector, port_number: u8, port_indicator: u8) SetupPacket {
+pub fn setupSetPortFeature(feature: PortFeature, port_number: u8, port_indicator: u8) SetupPacket {
     const index: u16 = @as(u16, port_indicator) | port_number;
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_feature), feature, index, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_feature), @intFromEnum(feature), index, 0);
 }

@@ -123,6 +123,18 @@ pub const ConfigurationDescriptor = extern struct {
         _reserved_1: u1 = 1, // unused since USB 2.0
     },
     power_max: u8,
+
+    pub fn dump(self: *const ConfigurationDescriptor, configuration: []const u8) void {
+        log.debug("ConfigurationDescriptor [", .{});
+        log.debug("  total length = {d}", .{self.total_length});
+        log.debug("  interface count = {d}", .{self.interface_count});
+        log.debug("  configuration value = {d}", .{self.configuration_value});
+        log.debug("  configuration (string index {d}) = '{s}'", .{ self.configuration, configuration });
+        log.debug("  remote wakeup = {d}", .{self.attributes.remote_wakeup});
+        log.debug("  self powered = {d}", .{self.attributes.self_powered});
+        log.debug("  power max = {d} mA", .{self.power_max});
+        log.debug("]", .{});
+    }
 };
 
 pub const InterfaceDescriptor = extern struct {
@@ -134,6 +146,16 @@ pub const InterfaceDescriptor = extern struct {
     interface_subclass: u8,
     interface_protocol: u8,
     interface_string: StringIndex,
+
+    pub fn dump(self: *const InterfaceDescriptor, interface_string: []const u8) void {
+        log.debug("InterfaceDescriptor [", .{});
+        log.debug("  interface number = {d}", .{self.interface_number});
+        log.debug("  alternate_setting = {d}", .{self.alternate_setting});
+        log.debug("  endpoint count = {d}", .{self.endpoint_count});
+        log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ self.interface_class, self.interface_subclass, self.interface_protocol });
+        log.debug("  interface string (index {d}) = '{s}'", .{ self.interface_string, interface_string });
+        log.debug("]", .{});
+    }
 };
 
 pub const IsoSynchronizationType = enum(u2) {
