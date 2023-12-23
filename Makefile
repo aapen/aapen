@@ -4,7 +4,8 @@ ZIG_BUILD_ARGS  = -Doptimize=Debug -freference-trace
 # Could we possibly have a zig build command that would simply output
 # all of the different board flavors? Otherwise we can make this
 # a simple make assignment.
-BOARD_FLAVORS   = $(shell echo pi3 pi4 pi400 pi5)
+#BOARD_FLAVORS   = $(shell echo pi3 pi4 pi400 pi5)
+BOARD_FLAVORS   = $(shell echo pi3)
 
 # Change this to set the board flavor used in the emulator.
 # Must be one in the list above.

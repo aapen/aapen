@@ -89,7 +89,9 @@ pub fn putc(self: *Self, ch: u8) void {
             _ = Serial.putc(0x08);
         },
         else => {
-            _ = Serial.putc(ch);
+            if (std.ascii.isPrint(ch)) {
+                _ = Serial.putc(ch);
+            }
         },
     }
     self.char_buffer_console.emit(ch);
