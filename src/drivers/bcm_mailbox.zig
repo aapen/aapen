@@ -15,6 +15,8 @@ const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
 
+const synchronize = @import("../synchronize.zig");
+
 extern fn spinDelay(delay: u32) void;
 
 const Self = @This();
@@ -335,10 +337,15 @@ pub fn getTags(self: *Self, tags: *align(4) anyopaque, tag_words: usize) !void {
     const sentinel_ptr: *u32 = @ptrCast(@alignCast(tags_area + payload_size));
     sentinel_ptr.* = END_TAG;
 
+    // Make sure the changes will be visible to the GPU
     barriers.barrierMemoryWrite();
+    synchronize.dataCacheRangeClean(@intFromPtr(property_buffer), payload_size);
 
     const buffer_address_mailbox: u32 = @truncate(@intFromPtr(property_buffer));
     try self.sendReceive(buffer_address_mailbox, MailboxChannel.property_arm_to_vc);
+
+    // Make sure changes from the GPU are visible to us
+    synchronize.dataCacheRangeInvalidate(@intFromPtr(property_buffer), payload_size);
 
     barriers.barrierMemory();
 

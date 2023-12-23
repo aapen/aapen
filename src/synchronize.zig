@@ -8,6 +8,12 @@ const cpu = arch.cpu;
 const InterruptLevel = cpu.InterruptLevel;
 
 // ----------------------------------------------------------------------
+// Architecture-specific constants
+// ----------------------------------------------------------------------
+const root = @import("root");
+const data_cache_line_length = root.HAL.data_cache_line_length;
+
+// ----------------------------------------------------------------------
 // Critical sections
 // ----------------------------------------------------------------------
 
@@ -139,3 +145,47 @@ pub const Spinlock = struct {
         }
     }
 };
+
+// ----------------------------------------------------------------------
+// Cache coherence and maintenance
+// ----------------------------------------------------------------------
+
+pub fn dataCacheRangeClean(address: u64, length: u64) void {
+    var next_location = address;
+    var remaining_length = length + data_cache_line_length;
+
+    while (true) {
+        asm volatile (
+            \\ dc cvac, %[addr]
+            :
+            : [addr] "r" (next_location),
+        );
+
+        if (remaining_length < data_cache_line_length) {
+            break;
+        }
+
+        next_location += data_cache_line_length;
+        remaining_length -= data_cache_line_length;
+    }
+}
+
+pub fn dataCacheRangeInvalidate(address: u64, length: u64) void {
+    var next_location = address;
+    var remaining_length = length + data_cache_line_length;
+
+    while (true) {
+        asm volatile (
+            \\ dc ivac, %[addr]
+            :
+            : [addr] "r" (next_location),
+        );
+
+        if (remaining_length < data_cache_line_length) {
+            break;
+        }
+
+        next_location += data_cache_line_length;
+        remaining_length -= data_cache_line_length;
+    }
+}
