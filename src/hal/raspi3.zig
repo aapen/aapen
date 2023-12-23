@@ -8,6 +8,8 @@ pub const peripheral_base: u64 = 0x3f00_0000;
 pub const heap_start: [*]u8 = @extern([*]u8, .{ .name = "__heap_start" });
 pub const heap_end: usize = device_start - 1;
 
+pub const data_cache_line_length: usize = 64;
+
 // ARM devices
 const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
 const arm_local_timer = @import("../drivers/arm_local_timer.zig");
