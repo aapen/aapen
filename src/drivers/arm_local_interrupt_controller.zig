@@ -173,7 +173,6 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
                 pending_2_received = true;
             },
             11 => {
-                root.debug.kernelMessage("U!");
                 // Basic IRQ bit 11 -> GPU IRQ 9 -> USB_HCI
                 self.irqHandleBasic(.USB_HCI);
             },

@@ -25,11 +25,11 @@ pub const device_start: u64 = HAL.device_start;
 
 // These are choices about memory protection
 // These must match the value written to MAIR_EL1 in mmu.S
-pub const mair_device_ng_nr_ne: u8 = 0x0;
+//pub const mair_device_ng_nr_ne: u8 = 0x0;
 pub const mair_device_ng_nr_ne_index: u2 = 0;
 
-pub const mair_normal_nc: u8 = 0x44;
-pub const mair_normal_nc_index: u2 = 1;
+//pub const mair_normal_nc: u8 = 0xff;
+pub const mair_normal_nc_index: u2 = 2;
 
 //pub const mair_value: u64 = (mair_normal_nc << (8 * mair_normal_nc_index)) | (mair_device_ng_nr_ne << (8 * mair_device_ng_nr_ne_index));
 

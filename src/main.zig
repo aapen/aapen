@@ -227,8 +227,8 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
         .naa = .trap_disable,
         .ee = .little_endian,
         .e0e = .little_endian,
-        .i_cache = .disabled,
-        .d_cache = .disabled,
+        .i_cache = .enabled,
+        .d_cache = .enabled,
         .wxn = 0,
     });
 
