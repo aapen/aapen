@@ -349,6 +349,8 @@ pub fn getTags(self: *Self, tags: *align(4) anyopaque, tag_words: usize) !void {
     barriers.barrierMemory();
 
     if (property_buffer.code != PropertyRequestHeader.code_response_success) {
+        std.log.warn("mailbox transaction unsuccessful: 0x{x:0>8}", .{property_buffer.code});
+        root.debug.sliceDumpAsWords(raw_property_buffer);
         return TagError.Unsuccessful;
     }
 

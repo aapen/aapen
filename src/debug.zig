@@ -10,6 +10,8 @@ const serial = @import("serial.zig");
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
+const string = @import("forty/string.zig");
+
 pub fn log(
     comptime level: std.log.Level,
     comptime scope: @TypeOf(.EnumLiteral),
@@ -35,6 +37,41 @@ pub fn kprint(comptime fmt: []const u8, args: anytype) void {
         root.main_console.print(fmt, args) catch {};
     } else {
         serial.writer.print(fmt, args) catch {};
+    }
+}
+
+pub fn sliceDumpAsWords(buf: []const u8) void {
+    const buf_words = std.mem.bytesAsSlice(u32, buf);
+    const len = buf_words.len;
+    var offset: usize = 0;
+
+    while (offset < len) {
+        kprint("{x:16}  {x:0>8}\n", .{@intFromPtr(buf_words.ptr) + offset, buf_words[offset]});
+        offset += 1;
+    }
+}
+
+pub fn sliceDump(buf: []const u8) void {
+    const len = buf.len;
+    var offset: usize = 0;
+
+    while (offset < len) {
+        kprint("{x:16}  ", .{@intFromPtr(buf.ptr) + offset});
+
+        const bound = @min(16, (len - offset));
+
+        for (0..bound) |iByte| {
+            kprint("{x:0>2} ", .{buf[offset + iByte]});
+            if (iByte == 7) {
+                kprint("  ", .{});
+            }
+        }
+        kprint("  |", .{});
+        for (0..bound) |iByte| {
+            kprint("{c}", .{string.toPrintable(buf[offset + iByte])});
+        }
+        kprint("|\n", .{});
+        offset += 16;
     }
 }
 
