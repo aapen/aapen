@@ -18,6 +18,9 @@ var serial_lock = Spinlock.init("serial output", false);
 
 pub fn putc(ch: u8) void {
     // TODO wait until there is space to transmit
+    if (ch == '\n') {
+        root.hal.uart.putc('\r');
+    }
     root.hal.uart.putc(ch);
 }
 
