@@ -1,3 +1,4 @@
+const std = @import("std");
 const root = @import("root");
 const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
@@ -27,27 +28,24 @@ const RateSelector = enum(u32) {
     min = 0x00030007,
 };
 
-pub const ClockResult = enum {
-    unknown,
-    failed,
-    no_such_device,
-    clock_on,
-    clock_off,
+pub const ClockResult = enum(u64) {
+    unknown = 0,
+    failed = 1,
+    no_such_device = 2,
+    clock_on = 3,
+    clock_off = 4,
 };
 
 const PropertyClock = extern struct {
     tag: PropertyTag,
     clock: u32,
-    param2: extern union {
-        state: u32,
-        rate: u32,
-    },
+    param2: u32,
 
     pub fn initStateQuery(clock: ClockId) @This() {
         return .{
             .tag = PropertyTag.init(.rpi_firmware_get_clock_state, 1, 2),
             .clock = @intFromEnum(clock),
-            .param2 = .{ .state = 0 },
+            .param2 = 0,
         };
     }
 
@@ -55,15 +53,17 @@ const PropertyClock = extern struct {
         return .{
             .tag = PropertyTag.init(.rpi_firmware_set_clock_state, 2, 2),
             .clock = @intFromEnum(clock),
-            .param2 = .{ .state = @intFromEnum(desired_state) },
+            .param2 = @intFromEnum(desired_state),
         };
     }
 
     pub fn initRateQuery(clock: ClockId, rate_selector: RateSelector) @This() {
+        const tag = @intFromEnum(rate_selector);
+
         return .{
-            .tag = PropertyTag.init(.rpi_firmware_get_clock_rate, 1, 2),
+            .tag = PropertyTag.init(@enumFromInt(tag), 1, 2),
             .clock = @intFromEnum(clock),
-            .param2 = .{ .rate = @intFromEnum(rate_selector) },
+            .param2 = 0,
         };
     }
 };
@@ -85,7 +85,48 @@ const PropertyClockRateControl = extern struct {
 };
 
 pub const PeripheralClockController = struct {
+    pub const VTable = struct {
+        clockRateGet: *const fn (controller: u64, clock_id: u64) u64,
+        clockStateGet: *const fn (controller: u64, clock_id: u64) u64,
+    };
+
     mailbox: *Mailbox,
+    vtable: VTable = .{
+        .clockRateGet = clockRateGetShim,
+        .clockStateGet = clockStateGetShim,
+    },
+
+    fn clockRateGetShim(controller: u64, clock_id: u64) u64 {
+        const self: *PeripheralClockController = @ptrFromInt(controller);
+
+        if (std.meta.intToEnum(ClockId, clock_id)) |clk| {
+            if (self.clockRateCurrent(clk)) |rate| {
+                return rate;
+            } else |err| {
+                std.log.warn("error querying clock rate: {any}", .{err});
+                return 0;
+            }
+        } else |_| {
+            std.log.warn("invalid clock id", .{});
+            return 0;
+        }
+    }
+
+    fn clockStateGetShim(controller: u64, clock_id: u64) u64 {
+        const self: *PeripheralClockController = @ptrFromInt(controller);
+
+        if (std.meta.intToEnum(ClockId, clock_id)) |clk| {
+            if (self.clockState(clk)) |state| {
+                return @intFromEnum(state);
+            } else |err| {
+                _ = err;
+                return 0;
+            }
+        } else |_| {
+            std.log.warn("invalid clock id", .{});
+            return 0;
+        }
+    }
 
     pub fn init(mailbox: *Mailbox) PeripheralClockController {
         return .{
@@ -107,9 +148,9 @@ pub const PeripheralClockController = struct {
     }
 
     fn clockRate(self: *PeripheralClockController, clock_id: ClockId, selector: RateSelector) !u32 {
-        const query = PropertyClock.initRateQuery(clock_id, selector);
+        var query = PropertyClock.initRateQuery(clock_id, selector);
         try self.mailbox.getTag(&query);
-        return query.param1.rate;
+        return query.param2;
     }
 
     pub fn clockRateCurrent(self: *PeripheralClockController, clock_id: ClockId) !u32 {
@@ -134,6 +175,12 @@ pub const PeripheralClockController = struct {
         const control = PropertyClock.initStateControl(clock_id, desired_state);
         try self.mailbox.getTag(&control);
         return decode(control.param1.state);
+    }
+
+    fn clockState(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {
+        const query = PropertyClock.initStateQuery(clock_id);
+        try self.mailbox.getTag(&query);
+        return decode(query.clock);
     }
 
     pub fn clockOn(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {

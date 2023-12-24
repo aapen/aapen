@@ -302,10 +302,10 @@ pub fn getTag(self: *Self, tag: anytype) !void {
     if (!@hasField(Tag, "tag")) @compileError("tag field missing, expected: tag: PropertyTag");
     if (@TypeOf(tag.tag) != PropertyTag) @compileError("tag expected type PropertyTag, found: " ++ @typeName(@TypeOf(tag.tag)));
 
-    const property_tag: *PropertyTag = @ptrCast(tag);
+    const property_tag: *PropertyTag = @ptrCast(@constCast(tag));
     const tag_size = @sizeOf(Tag);
 
-    try self.getTags(property_tag, tag_size);
+    try self.getTags(property_tag, tag_size / @sizeOf(u32));
 
     property_tag.value_length &= VALUE_LENGTH_RESPONSE;
     if (property_tag.value_length == 0) {

@@ -97,6 +97,18 @@ finish
   invoke-2r                                                 ( Call instance function, 0 return means failed )
 ;
 
+: get-clock
+  clocks
+  [[ clocks Clocks.vtable Clocks.VTable.clockRateGet +]] @
+  invoke-2r
+;
+
+: clock-state
+  clocks
+  [[ clocks Clocks.vtable Clocks.VTable.clockStateGet +]] @
+  invoke-2r
+;
+
 (Drawing)
 : draw-char (bg fg y x c -- : Draw character at position)
   fb

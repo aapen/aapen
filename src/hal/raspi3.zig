@@ -20,6 +20,7 @@ const bcm_dma = @import("../drivers/bcm_dma.zig");
 const bcm_gpio = @import("../drivers/bcm_gpio.zig");
 const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
 const bcm_board_info = @import("../drivers/bcm_board_info.zig");
+const bcm_peripheral_clocks = @import("../drivers/bcm_peripheral_clocks.zig");
 const bcm_power = @import("../drivers/bcm_power.zig");
 const bcm_video_controller = @import("../drivers/bcm_video_controller.zig");
 
@@ -33,6 +34,7 @@ pub const DMA = bcm_dma;
 pub const InterruptController = arm_local_interrupt;
 pub const GPIO = bcm_gpio;
 pub const Mailbox = bcm_mailbox;
+pub const PeripheralClockController = bcm_peripheral_clocks.PeripheralClockController;
 pub const PowerController = bcm_power;
 pub const SOC = simple_bus;
 pub const Timer = arm_local_timer.Timer;
@@ -50,6 +52,7 @@ dma: DMA,
 interrupt_controller: *InterruptController,
 gpio: GPIO,
 mailbox: Mailbox,
+peripheral_clock_controller: PeripheralClockController,
 power_controller: PowerController,
 uart: Uart,
 soc: SOC,
@@ -80,6 +83,8 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
 
     self.board_info_controller = BoardInfoController.init(&self.mailbox);
+
+    self.peripheral_clock_controller = PeripheralClockController.init(&self.mailbox);
 
     self.power_controller = PowerController.init(&self.mailbox);
 

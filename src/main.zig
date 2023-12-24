@@ -168,6 +168,7 @@ fn kernelInit() void {
     supplyAddress("char-buffer", @intFromPtr(char_buffer));
     supplyAddress("console", @intFromPtr(main_console));
     supplyAddress("hal", @intFromPtr(hal));
+    supplyAddress("clocks", @intFromPtr(&hal.peripheral_clock_controller));
     supplyAddress("board", @intFromPtr(&diagnostics.board));
     supplyAddress("mring", @intFromPtr(&debug.mring_storage));
 
