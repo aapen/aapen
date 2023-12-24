@@ -102,8 +102,7 @@ pub const PeripheralClockController = struct {
         if (std.meta.intToEnum(ClockId, clock_id)) |clk| {
             if (self.clockRateCurrent(clk)) |rate| {
                 return rate;
-            } else |err| {
-                std.log.warn("error querying clock rate: {any}", .{err});
+            } else |_| {
                 return 0;
             }
         } else |_| {
@@ -118,8 +117,7 @@ pub const PeripheralClockController = struct {
         if (std.meta.intToEnum(ClockId, clock_id)) |clk| {
             if (self.clockState(clk)) |state| {
                 return @intFromEnum(state);
-            } else |err| {
-                _ = err;
+            } else |_| {
                 return 0;
             }
         } else |_| {
