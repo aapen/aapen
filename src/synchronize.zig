@@ -149,6 +149,9 @@ pub const Spinlock = struct {
 // ----------------------------------------------------------------------
 // Cache coherence and maintenance
 // ----------------------------------------------------------------------
+pub fn dataCacheSliceClean(buf: []u8) void {
+    dataCacheRangeClean(@intFromPtr(buf.ptr), buf.len);
+}
 
 pub fn dataCacheRangeClean(address: u64, length: u64) void {
     var next_location = address;
@@ -170,6 +173,10 @@ pub fn dataCacheRangeClean(address: u64, length: u64) void {
     }
 }
 
+pub fn dataCacheSliceInvalidate(buf: []u8) void {
+    dataCacheRangeInvalidate(@intFromPtr(buf.ptr), buf.len);
+}
+
 pub fn dataCacheRangeInvalidate(address: u64, length: u64) void {
     var next_location = address;
     var remaining_length = length + data_cache_line_length;
@@ -188,6 +195,10 @@ pub fn dataCacheRangeInvalidate(address: u64, length: u64) void {
         next_location += data_cache_line_length;
         remaining_length -= data_cache_line_length;
     }
+}
+
+pub fn dataCacheSliceCleanAndInvalidate(buf: []u8) void {
+    dataCacheRangeCleanAndInvalidate(@intFromPtr(buf.ptr), buf.len);
 }
 
 pub fn dataCacheRangeCleanAndInvalidate(address: u64, length: u64) void {
