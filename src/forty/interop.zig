@@ -39,7 +39,6 @@ fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth) Forth
         2 => {
             const arg1 = try forth.stack.pop();
             const arg2 = try forth.stack.pop();
-            if (pushResult) result = func(arg1, arg2);
             if (pushResult) {
                 result = func(arg1, arg2);
             } else {
