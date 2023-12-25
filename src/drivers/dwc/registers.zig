@@ -1,3 +1,6 @@
+const std = @import("std");
+const log = std.log.scoped(.dwc_otg_usb_channel);
+
 const usb = @import("../../usb.zig");
 
 pub const ChannelCharacteristics = packed struct {
@@ -43,7 +46,7 @@ pub const ChannelInterrupt = packed struct {
     frame_list_rollover: u1 = 0, // 13
     _reserved_18_31: u18 = 0, // 14..31
 
-    pub fn isStatusNakNyet(self: *ChannelInterrupt) bool {
+    pub fn isStatusNakNyet(self: *const ChannelInterrupt) bool {
         const st: u32 = @bitCast(self.*);
         const nak_mask: u32 = @bitCast(ChannelInterrupt{
             .nak_response_received = 1,
@@ -52,7 +55,7 @@ pub const ChannelInterrupt = packed struct {
         return (st & nak_mask) != 0;
     }
 
-    pub fn isStatusError(self: *ChannelInterrupt) bool {
+    pub fn isStatusError(self: *const ChannelInterrupt) bool {
         const st: u32 = @bitCast(self.*);
         const error_mask: u32 = @bitCast(ChannelInterrupt{
             .ahb_error = 1,
@@ -64,6 +67,39 @@ pub const ChannelInterrupt = packed struct {
         });
 
         return (st & error_mask) != 0;
+    }
+
+    pub fn debugDecode(self: *const ChannelInterrupt) void {
+        if (self.transfer_completed == 1) {
+            log.debug("        xfer complete", .{});
+        }
+        if (self.halted == 1) {
+            log.debug("        halted", .{});
+        }
+        if (self.stall_response_received == 1) {
+            log.debug("        stall", .{});
+        }
+        if (self.nak_response_received == 1) {
+            log.debug("        nak", .{});
+        }
+        if (self.ack_response_received == 1) {
+            log.debug("        ack", .{});
+        }
+        if (self.nyet_response_received == 1) {
+            log.debug("        nyet", .{});
+        }
+        if (self.transaction_error == 1) {
+            log.debug("        transaction error", .{});
+        }
+        if (self.babble_error == 1) {
+            log.debug("        babble_error", .{});
+        }
+        if (self.frame_overrun == 1) {
+            log.debug("        frame overrun", .{});
+        }
+        if (self.data_toggle_error == 1) {
+            log.debug("        data toggle error", .{});
+        }
     }
 };
 

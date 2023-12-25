@@ -1,6 +1,8 @@
 const std = @import("std");
 const log = std.log.scoped(.dwc_otg_usb_channel);
 
+const root = @import("root");
+
 const arch = @import("../../architecture.zig");
 const cpu = arch.cpu;
 
@@ -50,10 +52,15 @@ pub const Transfer = struct {
 };
 
 pub const CompletionHandler = struct {
-    callback: *const fn (*const CompletionHandler, *Self, data: []u8) void,
+    callbackCompleted: *const fn (*const CompletionHandler, *Self, data: []u8) void,
+    callbackHalted: *const fn (*const CompletionHandler, *Self) void,
 
-    fn invoke(self: *const CompletionHandler, channel: *Self, data: []u8) void {
-        self.callback(self, channel, data);
+    fn completed(self: *const CompletionHandler, channel: *Self, data: []u8) void {
+        self.callbackCompleted(self, channel, data);
+    }
+
+    fn halted(self: *const CompletionHandler, channel: *Self) void {
+        self.callbackHalted(self, channel);
     }
 };
 
@@ -102,10 +109,10 @@ pub const Error = error{
     UnsupportedInitialPid,
 };
 
-pub fn init(self: *Self, id: ChannelId, channel_register_base: u64) void {
+pub fn init(self: *Self, id: ChannelId, registers: *volatile ChannelRegisters) void {
     self.* = .{
         .id = id,
-        .registers = @ptrFromInt(channel_register_base + (@sizeOf(ChannelRegisters) * @as(usize, id))),
+        .registers = registers,
     };
     self.state = .Idle;
 }
@@ -159,10 +166,16 @@ fn interruptsEnableActiveTransaction(self: *Self) void {
         .halted = 1,
         .ahb_error = 1,
         .stall_response_received = 1,
+        .nak_response_received = 1,
+        .ack_response_received = 1,
+        .nyet_response_received = 1,
         .transaction_error = 1,
         .babble_error = 1,
         .frame_overrun = 1,
         .data_toggle_error = 1,
+        .buffer_not_available = 1,
+        .excess_transaction_error = 1,
+        .frame_list_rollover = 1,
     };
 }
 
@@ -182,6 +195,13 @@ pub fn transactionBegin(
 ) !void {
     if (self.isEnabled()) {
         return Error.ChannelBusy;
+    }
+
+    if (endpoint_direction == .out) {
+        log.debug("channel {d} sending {d} bytes starting at 0x{x:0>8}", .{ self.id, buffer.len, @intFromPtr(buffer.ptr) });
+        root.debug.sliceDump(buffer);
+    } else {
+        log.debug("channel {d} receiving {d} bytes into 0x{x:0>8}", .{ self.id, buffer.len, @intFromPtr(buffer.ptr) });
     }
 
     // Don't allow IRQs while we're configuring the channel
@@ -215,7 +235,11 @@ pub fn transactionBegin(
 
     self.registers.channel_transfer_size = tsize;
 
-    self.registers.channel_dma_addr = @truncate(@intFromPtr(buffer.ptr));
+    // Make sure the HCD can see pending changes
+    synchronize.dataCacheSliceCleanAndInvalidate(buffer);
+
+    const bus_address: u32 = @truncate(@intFromPtr(buffer.ptr));
+    self.registers.channel_dma_addr = bus_address;
 
     var channel_characteristics = self.registers.channel_character;
     channel_characteristics.max_packet_size = max_packet_size;
@@ -250,20 +274,14 @@ pub fn transactionBegin(
 }
 
 pub fn channelInterrupt(self: *Self) void {
-    log.debug("channel {d} interrupt intr 0x{x:0>8} intmsk 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_int)), @as(u32, @bitCast(self.registers.channel_int_mask)) });
-
-    if (self.state != .Active and self.state != .Terminating) {
-        log.warn("channel {d} spurious interrupt while in state {any}. ignoring.", .{ self.id, self.state });
-        return;
-    }
-
-    log.debug("channel {d} ISR, current interrupt level {s}", .{ self.id, @tagName(cpu.currentInterruptLevel()) });
-
     criticalEnter(.FIQ);
     defer criticalLeave();
 
-    const int_status: ChannelInterrupt = @bitCast(@as(u32, @bitCast(self.registers.channel_int)) &
-        @as(u32, @bitCast(self.registers.channel_int_mask)));
+    const int_status: ChannelInterrupt = self.registers.channel_int;
+    const int_mask: ChannelInterrupt = self.registers.channel_int_mask;
+
+    log.debug("channel {d} state {s} intsts 0x{x:0>8} intmsk 0x{x:0>8}", .{ self.id, @tagName(self.state), @as(u32, @bitCast(int_status)), @as(u32, @bitCast(int_mask)) });
+    int_status.debugDecode();
 
     switch (self.state) {
         .Active => {
@@ -272,28 +290,42 @@ pub fn channelInterrupt(self: *Self) void {
             // transfer_completed interrupt
             if (int_status.transfer_completed == 1) {
                 self.state = .Finalizing;
+
+                // interrupt bit is W1C (write 1 to clear)
+                self.registers.channel_int.transfer_completed = 1;
+
                 log.debug("channel {d} transfer complete", .{self.id});
 
                 self.disable();
                 self.interruptsClearPending();
                 self.interruptDisableAll();
 
+                // Make sure the CPU can see updated data
+                synchronize.dataCacheSliceInvalidate(self.active_transfer.buffer);
+
                 // TODO check if all bytes have been transferred
                 // if so, call completion handler.
                 // if not, restart the channel with the remaining data
 
                 if (self.completion_handler) |h| {
-                    h.invoke(self, self.active_transfer.buffer);
+                    h.completed(self, self.active_transfer.buffer);
                 }
 
                 self.idle();
                 return;
             }
             if (int_status.halted == 1) {
-                log.debug("channel {d} halted", .{self.id});
+                log.debug("channel {d} halted, chintsts 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_int)) });
 
                 // TODO what should we do here? restart? call the
                 // completion handler with a failed status?
+
+                // interrupt bit is W1C
+                self.registers.channel_int.halted = 1;
+
+                if (self.completion_handler) |h| {
+                    h.halted(self);
+                }
 
                 self.disable();
                 self.interruptsClearPending();
@@ -302,27 +334,27 @@ pub fn channelInterrupt(self: *Self) void {
 
                 return;
             }
-            log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
         },
         .Terminating => {
             // We are waiting for the controller to confirm the
             // channel is halted. It does this by raising the halted
             // interrupt.
             if (int_status.halted == 1) {
+                // interrupt bit is W1C
+                self.registers.channel_int.halted = 1;
                 self.registers.channel_int_mask.halted = 0;
                 self.state = .Finalizing;
                 log.debug("channel {d} abort complete", .{self.id});
                 self.idle();
                 return;
             }
-            log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
         },
-        else => {
-            log.err("channel {d} erroneous interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
-        },
+        else => {},
     }
 
     // TODO what should we do with the other possible interrupts?
+
+    log.warn("channel {d} spurious interrupt while in state {any} intr 0x{x:0>8}", .{ self.id, self.state, @as(u32, @bitCast(int_status)) });
 }
 
 fn idle(self: *Self) void {

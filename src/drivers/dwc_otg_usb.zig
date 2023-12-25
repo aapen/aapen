@@ -246,7 +246,8 @@ pub fn init(
     };
 
     for (0..dwc_max_channels) |chid| {
-        self.channels[chid].init(@truncate(chid), register_base + 0x500);
+        const channel_registers: *volatile ChannelRegisters = @ptrFromInt(register_base + 0x500 + (@sizeOf(ChannelRegisters) * chid));
+        self.channels[chid].init(@truncate(chid), channel_registers);
     }
 
     // address 0 needs to be marked as "claimed" so we don't assign it
@@ -513,7 +514,7 @@ const RootPort = struct {
         self.host = host;
 
         try self.enable();
-        try self.configureDevice();
+        try self.deviceConfigure();
         try self.overcurrentShutdownCheck();
 
         return self.device;
@@ -556,7 +557,7 @@ const RootPort = struct {
         self.enabled = false;
     }
 
-    fn configureDevice(self: *RootPort) !void {
+    fn deviceConfigure(self: *RootPort) !void {
         log.debug("configure device start", .{});
         defer log.debug("configure device end", .{});
         errdefer |err| {
@@ -564,6 +565,7 @@ const RootPort = struct {
         }
 
         const speed = try self.host.getRootPortSpeed();
+        log.debug("root port speed: {s}", .{@tagName(speed)});
 
         self.device = try Device.init(self.allocator);
         self.device.initialize(self.host, speed) catch |err| {
@@ -595,7 +597,7 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
     // check if one of the channels raised the interrupt
     if (intr_status.host_channel_intr == 1) {
         const all_intrs = self.host_registers.all_channel_interrupts;
-        self.host_registers.all_channel_interrupts = all_intrs;
+        //        self.host_registers.all_channel_interrupts = all_intrs;
 
         // Find the channel that has something to say
         var channel_mask: u32 = 1;
@@ -614,15 +616,30 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
         const port_status = self.host_registers.port;
 
         if (port_status.connect_changed == 1) {
-            log.debug("irqHandle: Host port connected changed", .{});
+            log.debug("irqHandle: Host port connected changed, {d}", .{self.host_registers.port.connect});
+            // setting this to 1 clears the interrupt
+
+            // for some reason, when I uncomment this line
+            // usb-init-root-port fails in QEMU
+            // self.host_registers.port.connect_changed = 1;
         }
 
         if (port_status.enabled_changed == 1) {
-            log.debug("irqHandle: Host port enabled changed", .{});
+            log.debug("irqHandle: Host port enabled changed, {d}", .{self.host_registers.port.enabled});
+            // setting this to 1 clears the interrupt
+
+            // for some reason, when I uncomment this line
+            // usb-init-root-port fails in QEMU
+            // self.host_registers.port.enabled_changed = 1;
         }
 
         if (port_status.overcurrent_changed == 1) {
-            log.debug("irqHandle: Host port overcurrent changed", .{});
+            log.debug("irqHandle: Host port overcurrent changed, {d}", .{self.host_registers.port.overcurrent});
+            // setting this to 1 clears the interrupt
+
+            // for some reason, when I uncomment this line
+            // usb-init-root-port fails in QEMU
+            // self.host_registers.port.overcurrent_changed = 1;
         }
     }
 
@@ -780,7 +797,13 @@ fn transactionOnChannel(
 
     // wait for transaction.completed to be true, or deadline elapsed.
     if (transaction.completed) {
-        return transaction.actual_length;
+        if (transaction.succeeded) {
+            log.debug("Transaction succeeded", .{});
+            return transaction.actual_length;
+        } else {
+            log.debug("Transaction halted", .{});
+            return 0;
+        }
     } else {
         log.warn("Transaction timed out on channel {d}", .{channel.id});
         // if timeout, abort the transaction
@@ -799,9 +822,13 @@ const Transaction = struct {
     host: *Self,
     deadline: u64 = 0,
     completed: bool = false,
+    succeeded: bool = false,
     actual_length: TransferBytes = 0,
 
-    completion_handler: Channel.CompletionHandler = .{ .callback = onChannelComplete },
+    completion_handler: Channel.CompletionHandler = .{
+        .callbackCompleted = onChannelComplete,
+        .callbackHalted = onChannelHalted,
+    },
 
     // Callback invoked by `Channel.channelInterrupt`
     fn onChannelComplete(handler: *const Channel.CompletionHandler, channel: *Channel, data: []u8) void {
@@ -809,6 +836,16 @@ const Transaction = struct {
 
         var transaction: *Transaction = @constCast(@fieldParentPtr(Transaction, "completion_handler", handler));
         transaction.actual_length = @truncate(data.len);
+        transaction.completed = true;
+        transaction.succeeded = true;
+    }
+
+    fn onChannelHalted(handler: *const Channel.CompletionHandler, channel: *Channel) void {
+        var transaction: *Transaction = @constCast(@fieldParentPtr(Transaction, "completion_handler", handler));
+
+        log.debug("onChannelHalted for {d}, rxstatus = 0x{x:0>8}", .{ channel.id, @as(u32, @bitCast(transaction.host.core_registers.rx_status_read)) });
+
+        transaction.actual_length = 0;
         transaction.completed = true;
     }
 };
@@ -831,7 +868,7 @@ pub fn controlTransfer(
     // channels as when they are available.
     const device = endpoint.device;
 
-    log.debug("controlTransfer: performing 'setup' transaction with rt = {b}, rq = {d}", .{ @as(u8, @bitCast(setup.request_type)), setup.request });
+    log.debug("controlTransfer: performing 'setup' transaction with rt = {b}, rq = {d}, mps = {d}", .{ @as(u8, @bitCast(setup.request_type)), setup.request, endpoint.max_packet_size });
 
     // TODO check return value, should equal max_packet_size (8) for
     // a Setup token packet to a Control endpoint
@@ -844,7 +881,7 @@ pub fn controlTransfer(
         endpoint.max_packet_size,
         .token_setup,
         std.mem.sliceAsBytes(setup_slice),
-        100,
+        4000,
     );
 
     self.allocator.free(setup_slice);
@@ -876,7 +913,7 @@ pub fn controlTransfer(
             endpoint.max_packet_size,
             .data_data0,
             data,
-            100,
+            4000,
         );
 
         log.debug("controlTransfer: 'data' transaction returned {any}", .{maybe_in_data_response});
@@ -899,7 +936,7 @@ pub fn controlTransfer(
         endpoint.max_packet_size,
         .handshake_ack,
         &.{},
-        100,
+        4000,
     );
 
     log.debug("controlTransfer: 'status' transaction returned {any}", .{maybe_status_response});
@@ -1046,38 +1083,38 @@ pub const Device = struct {
 
         try host.assignAddress(self);
 
-        self.determineProductName() catch |err| {
-            log.warn("Could not read manufacturer and product name: {any}", .{err});
-        };
+        // self.determineProductName() catch |err| {
+        //     log.warn("Could not read manufacturer and product name: {any}", .{err});
+        // };
 
-        if (self.device_descriptor.configuration_count >= 1) {
-            self.configuration_descriptor = try host.configurationDescriptorQuery(&self.endpoint_0, 0);
+        // if (self.device_descriptor.configuration_count >= 1) {
+        //     self.configuration_descriptor = try host.configurationDescriptorQuery(&self.endpoint_0, 0);
 
-            if (self.configuration_descriptor.configuration > 0) {
-                self.determineConfiguration() catch |err| {
-                    log.warn("Could not read configuration value for index {d}: {any}", .{ self.configuration_descriptor.configuration, err });
-                };
-            }
+        //     if (self.configuration_descriptor.configuration > 0) {
+        //         self.determineConfiguration() catch |err| {
+        //             log.warn("Could not read configuration value for index {d}: {any}", .{ self.configuration_descriptor.configuration, err });
+        //         };
+        //     }
 
-            self.configuration_descriptor.dump(self.configuration);
+        //     self.configuration_descriptor.dump(self.configuration);
 
-            if (self.configuration_descriptor.interface_count >= 1) {
-                const config_tree_size = self.configuration_descriptor.total_length;
-                const buffer = try self.host.configurationTreeGet(&self.endpoint_0, 0, config_tree_size);
-                root.debug.kernelMessage(buffer);
-                //                self.allocator.free(buffer);
+        //     if (self.configuration_descriptor.interface_count >= 1) {
+        //         const config_tree_size = self.configuration_descriptor.total_length;
+        //         const buffer = try self.host.configurationTreeGet(&self.endpoint_0, 0, config_tree_size);
+        //         root.debug.kernelMessage(buffer);
+        //         //                self.allocator.free(buffer);
 
-                // self.interface_descriptor = try host.interfaceDescriptorQuery(&self.endpoint_0, 0);
+        //         // self.interface_descriptor = try host.interfaceDescriptorQuery(&self.endpoint_0, 0);
 
-                // if (self.interface_descriptor.interface_string > 0) {
-                //     self.determineInterface() catch |err| {
-                //         log.warn("Could not read interface name for index {d}: {any}", .{ self.interface_descriptor.interface_string, err });
-                //     };
-                // }
+        //         // if (self.interface_descriptor.interface_string > 0) {
+        //         //     self.determineInterface() catch |err| {
+        //         //         log.warn("Could not read interface name for index {d}: {any}", .{ self.interface_descriptor.interface_string, err });
+        //         //     };
+        //         // }
 
-                // self.interface_descriptor.dump(self.interface);
-            }
-        }
+        //         // self.interface_descriptor.dump(self.interface);
+        //     }
+        // }
     }
 
     fn determineProductName(self: *Device) !void {
