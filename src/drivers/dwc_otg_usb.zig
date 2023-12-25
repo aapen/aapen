@@ -664,26 +664,48 @@ fn delayMicros(self: *Self, count: u32) void {
 
 pub fn dumpStatus(self: *Self) void {
     log.info("{s: >28}", .{"Core registers"});
-    dumpRegister("otg_control", @bitCast(self.core_registers.otg_control));
-    dumpRegister("ahb_config", @bitCast(self.core_registers.ahb_config));
-    dumpRegister("usb_config", @bitCast(self.core_registers.usb_config));
-    dumpRegister("reset", @bitCast(self.core_registers.reset));
-    dumpRegister("interrupt_status", @bitCast(self.core_registers.core_interrupt_status));
-    dumpRegister("interrupt_mask", @bitCast(self.core_registers.core_interrupt_mask));
-    dumpRegister("rx_fifo_size", @bitCast(self.core_registers.rx_fifo_size));
-    dumpRegister("nonperiodic_tx_fifo_size", @bitCast(self.core_registers.nonperiodic_tx_fifo_size));
-    dumpRegister("nonperiodic_tx_status", @bitCast(self.core_registers.nonperiodic_tx_status));
+    dumpRegisterPair(
+        "otg_control",
+        @bitCast(self.core_registers.otg_control),
+        "ahb_config",
+        @bitCast(self.core_registers.ahb_config),
+    );
+    dumpRegisterPair(
+        "usb_config",
+        @bitCast(self.core_registers.usb_config),
+        "reset",
+        @bitCast(self.core_registers.reset),
+    );
+    dumpRegisterPair(
+        "interrupt_status",
+        @bitCast(self.core_registers.core_interrupt_status),
+        "interrupt_mask",
+        @bitCast(self.core_registers.core_interrupt_mask),
+    );
+    dumpRegisterPair(
+        "rx_status",
+        @bitCast(self.core_registers.rx_status_read),
+        "rx_fifo_size",
+        @bitCast(self.core_registers.rx_fifo_size),
+    );
+    dumpRegisterPair(
+        "nonperiodic_tx_fifo_size",
+        @bitCast(self.core_registers.nonperiodic_tx_fifo_size),
+        "nonperiodic_tx_status",
+        @bitCast(self.core_registers.nonperiodic_tx_status),
+    );
 
-    log.info("{s: >28}", .{""});
+    log.info("", .{});
     log.info("{s: >28}", .{"Host registers"});
-    dumpRegister("config", @bitCast(self.host_registers.config));
-    dumpRegister("frame_interval", @bitCast(self.host_registers.frame_interval));
-    dumpRegister("frame_num", @bitCast(self.host_registers.frame_num));
-    dumpRegister("periodic_tx_fifo_status", @bitCast(self.host_registers.periodic_tx_fifo_status));
-    dumpRegister("all_channel_interrupts", @bitCast(self.host_registers.all_channel_interrupts));
-    dumpRegister("all_channel_interrupts_mask", @bitCast(self.host_registers.all_channel_interrupts_mask));
-    dumpRegister("frame_list_base_addr", @bitCast(self.host_registers.frame_list_base_addr));
-    dumpRegister("port", @bitCast(self.host_registers.port));
+    dumpRegisterPair("port", @bitCast(self.host_registers.port), "config", @bitCast(self.host_registers.config));
+    dumpRegisterPair("frame_interval", @bitCast(self.host_registers.frame_interval), "frame_num", @bitCast(self.host_registers.frame_num));
+    //    dumpRegister("periodic_tx_fifo_status", @bitCast(self.host_registers.periodic_tx_fifo_status));
+    dumpRegisterPair("all_channel_interrupts", @bitCast(self.host_registers.all_channel_interrupts), "all_channel_interrupts_mask", @bitCast(self.host_registers.all_channel_interrupts_mask));
+    //    dumpRegister("frame_list_base_addr", @bitCast(self.host_registers.frame_list_base_addr));
+}
+
+fn dumpRegisterPair(f1: []const u8, v1: u32, f2: []const u8, v2: u32) void {
+    log.info("{s: >28}: {x:0>8}\t{s: >28}: {x:0>8}", .{ f1, v1, f2, v2 });
 }
 
 fn dumpRegister(field_name: []const u8, v: u32) void {

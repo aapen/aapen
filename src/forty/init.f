@@ -90,6 +90,13 @@ finish
   invoke-1r                                                 ( Call instance function, 0 return means failed )
 ;
 
+: usb-status
+  [[ hal hal.usb_hci +]] @
+  dup
+  USB.vtable USB.VTable.dumpStatus + + @
+  invoke-1
+;
+
 : usb-device                                                ( n -- addr : USB address -> device pointer )
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
