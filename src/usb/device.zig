@@ -1,3 +1,8 @@
+const transaction = @import("transaction.zig");
+const setup = transaction.setup;
+const SetupPacket = transaction.SetupPacket;
+const TransferType = transaction.TransferType;
+
 pub const DeviceAddress = u7;
 pub const DEFAULT_ADDRESS: DeviceAddress = 0;
 pub const FIRST_DEDICATED_ADDRESS = 1;
@@ -8,6 +13,17 @@ pub const UsbSpeed = enum {
     Full,
     High,
     Super,
+};
+
+pub const StandardDeviceRequests = enum(u8) {
+    get_status = 0x00,
+    clear_feature = 0x01,
+    set_feature = 0x03,
+    set_address = 0x05,
+    get_descriptor = 0x06,
+    set_descriptor = 0x07,
+    get_configuration = 0x08,
+    set_configuration = 0x09,
 };
 
 /// See https://www.usb.org/defined-class-codes
@@ -52,3 +68,7 @@ pub const HidProtocol = enum(u8) {
     keyboard = 0x01,
     mouse = 0x02,
 };
+
+pub fn setupSetAddress(address: DeviceAddress) SetupPacket {
+    return setup(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_address), address, 0, 0);
+}

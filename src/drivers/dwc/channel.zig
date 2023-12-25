@@ -315,7 +315,7 @@ pub fn channelInterrupt(self: *Self) void {
                 return;
             }
             if (int_status.halt == 1) {
-                log.debug("channel {d} halted, chintsts 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_int)) });
+                log.debug("channel {d} halted, chintsts 0x{x:0>8}, xfersize 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_int)), @as(u32, @bitCast(self.registers.channel_transfer_size)) });
 
                 // TODO what should we do here? restart? call the
                 // completion handler with a failed status?

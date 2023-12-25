@@ -154,6 +154,12 @@ channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
 address_assignments: UsbAddresses = .{},
 attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
 
+// Ideas for improving this:
+// - reserve an aligned buffer for each channel to use. that avoids
+//   dynamic allocation in the inner loop
+// - keep a top-level array of Hubs
+// - keep a top-level array of HIDs
+
 // ----------------------------------------------------------------------
 // Interop shims
 // ----------------------------------------------------------------------
@@ -1123,9 +1129,9 @@ pub const Device = struct {
 
         try host.assignAddress(self);
 
-        // self.determineProductName() catch |err| {
-        //     log.warn("Could not read manufacturer and product name: {any}", .{err});
-        // };
+        self.determineProductName() catch |err| {
+            log.warn("Could not read manufacturer and product name: {any}", .{err});
+        };
 
         // if (self.device_descriptor.configuration_count >= 1) {
         //     self.configuration_descriptor = try host.configurationDescriptorQuery(&self.endpoint_0, 0);

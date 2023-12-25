@@ -1,0 +1,30 @@
+pub const StandardInterfaceRequests = enum(u8) {
+    get_status = 0x00,
+    clear_feature = 0x01,
+    set_feature = 0x03,
+    get_interface = 0x0a,
+    set_interface = 0x11,
+};
+
+pub const InterfaceClass = enum(u8) {
+    reserved = 0x0,
+    audio = 0x1,
+    communications = 0x2,
+    hid = 0x3,
+    physical = 0x5,
+    image = 0x6,
+    printer = 0x7,
+    mass_storage = 0x8,
+    hub = 0x9,
+    cdc_data = 0xa,
+    smart_card = 0xb,
+    content_security = 0xd,
+    video = 0xe,
+    personal_health_care = 0xf,
+    audio_video = 0x10,
+    diagnostic_device = 0xdc,
+    wireless_controller = 0xe0,
+    miscellaneous = 0xef,
+    application_specific = 0xfe,
+    vendor_specific = 0xff,
+};

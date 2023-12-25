@@ -5,6 +5,10 @@ const log = std.log.scoped(.usb);
 
 const device = @import("device.zig");
 const DeviceClass = device.DeviceClass;
+const StandardDeviceRequests = device.StandardDeviceRequests;
+
+const interface = @import("interface.zig");
+const InterfaceClass = interface.InterfaceClass;
 
 const transaction = @import("transaction.zig");
 const setup = transaction.setup;
@@ -142,7 +146,7 @@ pub const InterfaceDescriptor = extern struct {
     interface_number: u8,
     alternate_setting: u8,
     endpoint_count: u8,
-    interface_class: u8,
+    interface_class: InterfaceClass,
     interface_subclass: u8,
     interface_protocol: u8,
     interface_string: StringIndex,
@@ -216,3 +220,8 @@ pub const StringDescriptor = extern struct {
         return result;
     }
 };
+
+pub fn setupDescriptorQuery(descriptor_type: DescriptorType, descriptor_index: u8, lang_id: u16, length: u16) SetupPacket {
+    const val: u16 = @as(u16, @intFromEnum(descriptor_type)) << 8 | @as(u8, descriptor_index);
+    return setup(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_descriptor), val, lang_id, length);
+}
