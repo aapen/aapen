@@ -162,19 +162,19 @@ fn interruptDisableAll(self: *Self) void {
 fn interruptsEnableActiveTransaction(self: *Self) void {
     log.debug("channel {d} interrupt enable active transaction", .{self.id});
     self.registers.channel_int_mask = .{
-        .transfer_completed = 1,
-        .halted = 1,
+        .transfer_complete = 1,
+        .halt = 1,
         .ahb_error = 1,
-        .stall_response_received = 1,
-        .nak_response_received = 1,
-        .ack_response_received = 1,
-        .nyet_response_received = 1,
+        .stall = 1,
+        .nak = 1,
+        .ack = 1,
+        .nyet = 1,
         .transaction_error = 1,
         .babble_error = 1,
         .frame_overrun = 1,
         .data_toggle_error = 1,
         .buffer_not_available = 1,
-        .excess_transaction_error = 1,
+        .excessive_transmission = 1,
         .frame_list_rollover = 1,
     };
 }
@@ -245,7 +245,7 @@ pub fn transactionBegin(
     channel_characteristics.max_packet_size = max_packet_size;
 
     // TODO - Is this really 1?
-    channel_characteristics.multi_count = 1;
+    channel_characteristics.packets_per_frame = 1;
     channel_characteristics.endpoint_direction = switch (endpoint_direction) {
         .out => .out,
         .in => .in,
@@ -288,11 +288,11 @@ pub fn channelInterrupt(self: *Self) void {
             // We are sending or receiving data. We are waiting for it
             // to finish. The controller signals this with the
             // transfer_completed interrupt
-            if (int_status.transfer_completed == 1) {
+            if (int_status.transfer_complete == 1) {
                 self.state = .Finalizing;
 
                 // interrupt bit is W1C (write 1 to clear)
-                self.registers.channel_int.transfer_completed = 1;
+                self.registers.channel_int.transfer_complete = 1;
 
                 log.debug("channel {d} transfer complete", .{self.id});
 
@@ -314,14 +314,14 @@ pub fn channelInterrupt(self: *Self) void {
                 self.idle();
                 return;
             }
-            if (int_status.halted == 1) {
+            if (int_status.halt == 1) {
                 log.debug("channel {d} halted, chintsts 0x{x:0>8}", .{ self.id, @as(u32, @bitCast(self.registers.channel_int)) });
 
                 // TODO what should we do here? restart? call the
                 // completion handler with a failed status?
 
                 // interrupt bit is W1C
-                self.registers.channel_int.halted = 1;
+                self.registers.channel_int.halt = 1;
 
                 if (self.completion_handler) |h| {
                     h.halted(self);
@@ -339,10 +339,10 @@ pub fn channelInterrupt(self: *Self) void {
             // We are waiting for the controller to confirm the
             // channel is halted. It does this by raising the halted
             // interrupt.
-            if (int_status.halted == 1) {
+            if (int_status.halt == 1) {
                 // interrupt bit is W1C
-                self.registers.channel_int.halted = 1;
-                self.registers.channel_int_mask.halted = 0;
+                self.registers.channel_int.halt = 1;
+                self.registers.channel_int_mask.halt = 0;
                 self.state = .Finalizing;
                 log.debug("channel {d} abort complete", .{self.id});
                 self.idle();
@@ -376,7 +376,7 @@ pub fn channelAbort(self: *Self) void {
     // listen for only the halted interrupt that tells us the disable
     // request is completed
     self.interruptDisableAll();
-    self.registers.channel_int_mask.halted = 1;
+    self.registers.channel_int_mask.halt = 1;
     self.state = .Terminating;
     self.disable();
 }

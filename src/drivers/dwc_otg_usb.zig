@@ -86,7 +86,8 @@ pub const ChannelRegisters = reg.ChannelRegisters;
 pub const HostConfig = reg.HostConfig;
 pub const HostFrameInterval = reg.HostFrameInterval;
 pub const HostFrames = reg.HostFrames;
-pub const HostPeriodicFifo = reg.HostPeriodicFifo;
+pub const HostPeriodicFifo = reg.PeriodicFifoStatus;
+pub const HostFifoStatus = reg.HostFifoStatus;
 pub const HostPort = reg.HostPortStatusAndControl;
 pub const HostRegisters = reg.HostRegisters;
 
@@ -100,14 +101,14 @@ pub const Reset = reg.Reset;
 pub const InterruptStatus = reg.InterruptStatus;
 pub const InterruptMask = reg.InterruptMask;
 pub const RxStatus = reg.RxStatus;
-pub const NonPeriodicTxFifoSize = reg.NonPeriodicTxFifoSize;
+pub const FifoSize = reg.FifoSize;
 pub const NonPeriodicTxFifoStatus = reg.NonPeriodicTxFifoStatus;
 pub const GeneralCoreConfig = reg.GeneralCoreConfig;
 pub const HwConfig2 = reg.HwConfig2;
 pub const HwConfig3 = reg.HwConfig3;
 pub const HwConfig4 = reg.HwConfig4;
-pub const PeriodicTxFifoSize = reg.PeriodicTxFifoSize;
 pub const CoreRegisters = reg.CoreRegisters;
+pub const PowerAndClock = reg.PowerAndClock;
 
 // ----------------------------------------------------------------------
 // Definitions from USB spec: Constants, Structures, and Packet Definitions
@@ -136,7 +137,7 @@ const UsbAddresses = ChannelSet.init("dwc_otg_usb addresses", u7, std.math.maxIn
 allocator: Allocator,
 core_registers: *volatile CoreRegisters,
 host_registers: *volatile HostRegisters,
-power_and_clock_control: *volatile u32,
+power_and_clock_control: *volatile PowerAndClock,
 all_channel_intmask_lock: Spinlock,
 intc: *InterruptController,
 irq_id: IrqId,
@@ -306,12 +307,12 @@ fn verifyHostControllerDevice(self: *Self) !void {
 
 fn globalInterruptDisable(self: *Self) !void {
     log.debug("global interrupt disable", .{});
-    self.core_registers.ahb_config.global_interrupt_mask = 0;
+    self.core_registers.ahb_config.global_interrupt_enable = 0;
 }
 
 fn globalInterruptEnable(self: *Self) !void {
     log.debug("global interrupt enable", .{});
-    self.core_registers.ahb_config.global_interrupt_mask = 1;
+    self.core_registers.ahb_config.global_interrupt_enable = 1;
 }
 
 fn connectInterruptHandler(self: *Self) !void {
@@ -328,13 +329,16 @@ fn initializeControllerCore(self: *Self) !void {
 
     try self.resetControllerCore();
 
-    config.ulpi_utmi_sel = 0;
+    config.mode_select = .ulpi;
     config.phy_if = 0;
     self.core_registers.usb_config = config;
 
+    // need another reset to make the phy changes take effect
+    try self.resetControllerCore();
+
     const hw2 = self.core_registers.hardware_config_2;
     config = self.core_registers.usb_config;
-    if (hw2.hs_phy_type == .ulpi and hw2.fs_phy_type == .dedicated) {
+    if (hw2.high_speed_physical_type == .ulpi and hw2.full_speed_physical_type == .dedicated) {
         config.ulpi_fsls = 1;
         config.ulpi_clk_sus_m = 1;
     } else {
@@ -347,13 +351,30 @@ fn initializeControllerCore(self: *Self) !void {
 
     var ahb = self.core_registers.ahb_config;
     ahb.dma_enable = 1;
-    ahb.wait_axi_writes = 1;
+    ahb.dma_remainder_mode = .incremental;
+    ahb.wait_for_axi_writes = 1;
     ahb.max_axi_burst = 0;
     self.core_registers.ahb_config = ahb;
 
     config = self.core_registers.usb_config;
-    config.hnp_capable = 0;
-    config.srp_capable = 0;
+    switch (hw2.operating_mode) {
+        .hnp_srp_capable_otg => {
+            config.hnp_capable = 1;
+            config.srp_capable = 1;
+        },
+        .srp_only_capable_otg, .srp_capable_device, .srp_capable_host => {
+            config.hnp_capable = 0;
+            config.srp_capable = 1;
+        },
+        .no_hnp_src_capable_otg, .no_srp_capable_host, .no_srp_capable_device => {
+            config.hnp_capable = 0;
+            config.srp_capable = 0;
+        },
+        else => {
+            config.hnp_capable = 0;
+            config.srp_capable = 0;
+        },
+    }
     self.core_registers.usb_config = config;
 }
 
@@ -362,16 +383,19 @@ fn enableCommonInterrupts(self: *Self) !void {
 }
 
 fn resetControllerCore(self: *Self) !void {
+    log.debug("core controller reset", .{});
+
     // wait up to 100 ms for reset to settle
     const end = self.deadline(100);
 
     // TODO what should we do if we don't see the idle signal
-    while (self.clock.ticks() < end and self.core_registers.reset.ahb_idle != 1) {}
+    while (self.clock.ticks() < end and self.core_registers.reset.ahb_master_idle != 1) {}
 
+    // trigger the soft reset
     self.core_registers.reset.soft_reset = 1;
 
     // wait up to 10 ms for reset to finish
-    const reset_end = self.deadline(10);
+    const reset_end = self.deadline(100);
     // TODO what should we do if we don't see the soft_reset go to zero?
     while (self.clock.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
 
@@ -383,27 +407,20 @@ fn resetControllerCore(self: *Self) !void {
 fn initializeHost(self: *Self) !void {
     log.debug("host init start", .{});
 
-    self.power_and_clock_control.* = 0;
+    self.power_and_clock_control.* = @bitCast(@as(u32, 0));
 
-    var config = self.host_registers.config;
+    try self.configPhyClockSpeed();
 
-    if (self.core_registers.hardware_config_2.hs_phy_type == .ulpi and
-        self.core_registers.hardware_config_2.fs_phy_type == .dedicated and
-        self.core_registers.usb_config.ulpi_fsls == 1)
-    {
-        config.fsls_pclk_sel = .sel_48_mhz;
-    } else {
-        config.fsls_pclk_sel = .sel_30_60_mhz;
-    }
-    self.host_registers.config = config;
+    self.host_registers.config.fs_ls_support_only = 1;
+
+    // TODO - set nonperiodic & periodic fifo sizes here
 
     try self.flushTxFifo();
-    self.delayMicros(1);
-
     try self.flushRxFifo();
-    self.delayMicros(1);
 
     try self.powerHostPort();
+    try self.resetHostPort();
+
     try self.enableHostInterrupts();
 
     log.debug("host init end", .{});
@@ -412,10 +429,10 @@ fn initializeHost(self: *Self) !void {
 fn configPhyClockSpeed(self: *Self) !void {
     const core_config = self.core_registers.usb_config;
     const hw2 = self.core_registers.hardware_config_2;
-    if (hw2.hs_phy_type == .ulpi and hw2.fs_phy_type == .dedicated and core_config.ulpi_fsls) {
-        self.host_registers.config.fsls_pclk_sel = .sel_48_mhz;
+    if (hw2.high_speed_physical_type == .ulpi and hw2.full_speed_physical_type == .dedicated and core_config.ulpi_fsls == 1) {
+        self.host_registers.config.clock_rate = .clock_48_mhz;
     } else {
-        self.host_registers.config.fsls_pclk_sel = .sel_30_60_mhz;
+        self.host_registers.config.clock_rate = .clock_30_60_mhz;
     }
 }
 
@@ -427,29 +444,52 @@ fn flushTxFifo(self: *Self) !void {
     reset.tx_fifo_flush_num = FLUSH_ALL_TX_FIFOS;
     self.core_registers.reset = reset;
 
-    const reset_end = self.deadline(10);
+    const reset_end = self.deadline(100);
     while (self.clock.ticks() < reset_end and self.core_registers.reset.tx_fifo_flush != 0) {}
 }
 
 fn flushRxFifo(self: *Self) !void {
     self.core_registers.reset.rx_fifo_flush = 1;
-    const reset_end = self.deadline(10);
+    const reset_end = self.deadline(100);
     while (self.clock.ticks() < reset_end and self.core_registers.reset.rx_fifo_flush != 0) {}
 }
 
 fn powerHostPort(self: *Self) !void {
     if (self.host_registers.port.power == 0) {
+        log.debug("initial power up of physical port", .{});
         self.host_registers.port.power = 1;
     }
 }
 
+fn resetHostPort(self: *Self) !void {
+    log.debug("reset of physical port", .{});
+
+    self.host_registers.port.reset = 1;
+    self.delayMillis(60);
+    self.host_registers.port.reset = 0;
+}
+
 fn enableHostInterrupts(self: *Self) !void {
     var int_mask: InterruptMask = @bitCast(@as(u32, 0));
-    int_mask.host_channel_intr = 1;
+    int_mask.host_channel = 1;
     self.core_registers.core_interrupt_mask = int_mask;
 
     // clear all pending interrupts
     self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffffffff));
+}
+
+fn haltAllChannels(self: *Self) !void {
+    for (0..self.num_host_channels) |chid| {
+        var char = self.channels[chid].registers.channel_character;
+        char.enable = true;
+        char.disable = true;
+        char.endpoint_direction = .in;
+        self.registers.channel_character = char;
+
+        // wait until we see enable go low
+        const enable_wait_end = self.deadline(100);
+        while (self.channels[chid].regisers.channel_character.enable == 1 and self.clock.ticks() < enable_wait_end) {}
+    }
 }
 
 fn rootPortInitialize(self: *Self) !*Device {
@@ -480,7 +520,7 @@ pub fn assignAddress(self: *Self, device: *Device) !void {
     // TODO - if the addressSet fails, should release the address assignment
 
     // 1. reserve an address (in memory)
-    var my_address: DeviceAddress = try self.claimAddress();
+    const my_address: DeviceAddress = try self.claimAddress();
 
     // 2. tell the actual device what address it should use (on device)
     _ = try self.addressSet(&device.endpoint_0, my_address);
@@ -595,7 +635,7 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
     const intr_status = self.core_registers.core_interrupt_status;
 
     // check if one of the channels raised the interrupt
-    if (intr_status.host_channel_intr == 1) {
+    if (intr_status.host_channel == 1) {
         const all_intrs = self.host_registers.all_channel_interrupts;
         //        self.host_registers.all_channel_interrupts = all_intrs;
 
@@ -612,7 +652,7 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
     }
 
     // check if the host port raised the interrupt
-    if (intr_status.port_intr == 1) {
+    if (intr_status.port == 1) {
         const port_status = self.host_registers.port;
 
         if (port_status.connect_changed == 1) {
@@ -958,7 +998,7 @@ fn sizeCheck(expected: TransferBytes, actual: TransferBytes) !void {
 // ----------------------------------------------------------------------
 fn descriptorQueryUntyped(self: *Self, endpoint: *Endpoint, setup_packet: *const SetupPacket, expected_size: u16) ![]align(DMA_ALIGNMENT) u8 {
     log.debug("descriptor query (type {d}) on device {d} endpoint {d}", .{ setup_packet.value >> 8, endpoint.device.address, endpoint.number });
-    var buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, setup_packet.data_size);
+    const buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, setup_packet.data_size);
 
     const returned = try self.controlTransfer(endpoint, setup_packet, buffer);
 
