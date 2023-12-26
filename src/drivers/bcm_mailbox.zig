@@ -4,16 +4,12 @@ const assert = std.debug.assert;
 
 const root = @import("root");
 
-const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
-
 const architecture = @import("../architecture.zig");
 const barriers = architecture.barriers;
 
 const memory = @import("../memory.zig");
-const AddressTranslation = memory.AddressTranslation;
 const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
-const toParent = memory.toParent;
 
 const synchronize = @import("../synchronize.zig");
 
