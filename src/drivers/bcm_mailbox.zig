@@ -27,8 +27,8 @@ pub const PropertyTag = extern struct {
     value_length: u32,
 
     pub fn init(tag_type: RpiFirmwarePropertyTag, request_words: u29, buffer_words: u29) PropertyTag {
-        const request_size_bytes: u32 = request_words * @sizeOf(u32);
-        const value_buffer_size_bytes: u32 = buffer_words * @sizeOf(u32);
+        const request_size_bytes: u32 = request_words * 4;
+        const value_buffer_size_bytes: u32 = buffer_words * 4;
         return .{
             .tag_id = @intFromEnum(tag_type),
             .value_length = request_size_bytes,
@@ -185,10 +185,6 @@ const MailboxChannel = enum(u4) {
     property_vc_to_arm = 9,
 };
 
-const rpi_firmware_status_request: u32 = 0;
-const rpi_firmware_status_success: u32 = 0x80000000;
-const rpi_firmware_status_error: u32 = 0x80000001;
-
 pub const RpiFirmwarePropertyTag = enum(u32) {
     rpi_firmware_property_end = 0x00000000,
     rpi_firmware_get_firmware_revision = 0x00000001,
@@ -295,17 +291,10 @@ const TagError = error{
     Unsuccessful,
 };
 
-pub const PropertyRequestHeader = extern struct {
-    const code_request = 0x0;
-    const code_response_success = 0x80000000;
-    const code_response_failure = 0x80000001;
-
-    buffer_size: u32,
-    code: u32 = code_request,
-};
+const CODE_REQUEST = 0x0;
+const CODE_RESPONSE_SUCCESS = 0x80000000;
 
 const VALUE_LENGTH_RESPONSE: u32 = 1 << 31;
-const END_TAG = 0;
 const PROPERTY_TAG_REQUIRED_ALIGNMENT = 16;
 
 pub fn getTag(self: *Self, tag: anytype) !void {
@@ -334,7 +323,7 @@ pub fn getTags(self: *Self, buffer: []u32) !void {
     defer self.allocator.free(message);
 
     message[0] = payload_size;
-    message[1] = 0;
+    message[1] = CODE_REQUEST;
     @memcpy(message[2..(2 + data_words)], buffer);
     message[data_words + 2] = 0;
 
@@ -348,7 +337,7 @@ pub fn getTags(self: *Self, buffer: []u32) !void {
     synchronize.dataCacheRangeInvalidate(@intFromPtr(message.ptr), payload_size);
     barriers.barrierMemory();
 
-    if (message[1] == PropertyRequestHeader.code_response_success) {
+    if (message[1] == CODE_RESPONSE_SUCCESS) {
         @memcpy(buffer, message[2 .. message.len - 1]);
     }
 }
