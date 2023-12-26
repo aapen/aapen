@@ -35,6 +35,22 @@ pub const PropertyTag = extern struct {
             .value_buffer_size = value_buffer_size_bytes,
         };
     }
+
+    pub fn asU32Slice(tag: anytype) []u32 {
+        const TagPtr = @TypeOf(tag);
+        assert(@typeInfo(TagPtr) == .Pointer);
+        assert(@typeInfo(TagPtr).Pointer.size == .One);
+
+        const Tag = @typeInfo(TagPtr).Pointer.child;
+        const size = @sizeOf(Tag);
+
+        if (size % 4 != 0) @compileError("tag structure size must be a multiple of 4 bytes, but it is " ++ size);
+
+        const byte_ptr: [*]u8 = @ptrCast(@constCast(tag));
+        const u32_ptr: [*]u32 = @ptrCast(@alignCast(byte_ptr));
+
+        return u32_ptr[0 .. size / 4];
+    }
 };
 
 const MailboxStatusRegister = packed struct {
@@ -298,61 +314,41 @@ pub fn getTag(self: *Self, tag: anytype) !void {
     assert(@typeInfo(TagPtr).Pointer.size == .One);
 
     const Tag = @typeInfo(TagPtr).Pointer.child;
-
     if (!@hasField(Tag, "tag")) @compileError("tag field missing, expected: tag: PropertyTag");
     if (@TypeOf(tag.tag) != PropertyTag) @compileError("tag expected type PropertyTag, found: " ++ @typeName(@TypeOf(tag.tag)));
 
-    const property_tag: *PropertyTag = @ptrCast(@constCast(tag));
-    const tag_size = @sizeOf(Tag);
+    var u32slice = PropertyTag.asU32Slice(tag);
+    try self.getTags(u32slice);
 
-    try self.getTags(property_tag, tag_size / @sizeOf(u32));
-
-    property_tag.value_length &= VALUE_LENGTH_RESPONSE;
-    if (property_tag.value_length == 0) {
+    // a valid response should have the high bit set on the "value
+    // length" field.
+    if (u32slice[2] & VALUE_LENGTH_RESPONSE == 0) {
         return TagError.NoResponse;
     }
 }
 
-pub fn getTags(self: *Self, tags: *align(4) anyopaque, tag_words: usize) !void {
-    assert(tag_words >= @sizeOf(PropertyTag) / @sizeOf(u32));
-    const tags_ptr: [*]align(4) u8 = @ptrCast(tags);
+pub fn getTags(self: *Self, buffer: []u32) !void {
+    const data_words: u32 = @truncate(buffer.len);
+    const payload_size: u32 = (data_words + 3) * @as(u32, 4);
+    const message: []u32 = try self.allocator.alignedAlloc(u32, PROPERTY_TAG_REQUIRED_ALIGNMENT, data_words + 3);
+    defer self.allocator.free(message);
 
-    const payload_size = tag_words * @sizeOf(u32);
-    const sentinel_size = @sizeOf(u32);
-    const buffer_size = @sizeOf(PropertyRequestHeader) + payload_size + sentinel_size;
-    assert((buffer_size & 0b11) == 0);
+    message[0] = payload_size;
+    message[1] = 0;
+    @memcpy(message[2..(2 + data_words)], buffer);
+    message[data_words + 2] = 0;
 
-    const raw_property_buffer = try self.allocator.alignedAlloc(u8, PROPERTY_TAG_REQUIRED_ALIGNMENT, buffer_size);
-    defer self.allocator.free(raw_property_buffer);
-
-    const property_buffer: *PropertyRequestHeader = @ptrCast(raw_property_buffer);
-    const tags_area: [*]u8 = raw_property_buffer.ptr + @sizeOf(PropertyRequestHeader);
-
-    property_buffer.code = PropertyRequestHeader.code_request;
-    property_buffer.buffer_size = @truncate(buffer_size);
-
-    @memcpy(tags_area[0..payload_size], tags_ptr);
-
-    // the sentinel goes after all the payload
-    const sentinel_ptr: *u32 = @ptrCast(@alignCast(tags_area + payload_size));
-    sentinel_ptr.* = END_TAG;
-
-    // Make sure the changes will be visible to the GPU
     barriers.barrierMemoryWrite();
-    synchronize.dataCacheRangeClean(@intFromPtr(property_buffer), payload_size);
+    synchronize.dataCacheRangeClean(@intFromPtr(message.ptr), payload_size);
 
-    const buffer_address_mailbox: u32 = @truncate(@intFromPtr(property_buffer));
+    const buffer_address_mailbox: u32 = @truncate(@intFromPtr(message.ptr));
     try self.sendReceive(buffer_address_mailbox, MailboxChannel.property_arm_to_vc);
 
     // Make sure changes from the GPU are visible to us
-    synchronize.dataCacheRangeInvalidate(@intFromPtr(property_buffer), payload_size);
+    synchronize.dataCacheRangeInvalidate(@intFromPtr(message.ptr), payload_size);
     barriers.barrierMemory();
 
-    if (property_buffer.code != PropertyRequestHeader.code_response_success) {
-        std.log.warn("mailbox transaction unsuccessful: 0x{x:0>8}", .{property_buffer.code});
-        root.debug.sliceDumpAsWords(raw_property_buffer);
-        return TagError.Unsuccessful;
+    if (message[1] == PropertyRequestHeader.code_response_success) {
+        @memcpy(buffer, message[2 .. message.len - 1]);
     }
-
-    @memcpy(tags_ptr, tags_area[0..payload_size]);
 }

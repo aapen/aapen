@@ -47,7 +47,7 @@ pub fn init(mailbox: *Mailbox) Self {
 
 pub fn inspect(self: *Self, info: *BoardInfo) !void {
     var board_info = PropertyBoardInfo.init();
-    try self.mailbox.getTags(&board_info, @sizeOf(PropertyBoardInfo) / 4);
+    try self.mailbox.getTags(PropertyTag.asU32Slice(&board_info));
 
     try info.memory.regions.append(memory.Region.fromSize("ARM memory", board_info.arm_memory.base, board_info.arm_memory.size));
     try info.memory.regions.append(memory.Region.fromSize("VC memory", board_info.vc_memory.base, board_info.vc_memory.size));
