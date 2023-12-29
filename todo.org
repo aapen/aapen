@@ -409,3 +409,11 @@ Approach:
 ** DONE Device tree load address from Broadcom firmware
 No idea why this is the address: 0x2eff7a00
 * Scratch Notes
+** bzt has a reset() routine that reboots the board
+https://github.com/bztsrc/raspi3-tutorial/blob/master/08_power/power.c#L75
+
+It uses a register "RSTS"
+
+#+begin_src
+  #define PM_RSTS         ((volatile unsigned int*)(MMIO_BASE+0x00100020))
+#+end_src

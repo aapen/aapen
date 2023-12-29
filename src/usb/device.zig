@@ -1,12 +1,31 @@
-const transaction = @import("transaction.zig");
-const setup = transaction.setup;
-const SetupPacket = transaction.SetupPacket;
-const TransferType = transaction.TransferType;
+const descriptor = @import("descriptor.zig");
+const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
+const DeviceDescriptor = descriptor.DeviceDescriptor;
+const EndpointDescriptor = descriptor.EndpointDescriptor;
+const InterfaceDescriptor = descriptor.InterfaceDescriptor;
+
+const driver = @import("driver.zig");
+const DeviceDriver = driver.DeviceDriver;
+
+const transfer = @import("transfer.zig");
+const setup = transfer.setup;
+const SetupPacket = transfer.SetupPacket;
+const TransferType = transfer.TransferType;
 
 pub const DeviceAddress = u7;
 pub const DEFAULT_ADDRESS: DeviceAddress = 0;
 pub const FIRST_DEDICATED_ADDRESS = 1;
+
 pub const MAX_ADDRESS: DeviceAddress = 63;
+pub const MAX_INTERFACES: usize = 8;
+pub const MAX_ENDPOINTS: usize = 8;
+
+pub const STATUS_SELF_POWERED: u32 = 0b01;
+pub const STATUS_REMOTE_WAKEUP: u32 = 0b10;
+
+pub const DeviceStatus = extern struct {
+    status: u16 = 0,
+};
 
 pub const UsbSpeed = enum {
     Low,
@@ -69,6 +88,46 @@ pub const HidProtocol = enum(u8) {
     mouse = 0x02,
 };
 
+pub const DeviceState = enum {
+    attached,
+    detaching,
+};
+
+pub const Device = struct {
+    in_use: bool = false,
+    address: DeviceAddress,
+    speed: UsbSpeed,
+
+    /// Hub this is attached to. Null means this is the root hub.
+    parent: ?*Device,
+    /// Port on the parent hub this is attached to
+    parent_port: u32,
+
+    configuration_index: u8,
+
+    device_descriptor: DeviceDescriptor,
+    configuration_descriptor: ?*ConfigurationDescriptor,
+    interfaces: [MAX_INTERFACES]?*InterfaceDescriptor,
+    endpoints: [MAX_INTERFACES][MAX_ENDPOINTS]?*EndpointDescriptor,
+
+    product: []u8,
+    configuration: []u8,
+
+    state: DeviceState,
+
+    // the follow members are controlled by the core driver
+    driver: *DeviceDriver,
+    driver_private: *anyopaque,
+};
+
 pub fn setupSetAddress(address: DeviceAddress) SetupPacket {
     return setup(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_address), address, 0, 0);
+}
+
+pub fn setupGetConfiguration() SetupPacket {
+    return setup(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_configuration), 0, 0, 1);
+}
+
+pub fn setupSetConfiguration(config: u16) SetupPacket {
+    return setup(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_configuration), config, 0, 0);
 }

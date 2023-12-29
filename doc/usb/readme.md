@@ -111,5 +111,4 @@ This is meant to depict the relationships of the actions. Not all of these are r
 
 [RiscOS implementation of DWC driver](https://gitlab.riscosopen.org/RiscOS/Sources/HWSupport/USB/Controllers/DWCDriver/-/tree/master)
 
-
-
+[MSDN article about enumerating devices](https://techcommunity.microsoft.com/t5/microsoft-usb-blog/how-does-usb-stack-enumerate-a-device/ba-p/270685)

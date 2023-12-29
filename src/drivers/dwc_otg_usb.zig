@@ -286,16 +286,19 @@ fn powerOn(self: *Self) !void {
     const power_result = try self.power_controller.powerOn(.usb_hcd);
 
     if (power_result != .power_on) {
-        log.err("Failed to power on USB device: {any}\n", .{power_result});
+        log.err("Failed to power on USB device: {any}", .{power_result});
         return Error.PowerFailure;
     }
+
+    // wait a bit for power to settle
+    self.delayMillis(10);
 }
 
 fn powerOff(self: *Self) !void {
     const power_result = try self.power_controller.powerOff(.usb_hcd);
 
     if (power_result != .power_off) {
-        log.err("Failed to power off USB device: {any}\n", .{power_result});
+        log.err("Failed to power off USB device: {any}", .{power_result});
         return Error.PowerFailure;
     }
 }
@@ -333,14 +336,14 @@ fn initializeControllerCore(self: *Self) !void {
     config.term_sel_dl_pulse = 0;
     self.core_registers.usb_config = config;
 
-    try self.resetControllerCore();
+    try self.resetSoft();
 
     config.mode_select = .ulpi;
     config.phy_if = 0;
     self.core_registers.usb_config = config;
 
     // need another reset to make the phy changes take effect
-    try self.resetControllerCore();
+    try self.resetSoft();
 
     const hw2 = self.core_registers.hardware_config_2;
     config = self.core_registers.usb_config;
@@ -354,6 +357,31 @@ fn initializeControllerCore(self: *Self) !void {
     self.core_registers.usb_config = config;
 
     self.num_host_channels = hw2.num_host_channels;
+
+    const rx_words: u32 = 1024; // Size of Rx FIFO in 4-byte words
+    const tx_words: u32 = 1024; // Size of Non-periodic Tx FIFO in 4-byte words
+    const ptx_words: u32 = 1024; // Size of Periodic Tx FIFO in 4-byte words
+
+    // /* First configure the Host Controller's FIFO sizes.  This is _required_
+    //  * because the default values (at least in Broadcom's instantiation of the
+    //  * Synopsys USB block) do not work correctly.  If software fails to do this,
+    //  * receiving data will fail in virtually impossible to debug ways that cause
+    //  * memory corruption.  This is true even though we are using DMA and not
+    //  * otherwise interacting with the Host Controller's FIFOs in this driver. */
+    // usb_debug("%u words of RAM available for dynamic FIFOs\n", regs->hwcfg3 >> 16);
+    // usb_debug("original FIFO sizes: rx 0x%08x,  tx 0x%08x, ptx 0x%08x\n",
+    //           regs->rx_fifo_size, regs->nonperiodic_tx_fifo_size,
+    //           regs->host_periodic_tx_fifo_size);
+    // regs->rx_fifo_size = rx_words;
+    // regs->nonperiodic_tx_fifo_size = (tx_words << 16) | rx_words;
+    // regs->host_periodic_tx_fifo_size = (ptx_words << 16) | (rx_words + tx_words);
+
+    log.info("{d} words of RAM available for dynamic FIFOs", .{@as(u32, @bitCast(self.core_registers.hardware_config_3)) >> 16});
+    log.debug("original FIFO sizes: rx 0x{x:0>8}, tx 0x{x:0>8}, ptx 0x{x:0>8}", .{ @as(u32, @bitCast(self.core_registers.rx_fifo_size)), @as(u32, @bitCast(self.core_registers.nonperiodic_tx_fifo_size)), @as(u32, @bitCast(self.core_registers.host_periodic_tx_fifo_size)) });
+
+    self.core_registers.rx_fifo_size = @bitCast(rx_words);
+    self.core_registers.nonperiodic_tx_fifo_size = @bitCast((tx_words << 16) | rx_words);
+    self.core_registers.host_periodic_tx_fifo_size = @bitCast((ptx_words << 16) | (rx_words + tx_words));
 
     var ahb = self.core_registers.ahb_config;
     ahb.dma_enable = 1;
@@ -388,7 +416,7 @@ fn enableCommonInterrupts(self: *Self) !void {
     self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffff_ffff));
 }
 
-fn resetControllerCore(self: *Self) !void {
+fn resetSoft(self: *Self) !void {
     log.debug("core controller reset", .{});
 
     // wait up to 100 ms for reset to settle
@@ -401,13 +429,13 @@ fn resetControllerCore(self: *Self) !void {
     self.core_registers.reset.soft_reset = 1;
 
     // wait up to 10 ms for reset to finish
-    const reset_end = self.deadline(100);
+    const reset_end = self.deadline(10);
+
     // TODO what should we do if we don't see the soft_reset go to zero?
     while (self.clock.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
 
     // wait 100 ms
-    const wait_end = self.deadline(100);
-    while (self.clock.ticks() < wait_end) {}
+    self.delayMillis(100);
 }
 
 fn initializeHost(self: *Self) !void {

@@ -103,6 +103,26 @@ pub fn wordReset(_: *Forth, _: *Header) ForthError!void {
     asm volatile ("brk 0x07c5");
 }
 
+pub fn wordPowerQuery(forth: *Forth, _: *Header) ForthError!void {
+    const device_number = try forth.stack.pop();
+    if (root.hal.power_controller.isPowered(@enumFromInt(device_number))) |power_result| {
+        try forth.stack.push(@intFromEnum(power_result));
+    } else |_| {
+        try forth.stack.push(0);
+    }
+}
+
+pub fn wordPowerControl(forth: *Forth, _: *Header) ForthError!void {
+    const device_number = try forth.stack.pop();
+    const desired_state = try forth.stack.pop();
+
+    if (root.hal.power_controller.setState(@enumFromInt(device_number), @enumFromInt(desired_state))) |power_result| {
+        try forth.stack.push(@intFromEnum(power_result));
+    } else |_| {
+        try forth.stack.push(0);
+    }
+}
+
 /// --
 pub fn wordHello(forth: *Forth, _: *Header) ForthError!void {
     try forth.print("Hello world!\n", .{});
@@ -559,8 +579,10 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("hal", HAL);
     try forth.defineStruct("Clocks", HAL.PeripheralClockController);
     try forth.defineStruct("Clocks.VTable", HAL.PeripheralClockController.VTable);
-    try forth.defineStruct("USB", HAL.USBHCI);
-    try forth.defineStruct("USB.VTable", HAL.USBHCI.VTable);
+    try forth.defineStruct("USB", usb);
+    try forth.defineStruct("USB.VTable", usb.VTable);
+    try forth.defineStruct("USBHCI", HAL.USBHCI);
+    try forth.defineStruct("USBHCI.VTable", HAL.USBHCI.VTable);
     try forth.defineStruct("usb-device", HAL.USBHCI.Device);
     try forth.defineStruct("usb-bus", usb.Bus);
     try forth.defineStruct("usb-hub", usb.Hub);
@@ -572,6 +594,8 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
     _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, false);
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
+    _ = try forth.definePrimitiveDesc("?power", "n -- n : check power state of device ", &wordPowerQuery, false);
+    _ = try forth.definePrimitiveDesc("power", "p n -- n : set device n to power state p", &wordPowerControl, false);
 
     // Basic Forth words.
     _ = try forth.definePrimitiveDesc("exec", "pHeader -- <Results>", &wordExec, false);

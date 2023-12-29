@@ -83,7 +83,7 @@ pub fn isPowered(self: *Self, device: PowerDevice) !PowerResult {
     return decode(query.state);
 }
 
-fn setState(self: *Self, device: PowerDevice, desired_state: DesiredState) !PowerResult {
+pub fn setState(self: *Self, device: PowerDevice, desired_state: DesiredState) !PowerResult {
     var control = PropertyPower.initControl(device, desired_state, .wait);
     try self.mailbox.getTag(&control);
     return decode(control.state);

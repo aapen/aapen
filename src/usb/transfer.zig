@@ -7,6 +7,15 @@ pub const TransferBytes = u19;
 pub const PacketSize = u11;
 pub const DEFAULT_MAX_PACKET_SIZE = 8;
 
+/// Describe a single USB transfer to perform. May be any type of
+/// transfer, but if it is a control transfer then the setup member
+/// must be filled in.
+pub const Transfer = struct {
+    transfer_type: TransferType,
+    setup: SetupPacket,
+    data_buffer: []u8,
+};
+
 pub const PID = enum(u8) {
     Setup,
     Data0,

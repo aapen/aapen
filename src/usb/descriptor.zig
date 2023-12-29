@@ -10,10 +10,10 @@ const StandardDeviceRequests = device.StandardDeviceRequests;
 const interface = @import("interface.zig");
 const InterfaceClass = interface.InterfaceClass;
 
-const transaction = @import("transaction.zig");
-const setup = transaction.setup;
-const SetupPacket = transaction.SetupPacket;
-const TransferType = transaction.TransferType;
+const transfer = @import("transfer.zig");
+const setup = transfer.setup;
+const SetupPacket = transfer.SetupPacket;
+const TransferType = transfer.TransferType;
 
 /// Index of a string descriptor
 pub const StringIndex = u8;
@@ -205,10 +205,10 @@ pub const StringDescriptor = extern struct {
     // For simplicity, we only read up to the first 62 bytes of this
     // descriptor. Otherwise we have to do one control transfer to
     // find the length then another to read the actual contents.
-    body: [31]u16,
+    body: [31]u16 align(1),
 
     pub fn asSlice(self: *const StringDescriptor, allocator: Allocator) ![]u8 {
-        const actual_length = (self.header.length - 2) / 2;
+        const actual_length = (self.header.length - @sizeOf(Header)) / 2;
         const result = try allocator.alloc(u8, actual_length + 1);
         @memset(result, 0);
 

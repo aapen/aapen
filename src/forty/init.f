@@ -68,39 +68,46 @@ finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
 
-( USB hardware control)
+( USB driver stack )
+
+: usb-init
+  usb dup
+  USB.vtable USB.VTable.initialize + + @
+  invoke-1r
+;
+
 : usb-init-hcd                                              ( -- bool : initialize the host controller driver )
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
-  USB.vtable USB.VTable.initialize + + @                    ( Address of initialize function )
+  USBHCI.vtable USBHCI.VTable.initialize + + @              ( Address of initialize function )
   invoke-1r                                                 ( Call instance function, 0 return means failed )
 ;
 
 : usb-init-root-port                                        ( -- addr : init and return *Device )
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
-  USB.vtable USB.VTable.rootPortInitialize + + @            ( Address of initialize function )
+  USBHCI.vtable USBHCI.VTable.rootPortInitialize + + @      ( Address of initialize function )
   invoke-1r                                                 ( Call instance function, 0 return means failed )
 ;
 
 : usb-init-bus                                              ( -- addr : init and return *Bus )
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
-  USB.vtable USB.VTable.busInitialize + + @                 ( Address of busInitialize function )
+  USBHCI.vtable USBHCI.VTable.busInitialize + + @           ( Address of busInitialize function )
   invoke-1r                                                 ( Call instance function, 0 return means failed )
 ;
 
 : usb-status
   [[ hal hal.usb_hci +]] @
   dup
-  USB.vtable USB.VTable.dumpStatus + + @
+  USBHCI.vtable USBHCI.VTable.dumpStatus + + @
   invoke-1
 ;
 
 : usb-device                                                ( n -- addr : USB address -> device pointer )
   [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
   dup
-  USB.vtable USB.VTable.deviceGet + + @                     ( Address of device lookup function )
+  USB.vtable USBHCI.VTable.deviceGet + + @                     ( Address of device lookup function )
   invoke-2r                                                 ( Call instance function, 0 return means failed )
 ;
 

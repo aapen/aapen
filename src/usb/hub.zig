@@ -23,6 +23,9 @@ const DeviceAddress = device.DeviceAddress;
 const StandardDeviceRequests = device.StandardDeviceRequests;
 const UsbSpeed = device.UsbSpeed;
 
+const driver = @import("driver.zig");
+const DeviceDriver = driver.DeviceDriver;
+
 const endpoint = @import("endpoint.zig");
 const EndpointNumber = endpoint.EndpointNumber;
 const EndpointType = endpoint.EndpointType;
@@ -32,9 +35,9 @@ const RequestTypeDirection = request.RequestTypeDirection;
 const RequestTypeRecipient = request.RequestTypeRecipient;
 const RequestTypeType = request.RequestTypeType;
 
-const transaction = @import("transaction.zig");
-const SetupPacket = transaction.SetupPacket;
-const setup = transaction.setup;
+const transfer = @import("transfer.zig");
+const SetupPacket = transfer.SetupPacket;
+const setup = transfer.setup;
 
 pub const HubDescriptor = extern struct {
     header: Header,
@@ -68,7 +71,7 @@ pub const HubDescriptor = extern struct {
 };
 
 /// See USB 2.0 specification, revision 2.0, section 11.24.2
-pub const ClassRequestCode = enum(u8) {
+pub const ClassRequest = enum(u8) {
     get_status = 0,
     clear_feature = 1,
     set_feature = 3,
@@ -158,7 +161,7 @@ const ClearTTBufferValue = packed struct {
 };
 
 /// See USB 2.0 specification, revision 2.0, table 11-19
-pub const HubStatusAndChangeStatus = packed struct {
+pub const HubStatus = packed struct {
     hub_status: packed struct {
         local_power_source: enum(u1) {
             local_power_good = 0b0,
@@ -403,7 +406,7 @@ pub const Hub = struct {
 };
 
 pub fn setupClearHubFeature(selector: HubFeature) SetupPacket {
-    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequestCode.clear_feature), @bitCast(selector), 0, 0);
+    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequest.clear_feature), @intFromEnum(selector), 0, 0);
 }
 
 pub fn setupClearTTBuffer(device_address: DeviceAddress, endpoint_number: EndpointNumber, endpoint_type: EndpointType, direction: TTDirection, port_number: u8) SetupPacket {
@@ -423,40 +426,44 @@ pub fn setupGetHubDescriptor(descriptor_index: u8, descriptor_length: u16) Setup
 }
 
 pub fn setupGetHubStatus() SetupPacket {
-    return setup(.device, .class, .device_to_host, @intFromEnum(ClassRequestCode.get_status), 0, 0, 4);
+    return setup(.device, .class, .device_to_host, @intFromEnum(ClassRequest.get_status), 0, 0, 4);
 }
 
 pub fn setupGetPortStatus(port_number: u8) SetupPacket {
-    return setup(.other, .class, .device_to_host, @intFromEnum(ClassRequestCode.get_status), 0, port_number, 4);
+    return setup(.other, .class, .device_to_host, @intFromEnum(ClassRequest.get_status), 0, port_number, 4);
 }
 
 pub fn setupGetTTState(tt_flags: u16, tt_port: u16, tt_state_length: u16) SetupPacket {
-    return setup(.other, .class, .device_to_host, @intFromEnum(ClassRequestCode.get_tt_state), tt_flags, tt_port, tt_state_length);
+    return setup(.other, .class, .device_to_host, @intFromEnum(ClassRequest.get_tt_state), tt_flags, tt_port, tt_state_length);
 }
 
 pub fn setupResetTT(tt_port: u16) SetupPacket {
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.reset_tt), 0, tt_port, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequest.reset_tt), 0, tt_port, 0);
 }
 
 pub fn setupSetHubDescriptor(descriptor_type: DescriptorType, descriptor_index: DescriptorIndex, length: u16) SetupPacket {
     const val: u16 = @as(u16, descriptor_type) << 8 | descriptor_index;
-    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_descriptor), val, 0, length);
+    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequest.set_descriptor), val, 0, length);
 }
 
 pub fn setupStopTT(tt_port: u16) SetupPacket {
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.stop_tt), 0, tt_port, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequest.stop_tt), 0, tt_port, 0);
 }
 
 pub fn setupSetHubFeature(selector: HubFeature) SetupPacket {
-    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_feature), @bitCast(selector), 0, 0);
+    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequest.set_feature), @intFromEnum(selector), 0, 0);
 }
 
 pub fn setupClearPortFeature(selector: PortFeature, port_number: u8, port_indicator: u8) SetupPacket {
     const index: u16 = @as(u16, port_indicator) << 8 | port_number;
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.clear_feature), @intFromEnum(selector), index, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequest.clear_feature), @intFromEnum(selector), index, 0);
 }
 
 pub fn setupSetPortFeature(feature: PortFeature, port_number: u8, port_indicator: u8) SetupPacket {
     const index: u16 = @as(u16, port_indicator) | port_number;
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequestCode.set_feature), @intFromEnum(feature), index, 0);
+    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequest.set_feature), @intFromEnum(feature), index, 0);
 }
+
+pub const usb_hub_driver: DeviceDriver = .{
+    .name = "USB Hub",
+};

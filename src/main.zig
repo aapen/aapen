@@ -11,7 +11,9 @@ const CharBufferConsole = @import("char_buffer_console.zig");
 const MainConsole = @import("main_console.zig");
 const Rectangle = @import("rectangle.zig").Rectangle;
 
-const bcd = @import("bcd.zig");
+pub const debug = @import("debug.zig");
+pub const kprint = debug.kprint;
+
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
@@ -20,8 +22,7 @@ const Forth = forty.Forth;
 
 const Serial = @import("serial.zig"); //TBD
 
-pub const debug = @import("debug.zig");
-pub const kprint = debug.kprint;
+const Usb = @import("usb.zig");
 
 const config = @import("config");
 pub const HAL = switch (config.board) {
@@ -34,9 +35,9 @@ pub const std_options = struct {
     pub const logFn = debug.log;
     pub const log_level = .warn;
     pub const log_scope_levels = &[_]ScopeLevel{
-        .{ .scope = .dwc_otg_usb, .level = .info },
-        .{ .scope = .dwc_otg_usb_channel, .level = .info },
-        .{ .scope = .usb, .level = .info },
+        .{ .scope = .dwc_otg_usb, .level = .debug },
+        .{ .scope = .dwc_otg_usb_channel, .level = .debug },
+        .{ .scope = .usb, .level = .debug },
     };
 };
 
@@ -52,6 +53,7 @@ pub var fb: *FrameBuffer = undefined;
 pub var char_buffer_console: *CharBufferConsole = undefined;
 pub var char_buffer: *CharBuffer = undefined;
 pub var main_console: *MainConsole = undefined;
+pub var usb: *Usb = undefined;
 
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
@@ -148,11 +150,12 @@ fn kernelInit() void {
         debug.kernelError("diagnostics init error", err);
     }
 
-    // if (hal.usb_hci.initialize()) {
-    //     debug.kernelMessage("USB host init");
-    // } else |err| {
-    //     debug.kernelError("USB host init error", err);
-    // }
+    if (Usb.init(heap.allocator)) |u| {
+        usb = u;
+        debug.kernelMessage("USB core init");
+    } else |err| {
+        debug.kernelError("USB core init error", err);
+    }
 
     if (interpreter.init(heap.allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
@@ -163,7 +166,8 @@ fn kernelInit() void {
     hal.system_timer.schedule(heartbeat_interval, &heartbeat);
 
     // TODO should this move to forty/core.zig?
-    supplyAddress("usb", @intFromPtr(&hal.usb_hci));
+    supplyAddress("usb", @intFromPtr(usb));
+    supplyAddress("usbhci", @intFromPtr(&hal.usb_hci));
     supplyAddress("fb", @intFromPtr(fb));
     supplyAddress("char-buffer", @intFromPtr(char_buffer));
     supplyAddress("console", @intFromPtr(main_console));

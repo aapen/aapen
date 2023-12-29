@@ -28,5 +28,7 @@ pub fn RT(r: RequestTypeRecipient, t: RequestTypeType, d: RequestTypeDirection) 
     return .{ .recipient = r, .type = t, .transfer_direction = d };
 }
 
-pub const request_type_in = RT(.device, .standard, .device_to_host);
-pub const request_type_out = RT(.device, .standard, .host_to_device);
+pub const standard_device_in = RT(.device, .standard, .device_to_host);
+pub const standard_device_out = RT(.device, .standard, .host_to_device);
+pub const class_device_in = RT(.other, .standard, .device_to_host);
+pub const class_device_out = RT(.other, .standard, .host_to_device);
