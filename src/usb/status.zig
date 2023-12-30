@@ -8,3 +8,7 @@ pub const Error = error{
     Timeout,
     UnsupportedRequest,
 };
+
+pub const TransactionStatus = enum {
+    ok,
+};
