@@ -65,6 +65,9 @@ firmware/COPYING.linux:
 test:
 	$(ZIG) test $(TEST_SRC)
 
+keep_testing:
+	find src | entr -c zig test --main-pkg-path src/. -freference-trace=9 src/tests.zig
+
 emulate: $(TEST_KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(TEST_KERNEL)
 
