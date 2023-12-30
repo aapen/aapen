@@ -442,7 +442,10 @@ pub fn hubHandleTransfer(transfer: *Transfer) !void {
                 }
             }
         },
-        else => transfer.complete(.unsupported_request),
+        else => {
+            log.warn("hubHandleTransfer: transfer type {d} not supported", .{transfer.transfer_type});
+            transfer.complete(.unsupported_request);
+        },
     }
 }
 
