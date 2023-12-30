@@ -10,8 +10,7 @@ const synchronize = @import("../../synchronize.zig");
 const criticalEnter = synchronize.criticalEnter;
 const criticalLeave = synchronize.criticalLeave;
 
-const local_timer = @import("../arm_local_timer.zig");
-const Clock = local_timer.Clock;
+const time = @import("../../time.zig");
 
 const usb = @import("../../usb.zig");
 pub const DeviceAddress = usb.DeviceAddress;
@@ -381,14 +380,12 @@ pub fn channelAbort(self: *Self) void {
     self.disable();
 }
 
-pub fn waitForState(self: *Self, clock: *Clock, desired_state: ChannelState, timeout_millis: u32) !void {
+pub fn waitForState(self: *Self, desired_state: ChannelState, timeout_millis: u32) !void {
     log.debug("channel {d} wait {d} ms for state {any}", .{ self.id, timeout_millis, desired_state });
 
     // TODO should probably use a critical section here.
-    const start_ticks = clock.ticks();
-    const elapsed_ticks = timeout_millis * 1_000; // clock freq is 1Mhz
-    const deadline = start_ticks + elapsed_ticks;
-    while (self.state != desired_state and clock.ticks() < deadline) {}
+    const deadline = time.deadlineMillis(timeout_millis);
+    while (self.state != desired_state and time.ticks() < deadline) {}
     if (self.state != desired_state) {
         log.debug("channel {d} timeout waiting for state {any}", .{ self.id, desired_state });
         return Error.Timeout;

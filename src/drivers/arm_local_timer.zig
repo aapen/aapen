@@ -30,6 +30,17 @@ pub const Clock = struct {
     pub fn ticksReadLow(self: *const Clock) u32 {
         return self.count_low.*;
     }
+
+    pub fn delayMillis(self: *const Clock, count: u32) void {
+        self.delayMicros(count * 1000);
+    }
+
+    // spin loop until 'count' ticks elapse
+    pub fn delayMicros(self: *const Clock, count: u32) void {
+        const start = self.ticks();
+        const end = start + count; // assumes clock freq is 1Mhz
+        while (self.ticks() <= end) {}
+    }
 };
 
 pub const TimerHandler = struct {

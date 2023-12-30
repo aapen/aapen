@@ -33,14 +33,17 @@ const device = @import("usb/device.zig");
 pub const Device = device.Device;
 pub const DeviceAddress = device.DeviceAddress;
 pub const DeviceClass = device.DeviceClass;
+pub const DeviceStatus = device.DeviceStatus;
 pub const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 pub const FIRST_DEDICATED_ADDRESS = device.FIRST_DEDICATED_ADDRESS;
 pub const MAX_ADDRESS = device.MAX_ADDRESS;
-pub const UsbSpeed = device.UsbSpeed;
-pub const StandardDeviceRequests = device.StandardDeviceRequests;
 pub const setupSetAddress = device.setupSetAddress;
 pub const setupGetConfiguration = device.setupGetConfiguration;
 pub const setupSetConfiguration = device.setupSetConfiguration;
+pub const setupGetStatus = device.setupGetStatus;
+pub const StandardDeviceRequests = device.StandardDeviceRequests;
+pub const STATUS_SELF_POWERED = device.STATUS_SELF_POWERED;
+pub const UsbSpeed = device.UsbSpeed;
 
 const driver = @import("usb/driver.zig");
 pub const DeviceDriver = driver.DeviceDriver;
@@ -59,7 +62,7 @@ pub const Characteristics = hub.Characteristics;
 pub const ChangeStatusP = hub.ChangeStatusP;
 pub const OvercurrentStatusP = hub.OvercurrentStatusP;
 pub const Hub = hub.Hub;
-pub const HubStatusAndChangeStatus = hub.HubStatus;
+pub const HubStatus = hub.HubStatus;
 pub const PortFeature = hub.PortFeature;
 pub const PortStatus = hub.PortStatus;
 pub const HubDescriptor = hub.HubDescriptor;
@@ -99,14 +102,15 @@ pub const Error = status.Error;
 
 const transfer = @import("usb/transfer.zig");
 pub const DEFAULT_MAX_PACKET_SIZE = transfer.DEFAULT_MAX_PACKET_SIZE;
+pub const PacketSize = transfer.PacketSize;
+pub const PID = transfer.PID;
+pub const PID2 = transfer.PID2;
 pub const SetupPacket = transfer.SetupPacket;
 pub const TransactionStage = transfer.TransactionStage;
 pub const Transfer = transfer.Transfer;
 pub const TransferBytes = transfer.TransferBytes;
+pub const TransferStatus = transfer.TransferStatus;
 pub const TransferType = transfer.TransferType;
-pub const PacketSize = transfer.PacketSize;
-pub const PID = transfer.PID;
-pub const PID2 = transfer.PID2;
 
 const Self = @This();
 

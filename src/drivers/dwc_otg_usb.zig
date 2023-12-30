@@ -8,8 +8,7 @@ const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
 
-const local_timer = @import("arm_local_timer.zig");
-const Clock = local_timer.Clock;
+const time = @import("../time.zig");
 
 const PowerController = root.HAL.PowerController;
 
@@ -146,7 +145,6 @@ irq_handler: IrqHandler = .{
 },
 translations: *const AddressTranslations,
 power_controller: *PowerController,
-clock: *Clock,
 root_port: RootPort,
 num_host_channels: u4,
 channel_assignments: HcdChannels = .{},
@@ -232,7 +230,6 @@ pub fn init(
     irq_id: IrqId,
     translations: *AddressTranslations,
     power: *PowerController,
-    clock: *Clock,
 ) !*Self {
     const self = try allocator.create(Self);
 
@@ -246,7 +243,6 @@ pub fn init(
         .irq_id = irq_id,
         .translations = translations,
         .power_controller = power,
-        .clock = clock,
         .root_port = RootPort.init(allocator),
         .num_host_channels = 0,
         .attached_devices = undefined,
@@ -291,7 +287,7 @@ fn powerOn(self: *Self) !void {
     }
 
     // wait a bit for power to settle
-    self.delayMillis(10);
+    time.delayMillis(10);
 }
 
 fn powerOff(self: *Self) !void {
@@ -420,22 +416,22 @@ fn resetSoft(self: *Self) !void {
     log.debug("core controller reset", .{});
 
     // wait up to 100 ms for reset to settle
-    const end = self.deadline(100);
+    const end = time.deadlineMillis(100);
 
     // TODO what should we do if we don't see the idle signal
-    while (self.clock.ticks() < end and self.core_registers.reset.ahb_master_idle != 1) {}
+    while (time.ticks() < end and self.core_registers.reset.ahb_master_idle != 1) {}
 
     // trigger the soft reset
     self.core_registers.reset.soft_reset = 1;
 
     // wait up to 10 ms for reset to finish
-    const reset_end = self.deadline(10);
+    const reset_end = time.deadlineMillis(10);
 
     // TODO what should we do if we don't see the soft_reset go to zero?
-    while (self.clock.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
+    while (time.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
 
     // wait 100 ms
-    self.delayMillis(100);
+    time.delayMillis(100);
 }
 
 fn initializeHost(self: *Self) !void {
@@ -478,14 +474,14 @@ fn flushTxFifo(self: *Self) !void {
     reset.tx_fifo_flush_num = FLUSH_ALL_TX_FIFOS;
     self.core_registers.reset = reset;
 
-    const reset_end = self.deadline(100);
-    while (self.clock.ticks() < reset_end and self.core_registers.reset.tx_fifo_flush != 0) {}
+    const reset_end = time.deadlineMillis(100);
+    while (time.ticks() < reset_end and self.core_registers.reset.tx_fifo_flush != 0) {}
 }
 
 fn flushRxFifo(self: *Self) !void {
     self.core_registers.reset.rx_fifo_flush = 1;
-    const reset_end = self.deadline(100);
-    while (self.clock.ticks() < reset_end and self.core_registers.reset.rx_fifo_flush != 0) {}
+    const reset_end = time.deadlineMillis(100);
+    while (time.ticks() < reset_end and self.core_registers.reset.rx_fifo_flush != 0) {}
 }
 
 fn powerHostPort(self: *Self) !void {
@@ -499,7 +495,7 @@ fn resetHostPort(self: *Self) !void {
     log.debug("reset of physical port", .{});
 
     self.host_registers.port.reset = 1;
-    self.delayMillis(60);
+    time.delayMillis(60);
     self.host_registers.port.reset = 0;
 }
 
@@ -521,8 +517,8 @@ fn haltAllChannels(self: *Self) !void {
         self.registers.channel_character = char;
 
         // wait until we see enable go low
-        const enable_wait_end = self.deadline(100);
-        while (self.channels[chid].regisers.channel_character.enable == 1 and self.clock.ticks() < enable_wait_end) {}
+        const enable_wait_end = time.deadlineMillis(100);
+        while (self.channels[chid].regisers.channel_character.enable == 1 and time.ticks() < enable_wait_end) {}
     }
 }
 
@@ -564,7 +560,7 @@ pub fn assignAddress(self: *Self, device: *Device) !void {
     self.attached_devices[my_address] = device;
 
     // wait 2 ms for the device to actually change its address
-    self.delayMillis(2);
+    time.delayMillis(2);
 }
 
 // ----------------------------------------------------------------------
@@ -598,10 +594,10 @@ const RootPort = struct {
         if (!self.enabled) {
             // We should see the connect bit become true within 510 ms of
             // power on
-            const connect_end = self.host.deadline(510);
-            while (self.host.clock.ticks() <= connect_end and self.host.host_registers.port.connect == 0) {}
+            const connect_end = time.deadlineMillis(510);
+            while (time.ticks() <= connect_end and self.host.host_registers.port.connect == 0) {}
 
-            self.host.delayMillis(100);
+            time.delayMillis(100);
 
             // assert the reset bit for 50 millis
             var port = self.host.host_registers.port;
@@ -612,7 +608,7 @@ const RootPort = struct {
             port.reset = 1;
             self.host.host_registers.port = port;
 
-            self.host.delayMillis(50);
+            time.delayMillis(50);
 
             port = self.host.host_registers.port;
             port.connect_changed = 0;
@@ -622,7 +618,7 @@ const RootPort = struct {
             port.reset = 0;
             self.host.host_registers.port = port;
 
-            self.host.delayMillis(20);
+            time.delayMillis(20);
             self.enabled = true;
         }
     }
@@ -728,29 +724,6 @@ pub fn getRootPortSpeed(self: *Self) !usb.UsbSpeed {
         .low => .Low,
         else => Error.ConfigurationError,
     };
-}
-
-// ----------------------------------------------------------------------
-// Clock handling
-// ----------------------------------------------------------------------
-
-// TODO migrate this to the clock
-pub fn deadline(self: *Self, millis: u32) u64 {
-    const start_ticks = self.clock.ticks();
-    const elapsed_ticks = millis * 1_000; // clock freq is 1Mhz
-    return start_ticks + elapsed_ticks;
-}
-
-fn delayMillis(self: *Self, count: u32) void {
-    self.delayMicros(count * 1000);
-}
-
-// TODO migrate this to the clock
-fn delayMicros(self: *Self, count: u32) void {
-    const start_ticks = self.clock.ticks();
-    const elapsed_ticks = count; // clock freq is 1Mhz
-    const end_ticks = start_ticks + elapsed_ticks;
-    while (self.clock.ticks() <= end_ticks) {}
 }
 
 pub fn dumpStatus(self: *Self) void {
@@ -863,11 +836,11 @@ fn transactionOnChannel(
     self.channelInterruptEnable(channel.id);
     defer self.channelInterruptDisable(channel.id);
 
-    transaction.deadline = if (timeout == 0) 0 else self.deadline(timeout);
+    transaction.deadline = if (timeout == 0) 0 else time.deadlineMillis(timeout);
 
     try channel.transactionBegin(device, device_speed, endpoint_number, endpoint_type, endpoint_direction, max_packet_size, initial_pid, buffer, &transaction.completion_handler);
 
-    while (self.clock.ticks() < transaction.deadline and !transaction.completed) {}
+    while (time.ticks() < transaction.deadline and !transaction.completed) {}
 
     // wait for transaction.completed to be true, or deadline elapsed.
     if (transaction.completed) {
@@ -883,7 +856,7 @@ fn transactionOnChannel(
         // if timeout, abort the transaction
         channel.channelAbort();
 
-        try channel.waitForState(self.clock, .Idle, 100);
+        try channel.waitForState(.Idle, 100);
 
         return 0;
     }

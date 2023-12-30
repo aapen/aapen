@@ -12,6 +12,8 @@ const HCI = root.HAL.USBHCI;
 // this is odd... should probably move Device to usb/device.zig
 const Device = HCI.Device;
 
+const time = @import("../time.zig");
+
 const descriptor = @import("descriptor.zig");
 const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
 const DescriptorIndex = descriptor.DescriptorIndex;
@@ -377,8 +379,8 @@ pub const Hub = struct {
 
     fn waitForPortStatus(self: *Hub, port_number: u8, expected: PortStatus, timeout: u16) !void {
         const expected_bits: u32 = @as(u32, @bitCast(expected));
-        const deadline = self.host.deadline(timeout);
-        while (self.host.clock.ticks() < deadline) {
+        const deadline = time.deadlineMillis(timeout);
+        while (time.ticks() < deadline) {
             const status = try self.getPortStatus(port_number);
             const actual_bits: u32 = @as(u32, @bitCast(status));
             if (expected_bits & actual_bits != 0) {

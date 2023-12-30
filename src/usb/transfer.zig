@@ -11,9 +11,22 @@ pub const DEFAULT_MAX_PACKET_SIZE = 8;
 /// transfer, but if it is a control transfer then the setup member
 /// must be filled in.
 pub const Transfer = struct {
+    pub const Completion = *const fn (self: *Transfer) void;
+
     transfer_type: TransferType,
     setup: SetupPacket,
     data_buffer: []u8,
+    actual_size: u16 = 0,
+    status: TransferStatus = .incomplete,
+    completion: ?Completion = null,
+
+    pub fn complete(self: *Transfer, status: TransferStatus) void {
+        self.status = status;
+
+        if (self.completion) |c| {
+            c(self);
+        }
+    }
 };
 
 pub const PID = enum(u8) {
@@ -45,6 +58,13 @@ pub const TransferType = enum(u2) {
     isochronous = 0b01,
     bulk = 0b10,
     interrupt = 0b11,
+};
+
+pub const TransferStatus = enum {
+    incomplete,
+    ok,
+    unsupported_request,
+    timeout,
 };
 
 pub const SetupPacket = extern struct {

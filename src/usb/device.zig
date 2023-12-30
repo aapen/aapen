@@ -20,12 +20,9 @@ pub const MAX_ADDRESS: DeviceAddress = 63;
 pub const MAX_INTERFACES: usize = 8;
 pub const MAX_ENDPOINTS: usize = 8;
 
+pub const DeviceStatus = u16;
 pub const STATUS_SELF_POWERED: u32 = 0b01;
 pub const STATUS_REMOTE_WAKEUP: u32 = 0b10;
-
-pub const DeviceStatus = extern struct {
-    status: u16 = 0,
-};
 
 pub const UsbSpeed = enum {
     Low,
@@ -130,4 +127,8 @@ pub fn setupGetConfiguration() SetupPacket {
 
 pub fn setupSetConfiguration(config: u16) SetupPacket {
     return setup(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_configuration), config, 0, 0);
+}
+
+pub fn setupGetStatus() SetupPacket {
+    return setup(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_status), 0, 0, 2);
 }
