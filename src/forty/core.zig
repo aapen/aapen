@@ -19,6 +19,7 @@ const parser = @import("parser.zig");
 
 const forth_module = @import("forth.zig");
 const Forth = forth_module.Forth;
+const WordFunction = forth_module.WordFunction;
 
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
@@ -56,6 +57,21 @@ pub fn wordLookup(forth: *Forth, _: *Header) ForthError!void {
     const word = forth.findWord(name);
     const iWord = @intFromPtr(word);
     try forth.stack.push(iWord);
+}
+
+/// word-addr catch-addr -- <result>"
+pub fn wordTry(forth: *Forth, _: *Header) ForthError!void {
+    const catcher: *Header = try forth.popAs(*Header);
+    const word: *Header = try forth.popAs(*Header);
+
+    const initialStackDepth = forth.call_stack.depth();
+    word.func(forth, word) catch |err| {
+        try forth.print("Error: {any}\n", .{err});
+        try catcher.func(forth, catcher);
+    };
+    while (forth.call_stack.depth() > initialStackDepth) {
+        _ = try forth.call_stack.pop();
+    }
 }
 
 /// value addr len --
@@ -572,7 +588,9 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("eval", "pStr -- <Results>", &wordEval, false);
     _ = try forth.definePrimitiveDesc("eval-command", "pStr -- <Results>", &wordEvalCommand, false);
     _ = try forth.definePrimitiveDesc("lookup", "word-name -- wordp or 0", &wordLookup, false);
+    _ = try forth.definePrimitiveDesc("try", "word-addr catch-addr -- <<result>>", &wordTry, false);
 
+    // Stack related words.
     _ = try forth.definePrimitiveDesc("swap", "w1 w2 -- w2 w1", &wordSwap, true);
     _ = try forth.definePrimitiveDesc("2swap", " w1 w2 w3 w4 -- w3 w4 w1 w2 ", &word2Swap, false);
     _ = try forth.definePrimitiveDesc("dup", "w -- w w", &wordDup, true);
@@ -624,8 +642,8 @@ pub fn defineCore(forth: *Forth) !void {
 
     _ = try forth.definePrimitiveDesc("set-mem", "value addr len -- : Initialize a block of memory.", &wordSetMemory, false);
 
+    // Screen and history related words.
     _ = try forth.definePrimitiveDesc("get-scr-text", "nline -- str : Get the text of the given line.", &wordGetScreenText, false);
-
     _ = try forth.definePrimitiveDesc("history-add", "str -- : Add a string to the command history.", &wordHistoryAdd, false);
     _ = try forth.definePrimitiveDesc("history", " -- : Print the command history.", &wordHistoryPrint, false);
 }
