@@ -1,5 +1,10 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const log = std.log.scoped(.usb);
+
 const descriptor = @import("descriptor.zig");
 const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
+const DescriptorType = descriptor.DescriptorType;
 const DeviceDescriptor = descriptor.DeviceDescriptor;
 const EndpointDescriptor = descriptor.EndpointDescriptor;
 const InterfaceDescriptor = descriptor.InterfaceDescriptor;
@@ -117,18 +122,151 @@ pub const Device = struct {
     driver_private: *anyopaque,
 };
 
-pub fn setupSetAddress(address: DeviceAddress) SetupPacket {
-    return setup(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_address), address, 0, 0);
-}
+/// This represents the parsed configuration tree
+pub const DeviceConfiguration = struct {
+    const ParseError = error{
+        BadData,
+    };
 
-pub fn setupGetConfiguration() SetupPacket {
-    return setup(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_configuration), 0, 0, 1);
-}
+    allocator: Allocator,
+    configuration_descriptor: ConfigurationDescriptor,
+    interfaces: [MAX_INTERFACES]?*InterfaceDescriptor,
+    endpoints: [MAX_INTERFACES][MAX_ENDPOINTS]?*EndpointDescriptor,
 
-pub fn setupSetConfiguration(config: u16) SetupPacket {
-    return setup(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_configuration), config, 0, 0);
-}
+    pub fn initFromBytes(allocator: Allocator, configuration_tree: []const u8) !*DeviceConfiguration {
+        var self = try allocator.create(DeviceConfiguration);
+        errdefer allocator.destroy(self);
 
-pub fn setupGetStatus() SetupPacket {
-    return setup(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_status), 0, 0, 2);
+        self.* = .{
+            .allocator = allocator,
+            .configuration_descriptor = std.mem.zeroes(ConfigurationDescriptor),
+            .interfaces = std.mem.zeroes([MAX_INTERFACES]?*InterfaceDescriptor),
+            .endpoints = std.mem.zeroes([MAX_INTERFACES][MAX_ENDPOINTS]?*EndpointDescriptor),
+        };
+
+        try self.parseConfiguration(configuration_tree);
+
+        return self;
+    }
+
+    pub fn deinit(self: *DeviceConfiguration) void {
+        for (0..MAX_INTERFACES) |i| {
+            if (self.interfaces[i]) |face| {
+                for (0..MAX_ENDPOINTS) |e| {
+                    if (self.endpoints[i][e]) |endp| {
+                        self.allocator.destroy(endp);
+                    }
+                }
+
+                self.allocator.destroy(face);
+                self.interfaces[i] = null;
+            }
+        }
+    }
+
+    fn parseConfiguration(self: *DeviceConfiguration, configuration_tree: []const u8) !void {
+        var here: usize = 0;
+        const config_start = here;
+        const config_length = configuration_tree[here];
+
+        if (configuration_tree[here + 1] != @intFromEnum(DescriptorType.configuration)) {
+            return DeviceConfiguration.ParseError.BadData;
+        }
+
+        here = here + config_length;
+        const config_end = here;
+
+        const partial_copy = try alignedCopy(ConfigurationDescriptor, self.allocator, configuration_tree[config_start..config_end]);
+        self.configuration_descriptor = partial_copy.*;
+        self.allocator.destroy(partial_copy);
+
+        const expect_interfaces = self.configuration_descriptor.interface_count;
+
+        for (0..expect_interfaces) |iface_num| {
+            const iface_length = configuration_tree[here];
+
+            if (configuration_tree[here + 1] != @intFromEnum(DescriptorType.interface)) {
+                return DeviceConfiguration.ParseError.BadData;
+            }
+
+            const iface_start = here;
+            here = here + iface_length;
+            const iface_end = here;
+
+            const iface = try alignedCopy(InterfaceDescriptor, self.allocator, configuration_tree[iface_start..iface_end]);
+            errdefer self.allocator.destroy(iface);
+
+            self.interfaces[iface_num] = iface;
+
+            const expect_endpoints = iface.endpoint_count;
+            for (0..expect_endpoints) |endpoint_num| {
+                const endpoint_length = configuration_tree[here];
+
+                if (configuration_tree[here + 1] != @intFromEnum(DescriptorType.endpoint)) {
+                    return DeviceConfiguration.ParseError.BadData;
+                }
+
+                const endpoint_start = here;
+                here = here + endpoint_length;
+                const endpoint_end = here;
+
+                const endpoint = try alignedCopy(EndpointDescriptor, self.allocator, configuration_tree[endpoint_start..endpoint_end]);
+                errdefer self.allocator.destroy(endpoint);
+
+                self.endpoints[iface_num][endpoint_num] = endpoint;
+            }
+        }
+    }
+
+    fn alignedCopy(comptime T: type, allocator: Allocator, unaligned_buffer: []const u8) !*T {
+        // res will now have the natural alignment of T
+        const res: *T = try allocator.create(T);
+
+        @memset(std.mem.asBytes(res), 0);
+        @memcpy(std.mem.asBytes(res)[0..unaligned_buffer.len], unaligned_buffer[0..]);
+
+        return res;
+    }
+
+    pub fn dump(self: *const DeviceConfiguration) void {
+        log.debug("DeviceConfiguration [", .{});
+        self.configuration_descriptor.dump();
+        for (0..MAX_INTERFACES) |i| {
+            if (self.interfaces[i]) |iface| {
+                iface.dump();
+
+                for (0..MAX_ENDPOINTS) |e| {
+                    if (self.endpoints[i][e]) |endp| {
+                        endp.dump();
+                    }
+                }
+            }
+        }
+        log.debug("]", .{});
+    }
+};
+
+// ----------------------------------------------------------------------
+// Testing
+// ----------------------------------------------------------------------
+const expect = std.testing.expect;
+const expectEqual = std.testing.expectEqual;
+
+test "we can parse a configuration tree into a device" {
+    std.debug.print("\n", .{});
+
+    const canned_configuration_descriptor = [_]u8{ 0x09, 0x02, 0x19, 0x00, 0x01, 0x01, 0x00, 0xe0, 0x00, 0x09, 0x04, 0x00, 0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x07, 0x05, 0x81, 0x03, 0x02, 0x00, 0xff };
+
+    var config = try DeviceConfiguration.initFromBytes(std.testing.allocator, &canned_configuration_descriptor);
+    defer {
+        config.deinit();
+        std.testing.allocator.destroy(config);
+    }
+
+    try expectEqual(@as(u8, 1), config.configuration_descriptor.interface_count);
+    try expect(config.interfaces[0] != null);
+    try expectEqual(@as(u8, 1), config.interfaces[0].?.endpoint_count);
+    try expect(config.endpoints[0][0] != null);
+    try expectEqual(@as(u8, 0x81), config.endpoints[0][0].?.endpoint_address);
+    try expectEqual(TransferType.interrupt, config.endpoints[0][0].?.attributes.transfer_type);
 }

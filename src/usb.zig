@@ -27,20 +27,17 @@ pub const IsoUsageType = descriptor.IsoUsageType;
 pub const EndpointDescriptor = descriptor.EndpointDescriptor;
 pub const StringDescriptor = descriptor.StringDescriptor;
 pub const StringIndex = descriptor.StringIndex;
-pub const setupDescriptorQuery = descriptor.setupDescriptorQuery;
+//pub const setupDescriptorQuery = descriptor.setupDescriptorQuery;
 
 const device = @import("usb/device.zig");
 pub const Device = device.Device;
 pub const DeviceAddress = device.DeviceAddress;
 pub const DeviceClass = device.DeviceClass;
+pub const DeviceConfiguration = device.DeviceConfiguration;
 pub const DeviceStatus = device.DeviceStatus;
 pub const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 pub const FIRST_DEDICATED_ADDRESS = device.FIRST_DEDICATED_ADDRESS;
 pub const MAX_ADDRESS = device.MAX_ADDRESS;
-pub const setupSetAddress = device.setupSetAddress;
-pub const setupGetConfiguration = device.setupGetConfiguration;
-pub const setupSetConfiguration = device.setupSetConfiguration;
-pub const setupGetStatus = device.setupGetStatus;
 pub const StandardDeviceRequests = device.StandardDeviceRequests;
 pub const STATUS_SELF_POWERED = device.STATUS_SELF_POWERED;
 pub const UsbSpeed = device.UsbSpeed;
@@ -69,18 +66,6 @@ pub const HubDescriptor = hub.HubDescriptor;
 pub const ClassRequestCode = hub.ClassRequest;
 pub const FeatureSelector = hub.FeatureSelector;
 pub const TTDirection = hub.TTDirection;
-pub const setupClearHubFeature = hub.setupClearHubFeature;
-pub const setupClearTTBuffer = hub.setupClearTTBuffer;
-pub const setupGetHubDescriptor = hub.setupGetHubDescriptor;
-pub const setupGetHubStatus = hub.setupGetHubStatus;
-pub const setupGetPortStatus = hub.setupGetPortStatus;
-pub const setupGetTTState = hub.setupGetTTState;
-pub const setupResetTT = hub.setupResetTT;
-pub const setupSetHubDescriptor = hub.setupSetHubDescriptor;
-pub const setupStopTT = hub.setupStopTT;
-pub const setupSetHubFeature = hub.setupSetHubFeature;
-pub const setupClearPortFeature = hub.setupClearPortFeature;
-pub const setupSetPortFeature = hub.setupSetPortFeature;
 const usb_hub_driver = hub.usb_hub_driver;
 
 const interface = @import("usb/interface.zig");
@@ -106,11 +91,12 @@ pub const PacketSize = transfer.PacketSize;
 pub const PID = transfer.PID;
 pub const PID2 = transfer.PID2;
 pub const SetupPacket = transfer.SetupPacket;
-pub const TransactionStage = transfer.TransactionStage;
 pub const Transfer = transfer.Transfer;
 pub const TransferBytes = transfer.TransferBytes;
-pub const TransferStatus = transfer.TransferStatus;
+pub const TransferCompletionStatus = transfer.Transfer.CompletionStatus;
 pub const TransferType = transfer.TransferType;
+
+pub const TransferFactory = @import("usb/transfer_factory.zig");
 
 const Self = @This();
 

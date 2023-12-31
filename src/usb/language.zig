@@ -14,6 +14,7 @@
 // was no way I was only going to include en_US.
 
 pub const LangID = enum(u16) {
+    none = 0x0000,
     en = 0x0009,
     en_US = 0x0409, // United States of America
     en_GB = 0x0809, // United Kingdom

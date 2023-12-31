@@ -41,12 +41,15 @@ const transfer = @import("transfer.zig");
 const SetupPacket = transfer.SetupPacket;
 const setup = transfer.setup;
 
+const TransferFactory = @import("transfer_factory.zig");
+
 pub const HubDescriptor = extern struct {
     header: Header,
     number_ports: u8,
     characteristics: Characteristics,
     power_on_to_power_good: u8, // in 2 millisecond intervals
     controller_current: u8, // in milliamps
+
     // following controller_current is a variable # of bytes
     // containing a bitmap for "device removable". there is one bit
     // per number_ports, padded out to byte granularity
@@ -54,6 +57,8 @@ pub const HubDescriptor = extern struct {
     // following the device removable bitmap is _another_ bitmap for
     // "port power control". it remains for compatibility but should
     // be set to all 1s.
+
+    // we ignore both of those
 
     pub fn dump(self: *const HubDescriptor) void {
         log.debug("HubDescriptor [", .{});
@@ -296,29 +301,29 @@ pub const Hub = struct {
         self.allocator = allocator;
 
         // get hub descriptor
-        const setup_packet = setupGetHubDescriptor(0, @sizeOf(HubDescriptor));
-        const desc = try self.host.descriptorQuery(&self.device.endpoint_0, &setup_packet, HubDescriptor);
 
-        if (desc.header.descriptor_type != .hub) {
+        var desc = TransferFactory.initHubDescriptorTransfer(0, std.mem.asBytes(&self.descriptor));
+
+        try self.host.perform(&desc);
+
+        if (self.descriptor.header.descriptor_type != .hub) {
             return Error.InvalidResponse;
         }
 
-        self.descriptor = desc;
         self.descriptor.dump();
 
-        self.port_count = desc.number_ports;
-
+        self.port_count = self.descriptor.number_ports;
         self.port = try self.allocator.alloc(Port, self.port_count);
 
-        for (0..self.port_count) |i| {
-            const port_number: u8 = @truncate(i + 1);
-            log.debug("Port status check {d}", .{port_number});
-            try self.checkPort(port_number);
+        // for (0..self.port_count) |i| {
+        //     const port_number: u8 = @truncate(i + 1);
+        //     log.debug("Port status check {d}", .{port_number});
+        //     try self.checkPort(port_number);
 
-            if (self.port[i].connected) {
-                try self.initializePortDevice(port_number);
-            }
-        }
+        //     if (self.port[i].connected) {
+        //         try self.initializePortDevice(port_number);
+        //     }
+        // }
 
         self.dump();
     }
@@ -344,8 +349,12 @@ pub const Hub = struct {
     }
 
     fn getPortStatus(self: *Hub, port_number: u8) !PortStatus {
-        const setup_packet = setupGetPortStatus(port_number);
-        return self.host.descriptorQuery(&self.device.endpoint_0, &setup_packet, PortStatus);
+        const buffer_size = 4;
+        var buffer: [buffer_size]u8 = undefined;
+        var xfer = TransferFactory.initHubGetPortStatusTransfer(port_number, buffer);
+        try self.host.perform(&xfer);
+
+        return std.mem.bytesAsValue(PortStatus, buffer);
     }
 
     fn initializePortDevice(self: *Hub, port_number: u8) !void {
@@ -362,8 +371,7 @@ pub const Hub = struct {
 
     fn resetPort(self: *Hub, port_number: u8) !void {
         // set port feature PORT_RESET
-        const feature = PortFeature.port_reset;
-        try self.setPortFeature(port_number, feature);
+        try self.setPortFeature(port_number, .port_reset);
 
         // it will be turned off by the hub
         // poll port feature until PORT_RESET is observed as 0
@@ -372,9 +380,10 @@ pub const Hub = struct {
     }
 
     fn setPortFeature(self: *Hub, port_number: u8, feature: PortFeature) !void {
-        const setup_packet = setupSetPortFeature(feature, port_number, 0);
-        const ret = try self.host.controlTransfer(&self.device.endpoint_0, &setup_packet, HCI.empty_slice);
-        log.debug("setPortFeature {d} with feature {any} returned {d}", .{ port_number, feature, ret });
+        var xfer = TransferFactory.initHubSetPortFeatureTransfer(feature, port_number, 0);
+        try self.host.perform(&xfer);
+
+        log.debug("setPortFeature {d} with feature {any}", .{ port_number, feature });
     }
 
     fn waitForPortStatus(self: *Hub, port_number: u8, expected: PortStatus, timeout: u16) !void {
@@ -391,80 +400,11 @@ pub const Hub = struct {
     }
 
     pub fn dump(self: *const Hub) void {
-        log.info("#\tConn\tEna\tSusp\tOverc\tReset\tPower\tSpeed", .{});
-        for (0..self.port_count) |i| {
-            log.info("{d}\t{}\t{}\t{}\t{}\t{}\t{}\t{s}", .{
-                i + 1,
-                self.port[i].connected,
-                self.port[i].enabled,
-                self.port[i].suspended,
-                self.port[i].overcurrent,
-                self.port[i].reset,
-                self.port[i].powered,
-                @tagName(self.port[i].device_speed),
-            });
-        }
+        log.info("Hub [", .{});
+        log.info("  port count = {d}", .{self.port_count});
+        log.info("]", .{});
     }
 };
-
-pub fn setupClearHubFeature(selector: HubFeature) SetupPacket {
-    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequest.clear_feature), @intFromEnum(selector), 0, 0);
-}
-
-pub fn setupClearTTBuffer(device_address: DeviceAddress, endpoint_number: EndpointNumber, endpoint_type: EndpointType, direction: TTDirection, port_number: u8) SetupPacket {
-    const val: ClearTTBufferValue = .{
-        .endpoint_number = endpoint_number,
-        .device_address = device_address,
-        .endpoint_type = endpoint_type,
-        .direction = direction,
-    };
-
-    return setup(.other, .class, .host_to_device, .clear_tt_buffer, val, port_number, 0);
-}
-
-pub fn setupGetHubDescriptor(descriptor_index: u8, descriptor_length: u16) SetupPacket {
-    const val: u16 = @as(u16, @intFromEnum(DescriptorType.hub)) << 8 | @as(u8, descriptor_index);
-    return setup(.device, .class, .device_to_host, @intFromEnum(StandardDeviceRequests.get_descriptor), val, 0, descriptor_length);
-}
-
-pub fn setupGetHubStatus() SetupPacket {
-    return setup(.device, .class, .device_to_host, @intFromEnum(ClassRequest.get_status), 0, 0, 4);
-}
-
-pub fn setupGetPortStatus(port_number: u8) SetupPacket {
-    return setup(.other, .class, .device_to_host, @intFromEnum(ClassRequest.get_status), 0, port_number, 4);
-}
-
-pub fn setupGetTTState(tt_flags: u16, tt_port: u16, tt_state_length: u16) SetupPacket {
-    return setup(.other, .class, .device_to_host, @intFromEnum(ClassRequest.get_tt_state), tt_flags, tt_port, tt_state_length);
-}
-
-pub fn setupResetTT(tt_port: u16) SetupPacket {
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequest.reset_tt), 0, tt_port, 0);
-}
-
-pub fn setupSetHubDescriptor(descriptor_type: DescriptorType, descriptor_index: DescriptorIndex, length: u16) SetupPacket {
-    const val: u16 = @as(u16, descriptor_type) << 8 | descriptor_index;
-    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequest.set_descriptor), val, 0, length);
-}
-
-pub fn setupStopTT(tt_port: u16) SetupPacket {
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequest.stop_tt), 0, tt_port, 0);
-}
-
-pub fn setupSetHubFeature(selector: HubFeature) SetupPacket {
-    return setup(.device, .class, .host_to_device, @intFromEnum(ClassRequest.set_feature), @intFromEnum(selector), 0, 0);
-}
-
-pub fn setupClearPortFeature(selector: PortFeature, port_number: u8, port_indicator: u8) SetupPacket {
-    const index: u16 = @as(u16, port_indicator) << 8 | port_number;
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequest.clear_feature), @intFromEnum(selector), index, 0);
-}
-
-pub fn setupSetPortFeature(feature: PortFeature, port_number: u8, port_indicator: u8) SetupPacket {
-    const index: u16 = @as(u16, port_indicator) | port_number;
-    return setup(.other, .class, .host_to_device, @intFromEnum(ClassRequest.set_feature), @intFromEnum(feature), index, 0);
-}
 
 pub const usb_hub_driver: DeviceDriver = .{
     .name = "USB Hub",

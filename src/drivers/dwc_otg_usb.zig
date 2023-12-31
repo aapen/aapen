@@ -32,8 +32,9 @@ const usb = @import("../usb.zig");
 pub const Bus = usb.Bus;
 pub const ConfigurationDescriptor = usb.ConfigurationDescriptor;
 pub const DeviceAddress = usb.DeviceAddress;
+pub const DeviceConfiguration = usb.DeviceConfiguration;
 pub const DeviceDescriptor = usb.DeviceDescriptor;
-pub const TransactionStage = usb.TransactionStage;
+pub const EndpointDescriptor = usb.EndpointDescriptor;
 pub const EndpointDirection = usb.EndpointDirection;
 pub const EndpointNumber = usb.EndpointNumber;
 pub const EndpointType = usb.EndpointType;
@@ -45,7 +46,9 @@ pub const PID = usb.PID2;
 pub const SetupPacket = usb.SetupPacket;
 pub const StringDescriptor = usb.StringDescriptor;
 pub const StringIndex = usb.StringIndex;
+pub const Transfer = usb.Transfer;
 pub const TransferBytes = usb.TransferBytes;
+pub const TransferFactory = usb.TransferFactory;
 pub const UsbSpeed = usb.UsbSpeed;
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
@@ -863,8 +866,124 @@ fn transactionOnChannel(
 }
 
 // ----------------------------------------------------------------------
-// Transfer interface
+// Transfer interface - high level
 // ----------------------------------------------------------------------
+
+pub fn perform(self: *Self, xfer: *Transfer) !void {
+    // This driver-level routine assumes that a higher-level caller
+    // has already checked the Transfer's consistency against USB
+    // specifications
+
+    // TODO this is too simplistic... it will fail if all channels are
+    // occupied. A better way would be to enqueue a Request and have a
+    // timer- or interrupt-driven dispatcher place transactions on
+    // channels as when they are available.
+
+    while (xfer.state != .complete) {
+        switch (xfer.transfer_type) {
+            .control => {
+                switch (xfer.state) {
+                    .token => {
+                        const aligned_buffer = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(SetupPacket));
+                        defer self.allocator.free(aligned_buffer);
+
+                        @memcpy(aligned_buffer, std.mem.asBytes(&xfer.setup));
+
+                        log.debug("perform: performing 'setup' transaction with rt = {b}, rq = {d}, mps = {d}", .{ @as(u8, @bitCast(xfer.setup.request_type)), xfer.setup.request, xfer.max_packet_size });
+
+                        const maybe_setup_response = self.transactionOnChannel(
+                            xfer.device_address,
+                            xfer.device_speed,
+                            xfer.endpoint_number,
+                            xfer.endpoint_type,
+                            .out,
+                            xfer.max_packet_size,
+                            xfer.getTransactionPid(),
+                            aligned_buffer,
+                            100,
+                        );
+
+                        if (maybe_setup_response) |bytes| {
+                            if (bytes == @sizeOf(SetupPacket)) {
+                                xfer.transferCompleteTransaction(.ok);
+                            } else {
+                                xfer.transferCompleteTransaction(.data_length_mismatch);
+                            }
+                        } else |_| {
+                            xfer.transferCompleteTransaction(.failed);
+                        }
+                    },
+                    .data => {
+                        log.debug("perform: performing 'data' transaction with {any}", .{xfer.setup.request_type.transfer_direction});
+
+                        const data_direction = switch (xfer.setup.request_type.transfer_direction) {
+                            .host_to_device => EndpointDirection.out,
+                            .device_to_host => EndpointDirection.in,
+                        };
+
+                        const maybe_in_data_response = self.transactionOnChannel(
+                            xfer.device_address,
+                            xfer.device_speed,
+                            xfer.endpoint_number,
+                            xfer.endpoint_type,
+                            data_direction,
+                            xfer.max_packet_size,
+                            xfer.getTransactionPid(),
+                            xfer.data_buffer,
+                            100,
+                        );
+
+                        log.debug("perform: 'data' transaction returned {any}", .{maybe_in_data_response});
+
+                        // this should probably report the error through
+                        // the Transfer
+                        var in_data_response = try maybe_in_data_response;
+
+                        if (in_data_response != xfer.data_buffer.len) {
+                            xfer.transferCompleteTransaction(.data_length_mismatch);
+                        }
+
+                        xfer.actual_size = in_data_response;
+
+                        xfer.transferCompleteTransaction(.ok);
+                    },
+                    .handshake => {
+                        log.debug("perform: performing 'status' transaction", .{});
+
+                        const maybe_status_response = self.transactionOnChannel(
+                            xfer.device_address,
+                            xfer.device_speed,
+                            xfer.endpoint_number,
+                            xfer.endpoint_type,
+                            .in,
+                            xfer.max_packet_size,
+                            xfer.getTransactionPid(),
+                            &.{},
+                            100,
+                        );
+
+                        log.debug("perform: 'status' transaction returned {any}", .{maybe_status_response});
+                        xfer.transferCompleteTransaction(.ok);
+                    },
+                    .complete => {},
+                }
+            },
+            else => {
+                // immediately fail the transfer
+                xfer.complete(.unsupported_request);
+            },
+        }
+    }
+}
+
+fn alignedCopy(allocator: Allocator, comptime T: type, v: *const T) !*align(DMA_ALIGNMENT) T {
+    const buffer_size = @sizeOf(T);
+    const aligned_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, buffer_size);
+    @memcpy(aligned_buffer, std.mem.asBytes(v)[0..buffer_size]);
+}
+
+// This is internal bookkeeping for the host driver. It should not be
+// exposed directly to callers.
 const Transaction = struct {
     host: *Self,
     deadline: u64 = 0,
@@ -897,180 +1016,17 @@ const Transaction = struct {
     }
 };
 
-pub const empty_slice: []align(DMA_ALIGNMENT) u8 = &.{};
-
-pub fn controlTransfer(
-    self: *Self,
-    endpoint: *Endpoint,
-    setup: *const SetupPacket,
-    data: []align(DMA_ALIGNMENT) u8,
-) !TransferBytes {
-    const setup_slice: []SetupPacket = try self.allocator.alignedAlloc(SetupPacket, DMA_ALIGNMENT, 1);
-
-    setup_slice[0] = setup.*;
-
-    // TODO this is too simplistic... it will fail if all channels are
-    // occupied. A better way would be to enqueue a Request and have a
-    // timer- or interrupt-driven dispatcher place transactions on
-    // channels as when they are available.
-    const device = endpoint.device;
-
-    log.debug("controlTransfer: performing 'setup' transaction with rt = {b}, rq = {d}, mps = {d}", .{ @as(u8, @bitCast(setup.request_type)), setup.request, endpoint.max_packet_size });
-
-    // TODO check return value, should equal max_packet_size (8) for
-    // a Setup token packet to a Control endpoint
-    const maybe_setup_response = self.transactionOnChannel(
-        device.address,
-        device.speed,
-        endpoint.number,
-        endpoint.type,
-        EndpointDirection.out,
-        endpoint.max_packet_size,
-        .token_setup,
-        std.mem.sliceAsBytes(setup_slice),
-        4000,
-    );
-
-    self.allocator.free(setup_slice);
-
-    log.debug("controlTransfer: 'setup' transaction returned {any}", .{maybe_setup_response});
-
-    const setup_response = try maybe_setup_response;
-
-    if (setup_response != usb.DEFAULT_MAX_PACKET_SIZE) {
-        return Error.InvalidResponse;
-    }
-
-    // Some requests don't have a data stage
-    var in_data_response: u19 = 0;
-    if (data.len > 0) {
-        log.debug("controlTransfer: performing 'data' transaction with {any}", .{setup.request_type.transfer_direction});
-
-        const data_direction = switch (setup.request_type.transfer_direction) {
-            .host_to_device => EndpointDirection.out,
-            .device_to_host => EndpointDirection.in,
-        };
-
-        const maybe_in_data_response = self.transactionOnChannel(
-            device.address,
-            device.speed,
-            endpoint.number,
-            endpoint.type,
-            data_direction,
-            endpoint.max_packet_size,
-            .data_data0,
-            data,
-            4000,
-        );
-
-        log.debug("controlTransfer: 'data' transaction returned {any}", .{maybe_in_data_response});
-
-        in_data_response = try maybe_in_data_response;
-
-        if (in_data_response != data.len) {
-            return Error.DataLengthMismatch;
-        }
-    }
-
-    log.debug("controlTransfer: performing 'status' transaction", .{});
-
-    const maybe_status_response = self.transactionOnChannel(
-        device.address,
-        device.speed,
-        endpoint.number,
-        endpoint.type,
-        EndpointDirection.in,
-        endpoint.max_packet_size,
-        .handshake_ack,
-        &.{},
-        4000,
-    );
-
-    log.debug("controlTransfer: 'status' transaction returned {any}", .{maybe_status_response});
-
-    _ = try maybe_status_response;
-
-    return in_data_response;
-}
-
-fn sizeCheck(expected: TransferBytes, actual: TransferBytes) !void {
-    if (expected != actual) {
-        log.debug("expected {d} bytes, got {d}", .{ expected, actual });
-        return Error.InvalidResponse;
-    }
-}
-
-// ----------------------------------------------------------------------
-// Endpoint interactions
-// ----------------------------------------------------------------------
-fn descriptorQueryUntyped(self: *Self, endpoint: *Endpoint, setup_packet: *const SetupPacket, expected_size: u16) ![]align(DMA_ALIGNMENT) u8 {
-    log.debug("descriptor query (type {d}) on device {d} endpoint {d}", .{ setup_packet.value >> 8, endpoint.device.address, endpoint.number });
-    const buffer: []align(DMA_ALIGNMENT) u8 = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, setup_packet.data_size);
-
-    const returned = try self.controlTransfer(endpoint, setup_packet, buffer);
-
-    try sizeCheck(expected_size, returned);
-
-    return buffer;
-}
-
-pub fn descriptorQuery(self: *Self, endpoint: *Endpoint, setup_packet: *const SetupPacket, comptime T: type) !T {
-    const expected_size: u16 = @sizeOf(T);
-    const buffer = try self.descriptorQueryUntyped(endpoint, setup_packet, @sizeOf(T));
-    defer self.allocator.free(buffer);
-
-    const result: *T = std.mem.bytesAsValue(T, buffer[0..expected_size]);
-    return result.*;
-}
-
-pub fn deviceDescriptorQuery(self: *Self, endpoint: *Endpoint, descriptor_index: usb.DescriptorIndex, lang_id: u16) !DeviceDescriptor {
-    const expected_size = @sizeOf(DeviceDescriptor);
-    const setup = usb.setupDescriptorQuery(.device, descriptor_index, lang_id, expected_size);
-
-    return self.descriptorQuery(endpoint, &setup, DeviceDescriptor);
-}
-
-pub fn configurationDescriptorQuery(self: *Self, endpoint: *Endpoint, configuration_index: usb.DescriptorIndex) !ConfigurationDescriptor {
-    const expected_size = @sizeOf(ConfigurationDescriptor);
-    const setup = usb.setupDescriptorQuery(.configuration, configuration_index, 0, expected_size);
-
-    return self.descriptorQuery(endpoint, &setup, ConfigurationDescriptor);
-}
-
-// This returns the entire configuration hierarchy, including all
-// interfaces and endpoints. In order to construct a buffer big enough
-// you should first use configurationDescriptorQuery and allocate
-// space according to the `total_length` field.
-pub fn configurationTreeGet(self: *Self, endpoint: *Endpoint, configuration_index: usb.DescriptorIndex, expected_size: u16) ![]align(DMA_ALIGNMENT) u8 {
-    log.info("configurationTreeGet: looking for {d} bytes from configuration {d}", .{ expected_size, configuration_index });
-
-    const setup = usb.setupDescriptorQuery(.configuration, configuration_index, 0, expected_size);
-    // The buffer will be populated, but we don't need the
-    // ConfigurationDescriptor constructed from it.
-    return self.descriptorQueryUntyped(endpoint, &setup, expected_size);
-}
-
-pub fn stringDescriptorQuery(self: *Self, endpoint: *Endpoint, index: StringIndex, language: LangID) !StringDescriptor {
-    const expected_size = @sizeOf(StringDescriptor);
-    const setup = usb.setupDescriptorQuery(.string, index, @intFromEnum(language), expected_size);
-
-    return self.descriptorQuery(endpoint, &setup, StringDescriptor);
-}
-
-pub fn stringQuery(self: *Self, endpoint: *Endpoint, index: StringIndex, language: LangID) ![]u8 {
-    const desc = try self.stringDescriptorQuery(endpoint, index, language);
-    return desc.asSlice(self.allocator);
-}
-
 pub fn addressSet(self: *Self, endpoint: *Endpoint, address: DeviceAddress) !u19 {
     log.debug("set address {d} on endpoint {d}", .{ address, endpoint.number });
 
-    const setup = usb.setupSetAddress(address);
-    const ret = self.controlTransfer(endpoint, &setup, empty_slice);
+    var xfer = TransferFactory.initSetAddressTransfer(address);
+    xfer.endpoint_number = endpoint.number;
 
-    log.debug("set address {d} on endpoint {d} returned {any}", .{ address, endpoint.number, ret });
+    try self.perform(&xfer);
 
-    return ret;
+    log.debug("set address {d} on endpoint {d} returned {any}", .{ address, endpoint.number, xfer.actual_size });
+
+    return xfer.actual_size;
 }
 
 // ----------------------------------------------------------------------
@@ -1080,25 +1036,26 @@ const Function = struct {};
 
 const Endpoint = struct {
     device: *Device,
-    number: u4,
+    number: EndpointNumber,
     type: usb.EndpointType = .Control,
     direction: EndpointDirection = .out,
     max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
 };
 
 pub const Device = struct {
+    pub const MAX_INTERFACES: usize = 8;
+    pub const MAX_ENDPOINTS: usize = 8;
+
     allocator: Allocator,
     host: *Self,
     speed: usb.UsbSpeed,
     address: usb.DeviceAddress,
     endpoint_0: Endpoint,
-    device_descriptor: usb.DeviceDescriptor,
-    configuration_descriptor: usb.ConfigurationDescriptor,
-    interface_descriptor: usb.InterfaceDescriptor,
+    device_descriptor: DeviceDescriptor,
+    configuration_descriptor: ConfigurationDescriptor,
+    configuration: *DeviceConfiguration,
     manufacturer: []u8,
     product_name: []u8,
-    configuration: []u8,
-    interface: []u8,
 
     pub fn init(allocator: Allocator) !*Device {
         var device = try allocator.create(Device);
@@ -1111,11 +1068,9 @@ pub const Device = struct {
             .endpoint_0 = .{ .number = 0, .device = device },
             .device_descriptor = undefined,
             .configuration_descriptor = undefined,
-            .interface_descriptor = undefined,
             .manufacturer = "",
             .product_name = "",
-            .configuration = "",
-            .interface = "",
+            .configuration = undefined,
         };
 
         return device;
@@ -1125,60 +1080,108 @@ pub const Device = struct {
         self.host = host;
         self.speed = speed;
 
-        self.device_descriptor = try host.deviceDescriptorQuery(&self.endpoint_0, usb.DEFAULT_DESCRIPTOR_INDEX, 0);
+        var xfer = TransferFactory.initDeviceDescriptorTransfer(usb.DEFAULT_DESCRIPTOR_INDEX, 0, std.mem.asBytes(&self.device_descriptor));
+
+        xfer.device_address = 0;
+        xfer.endpoint_number = 0;
+
+        try host.perform(&xfer);
+
+        if (xfer.status != .ok) {
+            return Error.InvalidResponse;
+        }
+
         self.device_descriptor.dump();
 
         try host.assignAddress(self);
 
-        self.determineProductName() catch |err| {
+        if (self.getProductName()) {
+            log.info("Product: '{s}'", .{self.product_name});
+        } else |err| {
             log.warn("Could not read manufacturer and product name: {any}", .{err});
-        };
+        }
 
-        // if (self.device_descriptor.configuration_count >= 1) {
-        //     self.configuration_descriptor = try host.configurationDescriptorQuery(&self.endpoint_0, 0);
+        if (self.getManufacturer()) {
+            log.info("Manufacturer: '{s}'", .{self.manufacturer});
+        } else |err| {
+            log.warn("Could not read manufacturer and product name: {any}", .{err});
+        }
 
-        //     if (self.configuration_descriptor.configuration > 0) {
-        //         self.determineConfiguration() catch |err| {
-        //             log.warn("Could not read configuration value for index {d}: {any}", .{ self.configuration_descriptor.configuration, err });
-        //         };
-        //     }
-
-        //     self.configuration_descriptor.dump(self.configuration);
-
-        //     if (self.configuration_descriptor.interface_count >= 1) {
-        //         const config_tree_size = self.configuration_descriptor.total_length;
-        //         const buffer = try self.host.configurationTreeGet(&self.endpoint_0, 0, config_tree_size);
-        //         root.debug.kernelMessage(buffer);
-        //         //                self.allocator.free(buffer);
-
-        //         // self.interface_descriptor = try host.interfaceDescriptorQuery(&self.endpoint_0, 0);
-
-        //         // if (self.interface_descriptor.interface_string > 0) {
-        //         //     self.determineInterface() catch |err| {
-        //         //         log.warn("Could not read interface name for index {d}: {any}", .{ self.interface_descriptor.interface_string, err });
-        //         //     };
-        //         // }
-
-        //         // self.interface_descriptor.dump(self.interface);
-        //     }
-        // }
+        if (self.device_descriptor.configuration_count >= 1) {
+            if (self.fetchConfiguration()) {
+                self.configuration.dump();
+            } else |err| {
+                log.warn("Could not read configuration descriptor: {any}", .{err});
+            }
+        }
     }
 
-    fn determineProductName(self: *Device) !void {
-        const mfg = try self.host.stringDescriptorQuery(&self.endpoint_0, self.device_descriptor.manufacturer_name, LangID.en_US);
-        self.manufacturer = try mfg.asSlice(self.allocator);
+    fn fetchConfiguration(self: *Device) !void {
+        // First fetch just the configuration descriptor (it's the
+        // root of the config tree)
+        var xfer = TransferFactory.initConfigurationDescriptorTransfer(0, std.mem.asBytes(&self.configuration_descriptor));
+        xfer.device_address = self.address;
 
-        const prod = try self.host.stringDescriptorQuery(&self.endpoint_0, self.device_descriptor.product_name, LangID.en_US);
-        self.product_name = try prod.asSlice(self.allocator);
+        try self.host.perform(&xfer);
+
+        if (xfer.status != .ok) {
+            return Error.InvalidResponse;
+        }
+
+        // The header of the configuration descriptor tells us how
+        // much space the whole config tree requires
+        const buffer_size = self.configuration_descriptor.total_length;
+        var buffer = try self.allocator.alloc(u8, buffer_size);
+        defer self.allocator.free(buffer);
+
+        log.info("Configuration {d} reports that it has {d} bytes to tell us about", .{ 0, buffer_size });
+
+        xfer = TransferFactory.initConfigurationDescriptorTransfer(0, buffer);
+        xfer.device_address = self.address;
+
+        try self.host.perform(&xfer);
+
+        if (xfer.status != .ok) {
+            log.debug("fetchConfiguration: read of whole configuration tree failed: {any}", .{xfer.status});
+            return Error.InvalidResponse;
+        }
+
+        if (xfer.actual_size != buffer_size) {
+            log.debug("fetchConfiguration: read of whole configuration tree returns incorrect number of bytes: {d}", .{xfer.actual_size});
+            return Error.DataLengthMismatch;
+        }
+
+        root.debug.sliceDump(buffer);
+
+        if (DeviceConfiguration.initFromBytes(self.allocator, buffer)) |conf| {
+            self.configuration = conf;
+        } else |err| {
+            log.err("fetchConfiguration: cannot parse device configuration tree: {any}", .{err});
+        }
     }
 
-    fn determineConfiguration(self: *Device) !void {
-        const val = try self.host.stringDescriptorQuery(&self.endpoint_0, self.configuration_descriptor.configuration, LangID.en_US);
-        self.configuration = try val.asSlice(self.allocator);
+    fn getManufacturer(self: *Device) !void {
+        self.manufacturer = try self.getString(self.device_descriptor.manufacturer_name, LangID.en_US);
     }
 
-    fn determineInterface(self: *Device) !void {
-        const val = try self.host.stringDescriptorQuery(&self.endpoint_0, self.interface_descriptor.interface_string, LangID.en_US);
-        self.interface = try val.asSlice(self.allocator);
+    fn getProductName(self: *Device) !void {
+        self.product_name = try self.getString(self.device_descriptor.product_name, LangID.en_US);
+    }
+
+    fn getConfiguration(self: *Device) !void {
+        self.configuration = try self.getString(self.configuration_descriptor.configuration, LangID.en_US);
+    }
+
+    fn getString(self: *Device, index: u8, lang: LangID) ![]u8 {
+        const buffer_size = @sizeOf(StringDescriptor);
+        var buffer: [buffer_size]u8 align(2) = undefined;
+
+        var xfer = TransferFactory.initStringDescriptorTransfer(index, lang, &buffer);
+        xfer.device_address = self.address;
+
+        try self.host.perform(&xfer);
+
+        const configuration: *StringDescriptor = std.mem.bytesAsValue(StringDescriptor, buffer[0..buffer_size]);
+        return try configuration.asSlice(self.allocator);
     }
 };

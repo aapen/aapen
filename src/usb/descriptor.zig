@@ -13,6 +13,7 @@ const InterfaceClass = interface.InterfaceClass;
 const transfer = @import("transfer.zig");
 const setup = transfer.setup;
 const SetupPacket = transfer.SetupPacket;
+const Transfer = transfer.Transfer;
 const TransferType = transfer.TransferType;
 
 /// Index of a string descriptor
@@ -114,7 +115,12 @@ pub const DeviceDescriptor = extern struct {
     }
 };
 
-pub const ConfigurationDescriptor = extern struct {
+pub const ConfigurationDescriptor = packed struct {
+    // Zig's @sizeOf() rounds up to natural alignment (in this case
+    // 10) so we use this constant for the length defined by the
+    // standard
+    pub const STANDARD_LENGTH = 9;
+
     header: Header,
     total_length: u16,
     interface_count: u8,
@@ -128,12 +134,12 @@ pub const ConfigurationDescriptor = extern struct {
     },
     power_max: u8,
 
-    pub fn dump(self: *const ConfigurationDescriptor, configuration: []const u8) void {
+    pub fn dump(self: *const ConfigurationDescriptor) void {
         log.debug("ConfigurationDescriptor [", .{});
         log.debug("  total length = {d}", .{self.total_length});
         log.debug("  interface count = {d}", .{self.interface_count});
         log.debug("  configuration value = {d}", .{self.configuration_value});
-        log.debug("  configuration (string index {d}) = '{s}'", .{ self.configuration, configuration });
+        log.debug("  configuration = {d}", .{self.configuration});
         log.debug("  remote wakeup = {d}", .{self.attributes.remote_wakeup});
         log.debug("  self powered = {d}", .{self.attributes.self_powered});
         log.debug("  power max = {d} mA", .{self.power_max});
@@ -141,7 +147,12 @@ pub const ConfigurationDescriptor = extern struct {
     }
 };
 
-pub const InterfaceDescriptor = extern struct {
+pub const InterfaceDescriptor = packed struct {
+    // Zig's @sizeOf() rounds up to natural alignment (in this case
+    // 10) so we use this constant for the length defined by the
+    // standard
+    pub const STANDARD_LENGTH = 9;
+
     header: Header,
     interface_number: u8,
     alternate_setting: u8,
@@ -151,13 +162,13 @@ pub const InterfaceDescriptor = extern struct {
     interface_protocol: u8,
     interface_string: StringIndex,
 
-    pub fn dump(self: *const InterfaceDescriptor, interface_string: []const u8) void {
+    pub fn dump(self: *const InterfaceDescriptor) void {
         log.debug("InterfaceDescriptor [", .{});
         log.debug("  interface number = {d}", .{self.interface_number});
         log.debug("  alternate_setting = {d}", .{self.alternate_setting});
         log.debug("  endpoint count = {d}", .{self.endpoint_count});
-        log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ self.interface_class, self.interface_subclass, self.interface_protocol });
-        log.debug("  interface string (index {d}) = '{s}'", .{ self.interface_string, interface_string });
+        log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ @intFromEnum(self.interface_class), self.interface_subclass, self.interface_protocol });
+        log.debug("  interface string = {d}", .{self.interface_string});
         log.debug("]", .{});
     }
 };
@@ -176,7 +187,12 @@ pub const IsoUsageType = enum(u2) {
     reserved = 0b11,
 };
 
-pub const EndpointDescriptor = extern struct {
+pub const EndpointDescriptor = packed struct {
+    // Zig's @sizeOf() rounds up to natural alignment (in this case
+    // 8) so we use this constant for the length defined by the
+    // standard
+    pub const STANDARD_LENGTH = 7;
+
     header: Header,
     endpoint_address: u8,
     attributes: packed struct {
@@ -187,6 +203,15 @@ pub const EndpointDescriptor = extern struct {
     },
     max_packet_size: u16,
     interval: u8, // polling interval in frames
+
+    pub fn dump(self: *const EndpointDescriptor) void {
+        log.debug("EndpointDescriptor [", .{});
+        log.debug("  endpoint_address = {d}", .{self.endpoint_address});
+        log.debug("  attributes = {d}", .{@as(u8, @bitCast(self.attributes))});
+        log.debug("  max_packet_size = {d}", .{self.max_packet_size});
+        log.debug("  interval = {d}", .{self.interval});
+        log.debug("]", .{});
+    }
 };
 
 pub const StringDescriptor = extern struct {

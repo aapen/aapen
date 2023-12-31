@@ -46,7 +46,7 @@ pub fn sliceDumpAsWords(buf: []const u8) void {
     var offset: usize = 0;
 
     while (offset < len) {
-        kprint("{x:16}  {x:0>8}\n", .{@intFromPtr(buf_words.ptr) + offset, buf_words[offset]});
+        kprint("{x:16}  {x:0>8}\n", .{ @intFromPtr(buf_words.ptr) + offset, buf_words[offset] });
         offset += 1;
     }
 }
@@ -58,17 +58,23 @@ pub fn sliceDump(buf: []const u8) void {
     while (offset < len) {
         kprint("{x:16}  ", .{@intFromPtr(buf.ptr) + offset});
 
-        const bound = @min(16, (len - offset));
-
-        for (0..bound) |iByte| {
-            kprint("{x:0>2} ", .{buf[offset + iByte]});
+        for (0..16) |iByte| {
+            if (offset + iByte < len) {
+                kprint("{x:0>2} ", .{buf[offset + iByte]});
+            } else {
+                kprint("   ", .{});
+            }
             if (iByte == 7) {
                 kprint("  ", .{});
             }
         }
         kprint("  |", .{});
-        for (0..bound) |iByte| {
-            kprint("{c}", .{string.toPrintable(buf[offset + iByte])});
+        for (0..16) |iByte| {
+            if (offset + iByte < len) {
+                kprint("{c}", .{string.toPrintable(buf[offset + iByte])});
+            } else {
+                kprint(" ", .{});
+            }
         }
         kprint("|\n", .{});
         offset += 16;

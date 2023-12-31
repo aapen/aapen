@@ -14,7 +14,6 @@ const time = @import("../../time.zig");
 
 const usb = @import("../../usb.zig");
 pub const DeviceAddress = usb.DeviceAddress;
-pub const TransactionStage = usb.TransactionStage;
 pub const EndpointDirection = usb.EndpointDirection;
 pub const EndpointNumber = usb.EndpointNumber;
 pub const EndpointType = usb.EndpointType;

@@ -1,6 +1,20 @@
 const std = @import("std");
 const log = std.log.scoped(.usb);
 
+const descriptor = @import("descriptor.zig");
+const DescriptorType = descriptor.DescriptorType;
+
+const device = @import("device.zig");
+const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
+const DeviceAddress = device.DeviceAddress;
+const UsbSpeed = device.UsbSpeed;
+const StandardDeviceRequests = device.StandardDeviceRequests;
+
+const endpoint = @import("endpoint.zig");
+const EndpointDirection = endpoint.EndpointDirection;
+const EndpointNumber = endpoint.EndpointNumber;
+const EndpointType = endpoint.EndpointType;
+
 const request = @import("request.zig");
 const RequestTypeDirection = request.RequestTypeDirection;
 const RequestTypeRecipient = request.RequestTypeRecipient;
@@ -24,6 +38,14 @@ pub const DEFAULT_MAX_PACKET_SIZE = 8;
 pub const Transfer = struct {
     pub const Completion = *const fn (self: *Transfer) void;
 
+    pub const CompletionStatus = enum {
+        incomplete,
+        ok,
+        unsupported_request,
+        timeout,
+        protocol_error,
+    };
+
     pub const State = enum {
         token,
         data,
@@ -31,24 +53,30 @@ pub const Transfer = struct {
         complete,
     };
 
-    state: State = undefined,
     transfer_type: TransferType,
+    device_address: DeviceAddress = DEFAULT_ADDRESS,
+    device_speed: UsbSpeed = .Full,
+    endpoint_number: EndpointNumber = 0,
+    endpoint_type: EndpointType = .Control,
+    direction: EndpointDirection = .in,
+    max_packet_size: PacketSize = DEFAULT_MAX_PACKET_SIZE,
     setup: SetupPacket, // only used when transfer_type == .control,
     data_buffer: []u8,
-    actual_size: u16 = 0,
-    status: TransferStatus = .incomplete,
+    actual_size: TransferBytes = 0,
+    status: CompletionStatus = .incomplete,
     completion: ?Completion = null,
+    state: State = undefined,
 
-    pub fn initControl(setup_packet: *const SetupPacket, data_buffer: []u8) Transfer {
+    pub fn initControl(setup_packet: SetupPacket, data_buffer: []u8) Transfer {
         return .{
             .state = .token,
             .transfer_type = .control,
-            .setup = setup_packet.*,
+            .setup = setup_packet,
             .data_buffer = data_buffer,
         };
     }
 
-    pub fn complete(self: *Transfer, txn_status: TransferStatus) void {
+    pub fn complete(self: *Transfer, txn_status: CompletionStatus) void {
         self.state = .complete;
         self.status = txn_status;
 
@@ -77,17 +105,38 @@ pub const Transfer = struct {
                         self.state = .handshake;
                     }
                 },
+                .timeout => {
+                    // TODO do we retry? do we halt? for now, just
+                    // report failure
+                    self.complete(.timeout);
+                },
+                inline else => self.complete(.protocol_error),
             },
             .data => switch (txn_status) {
                 .ok => self.state = .handshake,
+                .timeout => self.complete(.timeout),
+                inline else => self.complete(.protocol_error),
             },
             .handshake => switch (txn_status) {
                 .ok => self.complete(.ok),
+                .timeout => self.complete(.timeout),
+                inline else => self.complete(.protocol_error),
             },
             .complete => {
                 log.warn("transferCompleteControlTransaction: was called after transfer had already completed", .{});
             },
         }
+    }
+
+    pub fn getTransactionPid(self: *Transfer) PID2 {
+        // this probably needs to be extended to account for the
+        // transfer type
+        return switch (self.state) {
+            .token => .token_setup,
+            .data => .data_data1,
+            .handshake => .handshake_ack,
+            .complete => .handshake_nak,
+        };
     }
 };
 
@@ -122,25 +171,12 @@ pub const TransferType = enum(u2) {
     interrupt = 0b11,
 };
 
-pub const TransferStatus = enum {
-    incomplete,
-    ok,
-    unsupported_request,
-    timeout,
-};
-
 pub const SetupPacket = extern struct {
     request_type: request.RequestType,
     request: u8,
     value: u16,
     index: u16,
     data_size: u16,
-};
-
-pub const TransactionStage = enum {
-    token,
-    data,
-    status,
 };
 
 /// Create a SetupPacket for a control transfer. This should normally be wrapped with a more
@@ -171,6 +207,7 @@ pub fn setup(
 // Testing
 // ----------------------------------------------------------------------
 
+const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 
 test "control transfer starts with the .token phase" {
@@ -179,7 +216,7 @@ test "control transfer starts with the .token phase" {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
     const pkt = setup(.device, .standard, .device_to_host, 0x06, 0, 0, buffer_size);
-    const xfer = Transfer.initControl(&pkt, &buffer);
+    const xfer = Transfer.initControl(pkt, &buffer);
 
     try expectEqual(Transfer.State.token, xfer.state);
 }
@@ -190,7 +227,7 @@ test "control transfer with data expected has three phases" {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
     const pkt = setup(.device, .standard, .device_to_host, 0x06, 0, 0, buffer_size);
-    var xfer = Transfer.initControl(&pkt, &buffer);
+    var xfer = Transfer.initControl(pkt, &buffer);
 
     try expectEqual(Transfer.State.token, xfer.state);
 
@@ -205,7 +242,7 @@ test "control transfer with data expected has three phases" {
     xfer.transferCompleteTransaction(.ok);
 
     try expectEqual(Transfer.State.complete, xfer.state);
-    try expectEqual(TransferStatus.ok, xfer.status);
+    try expectEqual(Transfer.CompletionStatus.ok, xfer.status);
 }
 
 test "control transfer with no data expected has only two phases" {
@@ -214,7 +251,7 @@ test "control transfer with no data expected has only two phases" {
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
     const pkt = setup(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
-    var xfer = Transfer.initControl(&pkt, &buffer);
+    var xfer = Transfer.initControl(pkt, &buffer);
 
     try expectEqual(Transfer.State.token, xfer.state);
 
@@ -225,5 +262,65 @@ test "control transfer with no data expected has only two phases" {
     xfer.transferCompleteTransaction(.ok);
 
     try expectEqual(Transfer.State.complete, xfer.state);
-    try expectEqual(TransferStatus.ok, xfer.status);
+    try expectEqual(Transfer.CompletionStatus.ok, xfer.status);
+}
+
+test "a completion handler is called when the transfer succeeds" {
+    std.debug.print("\n", .{});
+
+    const buffer_size = 0;
+    var buffer: [buffer_size]u8 = undefined;
+    const pkt = setup(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
+    var xfer = Transfer.initControl(pkt, &buffer);
+
+    const Callback = struct {
+        var was_called: bool = false;
+
+        fn invoke(_: *Transfer) void {
+            was_called = true;
+        }
+    };
+    xfer.completion = &Callback.invoke;
+
+    try expectEqual(Transfer.State.token, xfer.state);
+
+    xfer.transferCompleteTransaction(.ok);
+
+    try expectEqual(Transfer.State.handshake, xfer.state);
+
+    xfer.transferCompleteTransaction(.ok);
+
+    try expectEqual(Transfer.State.complete, xfer.state);
+    try expectEqual(Transfer.CompletionStatus.ok, xfer.status);
+    try expect(Callback.was_called);
+}
+
+test "a completion handler is called when the transfer fails" {
+    std.debug.print("\n", .{});
+
+    const buffer_size = 0;
+    var buffer: [buffer_size]u8 = undefined;
+    const pkt = setup(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
+    var xfer = Transfer.initControl(pkt, &buffer);
+
+    const Callback = struct {
+        var was_called: bool = false;
+
+        fn invoke(_: *Transfer) void {
+            was_called = true;
+        }
+    };
+    xfer.completion = &Callback.invoke;
+
+    try expectEqual(Transfer.State.token, xfer.state);
+
+    xfer.transferCompleteTransaction(.ok);
+
+    try expectEqual(Transfer.State.handshake, xfer.state);
+
+    xfer.transferCompleteTransaction(.timeout);
+
+    try expectEqual(Transfer.State.complete, xfer.state);
+    try expectEqual(Transfer.CompletionStatus.timeout, xfer.status);
+    try expect(Callback.was_called);
 }

@@ -23,7 +23,7 @@ QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd
 QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd
 
 # Use this to get USB tracing from the emulator.
-QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -trace 'events=trace_events.txt'
+#QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -trace 'events=trace_events.txt'
 
 OS              = $(shell uname)
 ifeq ($(OS), Darwin)
@@ -66,7 +66,7 @@ test:
 	$(ZIG) test $(TEST_SRC)
 
 keep_testing:
-	find src | entr -c zig test --main-pkg-path src/. -freference-trace=9 src/tests.zig
+	find src | entr -c $(ZIG) test --main-pkg-path src/. -freference-trace=9 src/tests.zig
 
 emulate: $(TEST_KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(TEST_KERNEL)

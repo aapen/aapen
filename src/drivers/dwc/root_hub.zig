@@ -10,6 +10,7 @@ const ClassRequestCode = usb.ClassRequestCode;
 const ConfigurationDescriptor = usb.ConfigurationDescriptor;
 const DescriptorType = usb.DescriptorType;
 const DeviceClass = usb.DeviceClass;
+const DeviceConfiguration = usb.DeviceConfiguration;
 const DeviceDescriptor = usb.DeviceDescriptor;
 const DeviceStatus = usb.DeviceStatus;
 const EndpointDescriptor = usb.EndpointDescriptor;
@@ -18,6 +19,7 @@ const HubDescriptor = usb.HubDescriptor;
 const HubStatus = usb.HubStatus;
 const InterfaceClass = usb.InterfaceClass;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
+const LangID = usb.LangID;
 const PortFeature = usb.PortFeature;
 const PortStatus = usb.PortStatus;
 const RequestTypeRecipient = usb.RequestTypeRecipient;
@@ -25,7 +27,9 @@ const RequestTypeType = usb.RequestTypeType;
 const StandardDeviceRequests = usb.StandardDeviceRequests;
 const StringDescriptor = usb.StringDescriptor;
 const Transfer = usb.Transfer;
-const TransferStatus = usb.TransferStatus;
+const TransferBytes = usb.TransferBytes;
+const TransferStatus = usb.TransferCompletionStatus;
+const TransferFactory = usb.TransferFactory;
 
 const registers = @import("registers.zig");
 const HostPortStatusAndControl = registers.HostPortStatusAndControl;
@@ -75,7 +79,7 @@ const root_hub_device_descriptor: DeviceDescriptor = .{
     .configuration_count = 1,
 };
 
-const RootHubConfiguration = extern struct {
+const RootHubConfiguration = packed struct {
     configuration: ConfigurationDescriptor,
     interface: InterfaceDescriptor,
     endpoint: EndpointDescriptor,
@@ -84,7 +88,7 @@ const RootHubConfiguration = extern struct {
 const root_hub_configuration: RootHubConfiguration = .{
     .configuration = .{
         .header = .{
-            .length = @sizeOf(ConfigurationDescriptor),
+            .length = ConfigurationDescriptor.STANDARD_LENGTH,
             .descriptor_type = .configuration,
         },
         .total_length = @sizeOf(RootHubConfiguration),
@@ -99,7 +103,7 @@ const root_hub_configuration: RootHubConfiguration = .{
     },
     .interface = .{
         .header = .{
-            .length = @sizeOf(InterfaceDescriptor),
+            .length = InterfaceDescriptor.STANDARD_LENGTH,
             .descriptor_type = .interface,
         },
         .interface_number = 0,
@@ -112,7 +116,7 @@ const root_hub_configuration: RootHubConfiguration = .{
     },
     .endpoint = .{
         .header = .{
-            .length = @sizeOf(EndpointDescriptor),
+            .length = EndpointDescriptor.STANDARD_LENGTH,
             .descriptor_type = .endpoint,
         },
         .endpoint_address = (1 << 7) | 1,
@@ -443,7 +447,7 @@ pub fn hubHandleTransfer(transfer: *Transfer) !void {
             }
         },
         else => {
-            log.warn("hubHandleTransfer: transfer type {d} not supported", .{transfer.transfer_type});
+            log.warn("hubHandleTransfer: transfer type {any} not supported", .{transfer.transfer_type});
             transfer.complete(.unsupported_request);
         },
     }
@@ -493,15 +497,11 @@ test "get device descriptor" {
     const buffer_size = @sizeOf(DeviceDescriptor);
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupDescriptorQuery(.device, 0, 0, @sizeOf(DeviceDescriptor)),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initDescriptorTransfer(.device, 0, 0, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 
     const device_descriptor = std.mem.bytesAsValue(DeviceDescriptor, xfer.data_buffer[0..@sizeOf(DeviceDescriptor)]);
 
@@ -519,59 +519,40 @@ test "get device descriptor (with insufficient buffer length)" {
     const short_buffer_len: u16 = @as(u16, @sizeOf(DeviceDescriptor)) / 2;
     var buffer: [short_buffer_len]u8 = undefined;
 
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupDescriptorQuery(.device, 0, 0, short_buffer_len),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initDescriptorTransfer(.device, 0, 0, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try hubHandleTransfer(&xfer);
-
-    try expectEqual(short_buffer_len, xfer.actual_size);
+    try expectEqual(@as(u19, short_buffer_len), xfer.actual_size);
 }
 
 test "get configuration descriptor" {
     std.debug.print("\n", .{});
 
-    const buffer_size = @sizeOf(ConfigurationDescriptor) + @sizeOf(InterfaceDescriptor) + @sizeOf(EndpointDescriptor);
+    const buffer_size = ConfigurationDescriptor.STANDARD_LENGTH + InterfaceDescriptor.STANDARD_LENGTH + EndpointDescriptor.STANDARD_LENGTH;
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupDescriptorQuery(.configuration, 1, 0, buffer_size),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initConfigurationDescriptorTransfer(1, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try hubHandleTransfer(&xfer);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    var config = try DeviceConfiguration.initFromBytes(std.testing.allocator, &buffer);
+    defer {
+        config.deinit();
+        std.testing.allocator.destroy(config);
+    }
 
-    const config_start = 0;
-    const config_end = @sizeOf(ConfigurationDescriptor);
-    const iface_start = config_end;
-    const iface_end = iface_start + @sizeOf(InterfaceDescriptor);
-    const endpoint_start = iface_end;
-    const endpoint_end = endpoint_start + @sizeOf(EndpointDescriptor);
+    try expectEqual(DescriptorType.configuration, config.configuration_descriptor.header.descriptor_type);
+    try expect(config.configuration_descriptor.interface_count >= 1);
 
-    const configuration_descriptor = std.mem.bytesAsValue(ConfigurationDescriptor, xfer.data_buffer[config_start..config_end]);
-    try expectEqual(@as(u8, @sizeOf(ConfigurationDescriptor)), configuration_descriptor.header.length);
-    try expectEqual(DescriptorType.configuration, configuration_descriptor.header.descriptor_type);
-    try expect(configuration_descriptor.interface_count >= 1);
+    try expectEqual(DescriptorType.interface, config.interfaces[0].?.header.descriptor_type);
+    try expectEqual(InterfaceClass.hub, config.interfaces[0].?.interface_class);
+    try expect(config.interfaces[0].?.endpoint_count >= 1);
 
-    const interface_descriptor = std.mem.bytesAsValue(InterfaceDescriptor, xfer.data_buffer[iface_start..iface_end]);
-    try expectEqual(@as(u8, @sizeOf(InterfaceDescriptor)), interface_descriptor.header.length);
-    try expectEqual(DescriptorType.interface, interface_descriptor.header.descriptor_type);
-    try expect(interface_descriptor.endpoint_count >= 1);
-    try expectEqual(InterfaceClass.hub, interface_descriptor.interface_class);
-
-    const endpoint_descriptor = std.mem.bytesAsValue(EndpointDescriptor, xfer.data_buffer[endpoint_start..endpoint_end]);
-    try expectEqual(@as(u8, @sizeOf(EndpointDescriptor)), endpoint_descriptor.header.length);
-    try expectEqual(DescriptorType.endpoint, endpoint_descriptor.header.descriptor_type);
-    try expect(endpoint_descriptor.max_packet_size >= 8);
+    try expectEqual(DescriptorType.endpoint, config.endpoints[0][0].?.header.descriptor_type);
+    try expect(config.endpoints[0][0].?.max_packet_size >= 8);
 }
 
 test "get configuration descriptor (with insufficient buffer length)" {
@@ -580,17 +561,11 @@ test "get configuration descriptor (with insufficient buffer length)" {
     const buffer_size = (@sizeOf(ConfigurationDescriptor) + @sizeOf(InterfaceDescriptor) + @sizeOf(EndpointDescriptor)) / 2;
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupDescriptorQuery(.configuration, 1, 0, buffer_size),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initConfigurationDescriptorTransfer(1, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try hubHandleTransfer(&xfer);
-
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 test "get string descriptors" {
@@ -599,26 +574,18 @@ test "get string descriptors" {
     // Should be a descriptor header plus a single u16
     const buffer_size = @sizeOf(usb.StringDescriptor);
     var buffer: [buffer_size]u8 align(2) = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupDescriptorQuery(.string, 0, 0, buffer_size),
-        .data_buffer = &buffer,
-    };
 
+    var xfer = TransferFactory.initStringDescriptorTransfer(0, LangID.none, &buffer);
     try expectTransferStatus(.ok, &xfer);
-
-    try hubHandleTransfer(&xfer);
 
     const string = @as(*align(2) StringDescriptor, @ptrCast(@alignCast(xfer.data_buffer[0..buffer_size])));
 
     try expectEqualSlices(u16, &.{0x0409}, string.body[0..1]);
 
     // check string at index 1
-    xfer.setup = usb.setupDescriptorQuery(.string, 1, 0, buffer_size);
+    xfer = TransferFactory.initStringDescriptorTransfer(1, LangID.none, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
-
-    try hubHandleTransfer(&xfer);
 
     const string2 = @as(*align(2) StringDescriptor, @ptrCast(@alignCast(xfer.data_buffer[0..buffer_size])));
     const str_slice = try string2.asSlice(std.testing.allocator);
@@ -632,17 +599,12 @@ test "get string descriptor (with insufficient buffer length)" {
 
     const buffer_size = @sizeOf(usb.Header) + 4;
     var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupDescriptorQuery(.string, 1, 0, buffer_size),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initStringDescriptorTransfer(1, LangID.none, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try hubHandleTransfer(&xfer);
-
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 test "get status (standard request)" {
@@ -650,29 +612,18 @@ test "get status (standard request)" {
 
     const buffer_size = @sizeOf(u16);
     var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupGetStatus(),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initGetStatusTransfer(&buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try hubHandleTransfer(&xfer);
-
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 test "we support 'set configuration' if the chosen configuration is 1" {
     std.debug.print("\n", .{});
 
-    const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupSetConfiguration(1),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initSetConfigurationTransfer(1);
 
     try expectTransferStatus(.ok, &xfer);
 }
@@ -680,13 +631,7 @@ test "we support 'set configuration' if the chosen configuration is 1" {
 test "we do not support 'set configuration' if the chosen configuration is not 1" {
     std.debug.print("\n", .{});
 
-    const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupSetConfiguration(99),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initSetConfigurationTransfer(99);
 
     try expectTransferStatus(.unsupported_request, &xfer);
 }
@@ -696,11 +641,8 @@ test "'get configuration' always returns 1" {
 
     const buffer_size = 1;
     var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupGetConfiguration(),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initGetConfigurationTransfer(&buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
@@ -712,15 +654,12 @@ test "get descriptor (class request)" {
 
     const buffer_size = @sizeOf(HubDescriptor);
     var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupGetHubDescriptor(0, buffer_size),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initGetHubDescriptorTransfer(0, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 
     const hub_descriptor = std.mem.bytesAsValue(HubDescriptor, xfer.data_buffer[0..@sizeOf(HubDescriptor)]);
 
@@ -733,15 +672,12 @@ test "get hub status (class request)" {
 
     const buffer_size = 4;
     var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupGetHubStatus(),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initGetHubStatusTransfer(&buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 test "get port status (class request)" {
@@ -749,29 +685,23 @@ test "get port status (class request)" {
 
     const buffer_size = @sizeOf(PortStatus);
     var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupGetPortStatus(1),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initHubGetPortStatusTransfer(1, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getPortPowerStatus() !bool {
     const buffer_size = @sizeOf(PortStatus);
     var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupGetPortStatus(1),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initHubGetPortStatusTransfer(1, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 
     const port_status = std.mem.bytesAsValue(PortStatus, xfer.data_buffer[0..@sizeOf(PortStatus)]);
 
@@ -797,16 +727,12 @@ test "set port feature (class request) power" {
     host_registers = &regs;
 
     const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupSetPortFeature(PortFeature.port_power, 1, 0),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initHubSetPortFeatureTransfer(.port_power, 1, 0);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 test "set port feature (class request) reset" {
@@ -816,16 +742,12 @@ test "set port feature (class request) reset" {
     host_registers = &regs;
 
     const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupSetPortFeature(PortFeature.port_reset, 1, 0),
-        .data_buffer = &buffer,
-    };
+
+    var xfer = TransferFactory.initHubSetPortFeatureTransfer(.port_reset, 1, 0);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 test "we silently support 'set address'" {
@@ -833,27 +755,17 @@ test "we silently support 'set address'" {
 
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupSetAddress(123),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initDescriptorTransfer(.device, 0, 0, &buffer);
 
     try expectTransferStatus(.ok, &xfer);
 
-    try expectEqual(@as(u16, buffer_size), xfer.actual_size);
+    try expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 test "we don't support 'set hub feature'" {
     std.debug.print("\n", .{});
 
-    const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupSetHubFeature(.c_hub_local_power),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initHubSetHubFeatureTransfer(.c_hub_local_power);
 
     try expectTransferStatus(.unsupported_request, &xfer);
 }
@@ -861,13 +773,7 @@ test "we don't support 'set hub feature'" {
 test "we don't support 'clear hub feature'" {
     std.debug.print("\n", .{});
 
-    const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    var xfer: Transfer = .{
-        .transfer_type = .control,
-        .setup = usb.setupClearHubFeature(.c_hub_local_power),
-        .data_buffer = &buffer,
-    };
+    var xfer = TransferFactory.initHubClearHubFeatureTransfer(.c_hub_local_power);
 
     try expectTransferStatus(.unsupported_request, &xfer);
 }
