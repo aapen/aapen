@@ -5,6 +5,9 @@ const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
 
+const Forth = @import("forty/forth.zig").Forth;
+const auto = @import("forty/auto.zig");
+
 const serial = @import("serial.zig");
 
 const synchronize = @import("synchronize.zig");
@@ -84,6 +87,10 @@ pub fn sliceDump(buf: []const u8) void {
 // ------------------------------------------------------------------------------
 // Kernel message buffer
 // ------------------------------------------------------------------------------
+
+pub fn defineModule(forth: *Forth) !void {
+    try forth.defineConstant("mring", @intFromPtr(&mring_storage));
+}
 
 const mring_space_bytes = 1024 * 1024;
 pub var mring_storage: [mring_space_bytes]u8 = undefined;

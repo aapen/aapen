@@ -70,16 +70,22 @@ finish
 
 ( Peripheral clock interaction )
 
-: get-clock
-  clocks
-  [[ clocks Clocks.vtable Clocks.VTable.clockRateGet +]] @
-  invoke-2r
+: clock-controller hal hal.peripheral_clock_controller + ;
+
+: clock-rate ( n -- n : push rate in MHz of a clock )
+  clock-controller clock.clockRateCurrent
 ;
 
-: clock-state
-  clocks
-  [[ clocks Clocks.vtable Clocks.VTable.clockStateGet +]] @
-  invoke-2r
+: clock-state ( n -- n : push state of a clock )
+  clock-controller clock.clockState
+;
+
+: clock-on ( n -- n : try to turn on a clock, push the result )
+  1 clock-controller clock.clockStateSet
+;
+
+: clock-off ( n -- n : try to turn off a clock, push the result )
+  0 clock-controller clock.clockStateSet
 ;
 
 (Drawing)

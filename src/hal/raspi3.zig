@@ -2,6 +2,9 @@ const std = @import("std");
 const memory = @import("../memory.zig");
 const Region = memory.Region;
 
+const Forth = @import("../forty/forth.zig").Forth;
+const auto = @import("../forty/auto.zig");
+
 // Memory map
 pub const device_start: u64 = 0x3b40_0000;
 pub const peripheral_base: u64 = 0x3f00_0000;
@@ -39,7 +42,6 @@ pub const PowerController = bcm_power;
 pub const SOC = simple_bus;
 pub const Timer = arm_local_timer.Timer;
 pub const TimerHandler = arm_local_timer.TimerHandler;
-pub const TimerCallbackFn = arm_local_timer.TimerCallbackFn;
 pub const Uart = pl011;
 pub const USBHCI = dwc_otg_usb;
 pub const VideoController = bcm_video_controller;
@@ -103,4 +105,12 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     self.uart.initializeUart();
 
     return self;
+}
+
+pub fn defineModule(forth: *Forth, hal: *Self) !void {
+    try forth.defineStruct("hal", Self);
+    try forth.defineConstant("hal", @intFromPtr(hal));
+    try auto.defineNamespace(Self, "hal.", forth);
+
+    try bcm_peripheral_clocks.defineModule(forth);
 }

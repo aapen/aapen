@@ -573,11 +573,6 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineStruct("MainConsole", MainConsole);
     try forth.defineStruct("CharBuffer", CharBuffer);
 
-    // Hal
-    try forth.defineStruct("hal", HAL);
-    try forth.defineStruct("Clocks", HAL.PeripheralClockController);
-    try forth.defineStruct("Clocks.VTable", HAL.PeripheralClockController.VTable);
-
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);
     _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);

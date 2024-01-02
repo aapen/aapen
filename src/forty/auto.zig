@@ -209,7 +209,7 @@ fn unpackReturnValue(forth: *Forth, retval: anytype) !void {
             }
         },
         .Enum => {
-            forth.push(@intFromEnum(retval));
+            try forth.stack.push(@intFromEnum(retval));
         },
         inline else => |t| {
             std.debug.print("Don't know how to handle a {any}\n", .{t});

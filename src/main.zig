@@ -164,6 +164,14 @@ fn kernelInit() void {
 
     hal.system_timer.schedule(heartbeat_interval, &heartbeat);
 
+    debug.defineModule(&interpreter) catch |err| {
+        debug.kernelError("Debug ring define module", err);
+    };
+
+    HAL.defineModule(&interpreter, hal) catch |err| {
+        debug.kernelError("HAL define module", err);
+    };
+
     Usb.defineModule(&interpreter) catch |err| {
         debug.kernelError("USB define module", err);
     };
@@ -175,10 +183,7 @@ fn kernelInit() void {
     // TODO should this move to forty/core.zig?
     supplyAddress("char-buffer", @intFromPtr(char_buffer));
     supplyAddress("console", @intFromPtr(main_console));
-    supplyAddress("hal", @intFromPtr(hal));
-    supplyAddress("clocks", @intFromPtr(&hal.peripheral_clock_controller));
     supplyAddress("board", @intFromPtr(&diagnostics.board));
-    supplyAddress("mring", @intFromPtr(&debug.mring_storage));
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
