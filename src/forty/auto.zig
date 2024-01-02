@@ -26,12 +26,7 @@ pub fn defineNamespace(comptime Module: type, comptime as: []const u8, forth: *F
             .Fn => |f| {
                 if (comptime isSuitable(f)) {
                     const caller = callerFor(Module, as, d.name);
-
-                    const header = try forth.startWord(caller.name, "", &caller.invoke, false);
-                    _ = header;
-                    try forth.addNumber(@intFromPtr(&caller.invoke));
-                    try forth.completeWord();
-                    //try forth.definePrimitiveDesc(caller.name, caller.desc, &caller.invoke, false);
+                    _ = try forth.definePrimitiveDesc(caller.name, caller.desc, &caller.invoke, false);
                 }
             },
 
