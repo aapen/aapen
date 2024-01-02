@@ -8,6 +8,9 @@ const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
 
+const Forth = @import("../forty/forth.zig").Forth;
+const auto = @import("../forty/auto.zig");
+
 const time = @import("../time.zig");
 
 const PowerController = root.HAL.PowerController;
@@ -89,7 +92,7 @@ pub const HostConfig = reg.HostConfig;
 pub const HostFrameInterval = reg.HostFrameInterval;
 pub const HostFrames = reg.HostFrames;
 pub const HostPeriodicFifo = reg.PeriodicFifoStatus;
-pub const HostFifoStatus = reg.HostFifoStatus;
+pub const HostNonPeriodicFifo = reg.NonPeriodicFifoStatus;
 pub const HostPort = reg.HostPortStatusAndControl;
 pub const HostRegisters = reg.HostRegisters;
 
@@ -104,7 +107,7 @@ pub const InterruptStatus = reg.InterruptStatus;
 pub const InterruptMask = reg.InterruptMask;
 pub const RxStatus = reg.RxStatus;
 pub const FifoSize = reg.FifoSize;
-pub const NonPeriodicTxFifoStatus = reg.NonPeriodicTxFifoStatus;
+pub const NonPeriodicFifoStatus = reg.NonPeriodicFifoStatus;
 pub const GeneralCoreConfig = reg.GeneralCoreConfig;
 pub const HwConfig2 = reg.HwConfig2;
 pub const HwConfig3 = reg.HwConfig3;
@@ -162,7 +165,7 @@ attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
 // - keep a top-level array of HIDs
 
 // ----------------------------------------------------------------------
-// Interop shims
+// Forty Interop shims
 // ----------------------------------------------------------------------
 vtable: VTable = .{
     .initialize = initializeShim,
@@ -173,33 +176,39 @@ vtable: VTable = .{
 },
 
 fn initializeShim(usb_controller: u64) u64 {
-    var self: *Self = @ptrFromInt(usb_controller);
-    if (self.initialize()) {
-        return 1;
-    } else |err| {
-        log.err("USB init error: {any}", .{err});
-        return 0;
-    }
+    _ = usb_controller;
+    //     var self: *Self = @ptrFromInt(usb_controller);
+    //     if (self.initialize()) {
+    //         return 1;
+    //     } else |err| {
+    //         log.err("USB init error: {any}", .{err});
+    //         return 0;
+    //     }
+    return 0;
 }
 
 fn rootPortInitializeShim(usb_controller: u64) u64 {
     var self: *Self = @ptrFromInt(usb_controller);
-    if (self.rootPortInitialize()) |dev| {
-        return @intFromPtr(dev);
-    } else |err| {
-        log.err("USB init root port error: {any}", .{err});
-        return 0;
-    }
+    _ = self;
+    // if (self.rootPortInitialize()) |dev| {
+    //     return @intFromPtr(dev);
+    // } else |err| {
+    //     log.err("USB init root port error: {any}", .{err});
+    return 0;
+    // }
 }
 
 fn busInitializeShim(usb_controller: u64) u64 {
-    var self: *Self = @ptrFromInt(usb_controller);
-    if (self.busInitialize()) |bus| {
-        return @intFromPtr(bus);
-    } else |err| {
-        log.err("USB bus init error: {any}", .{err});
-        return 0;
-    }
+    _ = usb_controller;
+
+    // var self: *Self = @ptrFromInt(usb_controller);
+    // if (self.busInitialize()) |bus| {
+    //     return @intFromPtr(bus);
+    // } else |err| {
+    //     log.err("USB bus init error: {any}", .{err});
+    //     return 0;
+    // }
+    return 0;
 }
 
 fn deviceGetShim(usb_controller: u64, usb_address: u64) u64 {
@@ -221,6 +230,10 @@ fn deviceGetShim(usb_controller: u64, usb_address: u64) u64 {
 fn dumpStatusShim(usb_controller: u64) void {
     var self: *Self = @ptrFromInt(usb_controller);
     self.dumpStatus();
+}
+
+pub fn defineModule(forth: *Forth) !void {
+    try auto.defineNamespace(Self, "usbhci.", forth);
 }
 
 // ----------------------------------------------------------------------
@@ -264,13 +277,13 @@ pub fn init(
 }
 
 // Ugly: this reaches up to the generic layer
-pub fn busInitialize(self: *Self) !*Bus {
+pub fn busInitialize(self: *Self, _: auto.InteropCall) !*Bus {
     const bus: *Bus = try self.allocator.create(Bus);
     try bus.init(self.allocator, self, self.root_port.device);
     return bus;
 }
 
-pub fn initialize(self: *Self) !void {
+pub fn initialize(self: *Self, _: auto.InteropCall) !void {
     try self.powerOn();
     try self.verifyHostControllerDevice();
     try self.globalInterruptDisable();
@@ -525,7 +538,7 @@ fn haltAllChannels(self: *Self) !void {
     }
 }
 
-fn rootPortInitialize(self: *Self) !*Device {
+pub fn rootPortInitialize(self: *Self, _: auto.InteropCall) !*Device {
     log.debug("root port init start", .{});
     defer log.debug("root port init end", .{});
 

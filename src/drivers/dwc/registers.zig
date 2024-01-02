@@ -403,7 +403,7 @@ pub const FifoSize = packed struct {
     fifo_depth: u16,
 };
 
-pub const NonPeriodicTxFifoStatus = packed struct {
+pub const NonPeriodicFifoStatus = packed struct {
     space_available: u16,
     queue_space_available: u8,
     terminate: u1, // 24
@@ -558,7 +558,7 @@ pub const CoreRegisters = extern struct {
     rx_status_pop: RxStatus, // 0x20
     rx_fifo_size: u32 = 0, // 0x24
     nonperiodic_tx_fifo_size: FifoSize, // 0x28
-    nonperiodic_tx_status: NonPeriodicTxFifoStatus, // 0x2c
+    nonperiodic_tx_status: NonPeriodicFifoStatus, // 0x2c
     i2c_control: u32 = 0, // 0x30
     phy_vendor_control: u32 = 0, // 0x34
     general_config: GeneralCoreConfig, // 0x38

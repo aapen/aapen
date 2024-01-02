@@ -8,6 +8,8 @@ const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.usb);
 
 const root = @import("root");
+const HCI = root.HAL.USBHCI;
+
 const Forth = root.Forth;
 
 const auto = @import("forty/auto.zig");
@@ -110,6 +112,9 @@ const Self = @This();
 
 pub fn defineModule(forth: *Forth) !void {
     try auto.defineNamespace(Self, "usb.", forth);
+
+    try HCI.defineModule(forth);
+    try forth.defineConstant("usbhci", @intFromPtr(&root.hal.usb_hci));
 }
 
 // ----------------------------------------------------------------------
@@ -122,7 +127,7 @@ var drivers: Drivers = undefined;
 var root_hub: ?*Device = undefined;
 var bus_lock: Spinlock = undefined;
 
-pub fn init(_: auto.InteropCall) !void {
+pub fn init(iop: auto.InteropCall) !void {
     allocator = root.heap.allocator;
     drivers = Drivers.init(allocator);
     bus_lock = Spinlock.initWithTargetLevel("usb bus", true, .FIQ);
@@ -131,7 +136,7 @@ pub fn init(_: auto.InteropCall) !void {
     defer bus_lock.release();
 
     try registerDriver(&usb_hub_driver);
-    try root.hal.usb_hci.initialize();
+    try root.hal.usb_hci.initialize(iop);
 }
 
 pub fn registerDriver(device_driver: *const DeviceDriver) !void {

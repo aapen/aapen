@@ -68,7 +68,7 @@ finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
 
-( USB driver stack )
+( Peripheral clock interaction )
 
 : get-clock
   clocks
