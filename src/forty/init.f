@@ -84,9 +84,7 @@ finish
 
 (Drawing)
 : draw-char (bg fg y x c -- : Draw character at position)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.char +]] @
-  invoke-6
+  fb fb.drawChar
 ;
 
 (Utilities)
@@ -365,6 +363,10 @@ finish
   else
     "??? esc [ " s~ ~
   endif
+;
+
+: line
+  fb fb.line
 ;
 
 : line-demo-handler (ch -- : Draw some pretty lines)
