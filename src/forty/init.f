@@ -70,47 +70,6 @@ finish
 
 ( USB driver stack )
 
-: usb-init
-  usb dup
-  USB.vtable USB.VTable.initialize + + @
-  invoke-1r
-;
-
-: usb-init-hcd                                              ( -- bool : initialize the host controller driver )
-  [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
-  dup
-  USBHCI.vtable USBHCI.VTable.initialize + + @              ( Address of initialize function )
-  invoke-1r                                                 ( Call instance function, 0 return means failed )
-;
-
-: usb-init-root-port                                        ( -- addr : init and return *Device )
-  [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
-  dup
-  USBHCI.vtable USBHCI.VTable.rootPortInitialize + + @      ( Address of initialize function )
-  invoke-1r                                                 ( Call instance function, 0 return means failed )
-;
-
-: usb-init-bus                                              ( -- addr : init and return *Bus )
-  [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
-  dup
-  USBHCI.vtable USBHCI.VTable.busInitialize + + @           ( Address of busInitialize function )
-  invoke-1r                                                 ( Call instance function, 0 return means failed )
-;
-
-: usb-status
-  [[ hal hal.usb_hci +]] @
-  dup
-  USBHCI.vtable USBHCI.VTable.dumpStatus + + @
-  invoke-1
-;
-
-: usb-device                                                ( n -- addr : USB address -> device pointer )
-  [[ hal hal.usb_hci +]] @                                  ( Address of HCD )
-  dup
-  USB.vtable USBHCI.VTable.deviceGet + + @                     ( Address of device lookup function )
-  invoke-2r                                                 ( Call instance function, 0 return means failed )
-;
-
 : get-clock
   clocks
   [[ clocks Clocks.vtable Clocks.VTable.clockRateGet +]] @
@@ -129,31 +88,6 @@ finish
   [[ fb FrameBuffer.vtable FrameBuffer.VTable.char +]] @
   invoke-6
 ;
-
-: text (bg fg y x s -- : Draw string at position)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.text +]] @
-  invoke-6
-;
-
-: line  (color y2 x2 y1 x1 -- : Draw a colored line)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.line +]] @
-  invoke-6
-;
-
-: fill  (color bottom right top left -- : Fill a rectangle with color)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.fill +]] @
-  invoke-6
-;
-
-: blit  (dst-y dst-x src-h src-w src-y src-x -- : Copy a rectangle)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.blit +]] @
-  invoke-7
-;
-
 
 (Utilities)
 

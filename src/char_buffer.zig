@@ -157,7 +157,7 @@ pub fn renderRect(self: *Self, rect: Rectangle) void {
             const ch = self.text[i_char];
             const pt = self.location[i_char];
             //try serial.writer.print("render c {} {} {c}\n", .{ col, row, ch.ch });
-            self.fb.drawChar(pt.x, pt.y, ch.ch, ch.fg, ch.bg);
+            self.fb.drawChar(pt.x, pt.y, ch.ch, ch.fg, ch.bg, .{});
         }
     }
 }
@@ -354,7 +354,7 @@ pub fn scrollUp(self: *Self) void {
     const src_y = self.fb.font_height_px;
     const src_w = self.fb.xres;
     const src_h = self.fb.yres - self.fb.font_height_px;
-    self.fb.blit(src_x, src_y, src_w, src_h, 0, 0);
+    self.fb.blit(src_x, src_y, src_w, src_h, 0, 0, .{});
 
     // Clear the in memory version of the bottom row of text.
     var i_char = self.charIndexGet(0, self.num_rows - 1);
@@ -371,7 +371,7 @@ pub fn scrollUp(self: *Self) void {
     const top: u64 = self.fb.yres - self.fb.font_height_px;
     const right: u64 = self.fb.xres;
     const bottom: u64 = self.fb.yres;
-    self.fb.fill(left, top, right, bottom, self.current_bg);
+    self.fb.fill(left, top, right, bottom, self.current_bg, .{});
 }
 
 /// Debugging: Dump the in-memory text to the serial port.

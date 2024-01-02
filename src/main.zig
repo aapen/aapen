@@ -18,7 +18,7 @@ const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
 const forty = @import("forty/forth.zig");
-const Forth = forty.Forth;
+pub const Forth = forty.Forth;
 
 const Serial = @import("serial.zig"); //TBD
 
@@ -38,6 +38,7 @@ pub const std_options = struct {
         .{ .scope = .dwc_otg_usb, .level = .info },
         .{ .scope = .dwc_otg_usb_channel, .level = .info },
         .{ .scope = .usb, .level = .info },
+        .{ .scope = .forty, .level = .debug },
     };
 };
 
@@ -53,7 +54,6 @@ pub var fb: *FrameBuffer = undefined;
 pub var char_buffer_console: *CharBufferConsole = undefined;
 pub var char_buffer: *CharBuffer = undefined;
 pub var main_console: *MainConsole = undefined;
-pub var usb: *Usb = undefined;
 
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
@@ -150,12 +150,11 @@ fn kernelInit() void {
         debug.kernelError("diagnostics init error", err);
     }
 
-    if (Usb.init(heap.allocator)) |u| {
-        usb = u;
-        debug.kernelMessage("USB core init");
-    } else |err| {
-        debug.kernelError("USB core init error", err);
-    }
+    // if (Usb.init(heap.allocator)) |_| {
+    //     debug.kernelMessage("USB core init");
+    // } else |err| {
+    //     debug.kernelError("USB core init error", err);
+    // }
 
     if (interpreter.init(heap.allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
@@ -165,10 +164,15 @@ fn kernelInit() void {
 
     hal.system_timer.schedule(heartbeat_interval, &heartbeat);
 
+    Usb.defineModule(&interpreter) catch |err| {
+        debug.kernelError("USB define module", err);
+    };
+
+    FrameBuffer.defineModule(&interpreter, fb) catch |err| {
+        debug.kernelError("Frame buffer define module", err);
+    };
+
     // TODO should this move to forty/core.zig?
-    supplyAddress("usb", @intFromPtr(usb));
-    supplyAddress("usbhci", @intFromPtr(&hal.usb_hci));
-    supplyAddress("fb", @intFromPtr(fb));
     supplyAddress("char-buffer", @intFromPtr(char_buffer));
     supplyAddress("console", @intFromPtr(main_console));
     supplyAddress("hal", @intFromPtr(hal));

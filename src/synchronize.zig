@@ -101,6 +101,14 @@ pub const Spinlock = struct {
         };
     }
 
+    pub fn initWithTargetLevel(name: []const u8, enabled: bool, target_level: cpu.InterruptLevel) Spinlock {
+        return .{
+            .name = name,
+            .enabled = enabled,
+            .target_level = target_level,
+        };
+    }
+
     pub fn acquire(lock: *Spinlock) void {
         if (lock.target_level == .IRQ or lock.target_level == .FIQ) {
             criticalEnter(lock.target_level);

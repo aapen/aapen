@@ -8,8 +8,12 @@ const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.usb);
 
 const root = @import("root");
+const Forth = root.Forth;
+
+const auto = @import("forty/auto.zig");
 
 const synchronize = @import("synchronize.zig");
+const Spinlock = synchronize.Spinlock;
 
 pub const Bus = @import("usb/bus.zig");
 
@@ -64,7 +68,7 @@ pub const PortFeature = hub.PortFeature;
 pub const PortStatus = hub.PortStatus;
 pub const HubDescriptor = hub.HubDescriptor;
 pub const ClassRequestCode = hub.ClassRequest;
-pub const FeatureSelector = hub.FeatureSelector;
+//pub const FeatureSelector = hub.FeatureSelector;
 pub const TTDirection = hub.TTDirection;
 const usb_hub_driver = hub.usb_hub_driver;
 
@@ -100,48 +104,36 @@ pub const TransferFactory = @import("usb/transfer_factory.zig");
 
 const Self = @This();
 
-pub const VTable = struct {
-    initialize: *const fn (self: u64) u64,
-};
+// ----------------------------------------------------------------------
+// Forty interop
+// ----------------------------------------------------------------------
 
-pub fn initializeShim(self: u64) u64 {
-    const self_ptr: *Self = @ptrFromInt(self);
-    if (self_ptr.initialize()) {
-        return 1;
-    } else |e| {
-        log.err("USB Core init error: {any}", .{e});
-        return 0;
-    }
+pub fn defineModule(forth: *Forth) !void {
+    try auto.defineNamespace(Self, "usb.", forth);
 }
 
+// ----------------------------------------------------------------------
+// Core subsystem
+// ----------------------------------------------------------------------
 const Drivers = std.ArrayList(*const DeviceDriver);
 
-allocator: Allocator = undefined,
-drivers: Drivers = undefined,
-root_hub: ?*Device = undefined,
-vtable: VTable = .{
-    .initialize = initializeShim,
-},
+var allocator: Allocator = undefined;
+var drivers: Drivers = undefined;
+var root_hub: ?*Device = undefined;
+var bus_lock: Spinlock = undefined;
 
-pub fn init(allocator: Allocator) !*Self {
-    const self = try allocator.create(Self);
+pub fn init(_: auto.InteropCall) !void {
+    allocator = root.heap.allocator;
+    drivers = Drivers.init(allocator);
+    bus_lock = Spinlock.initWithTargetLevel("usb bus", true, .FIQ);
 
-    self.* = .{
-        .allocator = allocator,
-        .drivers = Drivers.init(allocator),
-    };
+    bus_lock.acquire();
+    defer bus_lock.release();
 
-    return self;
-}
-
-pub fn registerDriver(self: *Self, device_driver: *const DeviceDriver) !void {
-    synchronize.criticalEnter(.FIQ);
-    defer synchronize.criticalLeave();
-
-    try self.drivers.append(device_driver);
-}
-
-pub fn initialize(self: *Self) !void {
-    try self.registerDriver(&usb_hub_driver);
+    try registerDriver(&usb_hub_driver);
     try root.hal.usb_hci.initialize();
+}
+
+pub fn registerDriver(device_driver: *const DeviceDriver) !void {
+    try drivers.append(device_driver);
 }

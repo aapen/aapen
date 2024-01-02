@@ -10,7 +10,7 @@ const FrameBuffer = @import("../frame_buffer.zig");
 const CharBuffer = @import("../char_buffer.zig");
 const CharBufferConsole = @import("../char_buffer_console.zig");
 const MainConsole = @import("../main_console.zig");
-const usb = @import("../usb.zig");
+const Usb = @import("../usb.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -572,20 +572,11 @@ pub fn defineCore(forth: *Forth) !void {
 
     try forth.defineStruct("MainConsole", MainConsole);
     try forth.defineStruct("CharBuffer", CharBuffer);
-    try forth.defineStruct("FrameBuffer", FrameBuffer);
-    try forth.defineStruct("FrameBuffer.VTable", FrameBuffer.VTable);
 
     // Hal
     try forth.defineStruct("hal", HAL);
     try forth.defineStruct("Clocks", HAL.PeripheralClockController);
     try forth.defineStruct("Clocks.VTable", HAL.PeripheralClockController.VTable);
-    try forth.defineStruct("USB", usb);
-    try forth.defineStruct("USB.VTable", usb.VTable);
-    try forth.defineStruct("USBHCI", HAL.USBHCI);
-    try forth.defineStruct("USBHCI.VTable", HAL.USBHCI.VTable);
-    try forth.defineStruct("usb-device", HAL.USBHCI.Device);
-    try forth.defineStruct("usb-bus", usb.Bus);
-    try forth.defineStruct("usb-hub", usb.Hub);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);

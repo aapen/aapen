@@ -5,6 +5,9 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const debug = @import("debug.zig");
 
+const auto = @import("forty/auto.zig");
+const Forth = @import("forty/forth.zig").Forth;
+
 const DMA = root.HAL.DMA;
 const DMAChannel = root.HAL.DMA.Channel;
 const DMARequest = root.HAL.DMA.Request;
@@ -28,13 +31,11 @@ const character_rombits: [character_rom.len]CharBits = init: {
 
 pub const Self = @This();
 
-pub const VTable = struct {
-    char: *const fn (fb: u64, ch: u64, x: u64, y: u64, fg: u64, bg: u64) void,
-    text: *const fn (fb: u64, str: u64, x: u64, y: u64, fg: u64, bg: u64) void,
-    line: *const fn (fb: u64, x0: u64, y0: u64, x1: u64, x2: u64, color: u64) void,
-    fill: *const fn (fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void,
-    blit: *const fn (fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void,
-};
+pub fn defineModule(forth: *Forth, fb: *Self) !void {
+    try forth.defineConstant("fb", @intFromPtr(fb));
+    try auto.defineNamespace(Self, "fb.", forth);
+    try forth.defineStruct("FrameBuffer", Self);
+}
 
 // Font dimensions
 
@@ -82,45 +83,13 @@ base: [*]u8 = undefined,
 buffer_size: usize = undefined,
 pitch: usize = undefined,
 range: Region = undefined,
-vtable: VTable = .{
-    .char = charInteropShim,
-    .text = textInteropShim,
-    .line = lineInteropShim,
-    .fill = fillInteropShim,
-    .blit = blitInteropShim,
-},
 
-fn charInteropShim(fb: u64, ch: u64, x: u64, y: u64, fg: u64, bg: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    const c: u8 = @truncate(ch);
-    const fg8: u8 = @truncate(fg);
-    const bg8: u8 = @truncate(bg);
-    self.drawChar(x, y, c, fg8, bg8);
-}
+// ----------------------------------------------------------------------
+// Forty interop
+// ----------------------------------------------------------------------
 
-fn textInteropShim(fb: u64, str: u64, x: u64, y: u64, fg: u64, bg: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    const s: [*:0]u8 = @ptrFromInt(str);
-    const fg8: u8 = @truncate(fg);
-    const bg8: u8 = @truncate(bg);
-    self.text(s, x, y, fg8, bg8);
-}
-
-fn lineInteropShim(fb: u64, x0: u64, y0: u64, x1: u64, y1: u64, color: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    const c: u8 = @truncate(color);
-    self.line(x0, y0, x1, y1, c);
-}
-
-fn fillInteropShim(fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    const c: u8 = @truncate(color);
-    self.fill(left, top, right, bottom, c);
-}
-
-fn blitInteropShim(fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    self.blit(src_x, src_y, src_w, src_h, dest_x, dest_y);
+pub fn demo(iop: auto.InteropCall, fb: *Self, color: u8) void {
+    fb.line(0, 0, 1024, 768, color, iop);
 }
 
 pub fn init(allocator: Allocator, hal: *root.HAL) !*Self {
@@ -157,7 +126,7 @@ pub fn clearRegion(self: *Self, x: usize, y: usize, w: usize, h: usize, color: u
 // Font is fixed height of 16 bits, fixed width of 8 bits
 const CharRow = @Vector(DEFAULT_FONT_WIDTH, u8);
 
-pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8, fg: u8, bg: u8) void {
+pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8, fg: u8, bg: u8, _: auto.InteropCall) void {
     var romidx: usize = @as(usize, ch - 32) * DEFAULT_FONT_HEIGHT;
     if (romidx + self.font_height_px >= character_rom.len)
         return;
@@ -177,12 +146,12 @@ pub fn drawChar(self: *Self, x: usize, y: usize, ch: u8, fg: u8, bg: u8) void {
     }
 }
 
-pub fn text(self: *Self, str: [*:0]u8, x_start: usize, y_start: usize, fg: u8, bg: u8) void {
+pub fn text(self: *Self, str: [*:0]u8, x_start: usize, y_start: usize, fg: u8, bg: u8, iop: auto.InteropCall) void {
     const y = y_start;
     var x = x_start;
     var i: usize = 0;
     while (str[i] != 0) : (i += 1) {
-        self.drawChar(x, y, str[i], fg, bg);
+        self.drawChar(x, y, str[i], fg, bg, iop);
         x += 8;
     }
 }
@@ -217,7 +186,7 @@ pub inline fn colToX(self: *Self, col: usize) usize {
     return col * self.font_width_px;
 }
 
-pub fn blit(fb: *Self, src_x: usize, src_y: usize, src_w: usize, src_h: usize, dest_x: usize, dest_y: usize) void {
+pub fn blit(fb: *Self, src_x: usize, src_y: usize, src_w: usize, src_h: usize, dest_x: usize, dest_y: usize, _: auto.InteropCall) void {
     const sx = clamp(usize, 0, src_x, fb.xres);
     const sy = clamp(usize, 0, src_y, fb.yres);
     const w = clamp(usize, 0, src_w, fb.xres);
@@ -260,7 +229,7 @@ inline fn abs(comptime T: type, val: T) T {
     return if (val > 0) val else -val;
 }
 
-pub fn fill(fb: *Self, left: usize, top: usize, right: usize, bottom: usize, color: u8) void {
+pub fn fill(fb: *Self, left: usize, top: usize, right: usize, bottom: usize, color: u8, _: auto.InteropCall) void {
     const l = clamp(usize, 0, left, fb.xres);
     const r = clamp(usize, 0, right, fb.xres);
     const t = clamp(usize, 0, top, fb.yres);
@@ -335,7 +304,7 @@ fn fillPixels(fb: *Self, l: usize, t: usize, r: usize, b: usize, color: u8) void
     }
 }
 
-pub fn line(fb: *Self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) void {
+pub fn line(fb: *Self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8, _: auto.InteropCall) void {
     const x_start = boundsCheck(usize, 0, x0, fb.xres) catch {
         return;
     };
