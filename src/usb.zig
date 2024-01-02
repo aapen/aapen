@@ -127,7 +127,11 @@ var drivers: Drivers = undefined;
 var root_hub: ?*Device = undefined;
 var bus_lock: Spinlock = undefined;
 
-pub fn init(iop: auto.InteropCall) !void {
+pub const exports = [_][]const u8{
+    "init",
+};
+
+pub fn init() !void {
     allocator = root.heap.allocator;
     drivers = Drivers.init(allocator);
     bus_lock = Spinlock.initWithTargetLevel("usb bus", true, .FIQ);
@@ -136,7 +140,7 @@ pub fn init(iop: auto.InteropCall) !void {
     defer bus_lock.release();
 
     try registerDriver(&usb_hub_driver);
-    try root.hal.usb_hci.initialize(iop);
+    try root.hal.usb_hci.initialize();
 }
 
 pub fn registerDriver(device_driver: *const DeviceDriver) !void {

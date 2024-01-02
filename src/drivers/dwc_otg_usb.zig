@@ -64,6 +64,12 @@ const Self = @This();
 // Public API
 // ----------------------------------------------------------------------
 
+pub const exports = [_][]const u8{
+    "busInitialize",
+    "initialize",
+    "rootPortInitialize",
+};
+
 pub const Error = error{
     IncorrectDevice,
     PowerFailure,
@@ -277,13 +283,13 @@ pub fn init(
 }
 
 // Ugly: this reaches up to the generic layer
-pub fn busInitialize(self: *Self, _: auto.InteropCall) !*Bus {
+pub fn busInitialize(self: *Self) !*Bus {
     const bus: *Bus = try self.allocator.create(Bus);
     try bus.init(self.allocator, self, self.root_port.device);
     return bus;
 }
 
-pub fn initialize(self: *Self, _: auto.InteropCall) !void {
+pub fn initialize(self: *Self) !void {
     try self.powerOn();
     try self.verifyHostControllerDevice();
     try self.globalInterruptDisable();
@@ -538,7 +544,7 @@ fn haltAllChannels(self: *Self) !void {
     }
 }
 
-pub fn rootPortInitialize(self: *Self, _: auto.InteropCall) !*Device {
+pub fn rootPortInitialize(self: *Self) !*Device {
     log.debug("root port init start", .{});
     defer log.debug("root port init end", .{});
 

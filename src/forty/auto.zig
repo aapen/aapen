@@ -20,18 +20,20 @@ pub const InteropCall = struct {
 pub fn defineNamespace(comptime Module: type, comptime as: []const u8, forth: *Forth) !void {
     const decls = @typeInfo(Module).Struct.decls;
 
+    if (comptime @hasDecl(Module, "exports")) {
+        inline for (Module.exports) |name| {
+            const caller = callerFor(Module, as, name);
+            _ = try forth.definePrimitiveDesc(caller.name, caller.desc, &caller.invoke, false);
+        }
+    }
+
     inline for (decls) |d| {
         const t = @typeInfo(@TypeOf(@field(Module, d.name)));
         switch (t) {
             .Fn => |f| {
                 if (comptime isSuitable(f)) {
                     const caller = callerFor(Module, as, d.name);
-
-                    const header = try forth.startWord(caller.name, "", &caller.invoke, false);
-                    _ = header;
-                    try forth.addNumber(@intFromPtr(&caller.invoke));
-                    try forth.completeWord();
-                    //try forth.definePrimitiveDesc(caller.name, caller.desc, &caller.invoke, false);
+                    _ = try forth.definePrimitiveDesc(caller.name, caller.desc, &caller.invoke, false);
                 }
             },
 
