@@ -537,7 +537,6 @@ pub fn defineCore(forth: *Forth) !void {
     try forth.defineConstant("word", @sizeOf(u64));
 
     try forth.defineStruct("MainConsole", MainConsole);
-    try forth.defineStruct("CharBuffer", CharBuffer);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);

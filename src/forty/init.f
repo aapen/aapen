@@ -208,8 +208,8 @@ finish
 
 (Screen dimensions)
 
-[[ char-buffer CharBuffer.num_cols  +]] @  :scr-cols let
-[[ char-buffer CharBuffer.num_rows  +]] @  :scr-rows let
+: scr-cols char-buffer cb-cols ;
+: scr-rows char-buffer cb-rows ;
 
 : scr-xres fb fb-xres ;
 : scr-yres fb fb-yres ;

@@ -184,8 +184,11 @@ fn kernelInit() void {
         debug.kernelError("Frame buffer define module", err);
     };
 
+    CharBuffer.defineModule(&interpreter, char_buffer) catch |err| {
+        debug.kernelError("Char buffer define module", err);
+    };
+
     // TODO should this move to forty/core.zig?
-    supplyAddress("char-buffer", @intFromPtr(char_buffer));
     supplyAddress("console", @intFromPtr(main_console));
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
