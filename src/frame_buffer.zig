@@ -41,12 +41,13 @@ pub fn defineModule(forth: *Forth, fb: *Self) !void {
         .{ "drawPixel", "draw-pixel" },
         .{ "clearRegion", "clear-region" },
         .{"clear"},
+        .{ "getXres", "fb-xres", "X resolution in pixels" },
+        .{ "getYres", "fb-yres", "Y resolution in pixels" },
     }, forth);
     try forth.defineStruct("FrameBuffer", Self);
 }
 
 // Font dimensions
-
 pub const DEFAULT_FONT_WIDTH = 8;
 pub const DEFAULT_FONT_HEIGHT = 16;
 
@@ -92,10 +93,6 @@ buffer_size: usize = undefined,
 pitch: usize = undefined,
 range: Region = undefined,
 
-// ----------------------------------------------------------------------
-// Forty interop
-// ----------------------------------------------------------------------
-
 pub fn init(allocator: Allocator, hal: *root.HAL) !*Self {
     const self = try allocator.create(Self);
 
@@ -104,6 +101,14 @@ pub fn init(allocator: Allocator, hal: *root.HAL) !*Self {
     try hal.video_controller.allocFrameBuffer(self);
 
     return self;
+}
+
+pub fn getXres(self: *Self) u32 {
+    return self.xres;
+}
+
+pub fn getYres(self: *Self) u32 {
+    return self.yres;
 }
 
 pub fn drawPixel(self: *Self, x: usize, y: usize, color: u8) void {

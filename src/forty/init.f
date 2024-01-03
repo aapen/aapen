@@ -211,8 +211,8 @@ finish
 [[ char-buffer CharBuffer.num_cols  +]] @  :scr-cols let
 [[ char-buffer CharBuffer.num_rows  +]] @  :scr-rows let
 
-[[ fb FrameBuffer.xres +]] @w :scr-xres let
-[[ fb FrameBuffer.yres +]] @w :scr-yres let
+: scr-xres fb fb-xres ;
+: scr-yres fb fb-yres ;
 
 (Key Dispatch Table: dtab)
 
