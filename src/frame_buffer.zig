@@ -37,7 +37,6 @@ pub fn defineModule(forth: *Forth, fb: *Self) !void {
         .{ "line", "line", "draw a line" },
         .{"fill"},
         .{"text"},
-        .{"demo"},
         .{ "drawChar", "draw-char" },
         .{ "drawPixel", "draw-pixel" },
         .{ "clearRegion", "clear-region" },

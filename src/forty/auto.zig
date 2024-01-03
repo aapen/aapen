@@ -26,7 +26,7 @@ pub fn defineNamespace(comptime Module: type, exports: anytype, forth: *Forth) !
         const docstring = if (export_type_info.Struct.fields.len > 2) exp[2] else "";
 
         if (comptime (!@hasDecl(Module, decl))) {
-            @compileError("Module " ++ Module ++ " does not have a public declaration " ++ decl);
+            @compileError("Module " ++ @typeName(Module) ++ " does not have a public declaration " ++ decl);
         }
 
         const t = @typeInfo(@TypeOf(@field(Module, decl)));
