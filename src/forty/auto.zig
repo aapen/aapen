@@ -112,7 +112,7 @@ fn stackEffectParameterString(comptime f: std.builtin.Type.Fn) ![]const u8 {
 fn parameterSigil(comptime T: type) ![]const u8 {
     switch (@typeInfo(T)) {
         .Optional => |o| return parameterSigil(o.child),
-        .Int, .Enum => return "n",
+        .Int, .Enum, .Bool => return "n",
         .Pointer => return "a",
         else => @compileError("Unsupported parameter type " ++ @typeName(T)),
     }
@@ -129,7 +129,7 @@ fn stackEffectReturnValueString(comptime T: type) ![]const u8 {
         .Pointer => {
             return "a";
         },
-        .Int, .Enum => {
+        .Int, .Enum, .Bool => {
             return "n";
         },
         .Void => {
@@ -189,6 +189,9 @@ fn coerceParameter(comptime PT: type, into: *PT, comptime field_num: usize, comp
                 into[field_num] = @bitCast(val);
             }
         },
+        .Bool => {
+            into[field_num] = if (val) 1 else 0;
+        },
         .Pointer => {
             into[field_num] = @ptrFromInt(val);
         },
@@ -209,6 +212,7 @@ fn acceptableReturnType(comptime rt: type) bool {
         .Int => true,
         .Pointer => true,
         .Enum => true,
+        .Bool => true,
         inline else => false,
     };
 }
@@ -243,6 +247,10 @@ fn unpackReturnValue(forth: *Forth, retval: anytype) !void {
         },
         .Void => |_| {
             // do nothing with nothing
+        },
+        .Bool => {
+            const b: u64 = if (retval) 1 else 0;
+            try forth.stack.push(b);
         },
         .Int => |i| {
             if (i.bits < 64 and i.signedness == .signed) {
