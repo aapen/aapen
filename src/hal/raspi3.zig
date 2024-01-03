@@ -113,4 +113,5 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
 
     try arm_local_timer.defineModule(forth);
     try bcm_peripheral_clocks.defineModule(forth);
+    try bcm_power.defineModule(forth);
 }

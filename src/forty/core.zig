@@ -97,26 +97,6 @@ pub fn wordReset(_: *Forth, _: *Header) ForthError!void {
     asm volatile ("brk 0x07c5");
 }
 
-pub fn wordPowerQuery(forth: *Forth, _: *Header) ForthError!void {
-    const device_number = try forth.stack.pop();
-    if (root.hal.power_controller.isPowered(@enumFromInt(device_number))) |power_result| {
-        try forth.stack.push(@intFromEnum(power_result));
-    } else |_| {
-        try forth.stack.push(0);
-    }
-}
-
-pub fn wordPowerControl(forth: *Forth, _: *Header) ForthError!void {
-    const device_number = try forth.stack.pop();
-    const desired_state = try forth.stack.pop();
-
-    if (root.hal.power_controller.setState(@enumFromInt(device_number), @enumFromInt(desired_state))) |power_result| {
-        try forth.stack.push(@intFromEnum(power_result));
-    } else |_| {
-        try forth.stack.push(0);
-    }
-}
-
 /// --
 pub fn wordHello(forth: *Forth, _: *Header) ForthError!void {
     try forth.print("Hello world!\n", .{});
@@ -570,8 +550,6 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
-    _ = try forth.definePrimitiveDesc("?power", "n -- n : check power state of device ", &wordPowerQuery, false);
-    _ = try forth.definePrimitiveDesc("power", "p n -- n : set device n to power state p", &wordPowerControl, false);
 
     // Basic Forth words.
     _ = try forth.definePrimitiveDesc("exec", "pHeader -- <Results>", &wordExec, false);
