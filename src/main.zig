@@ -188,8 +188,9 @@ fn kernelInit() void {
         debug.kernelError("Char buffer define module", err);
     };
 
-    // TODO should this move to forty/core.zig?
-    supplyAddress("console", @intFromPtr(main_console));
+    MainConsole.defineModule(&interpreter, main_console) catch |err| {
+        debug.kernelError("Main console define module", err);
+    };
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));

@@ -1,12 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const FrameBuffer = @import("../frame_buffer.zig");
-const CharBuffer = @import("../char_buffer.zig");
-const CharBufferConsole = @import("../char_buffer_console.zig");
-const MainConsole = @import("../main_console.zig");
-const Usb = @import("../usb.zig");
-
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
@@ -535,8 +529,6 @@ pub fn defineCore(forth: *Forth) !void {
 
     // Expose internal values to forty.
     try forth.defineConstant("word", @sizeOf(u64));
-
-    try forth.defineStruct("MainConsole", MainConsole);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);

@@ -5,11 +5,19 @@ const root = @import("root");
 const debug = root.debug;
 const kprint = root.kprint;
 
+const Forth = @import("forty/forth.zig").Forth;
+const auto = @import("forty/auto.zig");
+
 const CharBufferConsole = @import("char_buffer_console.zig");
 const Serial = @import("serial.zig");
 const Readline = @import("readline.zig");
 
 const Self = @This();
+
+pub fn defineModule(forth: *Forth, console: *Self) !void {
+    try forth.defineStruct("MainConsole", Self);
+    try forth.defineConstant("console", @intFromPtr(console));
+}
 
 pub const Writer = std.io.Writer(*Self, error{}, write);
 
