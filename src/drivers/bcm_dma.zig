@@ -1,8 +1,10 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const root = @import("root");
 const InterruptController = root.HAL.InterruptController;
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
+const Forth = @import("../forty/forth.zig").Forth;
 
 const architecture = @import("../architecture.zig");
 const barriers = architecture.barriers;
@@ -18,6 +20,10 @@ const synchronize = @import("../synchronize.zig");
 const ChannelSet = @import("../channel_set.zig");
 
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    _ = forth;
+}
 
 extern fn spinDelay(cpu_cycles: u32) void;
 

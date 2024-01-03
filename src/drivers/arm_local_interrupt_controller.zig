@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const HAL = root.HAL;
 
+const Forth = @import("../forty/forth.zig").Forth;
+
 const debug = @import("../debug.zig");
 
 const arch = @import("../architecture.zig");
@@ -11,6 +13,10 @@ const exceptions = arch.cpu.exceptions;
 const ExceptionContext = exceptions.ExceptionContext;
 
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    _ = forth;
+}
 
 // ----------------------------------------------------------------------
 // External IRQ Identifiers

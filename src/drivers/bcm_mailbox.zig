@@ -4,6 +4,8 @@ const assert = std.debug.assert;
 
 const root = @import("root");
 
+const Forth = @import("../forty/forth.zig").Forth;
+
 const architecture = @import("../architecture.zig");
 const barriers = architecture.barriers;
 
@@ -16,6 +18,10 @@ const synchronize = @import("../synchronize.zig");
 extern fn spinDelay(delay: u32) void;
 
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    _ = forth;
+}
 
 pub const PropertyTag = extern struct {
     tag_id: u32,

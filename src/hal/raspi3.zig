@@ -111,7 +111,16 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
     try forth.defineStruct("hal", Self);
     try forth.defineConstant("hal", @intFromPtr(hal));
 
+    // dwc_otg_usb and bcm_board_info are initialized under different
+    // names ("Usb" and diagnostics)
+
+    try arm_local_interrupt.defineModule(forth);
     try arm_local_timer.defineModule(forth);
+    try bcm_dma.defineModule(forth);
+    try bcm_gpio.defineModule(forth);
+    try bcm_mailbox.defineModule(forth);
     try bcm_peripheral_clocks.defineModule(forth);
     try bcm_power.defineModule(forth);
+    try pl011.defineModule(forth);
+    try simple_bus.defineModule(forth);
 }

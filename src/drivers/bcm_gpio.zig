@@ -1,4 +1,16 @@
+const Forth = @import("../forty/forth.zig").Forth;
+const auto = @import("../forty/auto.zig");
+
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    try auto.defineNamespace(Self, .{
+        .{ "enable", "gpio-pin-enable" },
+        .{ "set", "gpio-pin-set" },
+        .{ "clear", "gpio-pin-clear" },
+        .{ "get", "gpio-pin-get" },
+    }, forth);
+}
 
 extern fn spinDelay(cpu_cycles: u32) void;
 

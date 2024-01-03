@@ -3,7 +3,13 @@ const std = @import("std");
 const root = @import("root");
 const GPIO = root.HAL.GPIO;
 
+const Forth = @import("../forty/forth.zig").Forth;
+
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    _ = forth;
+}
 
 extern fn spinDelay(cpu_cycles: u32) void;
 
