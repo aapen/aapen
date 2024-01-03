@@ -12,51 +12,59 @@ const Forth = forth_module.Forth;
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
 
-pub const InteropCall = struct {
-    forth: *Forth = undefined,
-    header: *Header = undefined,
+pub fn defineNamespace(comptime Module: type, exports: anytype, forth: *Forth) !void {
+    const exports_type_info = @typeInfo(@TypeOf(exports));
+    if (exports_type_info != .Struct) @compileError("exports must be a tuple of tuples");
+
+    inline for (exports, 0..) |exp, i| {
+        const export_type = @TypeOf(exp);
+        const export_type_info = @typeInfo(export_type);
+        if (export_type_info != .Struct) @compileError("item " ++ i ++ " should be a tuple like { 'decl' (, 'export-as') }");
+
+        const decl = exp[0];
+        const export_as = if (export_type_info.Struct.fields.len > 1) exp[1] else decl;
+        const docstring = if (export_type_info.Struct.fields.len > 2) exp[2] else "";
+
+        if (comptime (!@hasDecl(Module, decl))) {
+            @compileError("Module " ++ Module ++ " does not have a public declaration " ++ decl);
+        }
+
+        const t = @typeInfo(@TypeOf(@field(Module, decl)));
+
+        switch (comptime isSuitable(t)) {
+            .OK => {
+                const caller = callerFor(Module, decl);
+                const desc = comptime try stackEffectString(Module, decl, docstring);
+                _ = try forth.definePrimitiveDesc(export_as, desc, &caller.invoke, false);
+            },
+            inline else => |reason| @compileError(decl ++ " is not suitable for an interop call because " ++ @tagName(reason)),
+        }
+    }
+}
+
+const Suitability = enum {
+    OK,
+    NotFunction,
+    Generic,
+    CallingConvention,
+    VarArgs,
+    CantHandleReturnType,
 };
 
-pub fn defineNamespace(comptime Module: type, comptime as: []const u8, forth: *Forth) !void {
-    const decls = @typeInfo(Module).Struct.decls;
-
-    inline for (decls) |d| {
-        const t = @typeInfo(@TypeOf(@field(Module, d.name)));
-        switch (t) {
-            .Fn => |f| {
-                if (comptime isSuitable(f)) {
-                    const caller = callerFor(Module, as, d.name);
-                    _ = try forth.definePrimitiveDesc(caller.name, caller.desc, &caller.invoke, false);
-                }
-            },
-
-            inline else => {},
-        }
+fn isSuitable(comptime t: std.builtin.Type) Suitability {
+    switch (t) {
+        .Fn => |f| {
+            if (f.is_generic) return .Generic;
+            if (f.calling_convention != .Unspecified) return .CallingConvention;
+            if (f.is_var_args) return .VarArgs;
+            if (!acceptableReturnType(f.return_type.?)) return .CantHandleReturnType;
+            return .OK;
+        },
+        inline else => return .NotFunction,
     }
 }
 
-fn isSuitable(comptime f: std.builtin.Type.Fn) bool {
-    if (f.is_generic or f.calling_convention != .Unspecified or f.is_var_args or f.params.len == 0) {
-        return false;
-    }
-
-    var has_interop_marker = false;
-    inline for (f.params) |p| {
-        if (p.type == InteropCall) {
-            has_interop_marker = true;
-        }
-    }
-    if (!has_interop_marker) {
-        return false;
-    }
-
-    if (!acceptableReturnType(f.return_type.?)) {
-        return false;
-    }
-    return true;
-}
-
-pub fn callerFor(comptime T: type, comptime module_alias: []const u8, comptime fn_name: []const u8) type {
+pub fn callerFor(comptime T: type, comptime fn_name: []const u8) type {
     const decl = @field(T, fn_name);
     const decl_type = @TypeOf(decl);
     const decl_info = @typeInfo(decl_type);
@@ -64,16 +72,8 @@ pub fn callerFor(comptime T: type, comptime module_alias: []const u8, comptime f
     switch (decl_info) {
         .Fn => |f| {
             return struct {
-                const name: []const u8 = module_alias ++ fn_name;
-                const desc: []const u8 = "description coming soon";
-
-                pub fn invoke(forth: *Forth, header: *Header) ForthError!void {
-                    const interop: InteropCall = .{
-                        .forth = forth,
-                        .header = header,
-                    };
-
-                    const params = try packParameters(interop, f);
+                pub fn invoke(forth: *Forth, _: *Header) ForthError!void {
+                    const params = try packParameters(forth, f);
                     const retval = @call(.auto, decl, params);
                     try unpackReturnValue(forth, retval);
                 }
@@ -81,6 +81,62 @@ pub fn callerFor(comptime T: type, comptime module_alias: []const u8, comptime f
         },
         else => {
             @compileError(fn_name ++ " is a " ++ @typeName(decl_type) ++ " not a function");
+        },
+    }
+}
+
+fn stackEffectString(comptime T: type, comptime fn_name: []const u8, comptime docstring: []const u8) ![]const u8 {
+    const decl_type = @TypeOf(@field(T, fn_name));
+    const decl_info = @typeInfo(decl_type);
+
+    switch (decl_info) {
+        .Fn => |f| {
+            return try stackEffectParameterString(f) ++ " -- " ++ try stackEffectReturnValueString(f.return_type.?) ++ " : " ++ docstring;
+        },
+        else => {
+            @compileError(fn_name ++ " is a " ++ @typeName(decl_type) ++ " not a function");
+        },
+    }
+}
+
+fn stackEffectParameterString(comptime f: std.builtin.Type.Fn) ![]const u8 {
+    var sigs: []const u8 = "";
+
+    inline for (f.params) |p| {
+        sigs = try parameterSigil(p.type.?) ++ " " ++ sigs;
+    }
+
+    return sigs;
+}
+
+fn parameterSigil(comptime T: type) ![]const u8 {
+    switch (@typeInfo(T)) {
+        .Optional => |o| return parameterSigil(o.child),
+        .Int, .Enum => return "n",
+        .Pointer => return "a",
+        else => @compileError("Unsupported parameter type " ++ @typeName(T)),
+    }
+}
+
+fn stackEffectReturnValueString(comptime T: type) ![]const u8 {
+    switch (@typeInfo(T)) {
+        .ErrorUnion => |eu| {
+            return "e " ++ try stackEffectReturnValueString(eu.payload);
+        },
+        .Optional => |o| {
+            return stackEffectReturnValueString(o.child);
+        },
+        .Pointer => {
+            return "a";
+        },
+        .Int, .Enum => {
+            return "n";
+        },
+        .Void => {
+            return "";
+        },
+        else => {
+            @compileError("Unsupported return value type " ++ @typeName(T));
         },
     }
 }
@@ -105,19 +161,15 @@ fn ParameterTuple(comptime f: std.builtin.Type.Fn) type {
     } });
 }
 
-fn packParameters(interop: InteropCall, comptime f: std.builtin.Type.Fn) !ParameterTuple(f) {
+fn packParameters(forth: *Forth, comptime f: std.builtin.Type.Fn) !ParameterTuple(f) {
     const PT = ParameterTuple(f);
     var packed_params: PT = undefined;
 
     inline for (f.params, 0..) |p, i| {
-        if (p.type == InteropCall) {
-            packed_params[i] = interop;
-        } else {
-            const raw_argument = try interop.forth.stack.pop();
+        const raw_argument = try forth.stack.pop();
 
-            const T = p.type.?;
-            try coerceParameter(PT, &packed_params, i, T, raw_argument);
-        }
+        const T = p.type.?;
+        try coerceParameter(PT, &packed_params, i, T, raw_argument);
     }
 
     return packed_params;
@@ -143,9 +195,8 @@ fn coerceParameter(comptime PT: type, into: *PT, comptime field_num: usize, comp
         .Enum => {
             into[field_num] = @enumFromInt(val);
         },
-        else => |x| {
-            std.debug.print("Unsupported {any}\n", .{x});
-            return ForthError.Unsupported;
+        else => {
+            @compileError("Unsupported parameter type " ++ @typeName(T));
         },
     }
 }

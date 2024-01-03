@@ -111,7 +111,7 @@ const Self = @This();
 // ----------------------------------------------------------------------
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(Self, "usb.", forth);
+    try auto.defineNamespace(Self, .{.{ "init", "usb-init" }}, forth);
 
     try HCI.defineModule(forth);
     try forth.defineConstant("usbhci", @intFromPtr(&root.hal.usb_hci));
@@ -127,7 +127,7 @@ var drivers: Drivers = undefined;
 var root_hub: ?*Device = undefined;
 var bus_lock: Spinlock = undefined;
 
-pub fn init(iop: auto.InteropCall) !void {
+pub fn init() !void {
     allocator = root.heap.allocator;
     drivers = Drivers.init(allocator);
     bus_lock = Spinlock.initWithTargetLevel("usb bus", true, .FIQ);
@@ -136,7 +136,7 @@ pub fn init(iop: auto.InteropCall) !void {
     defer bus_lock.release();
 
     try registerDriver(&usb_hub_driver);
-    try root.hal.usb_hci.initialize(iop);
+    try root.hal.usb_hci.initialize();
 }
 
 pub fn registerDriver(device_driver: *const DeviceDriver) !void {

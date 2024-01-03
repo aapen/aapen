@@ -123,22 +123,11 @@ pub const DEFAULT_INTERVAL = 1;
 pub const DMA_ALIGNMENT = 64;
 
 // ----------------------------------------------------------------------
-// Forty interop table
+// HCD state
 // ----------------------------------------------------------------------
-pub const VTable = struct {
-    initialize: *const fn (usb_controller: u64) u64,
-    rootPortInitialize: *const fn (usb_controller: u64) u64,
-    busInitialize: *const fn (usb_controller: u64) u64,
-    deviceGet: *const fn (usb_controller: u64, usb_address: u64) u64,
-    dumpStatus: *const fn (usb_controller: u64) void,
-};
-
 const HcdChannels = ChannelSet.init("dwc_otg_usb channels", u5, dwc_max_channels);
 const UsbAddresses = ChannelSet.init("dwc_otg_usb addresses", u7, std.math.maxInt(u7));
 
-// ----------------------------------------------------------------------
-// HCD state
-// ----------------------------------------------------------------------
 allocator: Allocator,
 core_registers: *volatile CoreRegisters,
 host_registers: *volatile HostRegisters,
@@ -165,75 +154,15 @@ attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
 // - keep a top-level array of HIDs
 
 // ----------------------------------------------------------------------
-// Forty Interop shims
+// Forty interop
 // ----------------------------------------------------------------------
-vtable: VTable = .{
-    .initialize = initializeShim,
-    .rootPortInitialize = rootPortInitializeShim,
-    .busInitialize = busInitializeShim,
-    .deviceGet = deviceGetShim,
-    .dumpStatus = dumpStatusShim,
-},
-
-fn initializeShim(usb_controller: u64) u64 {
-    _ = usb_controller;
-    //     var self: *Self = @ptrFromInt(usb_controller);
-    //     if (self.initialize()) {
-    //         return 1;
-    //     } else |err| {
-    //         log.err("USB init error: {any}", .{err});
-    //         return 0;
-    //     }
-    return 0;
-}
-
-fn rootPortInitializeShim(usb_controller: u64) u64 {
-    var self: *Self = @ptrFromInt(usb_controller);
-    _ = self;
-    // if (self.rootPortInitialize()) |dev| {
-    //     return @intFromPtr(dev);
-    // } else |err| {
-    //     log.err("USB init root port error: {any}", .{err});
-    return 0;
-    // }
-}
-
-fn busInitializeShim(usb_controller: u64) u64 {
-    _ = usb_controller;
-
-    // var self: *Self = @ptrFromInt(usb_controller);
-    // if (self.busInitialize()) |bus| {
-    //     return @intFromPtr(bus);
-    // } else |err| {
-    //     log.err("USB bus init error: {any}", .{err});
-    //     return 0;
-    // }
-    return 0;
-}
-
-fn deviceGetShim(usb_controller: u64, usb_address: u64) u64 {
-    var self: *Self = @ptrFromInt(usb_controller);
-
-    if (usb_address > usb.MAX_ADDRESS) {
-        log.err("USB addresses only go up to {d}", .{usb.MAX_ADDRESS});
-        return 0;
-    }
-
-    if (self.deviceGet(@truncate(usb_address))) |dev| {
-        return @intFromPtr(dev);
-    } else |err| {
-        log.err("USB init root port error: {any}", .{err});
-        return 0;
-    }
-}
-
-fn dumpStatusShim(usb_controller: u64) void {
-    var self: *Self = @ptrFromInt(usb_controller);
-    self.dumpStatus();
-}
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(Self, "usbhci.", forth);
+    try auto.defineNamespace(Self, .{
+        .{ "initialize", "usb-init-hcd" },
+        .{ "rootPortInitialize", "usb-init-root-port" },
+        .{ "busInitialize", "usb-init-bus" },
+    }, forth);
 }
 
 // ----------------------------------------------------------------------
@@ -277,13 +206,13 @@ pub fn init(
 }
 
 // Ugly: this reaches up to the generic layer
-pub fn busInitialize(self: *Self, _: auto.InteropCall) !*Bus {
+pub fn busInitialize(self: *Self) !*Bus {
     const bus: *Bus = try self.allocator.create(Bus);
     try bus.init(self.allocator, self, self.root_port.device);
     return bus;
 }
 
-pub fn initialize(self: *Self, _: auto.InteropCall) !void {
+pub fn initialize(self: *Self) !void {
     try self.powerOn();
     try self.verifyHostControllerDevice();
     try self.globalInterruptDisable();
@@ -538,7 +467,7 @@ fn haltAllChannels(self: *Self) !void {
     }
 }
 
-pub fn rootPortInitialize(self: *Self, _: auto.InteropCall) !*Device {
+pub fn rootPortInitialize(self: *Self) !*Device {
     log.debug("root port init start", .{});
     defer log.debug("root port init end", .{});
 

@@ -110,7 +110,6 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 pub fn defineModule(forth: *Forth, hal: *Self) !void {
     try forth.defineStruct("hal", Self);
     try forth.defineConstant("hal", @intFromPtr(hal));
-    try auto.defineNamespace(Self, "hal.", forth);
 
     try bcm_peripheral_clocks.defineModule(forth);
 }

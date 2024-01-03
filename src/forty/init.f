@@ -2,6 +2,7 @@
 
 : cr 0x0a emit ;
 : cls 0x0c emit ;
+: clear cls ;
 : p ( n -- : Print the top of the stack followed by a newline) . cr ;
 
 ( Input and output base words )
@@ -68,30 +69,6 @@ finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
 
-( Peripheral clock interaction )
-
-: clock-controller hal hal.peripheral_clock_controller + ;
-
-: clock-rate ( n -- n : push rate in MHz of a clock )
-  clock-controller clock.clockRateCurrent
-;
-
-: clock-state ( n -- n : push state of a clock )
-  clock-controller clock.clockState
-;
-
-: clock-on ( n -- n : try to turn on a clock, push the result )
-  1 clock-controller clock.clockStateSet
-;
-
-: clock-off ( n -- n : try to turn off a clock, push the result )
-  0 clock-controller clock.clockStateSet
-;
-
-(Drawing)
-: draw-char (bg fg y x c -- : Draw character at position)
-  fb fb.drawChar
-;
 
 (Utilities)
 
@@ -371,9 +348,6 @@ finish
   endif
 ;
 
-: line
-  fb fb.line
-;
 
 : line-demo-handler (ch -- : Draw some pretty lines)
   drop
@@ -381,7 +355,7 @@ finish
     ->stack 16 %        (c)
     ->stack 3 * 1023    (y2 x2)
     384 0               (y1 x1)
-    line
+    fb line
   repeat
 ;
 
