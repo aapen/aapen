@@ -19,15 +19,7 @@ const CharBits = @Vector(8, bool);
 const character_rom = @embedFile("data/character_rom.bin");
 const character_count = character_rom.len;
 
-pub const exports = [_][]const u8{
-    "line",
-    "text",
-    "demo",
-    "drawChar",
-    "drawPixel",
-    "clearRegion",
-    "clear",
-};
+pub const exports = [_][]const u8{};
 
 // initialized from character_rom when the frame buffer is initialized
 const character_rombits: [character_rom.len]CharBits = init: {
@@ -43,7 +35,16 @@ pub const Self = @This();
 
 pub fn defineModule(forth: *Forth, fb: *Self) !void {
     try forth.defineConstant("fb", @intFromPtr(fb));
-    try auto.defineNamespace(Self, "fb.", forth);
+    try auto.defineNamespace(Self, .{
+        .{ "line", "line", "draw a line" },
+        .{"fill"},
+        .{"text"},
+        .{"demo"},
+        .{ "drawChar", "draw-char" },
+        .{ "drawPixel", "draw-pixel" },
+        .{ "clearRegion", "clear-region" },
+        .{"clear"},
+    }, forth);
     try forth.defineStruct("FrameBuffer", Self);
 }
 

@@ -111,7 +111,7 @@ const Self = @This();
 // ----------------------------------------------------------------------
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(Self, "usb.", forth);
+    try auto.defineNamespace(Self, .{.{ "init", "usb-init" }}, forth);
 
     try HCI.defineModule(forth);
     try forth.defineConstant("usbhci", @intFromPtr(&root.hal.usb_hci));
@@ -126,10 +126,6 @@ var allocator: Allocator = undefined;
 var drivers: Drivers = undefined;
 var root_hub: ?*Device = undefined;
 var bus_lock: Spinlock = undefined;
-
-pub const exports = [_][]const u8{
-    "init",
-};
 
 pub fn init() !void {
     allocator = root.heap.allocator;

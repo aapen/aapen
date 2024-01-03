@@ -8,7 +8,16 @@ const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(PeripheralClockController, "clock.", forth);
+    try auto.defineNamespace(PeripheralClockController, .{
+        .{ "clockRateCurrent", "clock-rate" },
+        .{ "clockRateMax", "clock-rate-max" },
+        .{ "clockRateMin", "clock-rate-min" },
+        .{ "clockRateSet", "clock-set-rate" },
+        .{ "clockStateSet", "clock-set-state" },
+        .{ "clockState", "clock-state" },
+        .{ "clockOn", "clock-on" },
+        .{ "clockOff", "clock-off" },
+    }, forth);
 }
 
 pub const ClockId = enum(u32) {
@@ -120,41 +129,41 @@ pub const PeripheralClockController = struct {
         return query.param2;
     }
 
-    pub fn clockRateCurrent(self: *PeripheralClockController, clock_id: ClockId, _: auto.InteropCall) !u32 {
+    pub fn clockRateCurrent(self: *PeripheralClockController, clock_id: ClockId) !u32 {
         return self.clockRate(clock_id, .current);
     }
 
-    pub fn clockRateMax(self: *PeripheralClockController, clock_id: ClockId, _: auto.InteropCall) !u32 {
+    pub fn clockRateMax(self: *PeripheralClockController, clock_id: ClockId) !u32 {
         return self.clockRate(clock_id, .max);
     }
 
-    pub fn clockRateMin(self: *PeripheralClockController, clock_id: ClockId, _: auto.InteropCall) !u32 {
+    pub fn clockRateMin(self: *PeripheralClockController, clock_id: ClockId) !u32 {
         return self.clockRate(clock_id, .min);
     }
 
-    pub fn clockRateSet(self: *PeripheralClockController, clock_id: ClockId, desired_rate: u32, _: auto.InteropCall) !u32 {
+    pub fn clockRateSet(self: *PeripheralClockController, clock_id: ClockId, desired_rate: u32) !u32 {
         const control = PropertyClockRateControl.initRateControl(clock_id, desired_rate);
         try self.mailbox.getTag(&control);
         return control.rate;
     }
 
-    pub fn clockStateSet(self: *PeripheralClockController, clock_id: ClockId, desired_state: DesiredState, _: auto.InteropCall) !ClockResult {
+    pub fn clockStateSet(self: *PeripheralClockController, clock_id: ClockId, desired_state: DesiredState) !ClockResult {
         const control = PropertyClock.initStateControl(clock_id, desired_state);
         try self.mailbox.getTag(&control);
         return decode(control.param2);
     }
 
-    pub fn clockState(self: *PeripheralClockController, clock_id: ClockId, _: auto.InteropCall) !ClockResult {
+    pub fn clockState(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {
         const query = PropertyClock.initStateQuery(clock_id);
         try self.mailbox.getTag(&query);
         return decode(query.clock);
     }
 
-    pub fn clockOn(self: *PeripheralClockController, clock_id: ClockId, iop: auto.InteropCall) !ClockResult {
-        return self.clockStateSet(clock_id, .on, iop);
+    pub fn clockOn(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {
+        return self.clockStateSet(clock_id, .on);
     }
 
-    pub fn clockOff(self: *PeripheralClockController, clock_id: ClockId, iop: auto.InteropCall) !ClockResult {
-        return self.clockStateSet(clock_id, .off, iop);
+    pub fn clockOff(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {
+        return self.clockStateSet(clock_id, .off);
     }
 };
