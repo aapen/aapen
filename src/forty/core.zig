@@ -557,6 +557,7 @@ pub fn wordSerialDot(forth: *Forth, _: *Header) ForthError!void {
     const v = try forth.popAs(i64);
     try forth.serial_print("{}", .{v});
 }
+
 pub fn wordTest2(forth: *Forth, _: *Header) ForthError!void {
     _ = forth;
 }
@@ -565,10 +566,6 @@ pub fn defineCore(forth: *Forth) !void {
 
     // Expose internal values to forty.
     try forth.defineConstant("word", @sizeOf(u64));
-    try forth.defineStruct("board", BoardInfo);
-    try forth.defineStruct("board.model", BoardInfo.Model);
-    try forth.defineStruct("board.device", BoardInfo.Device);
-    try forth.defineStruct("board.memory", BoardInfo.Memory);
 
     try forth.defineStruct("MainConsole", MainConsole);
     try forth.defineStruct("CharBuffer", CharBuffer);

@@ -172,6 +172,10 @@ fn kernelInit() void {
         debug.kernelError("HAL define module", err);
     };
 
+    diagnostics.defineModule(&interpreter) catch |err| {
+        debug.kernelError("diagnostics define module", err);
+    };
+
     Usb.defineModule(&interpreter) catch |err| {
         debug.kernelError("USB define module", err);
     };
@@ -183,7 +187,6 @@ fn kernelInit() void {
     // TODO should this move to forty/core.zig?
     supplyAddress("char-buffer", @intFromPtr(char_buffer));
     supplyAddress("console", @intFromPtr(main_console));
-    supplyAddress("board", @intFromPtr(&diagnostics.board));
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
