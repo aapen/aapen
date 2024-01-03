@@ -49,7 +49,7 @@ pub const VideoController = bcm_video_controller;
 const Self = @This();
 
 board_info_controller: BoardInfoController,
-clock: Clock,
+clock: *Clock,
 dma: DMA,
 interrupt_controller: *InterruptController,
 gpio: GPIO,
@@ -76,7 +76,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.interrupt_controller = try InterruptController.init(allocator, peripheral_base + 0xb200);
 
-    self.clock = Clock.init(peripheral_base + 0x3000);
+    self.clock = try Clock.init(allocator, peripheral_base + 0x3000);
 
     self.dma = DMA.init(allocator, peripheral_base + 0x7000, self.interrupt_controller, &self.soc.dma_ranges);
 
@@ -97,7 +97,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     self.usb_hci = try USBHCI.init(allocator, peripheral_base + 0x980000, self.interrupt_controller, .USB_HCI, &self.soc.bus_ranges, &self.power_controller);
 
     for (0..3) |timer_id| {
-        self.timer[timer_id] = try Timer.init(allocator, timer_id, peripheral_base + 0x3000, &self.clock, self.interrupt_controller);
+        self.timer[timer_id] = try Timer.init(allocator, timer_id, peripheral_base + 0x3000, self.clock, self.interrupt_controller);
     }
 
     self.system_timer = self.timer[1];
@@ -111,5 +111,6 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
     try forth.defineStruct("hal", Self);
     try forth.defineConstant("hal", @intFromPtr(hal));
 
+    try arm_local_timer.defineModule(forth);
     try bcm_peripheral_clocks.defineModule(forth);
 }

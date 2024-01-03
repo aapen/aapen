@@ -92,12 +92,6 @@ pub fn wordKeyMaybe(forth: *Forth, _: *Header) ForthError!void {
     try forth.stack.push(if (byte_available) 1 else 0);
 }
 
-/// -- n
-pub fn wordTicks(forth: *Forth, _: *Header) ForthError!void {
-    const ticks = root.hal.clock.ticks();
-    try forth.stack.push(ticks);
-}
-
 /// --
 pub fn wordReset(_: *Forth, _: *Header) ForthError!void {
     asm volatile ("brk 0x07c5");
@@ -575,7 +569,6 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
-    _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, false);
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
     _ = try forth.definePrimitiveDesc("?power", "n -- n : check power state of device ", &wordPowerQuery, false);
     _ = try forth.definePrimitiveDesc("power", "p n -- n : set device n to power state p", &wordPowerControl, false);

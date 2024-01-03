@@ -7,18 +7,37 @@ const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
 
+const Forth = @import("../forty/forth.zig").Forth;
+const auto = @import("../forty/auto.zig");
+
 const synchronize = @import("../synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
+pub fn defineModule(forth: *Forth) !void {
+    try auto.defineNamespace(@This(), .{
+        .{ "systemTicks", "ticks", "system clock ticks since boot" },
+    }, forth);
+}
+
+pub fn systemTicks() u64 {
+    return root.hal.clock.ticks();
+}
+
 pub const Clock = struct {
+    const Self = @This();
+
     count_low: *volatile u32,
     count_high: *volatile u32,
 
-    pub fn init(register_base: u64) Clock {
-        return .{
+    pub fn init(allocator: Allocator, register_base: u64) !*Clock {
+        const self = try allocator.create(Self);
+
+        self.* = .{
             .count_low = @ptrFromInt(register_base + 0x04),
             .count_high = @ptrFromInt(register_base + 0x08),
         };
+
+        return self;
     }
 
     pub fn ticks(self: *const Clock) u64 {
