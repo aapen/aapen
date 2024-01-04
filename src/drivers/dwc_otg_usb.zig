@@ -1,5 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const DoublyLinkedList = std.DoublyLinkedList;
+
 const log = std.log.scoped(.dwc_otg_usb);
 
 const root = @import("root");
@@ -58,6 +60,8 @@ const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 const dwc_max_channels = 16;
 
+const PendingTransfers = DoublyLinkedList(Transfer);
+
 const Self = @This();
 
 // ----------------------------------------------------------------------
@@ -66,6 +70,7 @@ const Self = @This();
 
 pub const Error = error{
     IncorrectDevice,
+    InitializationFailure,
     PowerFailure,
     ConfigurationError,
     OvercurrentDetected,
@@ -140,12 +145,12 @@ irq_handler: IrqHandler = .{
 },
 translations: *const AddressTranslations,
 power_controller: *PowerController,
-root_port: RootPort,
 num_host_channels: u4,
 channel_assignments: HcdChannels = .{},
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
 address_assignments: UsbAddresses = .{},
 attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
+pending_transfers: PendingTransfers = undefined,
 
 // Ideas for improving this:
 // - reserve an aligned buffer for each channel to use. that avoids
@@ -160,8 +165,6 @@ attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
 pub fn defineModule(forth: *Forth) !void {
     try auto.defineNamespace(Self, .{
         .{ "initialize", "usb-init-hcd" },
-        .{ "rootPortInitialize", "usb-init-root-port" },
-        .{ "busInitialize", "usb-init-bus" },
     }, forth);
 }
 
@@ -188,9 +191,9 @@ pub fn init(
         .irq_id = irq_id,
         .translations = translations,
         .power_controller = power,
-        .root_port = RootPort.init(allocator),
         .num_host_channels = 0,
         .attached_devices = undefined,
+        .pending_transfers = .{},
     };
 
     for (0..dwc_max_channels) |chid| {
@@ -205,22 +208,12 @@ pub fn init(
     return self;
 }
 
-// Ugly: this reaches up to the generic layer
-pub fn busInitialize(self: *Self) !*Bus {
-    const bus: *Bus = try self.allocator.create(Bus);
-    try bus.init(self.allocator, self, self.root_port.device);
-    return bus;
-}
-
 pub fn initialize(self: *Self) !void {
     try self.powerOn();
     try self.verifyHostControllerDevice();
-    try self.globalInterruptDisable();
-    try self.connectInterruptHandler();
+    try self.resetSoft();
     try self.initializeControllerCore();
-    try self.enableCommonInterrupts();
-    try self.globalInterruptEnable();
-    try self.initializeHost();
+    try self.initializeInterrupts();
 }
 
 fn powerOn(self: *Self) !void {
@@ -255,29 +248,12 @@ fn verifyHostControllerDevice(self: *Self) !void {
     }
 }
 
-fn globalInterruptDisable(self: *Self) !void {
-    log.debug("global interrupt disable", .{});
-    self.core_registers.ahb_config.global_interrupt_enable = 0;
-}
-
-fn globalInterruptEnable(self: *Self) !void {
-    log.debug("global interrupt enable", .{});
-    self.core_registers.ahb_config.global_interrupt_enable = 1;
-}
-
-fn connectInterruptHandler(self: *Self) !void {
-    self.intc.connect(self.irq_id, &self.irq_handler);
-    self.intc.enable(self.irq_id);
-}
-
 fn initializeControllerCore(self: *Self) !void {
     // clear bits 20 & 22 of core usb config register
     var config: UsbConfig = self.core_registers.usb_config;
     config.ulpi_ext_vbus_drv = 0;
     config.term_sel_dl_pulse = 0;
     self.core_registers.usb_config = config;
-
-    try self.resetSoft();
 
     config.mode_select = .ulpi;
     config.phy_if = 0;
@@ -299,23 +275,17 @@ fn initializeControllerCore(self: *Self) !void {
 
     self.num_host_channels = hw2.num_host_channels;
 
+    self.power_and_clock_control.* = @bitCast(@as(u32, 0));
+
+    try self.configPhyClockSpeed();
+
+    self.host_registers.config.fs_ls_support_only = 1;
+
     const rx_words: u32 = 1024; // Size of Rx FIFO in 4-byte words
     const tx_words: u32 = 1024; // Size of Non-periodic Tx FIFO in 4-byte words
     const ptx_words: u32 = 1024; // Size of Periodic Tx FIFO in 4-byte words
 
-    // /* First configure the Host Controller's FIFO sizes.  This is _required_
-    //  * because the default values (at least in Broadcom's instantiation of the
-    //  * Synopsys USB block) do not work correctly.  If software fails to do this,
-    //  * receiving data will fail in virtually impossible to debug ways that cause
-    //  * memory corruption.  This is true even though we are using DMA and not
-    //  * otherwise interacting with the Host Controller's FIFOs in this driver. */
-    // usb_debug("%u words of RAM available for dynamic FIFOs\n", regs->hwcfg3 >> 16);
-    // usb_debug("original FIFO sizes: rx 0x%08x,  tx 0x%08x, ptx 0x%08x\n",
-    //           regs->rx_fifo_size, regs->nonperiodic_tx_fifo_size,
-    //           regs->host_periodic_tx_fifo_size);
-    // regs->rx_fifo_size = rx_words;
-    // regs->nonperiodic_tx_fifo_size = (tx_words << 16) | rx_words;
-    // regs->host_periodic_tx_fifo_size = (ptx_words << 16) | (rx_words + tx_words);
+    // Configure FIFO sizes. Required because the defaults do not work correctly.
 
     log.info("{d} words of RAM available for dynamic FIFOs", .{@as(u32, @bitCast(self.core_registers.hardware_config_3)) >> 16});
     log.debug("original FIFO sizes: rx 0x{x:0>8}, tx 0x{x:0>8}, ptx 0x{x:0>8}", .{ @as(u32, @bitCast(self.core_registers.rx_fifo_size)), @as(u32, @bitCast(self.core_registers.nonperiodic_tx_fifo_size)), @as(u32, @bitCast(self.core_registers.host_periodic_tx_fifo_size)) });
@@ -353,18 +323,8 @@ fn initializeControllerCore(self: *Self) !void {
     self.core_registers.usb_config = config;
 }
 
-fn enableCommonInterrupts(self: *Self) !void {
-    self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffff_ffff));
-}
-
 fn resetSoft(self: *Self) !void {
     log.debug("core controller reset", .{});
-
-    // wait up to 100 ms for reset to settle
-    const end = time.deadlineMillis(100);
-
-    // TODO what should we do if we don't see the idle signal
-    while (time.ticks() < end and self.core_registers.reset.ahb_master_idle != 1) {}
 
     // trigger the soft reset
     self.core_registers.reset.soft_reset = 1;
@@ -375,30 +335,31 @@ fn resetSoft(self: *Self) !void {
     // TODO what should we do if we don't see the soft_reset go to zero?
     while (time.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
 
+    if (self.core_registers.reset.soft_reset != 0) {
+        return Error.InitializationFailure;
+    }
+
     // wait 100 ms
     time.delayMillis(100);
 }
 
-fn initializeHost(self: *Self) !void {
-    log.debug("host init start", .{});
+fn initializeInterrupts(self: *Self) !void {
+    // Enable only host channel and port interrupts
+    var enabled: InterruptMask = @bitCast(@as(u32, 0));
+    enabled.host_channel = 1;
+    enabled.port = 1;
+    self.core_registers.core_interrupt_mask = enabled;
 
-    self.power_and_clock_control.* = @bitCast(@as(u32, 0));
+    // Clear pending interrupts
+    const clear_all: InterruptStatus = @bitCast(@as(u32, 0xffff_ffff));
+    self.core_registers.core_interrupt_status = clear_all;
 
-    try self.configPhyClockSpeed();
+    // Connect interrupt handler & enable interrupts on the ARM PE
+    self.intc.connect(self.irq_id, &self.irq_handler);
+    self.intc.enable(self.irq_id);
 
-    self.host_registers.config.fs_ls_support_only = 1;
-
-    // TODO - set nonperiodic & periodic fifo sizes here
-
-    try self.flushTxFifo();
-    try self.flushRxFifo();
-
-    try self.powerHostPort();
-    try self.resetHostPort();
-
-    try self.enableHostInterrupts();
-
-    log.debug("host init end", .{});
+    // Enable interrupts for the host controller (this is the DWC side)
+    self.core_registers.ahb_config.global_interrupt_enable = 1;
 }
 
 fn configPhyClockSpeed(self: *Self) !void {
@@ -409,48 +370,6 @@ fn configPhyClockSpeed(self: *Self) !void {
     } else {
         self.host_registers.config.clock_rate = .clock_30_60_mhz;
     }
-}
-
-fn flushTxFifo(self: *Self) !void {
-    const FLUSH_ALL_TX_FIFOS = 0x10;
-
-    var reset = self.core_registers.reset;
-    reset.tx_fifo_flush = 1;
-    reset.tx_fifo_flush_num = FLUSH_ALL_TX_FIFOS;
-    self.core_registers.reset = reset;
-
-    const reset_end = time.deadlineMillis(100);
-    while (time.ticks() < reset_end and self.core_registers.reset.tx_fifo_flush != 0) {}
-}
-
-fn flushRxFifo(self: *Self) !void {
-    self.core_registers.reset.rx_fifo_flush = 1;
-    const reset_end = time.deadlineMillis(100);
-    while (time.ticks() < reset_end and self.core_registers.reset.rx_fifo_flush != 0) {}
-}
-
-fn powerHostPort(self: *Self) !void {
-    if (self.host_registers.port.power == 0) {
-        log.debug("initial power up of physical port", .{});
-        self.host_registers.port.power = 1;
-    }
-}
-
-fn resetHostPort(self: *Self) !void {
-    log.debug("reset of physical port", .{});
-
-    self.host_registers.port.reset = 1;
-    time.delayMillis(60);
-    self.host_registers.port.reset = 0;
-}
-
-fn enableHostInterrupts(self: *Self) !void {
-    var int_mask: InterruptMask = @bitCast(@as(u32, 0));
-    int_mask.host_channel = 1;
-    self.core_registers.core_interrupt_mask = int_mask;
-
-    // clear all pending interrupts
-    self.core_registers.core_interrupt_status = @bitCast(@as(u32, 0xffffffff));
 }
 
 fn haltAllChannels(self: *Self) !void {
@@ -465,13 +384,6 @@ fn haltAllChannels(self: *Self) !void {
         const enable_wait_end = time.deadlineMillis(100);
         while (self.channels[chid].regisers.channel_character.enable == 1 and time.ticks() < enable_wait_end) {}
     }
-}
-
-pub fn rootPortInitialize(self: *Self) !*Device {
-    log.debug("root port init start", .{});
-    defer log.debug("root port init end", .{});
-
-    return self.root_port.initialize(self);
 }
 
 // ----------------------------------------------------------------------
@@ -509,99 +421,6 @@ pub fn assignAddress(self: *Self, device: *Device) !void {
 }
 
 // ----------------------------------------------------------------------
-// Embedded port interface
-// ----------------------------------------------------------------------
-const RootPort = struct {
-    allocator: Allocator,
-    host: *Self = undefined,
-    device: *Device = undefined,
-    enabled: bool = false,
-
-    pub fn init(allocator: Allocator) RootPort {
-        return .{
-            .allocator = allocator,
-            .host = undefined,
-            .device = undefined,
-        };
-    }
-
-    pub fn initialize(self: *RootPort, host: *Self) !*Device {
-        self.host = host;
-
-        try self.enable();
-        try self.deviceConfigure();
-        try self.overcurrentShutdownCheck();
-
-        return self.device;
-    }
-
-    fn enable(self: *RootPort) !void {
-        if (!self.enabled) {
-            // We should see the connect bit become true within 510 ms of
-            // power on
-            const connect_end = time.deadlineMillis(510);
-            while (time.ticks() <= connect_end and self.host.host_registers.port.connect == 0) {}
-
-            time.delayMillis(100);
-
-            // assert the reset bit for 50 millis
-            var port = self.host.host_registers.port;
-            port.connect_changed = 0;
-            port.enabled = 0;
-            port.enabled_changed = 0;
-            port.overcurrent_changed = 0;
-            port.reset = 1;
-            self.host.host_registers.port = port;
-
-            time.delayMillis(50);
-
-            port = self.host.host_registers.port;
-            port.connect_changed = 0;
-            port.enabled = 0;
-            port.enabled_changed = 0;
-            port.overcurrent_changed = 0;
-            port.reset = 0;
-            self.host.host_registers.port = port;
-
-            time.delayMillis(20);
-            self.enabled = true;
-        }
-    }
-
-    fn disable(self: *RootPort) !void {
-        self.enabled = false;
-    }
-
-    fn deviceConfigure(self: *RootPort) !void {
-        log.debug("configure device start", .{});
-        defer log.debug("configure device end", .{});
-        errdefer |err| {
-            log.err("configure device error: {any}", .{err});
-        }
-
-        const speed = try self.host.getRootPortSpeed();
-        log.debug("root port speed: {s}", .{@tagName(speed)});
-
-        self.device = try Device.init(self.allocator);
-        self.device.initialize(self.host, speed) catch |err| {
-            self.device = undefined;
-            return err;
-        };
-    }
-
-    fn overcurrentShutdownCheck(self: *RootPort) !void {
-        if (self.overcurrentDetected()) {
-            self.disable() catch {};
-            return Error.OvercurrentDetected;
-        }
-    }
-
-    fn overcurrentDetected(self: *RootPort) bool {
-        return self.host.host_registers.port.overcurrent == 1;
-    }
-};
-
-// ----------------------------------------------------------------------
 // Interrupt handling
 // ----------------------------------------------------------------------
 fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
@@ -633,28 +452,19 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
         if (port_status.connect_changed == 1) {
             log.debug("irqHandle: Host port connected changed, {d}", .{self.host_registers.port.connect});
             // setting this to 1 clears the interrupt
-
-            // for some reason, when I uncomment this line
-            // usb-init-root-port fails in QEMU
-            // self.host_registers.port.connect_changed = 1;
+            self.host_registers.port.connect_changed = 1;
         }
 
         if (port_status.enabled_changed == 1) {
             log.debug("irqHandle: Host port enabled changed, {d}", .{self.host_registers.port.enabled});
             // setting this to 1 clears the interrupt
-
-            // for some reason, when I uncomment this line
-            // usb-init-root-port fails in QEMU
-            // self.host_registers.port.enabled_changed = 1;
+            self.host_registers.port.enabled_changed = 1;
         }
 
         if (port_status.overcurrent_changed == 1) {
             log.debug("irqHandle: Host port overcurrent changed, {d}", .{self.host_registers.port.overcurrent});
             // setting this to 1 clears the interrupt
-
-            // for some reason, when I uncomment this line
-            // usb-init-root-port fails in QEMU
-            // self.host_registers.port.overcurrent_changed = 1;
+            self.host_registers.port.overcurrent_changed = 1;
         }
     }
 
@@ -810,8 +620,26 @@ fn transactionOnChannel(
 // ----------------------------------------------------------------------
 // Transfer interface - high level
 // ----------------------------------------------------------------------
+fn pendingTransferCreate(self: *Self, xfer: *Transfer) !*PendingTransfers.Node {
+    const node: *PendingTransfers.Node = try self.allocator.create(PendingTransfers.Node);
+    node.data = xfer;
+    return node;
+}
+
+fn pendingTransferDestroy(self: *Self, node: *PendingTransfers.Node) void {
+    self.allocator.destroy(node);
+}
 
 pub fn perform(self: *Self, xfer: *Transfer) !void {
+    // put the transfer in the pending_transfers list.
+    self.pending_transfers.append(try self.pendingTransferCreate(xfer));
+
+    // kick the scheduler (what scheduler ?!)
+
+    // on timer interrupt, check for any pending transfer and see if
+    // there's a channel available.
+    // hand the transfer off to the channel.
+
     // This driver-level routine assumes that a higher-level caller
     // has already checked the Transfer's consistency against USB
     // specifications
@@ -821,6 +649,7 @@ pub fn perform(self: *Self, xfer: *Transfer) !void {
     // timer- or interrupt-driven dispatcher place transactions on
     // channels as when they are available.
 
+    // old implementation below here.
     while (xfer.state != .complete) {
         switch (xfer.transfer_type) {
             .control => {

@@ -9,7 +9,6 @@ const FrameBuffer = @import("frame_buffer.zig");
 const CharBuffer = @import("char_buffer.zig");
 const CharBufferConsole = @import("char_buffer_console.zig");
 const MainConsole = @import("main_console.zig");
-const Rectangle = @import("rectangle.zig").Rectangle;
 
 pub const debug = @import("debug.zig");
 pub const kprint = debug.kprint;
@@ -21,6 +20,9 @@ const forty = @import("forty/forth.zig");
 pub const Forth = forty.Forth;
 
 const Serial = @import("serial.zig"); //TBD
+
+pub const schedule = @import("schedule.zig");
+const heartbeat = @import("heartbeat.zig");
 
 const Usb = @import("usb.zig");
 
@@ -39,6 +41,7 @@ pub const std_options = struct {
         .{ .scope = .dwc_otg_usb_channel, .level = .info },
         .{ .scope = .usb, .level = .info },
         .{ .scope = .forty, .level = .debug },
+        .{ .scope = .schedule, .level = .debug },
     };
 };
 
@@ -162,8 +165,6 @@ fn kernelInit() void {
         debug.kernelError("Forth init error", err);
     }
 
-    hal.system_timer.schedule(heartbeat_interval, &heartbeat);
-
     debug.defineModule(&interpreter) catch |err| {
         debug.kernelError("Debug ring define module", err);
     };
@@ -192,6 +193,12 @@ fn kernelInit() void {
         debug.kernelError("Main console define module", err);
     };
 
+    if (schedule.init()) {
+        debug.kernelMessage("schedule init");
+    } else |err| {
+        debug.kernelMessage("schedule init error", err);
+    }
+
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
 
@@ -211,30 +218,6 @@ fn repl() callconv(.C) noreturn {
             std.log.err("REPL error: {any}\n\nABORT.\n", .{err});
         };
     }
-}
-
-fn supplyAddress(name: []const u8, addr: usize) void {
-    interpreter.defineConstant(name, addr) catch |err| {
-        std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
-    };
-}
-
-const heartbeat_interval: u32 = 600_000;
-const heartbeat: HAL.TimerHandler = .{
-    .callback = showHeartbeat,
-};
-
-fn showHeartbeat(_: *const HAL.TimerHandler, _: *const HAL.Timer) u32 {
-    var ch = char_buffer.charGet(0, 0);
-    if (ch >= 65) {
-        ch = ((ch - 64) % 26) + 65;
-    } else {
-        ch = 65;
-    }
-    char_buffer.charSet(0, 0, ch);
-    char_buffer.renderRect(Rectangle.init(0, 1, 0, 1));
-
-    return heartbeat_interval;
 }
 
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {

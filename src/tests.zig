@@ -1,4 +1,5 @@
 const std = @import("std");
+pub const schedule = @import("schedule.zig");
 pub const bcd = @import("bcd.zig");
 pub const forty_stack = @import("forty/stack.zig");
 pub const usb_transfer = @import("usb/transfer.zig");
