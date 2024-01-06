@@ -10,7 +10,23 @@ pub fn heartbeat() !void {
         ch = 65;
     }
     root.char_buffer.charSet(0, 0, ch);
-    root.char_buffer.renderRect(Rectangle.init(0, 1, 0, 1));
-
+    root.char_buffer.syncText();
     root.schedule.sleep(500);
 }
+
+// pub fn heartbeat2() !void {
+//     const now = root.hal.clock.ticks();
+
+//     if (now < 1_000_000) {
+//         root.schedule.sleep(1000);
+//         return;
+//     }
+
+//     spindex = (spindex + 1) & 0x7;
+//     root.char_buffer.charSet(1, 0, spin[spindex]);
+//     root.char_buffer.syncText();
+//     root.schedule.sleep(2500);
+// }
+
+// const spin: []const u8 = "|/-\\|/-\\";
+// var spindex: u8 = 0;
