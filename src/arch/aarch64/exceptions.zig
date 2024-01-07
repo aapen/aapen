@@ -33,9 +33,6 @@ pub const ExceptionContext = struct {
     /// General purpose registers' stored state
     gpr: [30]u64,
 
-    /// Link Register (a.k.a. x30)
-    lr: u64,
-
     /// Exception Link Register (PC at the time the exception
     /// happened)
     elr: u64,
@@ -84,7 +81,6 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
             if (unwind.sp != undefined) {
                 context.elr = unwind.pc;
                 context.force_sp = unwind.sp;
-                context.lr = unwind.lr;
                 context.gpr[29] = unwind.fp;
             }
         } else if (breakpoint_number == soft_reset_breakpoint) {
