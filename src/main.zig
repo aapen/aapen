@@ -1,4 +1,5 @@
 const std = @import("std");
+const ScopeLevel = std.log.ScopeLevel;
 
 const arch = @import("architecture.zig");
 const qemu = @import("qemu.zig");
@@ -8,19 +9,22 @@ const FrameBuffer = @import("frame_buffer.zig");
 const CharBuffer = @import("char_buffer.zig");
 const CharBufferConsole = @import("char_buffer_console.zig");
 const MainConsole = @import("main_console.zig");
-const Rectangle = @import("rectangle.zig").Rectangle;
 
-const bcd = @import("bcd.zig");
+pub const debug = @import("debug.zig");
+pub const kprint = debug.kprint;
+
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
 const forty = @import("forty/forth.zig");
-const Forth = forty.Forth;
+pub const Forth = forty.Forth;
 
 const Serial = @import("serial.zig"); //TBD
 
-pub const debug = @import("debug.zig");
-pub const kprint = debug.kprint;
+pub const schedule = @import("schedule.zig");
+const heartbeat = @import("heartbeat.zig");
+
+const Usb = @import("usb.zig");
 
 const config = @import("config");
 pub const HAL = switch (config.board) {
@@ -30,8 +34,15 @@ pub const HAL = switch (config.board) {
 const diagnostics = @import("hal/diagnostics.zig");
 
 pub const std_options = struct {
-    pub const log_level = .warn;
     pub const logFn = debug.log;
+    pub const log_level = .warn;
+    pub const log_scope_levels = &[_]ScopeLevel{
+        .{ .scope = .dwc_otg_usb, .level = .info },
+        .{ .scope = .dwc_otg_usb_channel, .level = .info },
+        .{ .scope = .usb, .level = .info },
+        .{ .scope = .forty, .level = .debug },
+        .{ .scope = .schedule, .level = .debug },
+    };
 };
 
 const Freestanding = struct {
@@ -142,11 +153,11 @@ fn kernelInit() void {
         debug.kernelError("diagnostics init error", err);
     }
 
-    if (hal.usb_hci.initialize()) {
-        debug.kernelMessage("USB host init");
-    } else |err| {
-        debug.kernelError("USB host init error", err);
-    }
+    // if (Usb.init(heap.allocator)) |_| {
+    //     debug.kernelMessage("USB core init");
+    // } else |err| {
+    //     debug.kernelError("USB core init error", err);
+    // }
 
     if (interpreter.init(heap.allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
@@ -154,15 +165,39 @@ fn kernelInit() void {
         debug.kernelError("Forth init error", err);
     }
 
-    hal.system_timer.schedule(heartbeat_interval, &heartbeat);
+    debug.defineModule(&interpreter) catch |err| {
+        debug.kernelError("Debug ring define module", err);
+    };
 
-    // TODO should this move to forty/core.zig?
-    supplyAddress("fb", @intFromPtr(fb));
-    supplyAddress("char-buffer", @intFromPtr(char_buffer));
-    supplyAddress("console", @intFromPtr(main_console));
-    supplyAddress("hal", @intFromPtr(hal));
-    supplyAddress("board", @intFromPtr(&diagnostics.board));
-    supplyAddress("mring", @intFromPtr(&debug.mring_storage));
+    HAL.defineModule(&interpreter, hal) catch |err| {
+        debug.kernelError("HAL define module", err);
+    };
+
+    diagnostics.defineModule(&interpreter) catch |err| {
+        debug.kernelError("diagnostics define module", err);
+    };
+
+    Usb.defineModule(&interpreter) catch |err| {
+        debug.kernelError("USB define module", err);
+    };
+
+    FrameBuffer.defineModule(&interpreter, fb) catch |err| {
+        debug.kernelError("Frame buffer define module", err);
+    };
+
+    CharBuffer.defineModule(&interpreter, char_buffer) catch |err| {
+        debug.kernelError("Char buffer define module", err);
+    };
+
+    MainConsole.defineModule(&interpreter, main_console) catch |err| {
+        debug.kernelError("Main console define module", err);
+    };
+
+    if (schedule.init()) {
+        debug.kernelMessage("schedule init");
+    } else |err| {
+        debug.kernelMessage("schedule init error", err);
+    }
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
@@ -185,30 +220,6 @@ fn repl() callconv(.C) noreturn {
     }
 }
 
-fn supplyAddress(name: []const u8, addr: usize) void {
-    interpreter.defineConstant(name, addr) catch |err| {
-        std.log.warn("Failed to define {s}: {any}\n", .{ name, err });
-    };
-}
-
-const heartbeat_interval: u32 = 600_000;
-const heartbeat: HAL.TimerHandler = .{
-    .callback = showHeartbeat,
-};
-
-fn showHeartbeat(_: *const HAL.TimerHandler, _: *const HAL.Timer) u32 {
-    var ch = char_buffer.charGet(0, 0);
-    if (ch >= 65) {
-        ch = ((ch - 64) % 26) + 65;
-    } else {
-        ch = 65;
-    }
-    char_buffer.charSet(0, 0, ch);
-    char_buffer.renderRect(Rectangle.init(0, 1, 0, 1));
-
-    return heartbeat_interval;
-}
-
 export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
     const registers = arch.cpu.registers;
 
@@ -220,8 +231,8 @@ export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
         .naa = .trap_disable,
         .ee = .little_endian,
         .e0e = .little_endian,
-        .i_cache = .disabled,
-        .d_cache = .disabled,
+        .i_cache = .enabled,
+        .d_cache = .enabled,
         .wxn = 0,
     });
 

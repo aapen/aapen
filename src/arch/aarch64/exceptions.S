@@ -11,7 +11,7 @@
         EC_VALUE_BKPT                   = 0x3C
         // kernel entry frame = 18 pairs of 64 bit registers, plus a
         // new invocation frame
-        KERNEL_ENTRY_FRAME_SIZE         = 19 * 2 * 8
+        KERNEL_ENTRY_FRAME_SIZE         = 18 * 2 * 8
 
         SYNCHRONOUS_INVALID_EL1T        = 0b0000
         IRQ_INVALID_EL1T                = 0b0001
@@ -57,86 +57,111 @@
         // Save registers on the stack before entering kernel space
         .macro KERNEL_ENTRY
         // build invocation frame on stack
-        // save frame pointer (x29) and link register (x30), then
-        // update the frame pointer
+
+        // At this point, the fp and lr belong to the function that
+        // was active when this interrupt got triggered. Save them as
+        // if they were an active stack frame. This aids backtracing
+        // in gdb.
+        stp     x29, x30, [sp, #-16]!
+        mov     x29, sp
+
+        // Allocate space on the stack to save registers
         sub     sp,  sp,  #KERNEL_ENTRY_FRAME_SIZE
-        stp     x29, x30, [sp, #KERNEL_ENTRY_FRAME_SIZE - 16]
-        add     x29, sp,  #KERNEL_ENTRY_FRAME_SIZE - 16
+
+        // Now we make a "fake" frame with the ELR (exception link
+        // register) value. This makes the exception look like a call
+        // in the backtrace
+        mrs     x30, elr_el1
+        stp     x29, x30, [sp]
+        mov     x29, sp
 
         // store all general purpose registers on the stack
-        stp	x0,  x1,  [sp, #16 * 0]
-	stp	x2,  x3,  [sp, #16 * 1]
-	stp	x4,  x5,  [sp, #16 * 2]
-	stp	x6,  x7,  [sp, #16 * 3]
-	stp	x8,  x9,  [sp, #16 * 4]
-	stp	x10, x11, [sp, #16 * 5]
-	stp	x12, x13, [sp, #16 * 6]
-	stp	x14, x15, [sp, #16 * 7]
-	stp	x16, x17, [sp, #16 * 8]
-	stp	x18, x19, [sp, #16 * 9]
-	stp	x20, x21, [sp, #16 * 10]
-	stp	x22, x23, [sp, #16 * 11]
-	stp	x24, x25, [sp, #16 * 12]
-	stp	x26, x27, [sp, #16 * 13]
-	stp	x28, x29, [sp, #16 * 14]
+        stp	x0,  x1,  [sp, #16 * 1]
+	stp	x2,  x3,  [sp, #16 * 2]
+	stp	x4,  x5,  [sp, #16 * 3]
+	stp	x6,  x7,  [sp, #16 * 4]
+	stp	x8,  x9,  [sp, #16 * 5]
+	stp	x10, x11, [sp, #16 * 6]
+	stp	x12, x13, [sp, #16 * 7]
+	stp	x14, x15, [sp, #16 * 8]
+	stp	x16, x17, [sp, #16 * 9]
+	stp	x18, x19, [sp, #16 * 10]
+	stp	x20, x21, [sp, #16 * 11]
+	stp	x22, x23, [sp, #16 * 12]
+	stp	x24, x25, [sp, #16 * 13]
+	stp	x26, x27, [sp, #16 * 14]
+	stp	x28, x29, [sp, #16 * 15]
 
-        // Also get the exception info: link register, saved program
-        // status, and exception syndrome
-        mrs     x1, elr_el1
+        // Get some additional exception info: saved program status
+        // and exception syndrome mrs x1, elr_el1. Put them into the
+        // stack space, since we will be giving the ISR a pointer to
+        // this "struct" of saved registers.
+        //
+        // x30 (lr) should still contain ELR_EL1's value from when it
+        // was loaded in the preamble.
         mrs     x2, spsr_el1
         mrs     x3, esr_el1
 
-	stp	lr,  x1,  [sp, #16 * 15]
-        stp     x2,  x3,  [sp, #16 * 16]
-        str     xzr,      [sp, #16 * 17]
+	stp	x30, x2,  [sp, #16 * 16]
+        stp     x3,  xzr, [sp, #16 * 17]
 
         // x0 will be the first parameter to the handler function
-        // it should point to the context structure that starts at SP
+        // it should point to the context structure that starts at SP+16
         // and extends upward
-        mov     x0, sp
+        add     x0, sp, #16
         .endm
 
         // Restore registers on exit from kernel space
         .macro KERNEL_EXIT
 
-        ldp     x19, xzr, [sp, #16 * 16]
-        ldp     lr,  x20, [sp, #16 * 15]
+        ldp     x30, x19, [sp, #16 * 16]
+//        ldp     x30, x20, [sp, #16 * 15]
 
+        // SPSR and ELR are used when we do the eret. Restore them in
+        // case they've been touched by the ISR or anything it called.
         msr     spsr_el1, x19
-        msr     elr_el1,  x20
+        msr     elr_el1,  x30
 
-        ldp	x0,  x1,  [sp, #16 * 0]
-	ldp	x2,  x3,  [sp, #16 * 1]
-	ldp	x4,  x5,  [sp, #16 * 2]
-	ldp	x6,  x7,  [sp, #16 * 3]
-	ldp	x8,  x9,  [sp, #16 * 4]
-	ldp	x10, x11, [sp, #16 * 5]
-	ldp	x12, x13, [sp, #16 * 6]
-	ldp	x14, x15, [sp, #16 * 7]
-	ldp	x16, x17, [sp, #16 * 8]
-	ldp	x18, x19, [sp, #16 * 9]
-	ldp	x20, x21, [sp, #16 * 10]
-	ldp	x22, x23, [sp, #16 * 11]
-	ldp	x24, x25, [sp, #16 * 12]
-	ldp	x26, x27, [sp, #16 * 13]
-	ldp	x28, x29, [sp, #16 * 14]
+        // Restore the general purpose registers. This must match the
+        // sequence and offsets from KERNEL_ENTRY or weird things will
+        // result.
+        ldp	x0,  x1,  [sp, #16 * 1]
+	ldp	x2,  x3,  [sp, #16 * 2]
+	ldp	x4,  x5,  [sp, #16 * 3]
+	ldp	x6,  x7,  [sp, #16 * 4]
+	ldp	x8,  x9,  [sp, #16 * 5]
+	ldp	x10, x11, [sp, #16 * 6]
+	ldp	x12, x13, [sp, #16 * 7]
+	ldp	x14, x15, [sp, #16 * 8]
+	ldp	x16, x17, [sp, #16 * 9]
+	ldp	x18, x19, [sp, #16 * 10]
+	ldp	x20, x21, [sp, #16 * 11]
+	ldp	x22, x23, [sp, #16 * 12]
+	ldp	x24, x25, [sp, #16 * 13]
+	ldp	x26, x27, [sp, #16 * 14]
+	ldp	x28, x29, [sp, #16 * 15]
 
-        // if we have an override stack pointer in the context
-        // the application wants to throw away the current stack
+        // if we have an override stack pointer in the context, it
+        // means the application wants to throw away the current stack.
         // we can temporarily use x30 for the value since it will be
         // overwritten by the processor when we do the eret
         //
-        // note that the frame pointer (x29) must have been set correctly by the
-        // exception handler
-        ldr     x30,      [sp, #16 * 17]
+        ldp     xzr, x30, [sp, #16 * 17]
         cbz     x30, 2f
+
+        // the application does want to throw away the stack. this
+        // means that the ISR must have also set x29 to it's desired
+        // frame pointer. So we ignore the saved lr and fp from
+        // KERNEL_ENTRY and just smash the new values into the
+        // registers. (x29 was loaded as part of the register restore
+        // sequence just above this.)
         mov     sp,  x30
         eret
 
 2:
         // restore frame pointer and link register
-        ldp     x29, x30, [sp, #KERNEL_ENTRY_FRAME_SIZE - 16]
-	add	sp,  sp,  #KERNEL_ENTRY_FRAME_SIZE
+        add     sp,  sp, #KERNEL_ENTRY_FRAME_SIZE
+        ldp     x29, x30, [sp], #16  // restore fp and lr as the original (interrupted) function left them
 	eret
         .endm
 

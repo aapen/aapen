@@ -4,20 +4,24 @@ const assert = std.debug.assert;
 
 const root = @import("root");
 
-const local_interrupt_controller = @import("arm_local_interrupt_controller.zig");
+const Forth = @import("../forty/forth.zig").Forth;
 
 const architecture = @import("../architecture.zig");
 const barriers = architecture.barriers;
 
 const memory = @import("../memory.zig");
-const AddressTranslation = memory.AddressTranslation;
 const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
-const toParent = memory.toParent;
+
+const synchronize = @import("../synchronize.zig");
 
 extern fn spinDelay(delay: u32) void;
 
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    _ = forth;
+}
 
 pub const PropertyTag = extern struct {
     tag_id: u32,
@@ -25,13 +29,29 @@ pub const PropertyTag = extern struct {
     value_length: u32,
 
     pub fn init(tag_type: RpiFirmwarePropertyTag, request_words: u29, buffer_words: u29) PropertyTag {
-        const request_size_bytes: u32 = request_words * @sizeOf(u32);
-        const value_buffer_size_bytes: u32 = buffer_words * @sizeOf(u32);
+        const request_size_bytes: u32 = request_words * 4;
+        const value_buffer_size_bytes: u32 = buffer_words * 4;
         return .{
             .tag_id = @intFromEnum(tag_type),
             .value_length = request_size_bytes,
             .value_buffer_size = value_buffer_size_bytes,
         };
+    }
+
+    pub fn asU32Slice(tag: anytype) []u32 {
+        const TagPtr = @TypeOf(tag);
+        assert(@typeInfo(TagPtr) == .Pointer);
+        assert(@typeInfo(TagPtr).Pointer.size == .One);
+
+        const Tag = @typeInfo(TagPtr).Pointer.child;
+        const size = @sizeOf(Tag);
+
+        if (size % 4 != 0) @compileError("tag structure size must be a multiple of 4 bytes, but it is " ++ size);
+
+        const byte_ptr: [*]u8 = @ptrCast(@constCast(tag));
+        const u32_ptr: [*]u32 = @ptrCast(@alignCast(byte_ptr));
+
+        return u32_ptr[0 .. size / 4];
     }
 };
 
@@ -167,10 +187,6 @@ const MailboxChannel = enum(u4) {
     property_vc_to_arm = 9,
 };
 
-const rpi_firmware_status_request: u32 = 0;
-const rpi_firmware_status_success: u32 = 0x80000000;
-const rpi_firmware_status_error: u32 = 0x80000001;
-
 pub const RpiFirmwarePropertyTag = enum(u32) {
     rpi_firmware_property_end = 0x00000000,
     rpi_firmware_get_firmware_revision = 0x00000001,
@@ -277,17 +293,10 @@ const TagError = error{
     Unsuccessful,
 };
 
-pub const PropertyRequestHeader = extern struct {
-    const code_request = 0x0;
-    const code_response_success = 0x80000000;
-    const code_response_failure = 0x80000001;
-
-    buffer_size: u32,
-    code: u32 = code_request,
-};
+const CODE_REQUEST = 0x0;
+const CODE_RESPONSE_SUCCESS = 0x80000000;
 
 const VALUE_LENGTH_RESPONSE: u32 = 1 << 31;
-const END_TAG = 0;
 const PROPERTY_TAG_REQUIRED_ALIGNMENT = 16;
 
 pub fn getTag(self: *Self, tag: anytype) !void {
@@ -296,55 +305,41 @@ pub fn getTag(self: *Self, tag: anytype) !void {
     assert(@typeInfo(TagPtr).Pointer.size == .One);
 
     const Tag = @typeInfo(TagPtr).Pointer.child;
-
     if (!@hasField(Tag, "tag")) @compileError("tag field missing, expected: tag: PropertyTag");
     if (@TypeOf(tag.tag) != PropertyTag) @compileError("tag expected type PropertyTag, found: " ++ @typeName(@TypeOf(tag.tag)));
 
-    const property_tag: *PropertyTag = @ptrCast(tag);
-    const tag_size = @sizeOf(Tag);
+    var u32slice = PropertyTag.asU32Slice(tag);
+    try self.getTags(u32slice);
 
-    try self.getTags(property_tag, tag_size);
-
-    property_tag.value_length &= VALUE_LENGTH_RESPONSE;
-    if (property_tag.value_length == 0) {
+    // a valid response should have the high bit set on the "value
+    // length" field.
+    if (u32slice[2] & VALUE_LENGTH_RESPONSE == 0) {
         return TagError.NoResponse;
     }
 }
 
-pub fn getTags(self: *Self, tags: *align(4) anyopaque, tag_words: usize) !void {
-    assert(tag_words >= @sizeOf(PropertyTag) / @sizeOf(u32));
-    const tags_ptr: [*]align(4) u8 = @ptrCast(tags);
+pub fn getTags(self: *Self, buffer: []u32) !void {
+    const data_words: u32 = @truncate(buffer.len);
+    const payload_size: u32 = (data_words + 3) * @as(u32, 4);
+    const message: []u32 = try self.allocator.alignedAlloc(u32, PROPERTY_TAG_REQUIRED_ALIGNMENT, data_words + 3);
+    defer self.allocator.free(message);
 
-    const payload_size = tag_words * @sizeOf(u32);
-    const sentinel_size = @sizeOf(u32);
-    const buffer_size = @sizeOf(PropertyRequestHeader) + payload_size + sentinel_size;
-    assert((buffer_size & 0b11) == 0);
-
-    const raw_property_buffer = try self.allocator.alignedAlloc(u8, PROPERTY_TAG_REQUIRED_ALIGNMENT, buffer_size);
-    defer self.allocator.free(raw_property_buffer);
-
-    const property_buffer: *PropertyRequestHeader = @ptrCast(raw_property_buffer);
-    const tags_area: [*]u8 = raw_property_buffer.ptr + @sizeOf(PropertyRequestHeader);
-
-    property_buffer.code = PropertyRequestHeader.code_request;
-    property_buffer.buffer_size = @truncate(buffer_size);
-
-    @memcpy(tags_area[0..payload_size], tags_ptr);
-
-    // the sentinel goes after all the payload
-    const sentinel_ptr: *u32 = @ptrCast(@alignCast(tags_area + payload_size));
-    sentinel_ptr.* = END_TAG;
+    message[0] = payload_size;
+    message[1] = CODE_REQUEST;
+    @memcpy(message[2..(2 + data_words)], buffer);
+    message[data_words + 2] = 0;
 
     barriers.barrierMemoryWrite();
+    synchronize.dataCacheRangeClean(@intFromPtr(message.ptr), payload_size);
 
-    const buffer_address_mailbox: u32 = @truncate(@intFromPtr(property_buffer));
+    const buffer_address_mailbox: u32 = @truncate(@intFromPtr(message.ptr));
     try self.sendReceive(buffer_address_mailbox, MailboxChannel.property_arm_to_vc);
 
+    // Make sure changes from the GPU are visible to us
+    synchronize.dataCacheRangeInvalidate(@intFromPtr(message.ptr), payload_size);
     barriers.barrierMemory();
 
-    if (property_buffer.code != PropertyRequestHeader.code_response_success) {
-        return TagError.Unsuccessful;
+    if (message[1] == CODE_RESPONSE_SUCCESS) {
+        @memcpy(buffer, message[2 .. message.len - 1]);
     }
-
-    @memcpy(tags_ptr, tags_area[0..payload_size]);
 }

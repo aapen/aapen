@@ -4,7 +4,8 @@ ZIG_BUILD_ARGS  = -Doptimize=Debug -freference-trace
 # Could we possibly have a zig build command that would simply output
 # all of the different board flavors? Otherwise we can make this
 # a simple make assignment.
-BOARD_FLAVORS   = $(shell echo pi3 pi4 pi400 pi5)
+#BOARD_FLAVORS   = $(shell echo pi3 pi4 pi400 pi5)
+BOARD_FLAVORS   = $(shell echo pi3)
 
 # Change this to set the board flavor used in the emulator.
 # Must be one in the list above.
@@ -18,8 +19,11 @@ TEST_KERNEL_ELF = zig-out/kernel-$(BOARD).elf
 QEMU_EXEC       = qemu-system-aarch64 -semihosting
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
 #QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2711-rpi-400.dtb
-QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd
+QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd 
 QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd
+
+# Use this to get USB tracing from the emulator.
+#QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -trace 'events=trace_events.txt'
 
 OS              = $(shell uname)
 ifeq ($(OS), Darwin)
@@ -60,6 +64,9 @@ firmware/COPYING.linux:
 
 test:
 	$(ZIG) test $(TEST_SRC)
+
+keep_testing:
+	find src | entr -c $(ZIG) test --main-pkg-path src/. -freference-trace=9 src/tests.zig
 
 emulate: $(TEST_KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(TEST_KERNEL)

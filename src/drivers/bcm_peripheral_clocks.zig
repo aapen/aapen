@@ -1,6 +1,24 @@
+const std = @import("std");
+
+const Forth = @import("../forty/forth.zig").Forth;
+const auto = @import("../forty/auto.zig");
+
 const root = @import("root");
 const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
+
+pub fn defineModule(forth: *Forth) !void {
+    try auto.defineNamespace(PeripheralClockController, .{
+        .{ "clockRateCurrent", "clock-rate" },
+        .{ "clockRateMax", "clock-rate-max" },
+        .{ "clockRateMin", "clock-rate-min" },
+        .{ "clockRateSet", "clock-set-rate" },
+        .{ "clockStateSet", "clock-set-state" },
+        .{ "clockState", "clock-state" },
+        .{ "clockOn", "clock-on" },
+        .{ "clockOff", "clock-off" },
+    }, forth);
+}
 
 pub const ClockId = enum(u32) {
     reserved = 0,
@@ -27,27 +45,24 @@ const RateSelector = enum(u32) {
     min = 0x00030007,
 };
 
-pub const ClockResult = enum {
-    unknown,
-    failed,
-    no_such_device,
-    clock_on,
-    clock_off,
+pub const ClockResult = enum(u64) {
+    unknown = 0,
+    failed = 1,
+    no_such_device = 2,
+    clock_on = 3,
+    clock_off = 4,
 };
 
 const PropertyClock = extern struct {
     tag: PropertyTag,
     clock: u32,
-    param2: extern union {
-        state: u32,
-        rate: u32,
-    },
+    param2: u32,
 
     pub fn initStateQuery(clock: ClockId) @This() {
         return .{
             .tag = PropertyTag.init(.rpi_firmware_get_clock_state, 1, 2),
             .clock = @intFromEnum(clock),
-            .param2 = .{ .state = 0 },
+            .param2 = 0,
         };
     }
 
@@ -55,15 +70,17 @@ const PropertyClock = extern struct {
         return .{
             .tag = PropertyTag.init(.rpi_firmware_set_clock_state, 2, 2),
             .clock = @intFromEnum(clock),
-            .param2 = .{ .state = @intFromEnum(desired_state) },
+            .param2 = @intFromEnum(desired_state),
         };
     }
 
     pub fn initRateQuery(clock: ClockId, rate_selector: RateSelector) @This() {
+        const tag = @intFromEnum(rate_selector);
+
         return .{
-            .tag = PropertyTag.init(.rpi_firmware_get_clock_rate, 1, 2),
+            .tag = PropertyTag.init(@enumFromInt(tag), 1, 2),
             .clock = @intFromEnum(clock),
-            .param2 = .{ .rate = @intFromEnum(rate_selector) },
+            .param2 = 0,
         };
     }
 };
@@ -94,8 +111,8 @@ pub const PeripheralClockController = struct {
     }
 
     fn decode(state: u32) ClockResult {
-        var no_device = (state & 0x02) != 0;
-        var actual_state = (state & 0x01) != 0;
+        const no_device = (state & 0x02) != 0;
+        const actual_state = (state & 0x01) != 0;
 
         if (no_device) {
             return .no_such_device;
@@ -107,9 +124,9 @@ pub const PeripheralClockController = struct {
     }
 
     fn clockRate(self: *PeripheralClockController, clock_id: ClockId, selector: RateSelector) !u32 {
-        const query = PropertyClock.initRateQuery(clock_id, selector);
+        var query = PropertyClock.initRateQuery(clock_id, selector);
         try self.mailbox.getTag(&query);
-        return query.param1.rate;
+        return query.param2;
     }
 
     pub fn clockRateCurrent(self: *PeripheralClockController, clock_id: ClockId) !u32 {
@@ -130,10 +147,16 @@ pub const PeripheralClockController = struct {
         return control.rate;
     }
 
-    fn clockStateSet(self: *PeripheralClockController, clock_id: ClockId, desired_state: DesiredState) !ClockResult {
+    pub fn clockStateSet(self: *PeripheralClockController, clock_id: ClockId, desired_state: DesiredState) !ClockResult {
         const control = PropertyClock.initStateControl(clock_id, desired_state);
         try self.mailbox.getTag(&control);
-        return decode(control.param1.state);
+        return decode(control.param2);
+    }
+
+    pub fn clockState(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {
+        const query = PropertyClock.initStateQuery(clock_id);
+        try self.mailbox.getTag(&query);
+        return decode(query.clock);
     }
 
     pub fn clockOn(self: *PeripheralClockController, clock_id: ClockId) !ClockResult {

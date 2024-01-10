@@ -1,0 +1,57 @@
+@startuml
+skinparam componentStyle rectangle
+
+package usb {
+        component usb_device [
+        usb/device.zig
+        Device (abstract),
+        Function detection and factory,
+        Endpoint detection
+        ]
+
+
+        component usb_request [
+        usb/request.zig
+        USB Request
+        Requests, transfers
+        ]
+}
+
+package drivers {
+        package dwc {
+                component dwc_hcd [
+                drivers/dwc/hcd.zig
+                Host Controller Driver
+                API exposed to the OS.
+                Handles transfers. Does not expose
+                channels or transactions.
+                If queueing is required, it will be here.
+                ]
+
+                component dwc_cil [
+                drivers/dwc/cil.zig
+                Core Interface Layer
+                Channels, transactions,
+                interrupt handling
+                ]
+
+                component dwc_reg [
+                drivers/dwc/registers.zig
+                Register definitions
+                ]
+        }
+        package xhci {
+                component xhci_hcd [
+                HCD for xHCI
+                (Structure TBD)
+                ]
+        }
+}
+
+usb_device -d-> usb_request
+usb_request -d-> dwc_hcd : RPi3
+usb_request -d-> xhci_hcd : RPi4 and later
+dwc_hcd -d-> dwc_cil
+dwc_cil -d-> dwc_reg
+
+@enduml

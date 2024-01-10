@@ -5,10 +5,15 @@ const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
 
+const Forth = @import("forty/forth.zig").Forth;
+const auto = @import("forty/auto.zig");
+
 const serial = @import("serial.zig");
 
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
+
+const string = @import("forty/string.zig");
 
 pub fn log(
     comptime level: std.log.Level,
@@ -18,7 +23,10 @@ pub fn log(
 ) void {
     if (comptime !std.log.logEnabled(level, scope)) return;
 
-    const prefix = "[" ++ comptime level.asText() ++ "] (" ++ @tagName(scope) ++ "): ";
+    const prefix = switch (scope) {
+        std.log.default_log_scope => "",
+        else => @tagName(scope) ++ " ",
+    } ++ "[" ++ comptime level.asText() ++ "]: ";
 
     if (root.main_console_valid) {
         root.main_console.print(prefix ++ format ++ "\n", args) catch {};
@@ -35,9 +43,54 @@ pub fn kprint(comptime fmt: []const u8, args: anytype) void {
     }
 }
 
+pub fn sliceDumpAsWords(buf: []const u8) void {
+    const buf_words = std.mem.bytesAsSlice(u32, buf);
+    const len = buf_words.len;
+    var offset: usize = 0;
+
+    while (offset < len) {
+        kprint("{x:16}  {x:0>8}\n", .{ @intFromPtr(buf_words.ptr) + offset, buf_words[offset] });
+        offset += 1;
+    }
+}
+
+pub fn sliceDump(buf: []const u8) void {
+    const len = buf.len;
+    var offset: usize = 0;
+
+    while (offset < len) {
+        kprint("{x:16}  ", .{@intFromPtr(buf.ptr) + offset});
+
+        for (0..16) |iByte| {
+            if (offset + iByte < len) {
+                kprint("{x:0>2} ", .{buf[offset + iByte]});
+            } else {
+                kprint("   ", .{});
+            }
+            if (iByte == 7) {
+                kprint("  ", .{});
+            }
+        }
+        kprint("  |", .{});
+        for (0..16) |iByte| {
+            if (offset + iByte < len) {
+                kprint("{c}", .{string.toPrintable(buf[offset + iByte])});
+            } else {
+                kprint(" ", .{});
+            }
+        }
+        kprint("|\n", .{});
+        offset += 16;
+    }
+}
+
 // ------------------------------------------------------------------------------
 // Kernel message buffer
 // ------------------------------------------------------------------------------
+
+pub fn defineModule(forth: *Forth) !void {
+    try forth.defineConstant("mring", @intFromPtr(&mring_storage));
+}
 
 const mring_space_bytes = 1024 * 1024;
 pub var mring_storage: [mring_space_bytes]u8 = undefined;

@@ -8,6 +8,12 @@ const cpu = arch.cpu;
 const InterruptLevel = cpu.InterruptLevel;
 
 // ----------------------------------------------------------------------
+// Architecture-specific constants
+// ----------------------------------------------------------------------
+const root = @import("root");
+const data_cache_line_length = root.HAL.data_cache_line_length;
+
+// ----------------------------------------------------------------------
 // Critical sections
 // ----------------------------------------------------------------------
 
@@ -95,6 +101,14 @@ pub const Spinlock = struct {
         };
     }
 
+    pub fn initWithTargetLevel(name: []const u8, enabled: bool, target_level: cpu.InterruptLevel) Spinlock {
+        return .{
+            .name = name,
+            .enabled = enabled,
+            .target_level = target_level,
+        };
+    }
+
     pub fn acquire(lock: *Spinlock) void {
         if (lock.target_level == .IRQ or lock.target_level == .FIQ) {
             criticalEnter(lock.target_level);
@@ -139,3 +153,78 @@ pub const Spinlock = struct {
         }
     }
 };
+
+// ----------------------------------------------------------------------
+// Cache coherence and maintenance
+// ----------------------------------------------------------------------
+pub fn dataCacheSliceClean(buf: []u8) void {
+    dataCacheRangeClean(@intFromPtr(buf.ptr), buf.len);
+}
+
+pub fn dataCacheRangeClean(address: u64, length: u64) void {
+    var next_location = address;
+    var remaining_length = length + data_cache_line_length;
+
+    while (true) {
+        asm volatile (
+            \\ dc cvac, %[addr]
+            :
+            : [addr] "r" (next_location),
+        );
+
+        if (remaining_length < data_cache_line_length) {
+            break;
+        }
+
+        next_location += data_cache_line_length;
+        remaining_length -= data_cache_line_length;
+    }
+}
+
+pub fn dataCacheSliceInvalidate(buf: []u8) void {
+    dataCacheRangeInvalidate(@intFromPtr(buf.ptr), buf.len);
+}
+
+pub fn dataCacheRangeInvalidate(address: u64, length: u64) void {
+    var next_location = address;
+    var remaining_length = length + data_cache_line_length;
+
+    while (true) {
+        asm volatile (
+            \\ dc ivac, %[addr]
+            :
+            : [addr] "r" (next_location),
+        );
+
+        if (remaining_length < data_cache_line_length) {
+            break;
+        }
+
+        next_location += data_cache_line_length;
+        remaining_length -= data_cache_line_length;
+    }
+}
+
+pub fn dataCacheSliceCleanAndInvalidate(buf: []u8) void {
+    dataCacheRangeCleanAndInvalidate(@intFromPtr(buf.ptr), buf.len);
+}
+
+pub fn dataCacheRangeCleanAndInvalidate(address: u64, length: u64) void {
+    var next_location = address;
+    var remaining_length = length + data_cache_line_length;
+
+    while (true) {
+        asm volatile (
+            \\ dc civac, %[addr]
+            :
+            : [addr] "r" (next_location),
+        );
+
+        if (remaining_length < data_cache_line_length) {
+            break;
+        }
+
+        next_location += data_cache_line_length;
+        remaining_length -= data_cache_line_length;
+    }
+}

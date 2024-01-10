@@ -1,15 +1,5 @@
-const root = @import("root");
-const HAL = root.HAL;
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-
-const BoardInfo = root.HAL.BoardInfoController.BoardInfo;
-
-const FrameBuffer = @import("../frame_buffer.zig");
-const CharBuffer = @import("../char_buffer.zig");
-const CharBufferConsole = @import("../char_buffer_console.zig");
-const MainConsole = @import("../main_console.zig");
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
@@ -107,15 +97,15 @@ pub fn wordKeyMaybe(forth: *Forth, _: *Header) ForthError!void {
     try forth.stack.push(if (byte_available) 1 else 0);
 }
 
-/// -- n
-pub fn wordTicks(forth: *Forth, _: *Header) ForthError!void {
-    const ticks = root.hal.clock.ticks();
-    try forth.stack.push(ticks);
-}
-
 /// --
 pub fn wordReset(_: *Forth, _: *Header) ForthError!void {
     asm volatile ("brk 0x07c5");
+}
+
+/// --
+pub fn wordPause(forth: *Forth, _: *Header) ForthError!void {
+    const n = try forth.stack.pop();
+    for (0..(n * 10000)) |_| {}
 }
 
 /// --
@@ -552,6 +542,7 @@ pub fn wordSerialDot(forth: *Forth, _: *Header) ForthError!void {
     const v = try forth.popAs(i64);
     try forth.serial_print("{}", .{v});
 }
+
 pub fn wordTest2(forth: *Forth, _: *Header) ForthError!void {
     _ = forth;
 }
@@ -560,28 +551,14 @@ pub fn defineCore(forth: *Forth) !void {
 
     // Expose internal values to forty.
     try forth.defineConstant("word", @sizeOf(u64));
-    try forth.defineStruct("board", BoardInfo);
-    try forth.defineStruct("board.model", BoardInfo.Model);
-    try forth.defineStruct("board.device", BoardInfo.Device);
-    try forth.defineStruct("board.memory", BoardInfo.Memory);
-
-    try forth.defineStruct("MainConsole", MainConsole);
-    try forth.defineStruct("CharBuffer", CharBuffer);
-    try forth.defineStruct("FrameBuffer", FrameBuffer);
-    try forth.defineStruct("FrameBuffer.VTable", FrameBuffer.VTable);
-
-    // Hal
-    try forth.defineStruct("hal", HAL);
-    try forth.defineStruct("usb", HAL.USBHCI);
-    try forth.defineStruct("usb.vtable", HAL.USBHCI.VTable);
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);
     _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
-    _ = try forth.definePrimitiveDesc("ticks", " -- n: Read clock", &wordTicks, false);
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
+    _ = try forth.definePrimitiveDesc("pause", " n -- : Pause for a bit", &wordPause, false);
 
     // Basic Forth words.
     _ = try forth.definePrimitiveDesc("exec", "pHeader -- <Results>", &wordExec, false);

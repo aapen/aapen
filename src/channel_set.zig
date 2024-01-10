@@ -1,53 +1,57 @@
 const std = @import("std");
+const log = std.log.scoped(.channel_set);
 
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
-
-const Self = @This();
 
 const Error = error{
     NoAvailableChannel,
 };
 
-// TODO Seems like this should be marked as
-// volatile, but Zig only allows that on pointers
-allocated: u32,
-max: u5,
-lock: Spinlock,
+pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
+    return struct {
+        const Self = @This();
+        const Bitset = std.bit_set.ArrayBitSet(u32, max);
 
-pub fn init(name: []const u8, max: u5) Self {
-    return .{
-        .allocated = 0,
-        .max = max,
-        .lock = Spinlock.init(name, true),
-    };
-}
+        // 1 bit means free, 0 is allocated.
+        // (This is due to the asymmetry in Zig's
+        // std.bit_set.ArrayBitSet API... all its functions look for
+        // bits set, not cleared)
+        available: Bitset = Bitset.initFull(),
+        lock: Spinlock = Spinlock.init(name, true),
 
-pub fn allocate(channel_set: *Self) !u5 {
-    channel_set.lock.acquire();
-    defer channel_set.lock.release();
+        pub fn allocate(this: *Self) !T {
+            this.lock.acquire();
+            defer this.lock.release();
 
-    var mask: u32 = 1;
-    var n: u5 = 0;
-    while (n < channel_set.max) : (n += 1) {
-        if (channel_set.allocated & mask == 0) {
-            channel_set.allocated |= mask;
-            return n;
+            if (this.available.toggleFirstSet()) |allocated| {
+                return @truncate(allocated);
+            } else {
+                return Error.NoAvailableChannel;
+            }
         }
-        mask <<= 1;
-    }
-    return Error.NoAvailableChannel;
-}
 
-pub fn free(channel_set: *Self, channel: u5) void {
-    channel_set.lock.acquire();
-    defer channel_set.lock.release();
+        pub fn free(this: *Self, channel: T) void {
+            this.lock.acquire();
+            defer this.lock.release();
 
-    const mask: u32 = @as(u32, 1) << channel;
+            if (channel >= max) {
+                // invalid channel, ignore
+                return;
+            }
 
-    if (channel_set.allocated & mask == 0) {
-        std.log.err("Attempt to free a channel that was not allocated.", .{});
-    }
+            if (this.available.isSet(channel)) {
+                log.err("Attempt to free channel {d} but it was not allocated.", .{channel});
+            } else {
+                this.available.set(channel);
+            }
+        }
 
-    channel_set.allocated &= ~mask;
+        pub fn isAllocated(this: *Self, channel: T) bool {
+            this.lock.acquire();
+            defer this.lock.release();
+
+            return !this.available.isSet(channel);
+        }
+    };
 }

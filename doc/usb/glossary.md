@@ -1,0 +1,46 @@
+# Glossary
+
+-   **ACK:** Packet sent by receiver to indicate receipt of an error free packet
+-   **ADP:** Attach Detection Protocol
+-   **AHB:** Advanced High-performance Bus. Part of ARM's AMBA specification. [Specification](https://developer.arm.com/documentation/ihi0033/latest/)
+-   **AMBA:** Advanced Microcontroller Bus Architecture. Family of ARM specifications for on-chip interconnect of functional blocks in a SoC design. [Library](https://developer.arm.com/Architectures/AMBA)
+-   **APB:** Advanced Peripheral Bus. Part of ARM's AMBA specification.
+-   **AXI:** Advanced eXtensible Interface. Part of ARM's AMBA specification (version 3 specifically). [Specification](https://web.archive.org/web/20190705083043/https://static.docs.arm.com/ihi0022/e/IHI0022E_amba_axi_and_ace_protocol_spec.pdf)
+-   **Bulk:** Endpoint meant for transferring large volumes of data, which must be lossless, but is not latency critical.
+-   **control transfer:** packet containing in-band signalling for setup and configuration
+-   **data transfer:** packet containing payload data
+-   **DWC:** DesignWare Cores, a brand name of [Synopsys](https://www.synopsys.com/) IP blocks, including the DWC2 and DWC3 used in RPi3 and RPi4 respectively.
+-   **EHCI:** Enhanced Host Controller Interface. Specification for how a host computer talks to its USB controller (register interface and protocol). Introduced by Intel for use with USB 2.0. [Specification](https://www.intel.com/content/www/us/en/products/docs/io/universal-serial-bus/ehci-specification-for-usb.html)
+-   **Endpoint:** Source or sink of data. Each device has one or more interfaces, which each have one or more endpoints. Endpoint 0 (EP0) is a special case.
+-   **EP:** Endpoint
+-   **EP0:** Endpoint 0. The target of control messages. All devices must support EP0. It is the initial target during device enumeration.
+-   **FS:** Full speed, 12 Mbps. Introduced with USB 1.0
+-   **HID:** Human interface device. E.g., mouse, keyboard
+-   **HNP:** Host Negotiation Protocol. Supplemental protocol introduced with the OTG specifiction. Allows devices to exchange their roles as host or peripheral.
+-   **Host:** The device that controls all the hubs and endpoints
+-   **HS:** High speed, 480 Mbps. Introduced with USB 2.0
+-   **Interrupt transfer:** Tranfer requiring quick response with bounded latency. Used by HIDs
+-   **IP Block:** Intellectual Property block. Industry term for a functional block that can be included in other chip designs.
+-   **Isochronous:** Guaranteed data rate stream, but may lose some information. Used for video and audio.
+-   **LS:** Low speed, 1.5 Mbps. Introduced with USB 1.0
+-   **Message Pipe:** Host controlled pipe. Messages have a defined format. Transfers may go in either direction, and are determined by the request sent by the host.
+-   **NAK:** Packet sent be receiver to indicate it cannot accept data or the transmitting device cannto send data.
+-   **Nyet:** Handshake packet, indicates that no response yet from receiver
+-   **OHCI:** Open Host Controller Interface. Specification for how a host computer talks to its USB controller. Supports USB 1.1 only (LS and FS).
+-   **OTG:** "On the Go". Supplemental USB specification that allows small devices to be either a host or a peripheral. RPis implement this so they can present as mass storage to a host computer.
+-   **Overcurrent:** Signal raised on a host when a device attempts to draw more current than allowed.
+-   **PID:** Packet Identifier. One byte indicating the type of the packet. 4 bits are the PID, the next 4 bits are the complement of the PID.
+-   **Ping:** Packet sent by host controller before requesting a bulk transfer. Endpoint should respond with ACK or NAK.
+-   **PHY:** Physical connection layer. Includes electrical characteristics and signalling.
+-   **SoC:** System-on-a-Chip.
+-   **SOF:** Start of Frame. Packet sent by the host.
+-   **SRP:** Session Request Protocol. Supplemental protocol introduced with the OTG specification. Allows both devices to control link's power.
+-   **SS:** Super speed, 5.0 Gbps. Introduced with USB 3.0
+-   **Stall:** Packet sent to indicate an endpipe is halted or a control pipe request is not supported
+-   **Stream pipe:** uni-directional pipe for data transfers
+-   **Transaction:** Transfer of data in either direction. A transaction is performed using multiple packets.
+-   **UHCI:** Universal Host Controller Interface. Specification for how a host computer talks to its USB controller (register interface and protocol). Introduced by Intel with USB 1.0 and 1.1. [Specification](https://web.archive.org/web/20100326195950/http://www.usbman.com/WebDrivers/usbpdffiles/UHCI%20Intel%20Specification.pdf)
+-   **ULPI:** UTMI+ Low Pin Interface. PHY specification for some device connections. 8 data wires plus 6 control wires. Not usually exposed via a connector; normally found between chips on a board.
+-   **UTMI+:** USB 2.0 Tranceiver Macrocell Interface. PHY specification.
+-   **xHCI:** eXtensible Host Controller Interface. Specification for how a host computer talks to its USB controller (register interface and protocol). Applies to USB 3.0 and later. [Specification](https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/extensible-host-controler-interface-usb-xhci.pdf)
+

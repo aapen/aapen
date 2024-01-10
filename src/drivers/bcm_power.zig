@@ -2,7 +2,28 @@ const root = @import("root");
 const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
+const Forth = @import("../forty/forth.zig").Forth;
+const auto = @import("../forty/auto.zig");
+
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    try auto.defineNamespace(Self, .{
+        .{ "systemPowerQuery", "?power", "check power state of device" },
+        .{ "systemPowerControl", "power", "set device to power state" },
+    }, forth);
+}
+
+// global wrappers that uses the initialized device to call the
+// instance function below (which leads to the question, "why do we
+// make these instance methods at all?")
+pub fn systemPowerQuery(device: PowerDevice) !PowerResult {
+    return root.hal.power_controller.isPowered(device);
+}
+
+pub fn systemPowerControl(device: PowerDevice, desired_state: DesiredState) !PowerResult {
+    return root.hal.power_controller.setState(device, desired_state);
+}
 
 pub const PowerDevice = enum(u32) {
     sdhci = 0,
@@ -83,7 +104,7 @@ pub fn isPowered(self: *Self, device: PowerDevice) !PowerResult {
     return decode(query.state);
 }
 
-fn setState(self: *Self, device: PowerDevice, desired_state: DesiredState) !PowerResult {
+pub fn setState(self: *Self, device: PowerDevice, desired_state: DesiredState) !PowerResult {
     var control = PropertyPower.initControl(device, desired_state, .wait);
     try self.mailbox.getTag(&control);
     return decode(control.state);

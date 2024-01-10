@@ -1,10 +1,16 @@
 const std = @import("std");
 
+const Forth = @import("../forty/forth.zig").Forth;
+
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
 const AddressTranslations = memory.AddressTranslations;
 
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    _ = forth;
+}
 
 bus_ranges: AddressTranslations,
 dma_ranges: AddressTranslations,

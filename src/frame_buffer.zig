@@ -5,6 +5,9 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const debug = @import("debug.zig");
 
+const auto = @import("forty/auto.zig");
+const Forth = @import("forty/forth.zig").Forth;
+
 const DMA = root.HAL.DMA;
 const DMAChannel = root.HAL.DMA.Channel;
 const DMARequest = root.HAL.DMA.Request;
@@ -28,16 +31,23 @@ const character_rombits: [character_rom.len]CharBits = init: {
 
 pub const Self = @This();
 
-pub const VTable = struct {
-    char: *const fn (fb: u64, ch: u64, x: u64, y: u64, fg: u64, bg: u64) void,
-    text: *const fn (fb: u64, str: u64, x: u64, y: u64, fg: u64, bg: u64) void,
-    line: *const fn (fb: u64, x0: u64, y0: u64, x1: u64, x2: u64, color: u64) void,
-    fill: *const fn (fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void,
-    blit: *const fn (fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void,
-};
+pub fn defineModule(forth: *Forth, fb: *Self) !void {
+    try forth.defineConstant("fb", @intFromPtr(fb));
+    try auto.defineNamespace(Self, .{
+        .{ "line", "line", "draw a line" },
+        .{"fill"},
+        .{"text"},
+        .{ "drawChar", "draw-char" },
+        .{ "drawPixel", "draw-pixel" },
+        .{ "clearRegion", "clear-region" },
+        .{"clear"},
+        .{ "getXres", "fb-xres", "X resolution in pixels" },
+        .{ "getYres", "fb-yres", "Y resolution in pixels" },
+    }, forth);
+    try forth.defineStruct("FrameBuffer", Self);
+}
 
 // Font dimensions
-
 pub const DEFAULT_FONT_WIDTH = 8;
 pub const DEFAULT_FONT_HEIGHT = 16;
 
@@ -82,46 +92,6 @@ base: [*]u8 = undefined,
 buffer_size: usize = undefined,
 pitch: usize = undefined,
 range: Region = undefined,
-vtable: VTable = .{
-    .char = charInteropShim,
-    .text = textInteropShim,
-    .line = lineInteropShim,
-    .fill = fillInteropShim,
-    .blit = blitInteropShim,
-},
-
-fn charInteropShim(fb: u64, ch: u64, x: u64, y: u64, fg: u64, bg: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    const c: u8 = @truncate(ch);
-    const fg8: u8 = @truncate(fg);
-    const bg8: u8 = @truncate(bg);
-    self.drawChar(x, y, c, fg8, bg8);
-}
-
-fn textInteropShim(fb: u64, str: u64, x: u64, y: u64, fg: u64, bg: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    const s: [*:0]u8 = @ptrFromInt(str);
-    const fg8: u8 = @truncate(fg);
-    const bg8: u8 = @truncate(bg);
-    self.text(s, x, y, fg8, bg8);
-}
-
-fn lineInteropShim(fb: u64, x0: u64, y0: u64, x1: u64, y1: u64, color: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    const c: u8 = @truncate(color);
-    self.line(x0, y0, x1, y1, c);
-}
-
-fn fillInteropShim(fb: u64, left: u64, top: u64, right: u64, bottom: u64, color: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    const c: u8 = @truncate(color);
-    self.fill(left, top, right, bottom, c);
-}
-
-fn blitInteropShim(fb: u64, src_x: u64, src_y: u64, src_w: u64, src_h: u64, dest_x: u64, dest_y: u64) void {
-    const self: *Self = @ptrFromInt(fb);
-    self.blit(src_x, src_y, src_w, src_h, dest_x, dest_y);
-}
 
 pub fn init(allocator: Allocator, hal: *root.HAL) !*Self {
     const self = try allocator.create(Self);
@@ -131,6 +101,14 @@ pub fn init(allocator: Allocator, hal: *root.HAL) !*Self {
     try hal.video_controller.allocFrameBuffer(self);
 
     return self;
+}
+
+pub fn getXres(self: *Self) u32 {
+    return self.xres;
+}
+
+pub fn getYres(self: *Self) u32 {
+    return self.yres;
 }
 
 pub fn drawPixel(self: *Self, x: usize, y: usize, color: u8) void {

@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>dwc_init_sequence.html</title>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+
+</head>
+
+<body>
+
+<h1 id="table-of-contents">Table of Contents</h1>
+<ol type="1">
+<li><a href="#orgcb9b9a9">DWC OTG USB init sequence</a></li>
+</ol>
+<p><a id="orgcb9b9a9"></a></p>
+<h1 id="dwc-otg-usb-init-sequence">DWC OTG USB init sequence</h1>
+<ol type="1">
+<li>check vendor ID register (confirms the USB device exists)</li>
+<li>power on (via mailbox message to power controller)</li>
+<li>disable interrupts
+<ol type="1">
+<li><code>core_ahb_config &amp;= ~(GLOBAL_INTERRUPT_MASK)</code></li>
+</ol></li>
+<li>connect IRQ handler</li>
+<li>initialize USB core
+<ol type="1">
+<li><code>core_usb_config &amp;= ~(ULPI_EXT_VBUS_DRV | TERM_SEL_DL_PULSE)</code></li>
+<li>reset core
+<ol type="1">
+<li>wait up to 100 ms for
+<code>core_reset &amp; AHB_IDLE == 1</code></li>
+<li><code>core_reset |= ~SOFT_RESET</code></li>
+<li>wait up to 10 ms for
+<code>core_reset &amp; SOFT_RESET == 0</code></li>
+<li>wait 100 ms</li>
+</ol></li>
+<li>select UTMI+ with width = 8
+<code>core_usb_config &amp;= ~(ULPI_UTMI_SEL | CFG_PHYIF)</code></li>
+<li>??
+<ol type="1">
+<li>if
+<code>hw cfg2 hs_phy_type == phy_ulpi &amp;&amp; fs_phy_type == phy_type_dedicated</code>
+<ol type="1">
+<li>set bits <code>cfg_ulpi_fsls</code> and
+<code>cfg_ulpi_clk_sus_m</code> in <code>core_usb_config</code></li>
+</ol></li>
+<li>else
+<ol type="1">
+<li>clear bits <code>cfg_ulpi_fsls</code> and
+<code>cfg_ulpi_clk_sus_m</code> in <code>core_usb_config</code></li>
+</ol></li>
+</ol></li>
+<li>get host channel count from <code>core_hardware_config_2</code></li>
+<li>Enable DMA
+<ol type="1">
+<li>set bits <code>dmaenable</code> and <code>wait_axi_writes</code> in
+<code>core_ahb_config</code>, clear <code>max_axi_burst_mask</code></li>
+</ol></li>
+<li>disable HNP and SRP
+<ol type="1">
+<li>Clear bits <code>hnp_capable</code> and <code>srp_capable</code> in
+<code>core_usb_config</code></li>
+</ol></li>
+<li>enable common interrupts
+<ol type="1">
+<li>set all bits in <code>core_interrupt_status</code></li>
+</ol></li>
+</ol></li>
+<li>enable global interrupts
+<ol type="1">
+<li>set <code>global_int_mask</code> in
+<code>core_ahb_config</code></li>
+</ol></li>
+<li>initialize host
+<ol type="1">
+<li>write 0 to <code>usb_power</code> (<code>usb_base</code> +
+0xe00)</li>
+<li>clear bit <code>fsls_pclk_sel__mask</code> in
+<code>host_config</code></li>
+<li>if hwconfig2 says phy is ulpi and dedicated, and usb config says
+<code>ulpi_fsls</code>, (if
+<code>core_hardware_config_2 hs_phy_type == phy_ulpi *and* fs_phy_type == phy_type_dedicated</code>
+<em>and</em> <code>core_usb_config</code> has bit
+<code>cfg_ulpi_fsls</code> set)
+<ol type="1">
+<li>then set <code>host_config</code>’s <code>fsls_pclk</code> selector
+to 48 mhz</li>
+<li>otherwise
+<ol type="1">
+<li>set bit <code>host_config</code>’s <code>fsls_pclk</code> to
+<code>30_60_mhz</code></li>
+</ol></li>
+</ol></li>
+<li>flush tx fifo 10
+<ol type="1">
+<li>As one atomic write:
+<ol type="1">
+<li>set <code>tx_fifo_flush</code> in <code>core_reset</code></li>
+<li>clear bits of <code>tx_fifo_num</code> in
+<code>core_reset</code></li>
+<li>set bits of <code>tx_fifo_num</code> with parameter (0x10)</li>
+</ol></li>
+<li>Wait up to 10 ms for <code>tx_fifo_flush</code> bit in
+<code>core_reset</code> to return to 0</li>
+<li>Wait 1 more microsecond</li>
+</ol></li>
+<li>flush rx fifo
+<ol type="1">
+<li>As one atomic write:
+<ol type="1">
+<li>set bit <code>rx_fifo_flush</code> in <code>core_reset</code></li>
+</ol></li>
+<li>Wait up to 10 ms for <code>rx_fifo_flush</code> bit in
+<code>core_reset</code> to return to 0</li>
+<li>Wait 1 more microsecond</li>
+</ol></li>
+<li>if bit <code>host_port_power</code> is not set in
+<code>host_port</code> set bit <code>host_port_power</code></li>
+<li>enable host interrupts
+<ol type="1">
+<li>disable all interrupts during the change (set
+<code>core_int_mask</code> to 0)</li>
+<li>clear pending interrupts (set <code>core_int_stat</code> to all
+1’s)</li>
+<li>set <code>hc_intr</code> bit in <code>core_int_mask</code></li>
+</ol></li>
+</ol></li>
+<li>Scan devices
+<ol type="1">
+<li>enable root port
+<ol type="1">
+<li>Wait up to 510 ms for <code>port_connect</code> bit of
+<code>host_port</code> register to be set</li>
+<li>Delay 100 ms</li>
+<li>In one atomic write to <code>host_port</code>
+<ol type="1">
+<li>Clear bits <code>connect_changed</code>, <code>enable</code>,
+<code>enable_changed</code>, <code>overcurrent_changed</code></li>
+<li>Set bit <code>reset</code></li>
+</ol></li>
+<li>Delay 50 ms</li>
+<li>In one atomic write to <code>host_port</code>
+<ol type="1">
+<li>Clear bits <code>connect_changed</code>, <code>enable</code>,
+<code>enable_changed</code>, <code>overcurrent_changed</code></li>
+<li>Clear bit <code>reset</code></li>
+</ol></li>
+<li>Delay 20 ms</li>
+</ol></li>
+<li>initialize root port
+<ol type="1">
+<li>get port speed (read from <code>host_port.speed</code>)</li>
+<li>create a default device
+<ol type="1">
+<li>initialize it</li>
+<li>configure it (requires ability to send control messages)</li>
+</ol></li>
+<li>check for overcurrent, if detected disable the root port</li>
+</ol></li>
+<li>scan the root port</li>
+</ol></li>
+</ol>
+
+</body>
+</html>

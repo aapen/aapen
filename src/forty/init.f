@@ -2,6 +2,7 @@
 
 : cr 0x0a emit ;
 : cls 0x0c emit ;
+: clear cls ;
 : p ( n -- : Print the top of the stack followed by a newline) . cr ;
 
 ( Input and output base words )
@@ -67,37 +68,6 @@
 finish
 
 : +]] 0 while swap dup [[ = not do + done drop ;
-
-(Drawing)
-: draw-char (bg fg y x c -- : Draw character at position)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.char +]] @
-  invoke-6
-;
-
-: text (bg fg y x s -- : Draw string at position)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.text +]] @
-  invoke-6
-;
-
-: line  (color y2 x2 y1 x1 -- : Draw a colored line)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.line +]] @
-  invoke-6
-;
-
-: fill  (color bottom right top left -- : Fill a rectangle with color)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.fill +]] @
-  invoke-6
-;
-
-: blit  (dst-y dst-x src-h src-w src-y src-x -- : Copy a rectangle)
-  fb
-  [[ fb FrameBuffer.vtable FrameBuffer.VTable.blit +]] @
-  invoke-7
-;
 
 
 (Utilities)
@@ -238,11 +208,11 @@ finish
 
 (Screen dimensions)
 
-[[ char-buffer CharBuffer.num_cols  +]] @  :scr-cols let
-[[ char-buffer CharBuffer.num_rows  +]] @  :scr-rows let
+: scr-cols char-buffer cb-cols ;
+: scr-rows char-buffer cb-rows ;
 
-[[ fb FrameBuffer.xres +]] @w :scr-xres let
-[[ fb FrameBuffer.yres +]] @w :scr-yres let
+: scr-xres fb fb-xres ;
+: scr-yres fb fb-yres ;
 
 (Key Dispatch Table: dtab)
 
@@ -378,13 +348,14 @@ finish
   endif
 ;
 
+
 : line-demo-handler (ch -- : Draw some pretty lines)
   drop
   0 256 for-range
     ->stack 16 %        (c)
     ->stack 3 * 1023    (y2 x2)
     384 0               (y1 x1)
-    line
+    fb line
   repeat
 ;
 
@@ -431,6 +402,37 @@ finish
   do
     handle-one
   done
+;
+
+(GPIO pins)
+
+: pins hal hal.gpio + ;
+
+: pin-init  (p-no -- : Initialize the given pin and set it to output)
+  dup dup
+  pins gpio-pin-enable 
+  1 swap pins gpio-pin-func
+;
+
+: pin-in (p-no -- : Set the given pin to input)
+  0 swap pins gpio-pin-func
+;
+
+: pin-out (p-no -- : Set the given pin to output)
+  1 swap pins gpio-pin-func
+;
+
+: pin-get (p-no -- n : Get the state of the pin)
+  pins gpio-pin-get
+;
+
+: pin-set (bool p-no -- : Set or clear the given pin)
+  swap
+  if 
+    pins gpio-pin-set
+  else
+    pins gpio-pin-clear
+  endif
 ;
 
 ( Testing... )

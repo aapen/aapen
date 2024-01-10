@@ -1,8 +1,13 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const root = @import("root");
 const InterruptController = root.HAL.InterruptController;
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
+const Forth = @import("../forty/forth.zig").Forth;
+
+const architecture = @import("../architecture.zig");
+const barriers = architecture.barriers;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -10,9 +15,15 @@ const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
 
+const synchronize = @import("../synchronize.zig");
+
 const ChannelSet = @import("../channel_set.zig");
 
 const Self = @This();
+
+pub fn defineModule(forth: *Forth) !void {
+    _ = forth;
+}
 
 extern fn spinDelay(cpu_cycles: u32) void;
 
@@ -48,29 +59,29 @@ pub const Request = struct {
 };
 
 const ControlAndStatus = packed struct {
-    active: u1 = 0,
-    end: u1 = 0,
-    interrupt_status: u1 = 0,
-    data_request: u1 = 0,
+    active: u1 = 0, // 0
+    end: u1 = 0, // 1
+    interrupt_status: u1 = 0, // 2
+    data_request: u1 = 0, // 3
 
-    paused: u1 = 0,
-    data_request_stops_dma: u1 = 0,
-    waiting_for_outstanding_writes: u1 = 0,
-    _reserved_0: u1 = 0,
+    paused: u1 = 0, // 4
+    data_request_stops_dma: u1 = 0, // 5
+    waiting_for_outstanding_writes: u1 = 0, // 6
+    _reserved_0: u1 = 0, // 7
 
-    dma_error: u1 = 0,
-    _reserved_1: u7 = 0,
+    dma_error: u1 = 0, // 8
+    _reserved_1: u7 = 0, // 9..15
 
-    priority: u4 = 0,
+    priority: u4 = 0, // 16..19
 
-    panic_priority: u4 = 0,
+    panic_priority: u4 = 0, // 20..23
 
-    _reserved_2: u4 = 0,
+    _reserved_2: u4 = 0, // 24..27
 
-    wait_for_outstanding_writes: u1 = 0,
-    disable_debug: u1 = 0,
-    abort: u1 = 0,
-    reset: u1 = 0,
+    wait_for_outstanding_writes: u1 = 0, // 28
+    disable_debug: u1 = 0, // 29
+    abort: u1 = 0, // 30
+    reset: u1 = 0, // 31
 };
 
 const TransferInformation = packed struct {
@@ -94,16 +105,16 @@ const TransferInformation = packed struct {
 };
 
 const DebugInformation = extern struct {
-    read_last_not_set_error: u1 = 0,
-    fifo_error: u1 = 0,
-    read_error: u1 = 0,
-    _reserved_0: u1 = 0,
-    outstanding_writes: u4 = 0,
-    dma_id: u8 = 0,
-    dma_state: u9 = 0,
-    version: u3 = 0,
-    lite: u1 = 0,
-    _reserved_1: u3 = 0,
+    read_last_not_set_error: u1 = 0, // 0
+    fifo_error: u1 = 0, // 1
+    read_error: u1 = 0, // 2
+    _reserved_0: u1 = 0, // 3
+    outstanding_writes: u4 = 0, // 4..7
+    dma_id: u8 = 0, // 8..15
+    dma_state: u9 = 0, // 16..24
+    version: u3 = 0, // 25..27
+    lite: u1 = 0, // 28
+    _reserved_1: u3 = 0, // 29..31
 };
 
 const ChannelRegisters = extern struct {
@@ -121,6 +132,7 @@ const ChannelRegisters = extern struct {
 const ChannelId = u5;
 
 const max_channel_id: ChannelId = 14;
+const DmaChannels = ChannelSet.init("bcm_dma channels", u5, max_channel_id);
 
 //    clock: *Clock = undefined,
 allocator: Allocator,
@@ -129,8 +141,7 @@ translations: *const AddressTranslations,
 interrupt_status: *volatile u32,
 transfer_enabled: *volatile u32,
 intc: *InterruptController,
-channels: ChannelSet,
-in_use: [max_channel_id]bool = [_]bool{false} ** max_channel_id,
+channels: DmaChannels,
 
 pub fn init(
     allocator: Allocator,
@@ -145,7 +156,7 @@ pub fn init(
         .interrupt_status = @ptrFromInt(register_base + 0xfe0),
         .transfer_enabled = @ptrFromInt(register_base + 0xff0),
         .translations = translations,
-        .channels = ChannelSet.init("DMA channels", max_channel_id),
+        .channels = .{},
     };
 }
 
@@ -220,6 +231,12 @@ pub fn initiate(self: *Self, channel: Channel, request: *Request) DMAError!void 
         ._reserved_1 = 0,
     };
 
+    // Make sure everything the CPU has touched is visible to the DMA
+    // controller
+    barriers.barrierMemoryWrite();
+    synchronize.dataCacheRangeClean(@intFromPtr(control_block), @sizeOf(BroadcomDMAControlBlock));
+    synchronize.dataCacheRangeClean(request.source, request.length);
+
     const control_block_bus_addr: u32 = @truncate(toChild(self.translations, @intFromPtr(control_block)));
     channel_registers.control_block_addr = control_block_bus_addr;
     channel_registers.control = ControlAndStatus{
@@ -235,8 +252,8 @@ pub fn initiate(self: *Self, channel: Channel, request: *Request) DMAError!void 
 pub fn awaitChannel(self: *Self, channel: Channel) bool {
     _ = self;
 
-    // apply a timeout. for now this is a fixed delay, but it will
-    // need to be a parameter in the future.
+    // apply a timeout. for now this is a fixed delay of about 200 ms,
+    // but it will need to be a parameter in the future.
     //
     // also this will overflow and panic if we ever run for 2^64
     // ticks and try to do a dma
@@ -244,14 +261,17 @@ pub fn awaitChannel(self: *Self, channel: Channel) bool {
     // would be nice to have a general 'watchdog' facility that we
     // could apply to any word
     const start_time = root.hal.clock.ticks();
-    const deadline = start_time + 1_500_000;
+    const deadline = start_time + 200_000;
 
     const channel_registers = channel.registers;
 
     var current_time = start_time;
     while (channel_registers.control.active == 0b1) : (current_time = root.hal.clock.ticks()) {
         if (current_time >= deadline) {
-            std.log.warn("DMA on channel {} exceeded timeout by {d}\n", .{ channel.channel_id, (current_time - deadline) });
+            root.debug.kernelMessage("dma timeout");
+            if (channel_registers.control.dma_error != 0) {
+                root.debug.kernelMessage("dma error");
+            }
             return false;
         }
     }
@@ -261,6 +281,5 @@ pub fn awaitChannel(self: *Self, channel: Channel) bool {
 
 pub fn releaseChannel(self: *Self, channel: Channel) void {
     self.transfer_enabled.* &= ~(@as(u32, 1) << channel.channel_id);
-    //        self.in_use[channel.channel_id] = false;
     self.channels.free(channel.channel_id);
 }
