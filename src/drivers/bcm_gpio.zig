@@ -9,6 +9,7 @@ pub fn defineModule(forth: *Forth) !void {
         .{ "set", "gpio-pin-set" },
         .{ "clear", "gpio-pin-clear" },
         .{ "get", "gpio-pin-get" },
+        .{ "selectFunction", "gpio-pin-func" },
     }, forth);
 }
 
@@ -27,14 +28,27 @@ pub const FunctionSelect = enum(u3) {
 
 const Registers = extern struct {
     function_select: [6]u32,
+    reserved_1: u32,
     output_set: [2]u32,
+    reserved_2: u32,
     output_clear: [2]u32,
+    reserved_3: u32,
     level: [2]u32,
+    reserved_4: u32,
     event_detect_status: [2]u32,
+    reserved_5: u32,
     rising_edge_detect_enable: [2]u32,
+    reserved_6: u32,
     falling_edge_detect_enable: [2]u32,
+    reserved_7: u32,
     pin_high_detect_enable: [2]u32,
+    reserved_8: u32,
     pin_low_detect_enable: [2]u32,
+    reserved_9: u32,
+    pin_async_rising_detect_enable: [2]u32,
+    reserved_10: u32,
+    pin_async_falling_detect_enable: [2]u32,
+    reserved_11: u32,
     pull_up_pull_down_enable: [1]u32,
     pull_up_pull_down_enable_clock: [2]u32,
 };
@@ -103,15 +117,17 @@ pub fn init(register_base: u64) Self {
     };
 }
 
-pub fn selectFunction(self: *Self, p: *const Pin, fsel: FunctionSelect) void {
+pub fn selectFunction(self: *Self, bc_id: u64, fsel: FunctionSelect) void {
+    const p = &self.pins[bc_id];
     var val = self.registers.function_select[p.function_select_register_index];
     val &= ~(@as(u32, 7) << p.function_select_register_shift);
     val |= (@as(u32, @intFromEnum(fsel)) << p.function_select_register_shift);
     self.registers.function_select[p.function_select_register_index] = val;
 }
 
-pub fn enable(self: *Self, p: *const Pin) void {
-    // clock in a zero for all pull up / pull down
+pub fn enable(self: *Self, bc_id: u64) void {
+    const p = &self.pins[bc_id];
+
     self.registers.pull_up_pull_down_enable[0] = 0;
     spinDelay(150);
 
@@ -124,15 +140,18 @@ pub fn enable(self: *Self, p: *const Pin) void {
     self.registers.pull_up_pull_down_enable_clock[p.data_register_index] = 0;
 }
 
-pub fn set(self: *Self, p: *const Pin) void {
+pub fn set(self: *Self, bc_id: u64) void {
+    const p = &self.pins[bc_id];
     self.registers.output_set[p.data_register_index] = p.getset_mask;
 }
 
-pub fn clear(self: *Self, p: *const Pin) void {
+pub fn clear(self: *Self, bc_id: u64) void {
+    const p = &self.pins[bc_id];
     self.registers.output_clear[p.data_register_index] = p.getset_mask;
 }
 
-pub fn get(self: *Self, p: *const Pin) bool {
+pub fn get(self: *Self, bc_id: u64) bool {
+    const p = &self.pins[bc_id];
     const levels = self.registers.level[p.data_register_index];
     return (levels & p.getset_mask) != 0;
 }

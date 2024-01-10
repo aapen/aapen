@@ -200,11 +200,11 @@ pub fn init(register_base: u64, gpio: *GPIO) Self {
 
 pub fn initializeUart(self: *Self) void {
     // Configure GPIO pins for serial I/O
-    self.gpio.enable(&self.gpio.pins[14]);
-    self.gpio.enable(&self.gpio.pins[15]);
+    self.gpio.enable(14);
+    self.gpio.enable(15);
 
-    self.gpio.selectFunction(&self.gpio.pins[14], .alt0);
-    self.gpio.selectFunction(&self.gpio.pins[15], .alt0);
+    self.gpio.selectFunction(14, .alt0);
+    self.gpio.selectFunction(15, .alt0);
 
     // Turn UART off while initializing
     self.registers.control.uart_enable = .disable;

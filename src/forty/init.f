@@ -404,6 +404,37 @@ finish
   done
 ;
 
+(GPIO pins)
+
+: pins hal hal.gpio + ;
+
+: pin-init  (p-no -- : Initialize the given pin and set it to output)
+  dup dup
+  pins gpio-pin-enable 
+  1 swap pins gpio-pin-func
+;
+
+: pin-in (p-no -- : Set the given pin to input)
+  0 swap pins gpio-pin-func
+;
+
+: pin-out (p-no -- : Set the given pin to output)
+  1 swap pins gpio-pin-func
+;
+
+: pin-get (p-no -- n : Get the state of the pin)
+  pins gpio-pin-get
+;
+
+: pin-set (bool p-no -- : Set or clear the given pin)
+  swap
+  if 
+    pins gpio-pin-set
+  else
+    pins gpio-pin-clear
+  endif
+;
+
 ( Testing... )
 
 : power-of-two ( n -- n )
