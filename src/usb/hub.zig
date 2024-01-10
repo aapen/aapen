@@ -10,7 +10,7 @@ const log = std.log.scoped(.usb);
 const root = @import("root");
 const HCI = root.HAL.USBHCI;
 // this is odd... should probably move Device to usb/device.zig
-const Device = HCI.Device;
+//const Device = HCI.Device;
 
 const time = @import("../time.zig");
 
@@ -21,16 +21,17 @@ const DescriptorType = descriptor.DescriptorType;
 const Header = descriptor.Header;
 
 const device = @import("device.zig");
+const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;
+const DeviceDriver = device.DeviceDriver;
 const StandardDeviceRequests = device.StandardDeviceRequests;
 const UsbSpeed = device.UsbSpeed;
-
-const driver = @import("driver.zig");
-const DeviceDriver = driver.DeviceDriver;
 
 const endpoint = @import("endpoint.zig");
 const EndpointNumber = endpoint.EndpointNumber;
 const EndpointType = endpoint.EndpointType;
+
+const Error = @import("status.zig").Error;
 
 const request = @import("request.zig");
 const RequestTypeDirection = request.RequestTypeDirection;
@@ -285,11 +286,6 @@ pub const Hub = struct {
         device: *Device,
     };
 
-    const Error = error{
-        InvalidResponse,
-        Timeout,
-    };
-
     allocator: Allocator = undefined,
     host: *HCI,
     device: *Device,
@@ -406,6 +402,16 @@ pub const Hub = struct {
     }
 };
 
+pub fn hubDriverDeviceBind(dev: *Device) Error!void {
+    _ = dev;
+}
+
+pub fn hubDriverDeviceUnbind(dev: *Device) void {
+    _ = dev;
+}
+
 pub const usb_hub_driver: DeviceDriver = .{
     .name = "USB Hub",
+    .bind = hubDriverDeviceBind,
+    .unbind = hubDriverDeviceUnbind,
 };

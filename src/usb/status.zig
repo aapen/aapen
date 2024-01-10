@@ -1,8 +1,10 @@
 pub const Error = error{
+    TooManyDevices,
     DeviceUnsupported,
     HardwareError,
     InvalidData,
     InvalidParameter,
+    InvalidResponse,
     NotProcessed,
     OutOfMemory,
     Timeout,

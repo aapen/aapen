@@ -9,13 +9,14 @@ const DeviceDescriptor = descriptor.DeviceDescriptor;
 const EndpointDescriptor = descriptor.EndpointDescriptor;
 const InterfaceDescriptor = descriptor.InterfaceDescriptor;
 
-const driver = @import("driver.zig");
-const DeviceDriver = driver.DeviceDriver;
+const Error = @import("status.zig").Error;
 
 const transfer = @import("transfer.zig");
 const setup = transfer.setup;
 const SetupPacket = transfer.SetupPacket;
 const TransferType = transfer.TransferType;
+
+const TransferFactory = @import("transfer_factory.zig");
 
 pub const DeviceAddress = u7;
 pub const DEFAULT_ADDRESS: DeviceAddress = 0;
@@ -97,6 +98,7 @@ pub const DeviceState = enum {
 
 pub const Device = struct {
     in_use: bool = false,
+    depth: u8 = 0,
     address: DeviceAddress,
     speed: UsbSpeed,
 
@@ -118,8 +120,17 @@ pub const Device = struct {
     state: DeviceState,
 
     // the follow members are controlled by the core driver
-    driver: *DeviceDriver,
+    driver: ?*DeviceDriver,
     driver_private: *anyopaque,
+
+    pub fn deinit(self: *Device) void {
+        _ = self;
+        // release any dynamically allocated memory
+    }
+
+    pub fn isRootHub(self: *Device) bool {
+        return self.parent == null;
+    }
 };
 
 /// This represents the parsed configuration tree
@@ -244,6 +255,12 @@ pub const DeviceConfiguration = struct {
         }
         log.debug("]", .{});
     }
+};
+
+pub const DeviceDriver = struct {
+    name: []const u8,
+    bind: *const fn (device: *Device) Error!void,
+    unbind: ?*const fn (device: *Device) void,
 };
 
 // ----------------------------------------------------------------------

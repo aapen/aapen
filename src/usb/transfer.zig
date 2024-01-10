@@ -7,6 +7,7 @@ const DescriptorType = descriptor.DescriptorType;
 const device = @import("device.zig");
 const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 const DeviceAddress = device.DeviceAddress;
+const Device = device.Device;
 const UsbSpeed = device.UsbSpeed;
 const StandardDeviceRequests = device.StandardDeviceRequests;
 
@@ -54,6 +55,7 @@ pub const Transfer = struct {
     };
 
     transfer_type: TransferType,
+    device: *Device = undefined,
     device_address: DeviceAddress = DEFAULT_ADDRESS,
     device_speed: UsbSpeed = .Full,
     endpoint_number: EndpointNumber = 0,
@@ -177,31 +179,25 @@ pub const SetupPacket = extern struct {
     value: u16,
     index: u16,
     data_size: u16,
-};
 
-/// Create a SetupPacket for a control transfer. This should normally be wrapped with a more
-/// specific function for a device, interface, or endpoint
-pub fn setup(
-    recip: RequestTypeRecipient,
-    rtt: RequestTypeType,
-    dir: RequestTypeDirection,
-    rq: u8,
-    value: u16,
-    index: u16,
-    data_size: u16,
-) SetupPacket {
-    return .{
-        .request_type = .{
-            .recipient = recip,
-            .type = rtt,
-            .transfer_direction = dir,
-        },
-        .request = rq,
-        .value = value,
-        .index = index,
-        .data_size = data_size,
-    };
-}
+    pub fn init(
+        recip: RequestTypeRecipient,
+        rtt: RequestTypeType,
+        dir: RequestTypeDirection,
+        rq: u8,
+        value: u16,
+        index: u16,
+        data_size: u16,
+    ) SetupPacket {
+        return .{
+            .request_type = .{ .recipient = recip, .type = rtt, .transfer_direction = dir },
+            .request = rq,
+            .value = value,
+            .index = index,
+            .data_size = data_size,
+        };
+    }
+};
 
 // ----------------------------------------------------------------------
 // Testing
@@ -215,7 +211,7 @@ test "control transfer starts with the .token phase" {
 
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = setup(.device, .standard, .device_to_host, 0x06, 0, 0, buffer_size);
+    const pkt = SetupPacket.init(.device, .standard, .device_to_host, 0x06, 0, 0, buffer_size);
     const xfer = Transfer.initControl(pkt, &buffer);
 
     try expectEqual(Transfer.State.token, xfer.state);
@@ -226,7 +222,7 @@ test "control transfer with data expected has three phases" {
 
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = setup(.device, .standard, .device_to_host, 0x06, 0, 0, buffer_size);
+    const pkt = SetupPacket.init(.device, .standard, .device_to_host, 0x06, 0, 0, buffer_size);
     var xfer = Transfer.initControl(pkt, &buffer);
 
     try expectEqual(Transfer.State.token, xfer.state);
@@ -250,7 +246,7 @@ test "control transfer with no data expected has only two phases" {
 
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = setup(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
+    const pkt = SetupPacket.init(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
     var xfer = Transfer.initControl(pkt, &buffer);
 
     try expectEqual(Transfer.State.token, xfer.state);
@@ -270,7 +266,7 @@ test "a completion handler is called when the transfer succeeds" {
 
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = setup(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
+    const pkt = SetupPacket.init(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
     var xfer = Transfer.initControl(pkt, &buffer);
 
     const Callback = struct {
@@ -300,7 +296,7 @@ test "a completion handler is called when the transfer fails" {
 
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = setup(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
+    const pkt = SetupPacket.init(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
     var xfer = Transfer.initControl(pkt, &buffer);
 
     const Callback = struct {

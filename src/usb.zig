@@ -10,6 +10,8 @@ const log = std.log.scoped(.usb);
 const root = @import("root");
 const HCI = root.HAL.USBHCI;
 
+const time = @import("time.zig");
+
 const Forth = root.Forth;
 
 const auto = @import("forty/auto.zig");
@@ -40,6 +42,7 @@ pub const Device = device.Device;
 pub const DeviceAddress = device.DeviceAddress;
 pub const DeviceClass = device.DeviceClass;
 pub const DeviceConfiguration = device.DeviceConfiguration;
+pub const DeviceDriver = device.DeviceDriver;
 pub const DeviceStatus = device.DeviceStatus;
 pub const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 pub const FIRST_DEDICATED_ADDRESS = device.FIRST_DEDICATED_ADDRESS;
@@ -47,9 +50,6 @@ pub const MAX_ADDRESS = device.MAX_ADDRESS;
 pub const StandardDeviceRequests = device.StandardDeviceRequests;
 pub const STATUS_SELF_POWERED = device.STATUS_SELF_POWERED;
 pub const UsbSpeed = device.UsbSpeed;
-
-const driver = @import("usb/driver.zig");
-pub const DeviceDriver = driver.DeviceDriver;
 
 const endpoint = @import("usb/endpoint.zig");
 pub const EndpointDirection = endpoint.EndpointDirection;
@@ -121,8 +121,10 @@ pub fn defineModule(forth: *Forth) !void {
 // Core subsystem
 // ----------------------------------------------------------------------
 const Drivers = std.ArrayList(*const DeviceDriver);
+const MAX_DEVICES = 16;
 
 var allocator: Allocator = undefined;
+var devices: [MAX_DEVICES]Device = undefined;
 var drivers: Drivers = undefined;
 var root_hub: ?*Device = undefined;
 var bus_lock: Spinlock = undefined;
@@ -135,10 +137,142 @@ pub fn init() !void {
     bus_lock.acquire();
     defer bus_lock.release();
 
+    for (0..MAX_DEVICES) |i| {
+        devices[i] = undefined;
+    }
+
     try registerDriver(&usb_hub_driver);
+    log.debug("registered hub driver", .{});
+
     try root.hal.usb_hci.initialize();
+    log.debug("started host controller", .{});
+
+    const dev0 = try allocateDevice(null);
+    errdefer freeDevice(dev0);
+    log.debug("attaching root hub", .{});
+
+    if (attachDevice(dev0)) {
+        log.debug("usb initialized", .{});
+        root_hub = &devices[dev0];
+        return;
+    } else |err| {
+        log.err("usb init failed: {any}", .{err});
+        return err;
+    }
 }
 
 pub fn registerDriver(device_driver: *const DeviceDriver) !void {
-    try drivers.append(device_driver);
+    synchronize.criticalEnter(.FIQ);
+    defer synchronize.criticalLeave();
+
+    var already_registered = false;
+    for (drivers.items) |drv| {
+        if (drv == device_driver) {
+            log.err("device driver is already registered, skipping it", .{});
+            already_registered = true;
+            break;
+        }
+    }
+
+    if (!already_registered) {
+        try drivers.append(device_driver);
+    }
+}
+
+pub fn allocateDevice(parent: ?*Device) !usize {
+    synchronize.criticalEnter(.FIQ);
+    defer synchronize.criticalLeave();
+
+    for (0..MAX_DEVICES) |i| {
+        if (!devices[i].in_use) {
+            var dev = &devices[i];
+            dev.in_use = true;
+            dev.parent = parent;
+            if (parent != null) {
+                dev.depth = parent.?.depth + 1;
+            }
+            dev.state = .attached;
+            return i + 1;
+        }
+    }
+
+    return Error.TooManyDevices;
+}
+
+pub fn freeDevice(devid: usize) void {
+    synchronize.criticalEnter(.FIQ);
+    defer synchronize.criticalLeave();
+
+    var dev = &devices[devid - 1];
+    dev.state = .detaching;
+
+    if (dev.driver != null) {
+        dev.driver.?.unbind.?(dev);
+    }
+
+    dev.deinit();
+    dev.in_use = false;
+}
+
+pub fn attachDevice(devid: usize) !void {
+    var dev = &devices[devid - 1];
+    // when attaching a device, it will be in the default state:
+    // responding to address 0, endpoint 0
+    try deviceDescriptorRead(dev);
+
+    log.debug("device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
+
+    log.debug("assigning address {d}", .{devid});
+}
+
+// ----------------------------------------------------------------------
+// Device registry
+// ----------------------------------------------------------------------
+
+// ----------------------------------------------------------------------
+// Transfer handling
+// ----------------------------------------------------------------------
+
+// submit a transfer for asynchronous processing
+pub fn transferSubmit(xfer: *Transfer) !void {
+    // TODO check if the request is already in flight
+
+    // TODO check if the device is being detached
+
+    // TODO track how many requests are pending for a device
+
+    synchronize.criticalEnter(.FIQ);
+    defer synchronize.criticalLeave();
+
+    xfer.completion = transferNotify;
+
+    try root.hal.usb_hci.perform(xfer);
+}
+
+// callback from the HCD when the transfer has finished
+fn transferNotify(xfer: *Transfer) void {
+    _ = xfer;
+}
+
+pub fn transferAwait(xfer: *Transfer, timeout: u32) !void {
+    const deadline = time.deadlineMillis(timeout);
+
+    while (time.ticks() < deadline and xfer.status == .incomplete) {}
+
+    if (xfer.status == .incomplete) {
+        return Error.Timeout;
+    }
+}
+
+// ----------------------------------------------------------------------
+// Specific transfers
+// ----------------------------------------------------------------------
+pub fn deviceDescriptorRead(dev: *Device) !void {
+    var xfer = TransferFactory.initDeviceDescriptorTransfer(0, 0, std.mem.asBytes(&dev.device_descriptor));
+    xfer.device_address = dev.address;
+    xfer.endpoint_number = 0;
+    xfer.endpoint_type = .Control;
+
+    try transferSubmit(&xfer);
+    try transferAwait(&xfer, 100);
 }

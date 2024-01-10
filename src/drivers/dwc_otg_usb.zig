@@ -620,19 +620,22 @@ fn transactionOnChannel(
 // ----------------------------------------------------------------------
 // Transfer interface - high level
 // ----------------------------------------------------------------------
-fn pendingTransferCreate(self: *Self, xfer: *Transfer) !*PendingTransfers.Node {
+fn pendingTransferAdd(self: *Self, xfer: *Transfer) !*PendingTransfers.Node {
     const node: *PendingTransfers.Node = try self.allocator.create(PendingTransfers.Node);
     node.data = xfer;
     return node;
 }
 
-fn pendingTransferDestroy(self: *Self, node: *PendingTransfers.Node) void {
-    self.allocator.destroy(node);
+fn pendingTransferRemove(self: *Self, xfer: *Transfer) void {
+    const node: *PendingTransfers.Node = @fieldParentPtr(PendingTransfers.Node, "data", xfer);
+    if (node != null) {
+        self.allocator.destroy(node);
+    }
 }
 
 pub fn perform(self: *Self, xfer: *Transfer) !void {
     // put the transfer in the pending_transfers list.
-    self.pending_transfers.append(try self.pendingTransferCreate(xfer));
+    //    self.pendingTransferAdd(xfer);
 
     // kick the scheduler (what scheduler ?!)
 
