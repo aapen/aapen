@@ -40,7 +40,7 @@ pub fn defineModule(forth: *Forth, fb: *Self) !void {
         .{ "drawChar", "draw-char" },
         .{ "drawPixel", "draw-pixel" },
         .{ "clearRegion", "clear-region" },
-        .{"clear"},
+        .{ "clear", "clear-fb" },
         .{ "getXres", "fb-xres", "X resolution in pixels" },
         .{ "getYres", "fb-yres", "Y resolution in pixels" },
     }, forth);

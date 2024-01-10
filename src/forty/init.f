@@ -2,7 +2,6 @@
 
 : cr 0x0a emit ;
 : cls 0x0c emit ;
-: clear cls ;
 : p ( n -- : Print the top of the stack followed by a newline) . cr ;
 
 ( Input and output base words )
