@@ -92,6 +92,7 @@ pub const HidProtocol = enum(u8) {
 };
 
 pub const DeviceState = enum {
+    unconfigured,
     attached,
     detaching,
 };
@@ -122,6 +123,27 @@ pub const Device = struct {
     // the follow members are controlled by the core driver
     driver: ?*DeviceDriver,
     driver_private: *anyopaque,
+
+    pub fn init(self: *Device) void {
+        self.* = .{
+            .in_use = false,
+            .depth = 0,
+            .address = 0,
+            .speed = .Full,
+            .parent = null,
+            .parent_port = 0,
+            .configuration_index = 0,
+            .device_descriptor = undefined,
+            .configuration_descriptor = undefined,
+            .interfaces = undefined,
+            .endpoints = undefined,
+            .product = "",
+            .configuration = "",
+            .state = .unconfigured,
+            .driver = null,
+            .driver_private = &.{},
+        };
+    }
 
     pub fn deinit(self: *Device) void {
         _ = self;

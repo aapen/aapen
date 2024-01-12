@@ -7,7 +7,8 @@ pub const Error = error{
     InvalidResponse,
     NotProcessed,
     OutOfMemory,
-    Timeout,
+    TransferIncomplete,
+    TransferTimeout,
     UnsupportedRequest,
 };
 

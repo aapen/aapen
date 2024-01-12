@@ -137,7 +137,7 @@ pub fn init() !void {
     defer bus_lock.release();
 
     for (0..MAX_DEVICES) |i| {
-        devices[i] = undefined;
+        devices[i].init();
     }
 
     try registerDriver(&usb_hub_driver);
@@ -258,8 +258,12 @@ pub fn transferAwait(xfer: *Transfer, timeout: u32) !void {
 
     while (time.ticks() < deadline and xfer.status == .incomplete) {}
 
-    if (xfer.status == .incomplete) {
-        return Error.Timeout;
+    switch (xfer.status) {
+        .incomplete => return Error.TransferIncomplete,
+        .timeout => return Error.TransferTimeout,
+        .unsupported_request => return Error.UnsupportedRequest,
+        .protocol_error => return Error.InvalidData,
+        inline else => return,
     }
 }
 

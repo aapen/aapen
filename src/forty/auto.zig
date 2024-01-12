@@ -227,7 +227,7 @@ fn unpackReturnValue(forth: *Forth, retval: anytype) !void {
                 try unpackReturnValue(forth, payload);
             } else |err| {
                 try forth.stack.push(@intFromError(err));
-                try forth.stack.push(0x7fffffffffffffff);
+                try forth.stack.push(0x7fff_ffff_ffff_ffff); // bitpattern for -1 as u64
             }
         },
         .Optional => |o| {
