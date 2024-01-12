@@ -178,27 +178,28 @@ pub fn registerDriver(device_driver: *const DeviceDriver) !void {
     }
 }
 
-pub fn allocateDevice(parent: ?*Device) !usize {
+pub fn allocateDevice(parent: ?*Device) !DeviceAddress {
     synchronize.criticalEnter(.FIQ);
     defer synchronize.criticalLeave();
 
     for (0..MAX_DEVICES) |i| {
-        if (!devices[i].in_use) {
-            var dev = &devices[i];
+        const addr: DeviceAddress = @truncate(i);
+        if (!devices[addr].in_use) {
+            var dev = &devices[addr];
             dev.in_use = true;
             dev.parent = parent;
             if (parent != null) {
                 dev.depth = parent.?.depth + 1;
             }
             dev.state = .attached;
-            return i + 1;
+            return addr + 1;
         }
     }
 
     return Error.TooManyDevices;
 }
 
-pub fn freeDevice(devid: usize) void {
+pub fn freeDevice(devid: DeviceAddress) void {
     synchronize.criticalEnter(.FIQ);
     defer synchronize.criticalLeave();
 
@@ -213,7 +214,7 @@ pub fn freeDevice(devid: usize) void {
     dev.in_use = false;
 }
 
-pub fn attachDevice(devid: usize) !void {
+pub fn attachDevice(devid: DeviceAddress) !void {
     var dev = &devices[devid - 1];
     // when attaching a device, it will be in the default state:
     // responding to address 0, endpoint 0
@@ -222,6 +223,7 @@ pub fn attachDevice(devid: usize) !void {
     log.debug("device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
 
     log.debug("assigning address {d}", .{devid});
+    try deviceSetAddress(dev, devid);
 }
 
 // ----------------------------------------------------------------------
@@ -278,4 +280,15 @@ pub fn deviceDescriptorRead(dev: *Device) !void {
 
     try transferSubmit(&xfer);
     try transferAwait(&xfer, 100);
+}
+
+pub fn deviceSetAddress(dev: *Device, address: DeviceAddress) !void {
+    var xfer = TransferFactory.initSetAddressTransfer(address);
+    xfer.endpoint_number = 0;
+    xfer.endpoint_type = .control;
+
+    try transferSubmit(&xfer);
+    try transferAwait(&xfer, 100);
+
+    dev.address = address;
 }

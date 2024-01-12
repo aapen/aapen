@@ -121,17 +121,12 @@ pub const CoreRegisters = reg.CoreRegisters;
 pub const PowerAndClock = reg.PowerAndClock;
 
 // ----------------------------------------------------------------------
-// Definitions from USB spec: Constants, Structures, and Packet Definitions
+// HCD state
 // ----------------------------------------------------------------------
-
 pub const DEFAULT_INTERVAL = 1;
 pub const DMA_ALIGNMENT = 64;
 
-// ----------------------------------------------------------------------
-// HCD state
-// ----------------------------------------------------------------------
 const HcdChannels = ChannelSet.init("dwc_otg_usb channels", u5, dwc_max_channels);
-const UsbAddresses = ChannelSet.init("dwc_otg_usb addresses", u7, std.math.maxInt(u7));
 
 allocator: Allocator,
 core_registers: *volatile CoreRegisters,
@@ -148,15 +143,11 @@ power_controller: *PowerController,
 num_host_channels: u4,
 channel_assignments: HcdChannels = .{},
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
-address_assignments: UsbAddresses = .{},
-attached_devices: [usb.MAX_ADDRESS]*Device = undefined,
 pending_transfers: PendingTransfers = undefined,
 
 // Ideas for improving this:
 // - reserve an aligned buffer for each channel to use. that avoids
 //   dynamic allocation in the inner loop
-// - keep a top-level array of Hubs
-// - keep a top-level array of HIDs
 
 // ----------------------------------------------------------------------
 // Forty interop
@@ -192,7 +183,6 @@ pub fn init(
         .translations = translations,
         .power_controller = power,
         .num_host_channels = 0,
-        .attached_devices = undefined,
         .pending_transfers = .{},
     };
 
@@ -200,10 +190,6 @@ pub fn init(
         const channel_registers: *volatile ChannelRegisters = @ptrFromInt(register_base + 0x500 + (@sizeOf(ChannelRegisters) * chid));
         self.channels[chid].init(@truncate(chid), channel_registers);
     }
-
-    // address 0 needs to be marked as "claimed" so we don't assign it
-    // to any actual device
-    _ = try self.address_assignments.allocate();
 
     return self;
 }
@@ -387,40 +373,6 @@ fn haltAllChannels(self: *Self) !void {
 }
 
 // ----------------------------------------------------------------------
-// Device registry
-// ----------------------------------------------------------------------
-pub fn deviceGet(self: *Self, address: DeviceAddress) !*Device {
-    if (self.address_assignments.isAllocated(address)) {
-        return self.attached_devices[address];
-    } else {
-        return Error.NoDevice;
-    }
-}
-
-fn claimAddress(self: *Self) !DeviceAddress {
-    return self.address_assignments.allocate();
-}
-
-pub fn assignAddress(self: *Self, device: *Device) !void {
-    // assigning an address is a 3 step process
-
-    // TODO - if the addressSet fails, should release the address assignment
-
-    // 1. reserve an address (in memory)
-    const my_address: DeviceAddress = try self.claimAddress();
-
-    // 2. tell the actual device what address it should use (on device)
-    _ = try self.addressSet(&device.endpoint_0, my_address);
-    device.address = my_address;
-
-    // 3. associate the address with the device struct (in memory)
-    self.attached_devices[my_address] = device;
-
-    // wait 2 ms for the device to actually change its address
-    time.delayMillis(2);
-}
-
-// ----------------------------------------------------------------------
 // Interrupt handling
 // ----------------------------------------------------------------------
 fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
@@ -518,9 +470,7 @@ pub fn dumpStatus(self: *Self) void {
     log.info("{s: >28}", .{"Host registers"});
     dumpRegisterPair("port", @bitCast(self.host_registers.port), "config", @bitCast(self.host_registers.config));
     dumpRegisterPair("frame_interval", @bitCast(self.host_registers.frame_interval), "frame_num", @bitCast(self.host_registers.frame_num));
-    //    dumpRegister("periodic_tx_fifo_status", @bitCast(self.host_registers.periodic_tx_fifo_status));
     dumpRegisterPair("all_channel_interrupts", @bitCast(self.host_registers.all_channel_interrupts), "all_channel_interrupts_mask", @bitCast(self.host_registers.all_channel_interrupts_mask));
-    //    dumpRegister("frame_list_base_addr", @bitCast(self.host_registers.frame_list_base_addr));
 }
 
 fn dumpRegisterPair(f1: []const u8, v1: u32, f2: []const u8, v2: u32) void {
@@ -787,175 +737,5 @@ const Transaction = struct {
 
         transaction.actual_length = 0;
         transaction.completed = true;
-    }
-};
-
-pub fn addressSet(self: *Self, endpoint: *Endpoint, address: DeviceAddress) !u19 {
-    log.debug("set address {d} on endpoint {d}", .{ address, endpoint.number });
-
-    var xfer = TransferFactory.initSetAddressTransfer(address);
-    xfer.endpoint_number = endpoint.number;
-
-    try self.perform(&xfer);
-
-    log.debug("set address {d} on endpoint {d} returned {any}", .{ address, endpoint.number, xfer.actual_size });
-
-    return xfer.actual_size;
-}
-
-// ----------------------------------------------------------------------
-// USB Device Model
-// ----------------------------------------------------------------------
-const Function = struct {};
-
-const Endpoint = struct {
-    device: *Device,
-    number: EndpointNumber,
-    type: TransferType = .control,
-    direction: EndpointDirection = .out,
-    max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
-};
-
-pub const Device = struct {
-    pub const MAX_INTERFACES: usize = 8;
-    pub const MAX_ENDPOINTS: usize = 8;
-
-    allocator: Allocator,
-    host: *Self,
-    speed: usb.UsbSpeed,
-    address: usb.DeviceAddress,
-    endpoint_0: Endpoint,
-    device_descriptor: DeviceDescriptor,
-    configuration_descriptor: ConfigurationDescriptor,
-    configuration: *DeviceConfiguration,
-    manufacturer: []u8,
-    product_name: []u8,
-
-    pub fn init(allocator: Allocator) !*Device {
-        var device = try allocator.create(Device);
-
-        device.* = .{
-            .allocator = allocator,
-            .host = undefined,
-            .speed = undefined,
-            .address = usb.DEFAULT_ADDRESS,
-            .endpoint_0 = .{ .number = 0, .device = device },
-            .device_descriptor = undefined,
-            .configuration_descriptor = undefined,
-            .manufacturer = "",
-            .product_name = "",
-            .configuration = undefined,
-        };
-
-        return device;
-    }
-
-    pub fn initialize(self: *Device, host: *Self, speed: usb.UsbSpeed) !void {
-        self.host = host;
-        self.speed = speed;
-
-        var xfer = TransferFactory.initDeviceDescriptorTransfer(usb.DEFAULT_DESCRIPTOR_INDEX, 0, std.mem.asBytes(&self.device_descriptor));
-
-        xfer.device_address = 0;
-        xfer.endpoint_number = 0;
-
-        try host.perform(&xfer);
-
-        if (xfer.status != .ok) {
-            return Error.InvalidResponse;
-        }
-
-        self.device_descriptor.dump();
-
-        try host.assignAddress(self);
-
-        if (self.getProductName()) {
-            log.info("Product: '{s}'", .{self.product_name});
-        } else |err| {
-            log.warn("Could not read manufacturer and product name: {any}", .{err});
-        }
-
-        if (self.getManufacturer()) {
-            log.info("Manufacturer: '{s}'", .{self.manufacturer});
-        } else |err| {
-            log.warn("Could not read manufacturer and product name: {any}", .{err});
-        }
-
-        if (self.device_descriptor.configuration_count >= 1) {
-            if (self.fetchConfiguration()) {
-                self.configuration.dump();
-            } else |err| {
-                log.warn("Could not read configuration descriptor: {any}", .{err});
-            }
-        }
-    }
-
-    fn fetchConfiguration(self: *Device) !void {
-        // First fetch just the configuration descriptor (it's the
-        // root of the config tree)
-        var xfer = TransferFactory.initConfigurationDescriptorTransfer(0, std.mem.asBytes(&self.configuration_descriptor));
-        xfer.device_address = self.address;
-
-        try self.host.perform(&xfer);
-
-        if (xfer.status != .ok) {
-            return Error.InvalidResponse;
-        }
-
-        // The header of the configuration descriptor tells us how
-        // much space the whole config tree requires
-        const buffer_size = self.configuration_descriptor.total_length;
-        var buffer = try self.allocator.alloc(u8, buffer_size);
-        defer self.allocator.free(buffer);
-
-        log.info("Configuration {d} reports that it has {d} bytes to tell us about", .{ 0, buffer_size });
-
-        xfer = TransferFactory.initConfigurationDescriptorTransfer(0, buffer);
-        xfer.device_address = self.address;
-
-        try self.host.perform(&xfer);
-
-        if (xfer.status != .ok) {
-            log.debug("fetchConfiguration: read of whole configuration tree failed: {any}", .{xfer.status});
-            return Error.InvalidResponse;
-        }
-
-        if (xfer.actual_size != buffer_size) {
-            log.debug("fetchConfiguration: read of whole configuration tree returns incorrect number of bytes: {d}", .{xfer.actual_size});
-            return Error.DataLengthMismatch;
-        }
-
-        root.debug.sliceDump(buffer);
-
-        if (DeviceConfiguration.initFromBytes(self.allocator, buffer)) |conf| {
-            self.configuration = conf;
-        } else |err| {
-            log.err("fetchConfiguration: cannot parse device configuration tree: {any}", .{err});
-        }
-    }
-
-    fn getManufacturer(self: *Device) !void {
-        self.manufacturer = try self.getString(self.device_descriptor.manufacturer_name, LangID.en_US);
-    }
-
-    fn getProductName(self: *Device) !void {
-        self.product_name = try self.getString(self.device_descriptor.product_name, LangID.en_US);
-    }
-
-    fn getConfiguration(self: *Device) !void {
-        self.configuration = try self.getString(self.configuration_descriptor.configuration, LangID.en_US);
-    }
-
-    fn getString(self: *Device, index: u8, lang: LangID) ![]u8 {
-        const buffer_size = @sizeOf(StringDescriptor);
-        var buffer: [buffer_size]u8 align(2) = undefined;
-
-        var xfer = TransferFactory.initStringDescriptorTransfer(index, lang, &buffer);
-        xfer.device_address = self.address;
-
-        try self.host.perform(&xfer);
-
-        const configuration: *StringDescriptor = std.mem.bytesAsValue(StringDescriptor, buffer[0..buffer_size]);
-        return try configuration.asSlice(self.allocator);
     }
 };
