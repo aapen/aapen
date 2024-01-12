@@ -13,21 +13,21 @@ const criticalLeave = synchronize.criticalLeave;
 const time = @import("../../time.zig");
 
 const usb = @import("../../usb.zig");
-pub const DeviceAddress = usb.DeviceAddress;
-pub const EndpointDirection = usb.EndpointDirection;
-pub const EndpointNumber = usb.EndpointNumber;
-pub const PacketSize = usb.PacketSize;
-pub const PID = usb.PID2;
-pub const TransferType = usb.TransferType;
-pub const UsbSpeed = usb.UsbSpeed;
+const DeviceAddress = usb.DeviceAddress;
+const EndpointDirection = usb.EndpointDirection;
+const EndpointNumber = usb.EndpointNumber;
+const PacketSize = usb.PacketSize;
+const PID = usb.PID2;
+const TransferType = usb.TransferType;
+const UsbSpeed = usb.UsbSpeed;
 
 const reg = @import("registers.zig");
-pub const ChannelCharacteristics = reg.ChannelCharacteristics;
-pub const ChannelSplitControl = reg.ChannelSplitControl;
-pub const ChannelInterrupt = reg.ChannelInterrupt;
-pub const DwcTransferSizePid = reg.DwcTransferSizePid;
-pub const TransferSize = reg.TransferSize;
-pub const ChannelRegisters = reg.ChannelRegisters;
+const ChannelCharacteristics = reg.ChannelCharacteristics;
+const ChannelSplitControl = reg.ChannelSplitControl;
+const ChannelInterrupt = reg.ChannelInterrupt;
+const DwcTransferSizePid = reg.DwcTransferSizePid;
+const TransferSize = reg.TransferSize;
+const ChannelRegisters = reg.ChannelRegisters;
 
 pub const ChannelId = u5;
 
