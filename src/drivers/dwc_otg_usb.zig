@@ -42,7 +42,6 @@ pub const DeviceDescriptor = usb.DeviceDescriptor;
 pub const EndpointDescriptor = usb.EndpointDescriptor;
 pub const EndpointDirection = usb.EndpointDirection;
 pub const EndpointNumber = usb.EndpointNumber;
-pub const EndpointType = usb.EndpointType;
 pub const Hub = usb.Hub;
 pub const InterfaceDescriptor = usb.InterfaceDescriptor;
 pub const LangID = usb.LangID;
@@ -54,6 +53,7 @@ pub const StringIndex = usb.StringIndex;
 pub const Transfer = usb.Transfer;
 pub const TransferBytes = usb.TransferBytes;
 pub const TransferFactory = usb.TransferFactory;
+pub const TransferType = usb.TransferType;
 pub const UsbSpeed = usb.UsbSpeed;
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
@@ -569,7 +569,7 @@ fn transactionOnChannel(
     device: DeviceAddress,
     device_speed: UsbSpeed,
     endpoint_number: EndpointNumber,
-    endpoint_type: EndpointType,
+    endpoint_type: TransferType,
     endpoint_direction: EndpointDirection,
     max_packet_size: PacketSize,
     initial_pid: usb.PID2,
@@ -811,7 +811,7 @@ const Function = struct {};
 const Endpoint = struct {
     device: *Device,
     number: EndpointNumber,
-    type: usb.EndpointType = .Control,
+    type: TransferType = .control,
     direction: EndpointDirection = .out,
     max_packet_size: u11 = usb.DEFAULT_MAX_PACKET_SIZE,
 };

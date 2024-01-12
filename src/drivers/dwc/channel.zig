@@ -16,9 +16,9 @@ const usb = @import("../../usb.zig");
 pub const DeviceAddress = usb.DeviceAddress;
 pub const EndpointDirection = usb.EndpointDirection;
 pub const EndpointNumber = usb.EndpointNumber;
-pub const EndpointType = usb.EndpointType;
 pub const PacketSize = usb.PacketSize;
 pub const PID = usb.PID2;
+pub const TransferType = usb.TransferType;
 pub const UsbSpeed = usb.UsbSpeed;
 
 const reg = @import("registers.zig");
@@ -184,7 +184,7 @@ pub fn transactionBegin(
     device: DeviceAddress,
     device_speed: UsbSpeed,
     endpoint_number: EndpointNumber,
-    endpoint_type: EndpointType,
+    endpoint_type: TransferType,
     endpoint_direction: EndpointDirection,
     max_packet_size: PacketSize,
     initial_pid: usb.PID2,

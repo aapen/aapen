@@ -29,7 +29,6 @@ const UsbSpeed = device.UsbSpeed;
 
 const endpoint = @import("endpoint.zig");
 const EndpointNumber = endpoint.EndpointNumber;
-const EndpointType = endpoint.EndpointType;
 
 const Error = @import("status.zig").Error;
 
@@ -41,6 +40,7 @@ const RequestTypeType = request.RequestTypeType;
 const transfer = @import("transfer.zig");
 const SetupPacket = transfer.SetupPacket;
 const setup = transfer.setup;
+const TransferType = transfer.TransferType;
 
 const TransferFactory = @import("transfer_factory.zig");
 
@@ -163,7 +163,7 @@ pub const TTDirection = enum(u1) {
 const ClearTTBufferValue = packed struct {
     endpoint_number: EndpointNumber,
     device_address: DeviceAddress,
-    endpoint_type: EndpointType,
+    endpoint_type: TransferType,
     _reserved: u2 = 0,
     direction: TTDirection,
 };

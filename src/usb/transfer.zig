@@ -14,7 +14,6 @@ const StandardDeviceRequests = device.StandardDeviceRequests;
 const endpoint = @import("endpoint.zig");
 const EndpointDirection = endpoint.EndpointDirection;
 const EndpointNumber = endpoint.EndpointNumber;
-const EndpointType = endpoint.EndpointType;
 
 const request = @import("request.zig");
 const RequestTypeDirection = request.RequestTypeDirection;
@@ -59,7 +58,7 @@ pub const Transfer = struct {
     device_address: DeviceAddress = DEFAULT_ADDRESS,
     device_speed: UsbSpeed = .Full,
     endpoint_number: EndpointNumber = 0,
-    endpoint_type: EndpointType = .Control,
+    endpoint_type: TransferType = .control,
     direction: EndpointDirection = .in,
     max_packet_size: PacketSize = DEFAULT_MAX_PACKET_SIZE,
     setup: SetupPacket, // only used when transfer_type == .control,

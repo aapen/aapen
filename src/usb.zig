@@ -54,7 +54,6 @@ pub const UsbSpeed = device.UsbSpeed;
 const endpoint = @import("usb/endpoint.zig");
 pub const EndpointDirection = endpoint.EndpointDirection;
 pub const EndpointNumber = endpoint.EndpointNumber;
-pub const EndpointType = endpoint.EndpointType;
 pub const StandardEndpointRequests = endpoint.StandardEndpointRequests;
 
 const function = @import("usb/function.zig");
@@ -271,7 +270,7 @@ pub fn deviceDescriptorRead(dev: *Device) !void {
     var xfer = TransferFactory.initDeviceDescriptorTransfer(0, 0, std.mem.asBytes(&dev.device_descriptor));
     xfer.device_address = dev.address;
     xfer.endpoint_number = 0;
-    xfer.endpoint_type = .Control;
+    xfer.endpoint_type = .control;
 
     try transferSubmit(&xfer);
     try transferAwait(&xfer, 100);
