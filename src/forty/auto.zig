@@ -219,7 +219,7 @@ fn acceptableReturnType(comptime rt: type) bool {
 
 fn unpackReturnValue(forth: *Forth, retval: anytype) !void {
     switch (@typeInfo(@TypeOf(retval))) {
-        .ErrorUnion => |_| {
+        .ErrorUnion => |eu| {
             if (retval) |payload| {
                 // no error, push zero (for the error position) then
                 // the actual return value.
@@ -227,7 +227,9 @@ fn unpackReturnValue(forth: *Forth, retval: anytype) !void {
                 try unpackReturnValue(forth, payload);
             } else |err| {
                 try forth.stack.push(@intFromError(err));
-                try forth.stack.push(0x7fff_ffff_ffff_ffff); // bitpattern for -1 as u64
+                if (@typeInfo(eu.payload) != std.builtin.Type.Void) {
+                    try forth.stack.push(0x7fff_ffff_ffff_ffff); // bitpattern for -1 as u64
+                }
             }
         },
         .Optional => |o| {
