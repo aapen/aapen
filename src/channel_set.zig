@@ -4,10 +4,6 @@ const log = std.log.scoped(.channel_set);
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
-const Error = error{
-    NoAvailableChannel,
-};
-
 pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
     return struct {
         const Self = @This();
@@ -20,14 +16,17 @@ pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
         available: Bitset = Bitset.initFull(),
         lock: Spinlock = Spinlock.init(name, true),
 
-        pub fn allocate(this: *Self) !T {
+        pub fn allocate(this: *Self) error{NoAvailableChannel}!T {
             this.lock.acquire();
             defer this.lock.release();
 
             if (this.available.toggleFirstSet()) |allocated| {
+                if (allocated > max) {
+                    return error.NoAvailableChannel;
+                }
                 return @truncate(allocated);
             } else {
-                return Error.NoAvailableChannel;
+                return error.NoAvailableChannel;
             }
         }
 

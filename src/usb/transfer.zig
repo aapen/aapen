@@ -54,7 +54,7 @@ pub const Transfer = struct {
     };
 
     transfer_type: TransferType,
-    device: *Device = undefined,
+    device: ?*Device = undefined,
     device_address: DeviceAddress = DEFAULT_ADDRESS,
     device_speed: UsbSpeed = .Full,
     endpoint_number: EndpointNumber = 0,
@@ -67,9 +67,11 @@ pub const Transfer = struct {
     status: CompletionStatus = .incomplete,
     completion: ?Completion = null,
     state: State = undefined,
+    timeout: usize = 100,
 
     pub fn initControl(setup_packet: SetupPacket, data_buffer: []u8) Transfer {
         return .{
+            .device = null,
             .state = .token,
             .transfer_type = .control,
             .setup = setup_packet,

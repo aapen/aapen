@@ -25,6 +25,7 @@ const TaskDefinition = struct { []const u8, Task.Proc };
 
 const task_definitions: []const TaskDefinition = &.{
     .{ "heartbeat", heartbeat.heartbeat },
+    .{ "usb_poll", HAL.USBHCI.poll },
     //    .{ "hb2", heartbeat.heartbeat2 },
 };
 
@@ -42,7 +43,6 @@ const Task = struct {
         ready,
         running,
         sleeping,
-        //        running,
         suspended,
         failed,
     };
@@ -63,7 +63,7 @@ pub const tasks: []Task = tasks: {
     break :tasks &result;
 };
 
-const quantum = 20_000;
+const quantum = 50_000;
 
 const schedule_handler: HAL.TimerHandler = .{
     .callback = scheduleRun,

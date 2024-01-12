@@ -148,8 +148,8 @@ pub fn init() !void {
 
     const dev0 = try allocateDevice(null);
     errdefer freeDevice(dev0);
-    log.debug("attaching root hub", .{});
 
+    log.debug("attaching root hub", .{});
     if (attachDevice(dev0)) {
         log.debug("usb initialized", .{});
         root_hub = &devices[dev0];
@@ -227,10 +227,6 @@ pub fn attachDevice(devid: DeviceAddress) !void {
 }
 
 // ----------------------------------------------------------------------
-// Device registry
-// ----------------------------------------------------------------------
-
-// ----------------------------------------------------------------------
 // Transfer handling
 // ----------------------------------------------------------------------
 
@@ -274,6 +270,7 @@ pub fn transferAwait(xfer: *Transfer, timeout: u32) !void {
 // ----------------------------------------------------------------------
 pub fn deviceDescriptorRead(dev: *Device) !void {
     var xfer = TransferFactory.initDeviceDescriptorTransfer(0, 0, std.mem.asBytes(&dev.device_descriptor));
+    xfer.device = dev;
     xfer.device_address = dev.address;
     xfer.endpoint_number = 0;
     xfer.endpoint_type = .control;
@@ -284,6 +281,7 @@ pub fn deviceDescriptorRead(dev: *Device) !void {
 
 pub fn deviceSetAddress(dev: *Device, address: DeviceAddress) !void {
     var xfer = TransferFactory.initSetAddressTransfer(address);
+    xfer.device = dev;
     xfer.endpoint_number = 0;
     xfer.endpoint_type = .control;
 

@@ -31,17 +31,20 @@ const TransferBytes = usb.TransferBytes;
 const TransferStatus = usb.TransferCompletionStatus;
 const TransferFactory = usb.TransferFactory;
 
-const registers = @import("registers.zig");
-const HostPortStatusAndControl = registers.HostPortStatusAndControl;
+const reg = @import("registers.zig");
+const HostPortStatusAndControl = reg.HostPortStatusAndControl;
+const HostRegisters = reg.HostRegisters;
+
+const Self = @This();
 
 // ----------------------------------------------------------------------
 // Mutable state
 // ----------------------------------------------------------------------
-var host_registers: ?*volatile registers.HostRegisters = null;
+host_registers: ?*volatile reg.HostRegisters = null,
 
-var root_hub_device_status: DeviceStatus = usb.STATUS_SELF_POWERED;
+root_hub_device_status: DeviceStatus = usb.STATUS_SELF_POWERED,
 
-var root_hub_hub_status: HubStatus = .{
+root_hub_hub_status: HubStatus = .{
     .hub_status = .{
         .local_power_source = .local_power_good,
         .overcurrent = .not_detected,
@@ -50,12 +53,20 @@ var root_hub_hub_status: HubStatus = .{
         .local_power_changed = .not_changed,
         .overcurrent_changed = .not_changed,
     },
-};
+},
 
-var root_hub_port_status: PortStatus = .{
+root_hub_port_status: PortStatus = .{
     .port_status = @bitCast(@as(u16, 0)),
     .port_change = @bitCast(@as(u16, 0)),
-};
+},
+
+pending_interrupt_transfer: ?*Transfer = null,
+
+pub fn init(self: *Self, registers: *volatile HostRegisters) void {
+    self.* = .{
+        .host_registers = registers,
+    };
+}
 
 // ----------------------------------------------------------------------
 // Static data
@@ -172,7 +183,8 @@ const root_hub_hub_descriptor: RootHubDescriptor = .{
 // Hardware interaction
 // ----------------------------------------------------------------------
 
-fn hostPortSafeRead(host_reg: *volatile registers.HostRegisters) HostPortStatusAndControl {
+fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) HostPortStatusAndControl {
+    _ = self;
     var hw_status = host_reg.port;
 
     // We zero out some bits because they are "write clear" and we
@@ -185,9 +197,9 @@ fn hostPortSafeRead(host_reg: *volatile registers.HostRegisters) HostPortStatusA
     return hw_status;
 }
 
-fn hostPortPowerOn() TransferStatus {
-    if (host_registers) |host_reg| {
-        var hw_status = hostPortSafeRead(host_reg);
+fn hostPortPowerOn(self: *Self) TransferStatus {
+    if (self.host_registers) |host_reg| {
+        var hw_status = self.hostPortSafeRead(host_reg);
 
         hw_status.power = 1;
 
@@ -196,9 +208,9 @@ fn hostPortPowerOn() TransferStatus {
     return .ok;
 }
 
-fn hostPortPowerOff() TransferStatus {
-    if (host_registers) |host_reg| {
-        var hw_status = hostPortSafeRead(host_reg);
+fn hostPortPowerOff(self: *Self) TransferStatus {
+    if (self.host_registers) |host_reg| {
+        var hw_status = self.hostPortSafeRead(host_reg);
 
         hw_status.power = 0;
 
@@ -207,9 +219,9 @@ fn hostPortPowerOff() TransferStatus {
     return .ok;
 }
 
-fn hostPortReset() TransferStatus {
-    if (host_registers) |host_reg| {
-        var hw_status = hostPortSafeRead(host_reg);
+fn hostPortReset(self: *Self) TransferStatus {
+    if (self.host_registers) |host_reg| {
+        var hw_status = self.hostPortSafeRead(host_reg);
         hw_status.reset = 1;
         host_reg.port = hw_status;
 
@@ -227,22 +239,22 @@ fn hostPortReset() TransferStatus {
 
 // This is called from the DWC core driver when it receives a 'port'
 // interrupt
-pub fn hubHandlePortInterrupt() void {
-    if (host_registers) |host_reg| {
+pub fn hubHandlePortInterrupt(self: *Self) void {
+    if (self.host_registers) |host_reg| {
         const hw_status = host_reg.port;
 
-        root_hub_port_status.port_status.connected = hw_status.connect;
-        root_hub_port_status.port_status.enabled = hw_status.enabled;
-        root_hub_port_status.port_status.suspended = hw_status.suspended;
-        root_hub_port_status.port_status.overcurrent = hw_status.overcurrent;
-        root_hub_port_status.port_status.reset = hw_status.reset;
-        root_hub_port_status.port_status.powered = hw_status.power;
-        root_hub_port_status.port_status.low_speed_device = hw_status.speed == .low;
-        root_hub_port_status.port_status.high_speed_device = hw_status.speed == .high;
+        self.root_hub_port_status.port_status.connected = hw_status.connect;
+        self.root_hub_port_status.port_status.enabled = hw_status.enabled;
+        self.root_hub_port_status.port_status.suspended = hw_status.suspended;
+        self.root_hub_port_status.port_status.overcurrent = hw_status.overcurrent;
+        self.root_hub_port_status.port_status.reset = hw_status.reset;
+        self.root_hub_port_status.port_status.powered = hw_status.power;
+        self.root_hub_port_status.port_status.low_speed_device = hw_status.speed == .low;
+        self.root_hub_port_status.port_status.high_speed_device = hw_status.speed == .high;
 
-        root_hub_port_status.port_change.connected_changed = hw_status.connect_changed;
-        root_hub_port_status.port_change.enabled_changed = hw_status.enabled_changed;
-        root_hub_port_status.port_change.overcurrent_changed = hw_status.overcurrent_changed;
+        self.root_hub_port_status.port_change.connected_changed = hw_status.connect_changed;
+        self.root_hub_port_status.port_change.enabled_changed = hw_status.enabled_changed;
+        self.root_hub_port_status.port_change.overcurrent_changed = hw_status.overcurrent_changed;
 
         // Clear the interrupts, which are WC ("write clear") bits by
         // writing the register value back to itself, except for the
@@ -266,25 +278,23 @@ pub fn hubHandlePortInterrupt() void {
 // within the host machine. (Though a hardware interrupt may result
 // from completing the USB interrupt transfer!)
 
-var pending_interrupt_transfer: ?*Transfer = null;
-
-fn hubNotifyPortChange() void {
-    if (pending_interrupt_transfer) |request| {
-        pending_interrupt_transfer = null;
+fn hubNotifyPortChange(self: *Self) void {
+    if (self.pending_interrupt_transfer) |request| {
+        self.pending_interrupt_transfer = null;
         if (request.data_buffer.len >= 1) {
             request.data_buffer[0] = 0x02;
             request.actual_size = 1;
         } else {
             request.actual_size = 0;
         }
-        pending_interrupt_transfer.complete(.ok);
+        request.complete(.ok);
     }
 }
 
 // ----------------------------------------------------------------------
 // Request Handling Behavior
 // ----------------------------------------------------------------------
-const Handler = struct { RequestTypeType, ?u8, ?usb.RequestTypeRecipient, *const fn (transfer: *Transfer) TransferStatus };
+const Handler = struct { RequestTypeType, ?u8, ?usb.RequestTypeRecipient, *const fn (self: *Self, transfer: *Transfer) TransferStatus };
 
 // null means "don't care", ignore this field when dispatching.
 
@@ -311,11 +321,13 @@ fn replyWithStructure(transfer: *Transfer, v: *const anyopaque, size: usize) Tra
     return .ok;
 }
 
-fn hubGetDeviceDescriptor(transfer: *Transfer) TransferStatus {
+fn hubGetDeviceDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
+    _ = self;
     return replyWithStructure(transfer, &root_hub_device_descriptor, @sizeOf(@TypeOf(root_hub_device_descriptor)));
 }
 
-fn hubGetConfigurationDescriptor(transfer: *Transfer) TransferStatus {
+fn hubGetConfigurationDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
+    _ = self;
     const descriptor_index = transfer.setup.value & 0x0f;
     if (descriptor_index == 1) {
         return replyWithStructure(transfer, &root_hub_configuration, @sizeOf(@TypeOf(root_hub_configuration)));
@@ -325,7 +337,8 @@ fn hubGetConfigurationDescriptor(transfer: *Transfer) TransferStatus {
     }
 }
 
-fn hubGetStringDescriptor(transfer: *Transfer) TransferStatus {
+fn hubGetStringDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
+    _ = self;
     const descriptor_index = transfer.setup.value & 0x0f;
     if (descriptor_index > root_hub_strings.len) {
         log.warn("hubGetStringDescriptor: descriptor_index {d} is greater than {d}", .{ descriptor_index, root_hub_strings.len });
@@ -336,20 +349,20 @@ fn hubGetStringDescriptor(transfer: *Transfer) TransferStatus {
     return replyWithStructure(transfer, string, string.header.length);
 }
 
-fn hubGetDeviceStatus(transfer: *Transfer) TransferStatus {
-    return replyWithStructure(transfer, &root_hub_device_status, @sizeOf(@TypeOf(root_hub_device_status)));
+fn hubGetDeviceStatus(self: *Self, transfer: *Transfer) TransferStatus {
+    return replyWithStructure(transfer, &self.root_hub_device_status, @sizeOf(@TypeOf(self.root_hub_device_status)));
 }
 
-fn hubSetAddress(_: *Transfer) TransferStatus {
+fn hubSetAddress(_: *Self, _: *Transfer) TransferStatus {
     return .ok;
 }
 
-fn hubGetDescriptor(transfer: *Transfer) TransferStatus {
+fn hubGetDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
     const descriptor_type = transfer.setup.value >> 8;
     switch (descriptor_type) {
-        @intFromEnum(DescriptorType.device) => return hubGetDeviceDescriptor(transfer),
-        @intFromEnum(DescriptorType.configuration) => return hubGetConfigurationDescriptor(transfer),
-        @intFromEnum(DescriptorType.string) => return hubGetStringDescriptor(transfer),
+        @intFromEnum(DescriptorType.device) => return self.hubGetDeviceDescriptor(transfer),
+        @intFromEnum(DescriptorType.configuration) => return self.hubGetConfigurationDescriptor(transfer),
+        @intFromEnum(DescriptorType.string) => return self.hubGetStringDescriptor(transfer),
         else => {
             log.warn("hubGetDescriptor: descriptor type {d} not supported", .{descriptor_type});
             return .unsupported_request;
@@ -357,14 +370,16 @@ fn hubGetDescriptor(transfer: *Transfer) TransferStatus {
     }
 }
 
-fn hubGetConfiguration(transfer: *Transfer) TransferStatus {
+fn hubGetConfiguration(self: *const Self, transfer: *Transfer) TransferStatus {
+    _ = self;
     if (transfer.setup.data_size >= 1) {
         transfer.data_buffer[0] = 1;
     }
     return .ok;
 }
 
-fn hubSetConfiguration(transfer: *Transfer) TransferStatus {
+fn hubSetConfiguration(self: *Self, transfer: *Transfer) TransferStatus {
+    _ = self;
     const requested_configuration = transfer.setup.value;
     if (requested_configuration == 1) {
         return .ok;
@@ -374,7 +389,8 @@ fn hubSetConfiguration(transfer: *Transfer) TransferStatus {
     }
 }
 
-fn hubGetHubDescriptor(transfer: *Transfer) TransferStatus {
+fn hubGetHubDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
+    _ = self;
     const descriptor_index = transfer.setup.value & 0x0f;
     if (descriptor_index == 0) {
         return replyWithStructure(transfer, &root_hub_hub_descriptor, @sizeOf(@TypeOf(root_hub_hub_descriptor)));
@@ -384,25 +400,26 @@ fn hubGetHubDescriptor(transfer: *Transfer) TransferStatus {
     }
 }
 
-fn hubGetHubStatus(transfer: *Transfer) TransferStatus {
-    return replyWithStructure(transfer, &root_hub_hub_status, @sizeOf(@TypeOf(root_hub_hub_status)));
+fn hubGetHubStatus(self: *Self, transfer: *Transfer) TransferStatus {
+    return replyWithStructure(transfer, &self.root_hub_hub_status, @sizeOf(@TypeOf(self.root_hub_hub_status)));
 }
 
-fn hubGetPortStatus(transfer: *Transfer) TransferStatus {
-    return replyWithStructure(transfer, &root_hub_port_status, @sizeOf(@TypeOf(root_hub_port_status)));
+fn hubGetPortStatus(self: *Self, transfer: *Transfer) TransferStatus {
+    return replyWithStructure(transfer, &self.root_hub_port_status, @sizeOf(@TypeOf(self.root_hub_port_status)));
 }
 
-fn hubSetHubFeature(_: *Transfer) TransferStatus {
+fn hubSetHubFeature(self: *Self, _: *Transfer) TransferStatus {
+    _ = self;
     log.warn("hubSetHubFeature: set hub feature not supported", .{});
     return .unsupported_request;
 }
 
-fn hubSetPortFeature(transfer: *Transfer) TransferStatus {
+fn hubSetPortFeature(self: *Self, transfer: *Transfer) TransferStatus {
     const feature = transfer.setup.value;
 
     switch (feature) {
-        @intFromEnum(PortFeature.port_power) => return hostPortPowerOn(),
-        @intFromEnum(PortFeature.port_reset) => return hostPortReset(),
+        @intFromEnum(PortFeature.port_power) => return self.hostPortPowerOn(),
+        @intFromEnum(PortFeature.port_reset) => return self.hostPortReset(),
         else => {
             log.warn("hubSetPortFeature: port feature {d} not supported", .{feature});
             return .unsupported_request;
@@ -410,20 +427,21 @@ fn hubSetPortFeature(transfer: *Transfer) TransferStatus {
     }
 }
 
-fn hubClearHubFeature(_: *Transfer) TransferStatus {
+fn hubClearHubFeature(self: *Self, _: *Transfer) TransferStatus {
+    _ = self;
     log.warn("hubClearHubFeature: clear hub feature not supported", .{});
     return .unsupported_request;
 }
 
-fn hubClearPortFeature(transfer: *Transfer) TransferStatus {
+fn hubClearPortFeature(self: *Self, transfer: *Transfer) TransferStatus {
     const feature = transfer.setup.value;
 
     switch (feature) {
-        @intFromEnum(PortFeature.c_port_connection) => root_hub_port_status.port_change.connected_changed = .not_changed,
-        @intFromEnum(PortFeature.c_port_enable) => root_hub_port_status.port_change.enabled_changed = .not_changed,
-        @intFromEnum(PortFeature.c_port_suspend) => root_hub_port_status.port_change.suspended_changed = .not_changed,
-        @intFromEnum(PortFeature.c_port_over_current) => root_hub_port_status.port_change.overcurrent_changed = .not_changed,
-        @intFromEnum(PortFeature.c_port_reset) => root_hub_port_status.port_change.reset_changed = .not_changed,
+        @intFromEnum(PortFeature.c_port_connection) => self.root_hub_port_status.port_change.connected_changed = .not_changed,
+        @intFromEnum(PortFeature.c_port_enable) => self.root_hub_port_status.port_change.enabled_changed = .not_changed,
+        @intFromEnum(PortFeature.c_port_suspend) => self.root_hub_port_status.port_change.suspended_changed = .not_changed,
+        @intFromEnum(PortFeature.c_port_over_current) => self.root_hub_port_status.port_change.overcurrent_changed = .not_changed,
+        @intFromEnum(PortFeature.c_port_reset) => self.root_hub_port_status.port_change.reset_changed = .not_changed,
         else => {
             log.warn("hubClearPortFeature: feature {d} not supported", .{feature});
             return .unsupported_request;
@@ -432,7 +450,7 @@ fn hubClearPortFeature(transfer: *Transfer) TransferStatus {
     return .ok;
 }
 
-pub fn hubHandleTransfer(transfer: *Transfer) !void {
+pub fn hubHandleTransfer(self: *Self, transfer: *Transfer) void {
     switch (transfer.transfer_type) {
         .control => {
             const req_type = transfer.setup.request_type.type;
@@ -441,7 +459,7 @@ pub fn hubHandleTransfer(transfer: *Transfer) !void {
 
             for (handlers) |h| {
                 if (req_type == h[0] and (h[1] == null or h[1] == request) and (h[2] == null or h[2] == recipient)) {
-                    transfer.complete(h[3](transfer));
+                    transfer.complete(h[3](self, transfer));
                     return;
                 }
             }
@@ -462,7 +480,11 @@ const expectEqual = std.testing.expectEqual;
 const expectEqualSlices = std.testing.expectEqualSlices;
 
 fn expectTransferStatus(expected_status: TransferStatus, xfer: *Transfer) !void {
-    try hubHandleTransfer(xfer);
+    var regs: HostRegisters = fakeRegisters();
+    var hub: Self = .{};
+    hub.init(&regs);
+
+    hub.hubHandleTransfer(xfer);
     try expectEqual(expected_status, xfer.status);
 }
 
@@ -708,7 +730,7 @@ fn getPortPowerStatus() !bool {
     return port_status.port_status.power == .on;
 }
 
-fn fakeRegisters() registers.HostRegisters {
+fn fakeRegisters() reg.HostRegisters {
     const u32zero = @as(u32, 0);
     return .{
         .config = @bitCast(u32zero),
@@ -723,8 +745,9 @@ fn fakeRegisters() registers.HostRegisters {
 test "set port feature (class request) power" {
     std.debug.print("\n", .{});
 
-    var regs = fakeRegisters();
-    host_registers = &regs;
+    //    var regs = fakeRegisters();
+    //    init(fakeRegisters());
+    //    host_registers = &regs;
 
     const buffer_size = 0;
 
@@ -737,9 +760,6 @@ test "set port feature (class request) power" {
 
 test "set port feature (class request) reset" {
     std.debug.print("\n", .{});
-
-    var regs = fakeRegisters();
-    host_registers = &regs;
 
     const buffer_size = 0;
 
