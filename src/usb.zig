@@ -122,7 +122,7 @@ pub fn defineModule(forth: *Forth) !void {
 const Drivers = std.ArrayList(*const DeviceDriver);
 const MAX_DEVICES = 16;
 
-var allocator: Allocator = undefined;
+pub var allocator: Allocator = undefined;
 var devices: [MAX_DEVICES]Device = undefined;
 var drivers: Drivers = undefined;
 var root_hub: ?*Device = undefined;
@@ -328,6 +328,14 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
 
 pub fn deviceSetConfiguration(dev: *Device, use_config: u8) !void {
     var xfer = TransferFactory.initSetConfigurationTransfer(use_config);
+    xfer.addressTo(dev);
+
+    try transferSubmit(&xfer);
+    try transferAwait(&xfer, 100);
+}
+
+pub fn deviceGetStringDescriptor(dev: *Device, index: StringIndex, lang: LangID, buffer: []u8) !void {
+    var xfer = TransferFactory.initStringDescriptorTransfer(index, lang, buffer);
     xfer.addressTo(dev);
 
     try transferSubmit(&xfer);

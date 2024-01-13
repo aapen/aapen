@@ -9,8 +9,12 @@ const DescriptorType = descriptor.DescriptorType;
 const DeviceDescriptor = descriptor.DeviceDescriptor;
 const EndpointDescriptor = descriptor.EndpointDescriptor;
 const InterfaceDescriptor = descriptor.InterfaceDescriptor;
+const StringDescriptor = descriptor.StringDescriptor;
 
 const Error = @import("status.zig").Error;
+
+const LangID = @import("language.zig").LangID;
+const DEFAULT_LANG = LangID.en_US;
 
 const transfer = @import("transfer.zig");
 const setup = transfer.setup;
@@ -18,6 +22,8 @@ const SetupPacket = transfer.SetupPacket;
 const TransferType = transfer.TransferType;
 
 const TransferFactory = @import("transfer_factory.zig");
+
+const usb = @import("../usb.zig");
 
 pub const DeviceAddress = u7;
 pub const DEFAULT_ADDRESS: DeviceAddress = 0;
@@ -138,29 +144,52 @@ pub const Device = struct {
     }
 
     pub fn deinit(self: *Device) void {
-        _ = self;
         // release any dynamically allocated memory
+        if (self.product.len > 0) {
+            usb.allocator.free(self.product);
+        }
     }
 
     pub fn isRootHub(self: *Device) bool {
         return self.parent == null;
     }
 
-    pub fn description(self: *const Device, buffer: []u8) []u8 {
+    pub fn description(self: *Device, buffer: []u8) []u8 {
         const usb_standard = self.device_descriptor.usb_standard_compliance;
 
         return bufPrint(
             buffer,
-            "{s}-speed USB {d}.{d} {s} device (vendor = 0x{x:0>4}, product = 0x{x:0>4})",
+            "{s}-speed USB {d}.{d} {s} device ({s}) (vendor = 0x{x:0>4}, product = 0x{x:0>4})",
             .{
                 @tagName(self.speed),
                 (usb_standard >> 8) & 0xff,
                 (usb_standard >> 4) & 0xf,
                 self.deviceClassString(),
+                self.deviceProductName(),
                 self.device_descriptor.vendor,
                 self.device_descriptor.product,
             },
         ) catch "";
+    }
+
+    fn deviceProductName(self: *Device) []const u8 {
+        if (self.product.len > 0) {
+            return self.product;
+        }
+
+        var desc: StringDescriptor = undefined;
+
+        if (usb.deviceGetStringDescriptor(self, self.device_descriptor.product_name, DEFAULT_LANG, std.mem.asBytes(&desc))) {
+            if (desc.asSlice(usb.allocator)) |s| {
+                self.product = s;
+            } else |err| {
+                log.err("error extracting product name, err {any}", .{err});
+            }
+        } else |err| {
+            log.err("error fetching product name, index {d}, err {any}", .{ self.device_descriptor.product_name, err });
+        }
+
+        return self.product;
     }
 
     fn deviceClassString(self: *const Device) []const u8 {

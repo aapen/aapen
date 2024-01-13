@@ -85,7 +85,7 @@ const root_hub_device_descriptor: DeviceDescriptor = .{
     .product = 0,
     .device_release = 0,
     .manufacturer_name = 0,
-    .product_name = 0,
+    .product_name = 1,
     .serial_number = 0,
     .configuration_count = 1,
 };
