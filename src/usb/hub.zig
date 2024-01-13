@@ -83,15 +83,15 @@ pub const HubDescriptor = extern struct {
 
 /// See USB 2.0 specification, revision 2.0, section 11.24.2
 pub const ClassRequest = enum(u8) {
-    get_status = 0,
-    clear_feature = 1,
-    set_feature = 3,
-    get_descriptor = 6,
-    set_descriptor = 7,
-    clear_tt_buffer = 8,
-    reset_tt = 9,
-    get_tt_state = 10,
-    stop_tt = 11,
+    get_status = 0x00,
+    clear_feature = 0x01,
+    set_feature = 0x03,
+    get_descriptor = 0x06,
+    set_descriptor = 0x07,
+    clear_tt_buffer = 0x08,
+    reset_tt = 0x09,
+    get_tt_state = 0x0a,
+    stop_tt = 0x0b,
 };
 
 pub const HubFeature = enum(u16) {
@@ -332,7 +332,7 @@ pub const Hub = struct {
     }
 
     fn hubReadHubDescriptor(self: *Hub) !void {
-        var xfer = TransferFactory.initHubDescriptorTransfer(0, std.mem.asBytes(&self.descriptor));
+        var xfer = TransferFactory.initGetHubDescriptorTransfer(0, std.mem.asBytes(&self.descriptor));
         xfer.addressTo(self.device);
 
         try usb.transferSubmit(&xfer);
@@ -465,7 +465,11 @@ pub fn hubDriverDeviceBind(dev: *Device) Error!void {
             hub.in_use = true;
             errdefer hub.in_use = false;
 
-            try hub.deviceBind(dev);
+            if (hub.deviceBind(dev)) {
+                return;
+            } else |e| {
+                log.debug("error binding device: {any}", .{e});
+            }
         }
     }
     return Error.TooManyHubs;

@@ -1,6 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.usb);
-const builtin = @import("builtin");
+const log = std.log.scoped(.dwc_otg_usb);
 
 const time = @import("../../time.zig");
 const delayMillis = time.delayMillis;

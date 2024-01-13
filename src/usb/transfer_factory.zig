@@ -59,10 +59,6 @@ pub fn initEndpointDescriptorTransfer(descriptor_index: u8, data_buffer: []u8) T
     return initDescriptorTransfer(.endpoint, descriptor_index, 0, data_buffer);
 }
 
-pub fn initHubDescriptorTransfer(descriptor_index: u8, data_buffer: []u8) Transfer {
-    return initDescriptorTransfer(.hub, descriptor_index, 0, data_buffer);
-}
-
 pub fn initSetAddressTransfer(device_address: DeviceAddress) Transfer {
     const setup_packet = SetupPacket.init(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_address), device_address, 0, 0);
     return initControlTransfer(setup_packet, &.{});
@@ -181,7 +177,7 @@ test "factory can create a specific transfer for an endpoint descriptor query" {
 test "factory can create a specific transfer for a hub descriptor query" {
     const buffer_size = @sizeOf(descriptor.StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initHubDescriptorTransfer(0, &buffer);
+    const xfer = initGetHubDescriptorTransfer(0, &buffer);
     try expectEqual(TransferType.control, xfer.transfer_type);
     try expectEqual(@intFromEnum(StandardDeviceRequests.get_descriptor), xfer.setup.request);
 }

@@ -238,7 +238,35 @@ pub fn attachDevice(devid: DeviceAddress) !void {
     try deviceSetConfiguration(dev, use_config);
 
     var buf: [512]u8 = [_]u8{0} ** 512;
-    log.info("attaching {s}", .{dev.description(&buf)});
+    log.debug("attaching {s}", .{dev.description(&buf)});
+
+    try bindDriver(dev);
+}
+
+fn bindDriver(dev: *Device) !void {
+    if (dev.driver != null) {
+        return;
+    }
+
+    for (drivers.items) |drv| {
+        log.debug("Attempting to bind driver {s} to device", .{drv.name});
+        if (drv.bind(dev)) {
+            var buf: [512]u8 = [_]u8{0} ** 512;
+            log.info("Bound driver {s} to {s}", .{ drv.name, dev.description(&buf) });
+            return;
+        } else |e| {
+            switch (e) {
+                error.DeviceUnsupported => {
+                    log.debug("Driver {s} doesn't support this device", .{drv.name});
+                    // move on to the next driver.
+                    continue;
+                },
+                else => {
+                    log.err("Driver bind error {any}", .{e});
+                },
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------
