@@ -1,5 +1,6 @@
 pub const Error = error{
     TooManyDevices,
+    TooManyHubs,
     DeviceUnsupported,
     HardwareError,
     InvalidData,

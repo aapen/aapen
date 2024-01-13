@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const bufPrint = std.fmt.bufPrint;
 const log = std.log.scoped(.usb);
 
 const descriptor = @import("descriptor.zig");
@@ -143,6 +144,53 @@ pub const Device = struct {
 
     pub fn isRootHub(self: *Device) bool {
         return self.parent == null;
+    }
+
+    pub fn description(self: *const Device, buffer: []u8) []u8 {
+        const usb_standard = self.device_descriptor.usb_standard_compliance;
+
+        return bufPrint(
+            buffer,
+            "{s}-speed USB {d}.{d} {s} device (vendor = 0x{x:0>4}, product = 0x{x:0>4})",
+            .{
+                @tagName(self.speed),
+                (usb_standard >> 8) & 0xff,
+                (usb_standard >> 4) & 0xf,
+                self.deviceClassString(),
+                self.device_descriptor.vendor,
+                self.device_descriptor.product,
+            },
+        ) catch "";
+    }
+
+    fn deviceClassString(self: *const Device) []const u8 {
+        var class = self.device_descriptor.device_class;
+
+        if (class == 0) {
+            for (0..self.configuration.configuration_descriptor.interface_count) |i| {
+                if (self.configuration.interfaces[i]) |iface| {
+                    if (iface.interface_class != .reserved) {
+                        class = @intFromEnum(iface.interface_class);
+                    }
+                }
+            }
+        }
+
+        return switch (class) {
+            0 => "Unspecified",
+            @intFromEnum(DeviceClass.audio) => "Audio",
+            @intFromEnum(DeviceClass.cdc_control) => "Communications and CDC control",
+            @intFromEnum(DeviceClass.hid) => "HID (Human interface device)",
+            @intFromEnum(DeviceClass.image) => "Image",
+            @intFromEnum(DeviceClass.printer) => "Printer",
+            @intFromEnum(DeviceClass.mass_storage) => "Mass storage",
+            @intFromEnum(DeviceClass.hub) => "Hub",
+            @intFromEnum(DeviceClass.video) => "Video",
+            @intFromEnum(DeviceClass.wireless_controller) => "Wireless controller",
+            @intFromEnum(DeviceClass.miscellaneous) => "Miscellaneous",
+            @intFromEnum(DeviceClass.vendor_specific) => "Vendor specific",
+            else => "Unknown",
+        };
     }
 };
 

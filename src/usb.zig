@@ -187,6 +187,7 @@ pub fn allocateDevice(parent: ?*Device) !DeviceAddress {
         if (!devices[addr].in_use) {
             var dev = &devices[addr];
             dev.in_use = true;
+            errdefer dev.in_use = false;
             dev.parent = parent;
             if (parent != null) {
                 dev.depth = parent.?.depth + 1;
@@ -235,6 +236,9 @@ pub fn attachDevice(devid: DeviceAddress) !void {
     const use_config = dev.configuration.configuration_descriptor.configuration_value;
     log.debug("setting device to use configuration {d}", .{use_config});
     try deviceSetConfiguration(dev, use_config);
+
+    var buf: [512]u8 = [_]u8{0} ** 512;
+    log.info("attaching {s}", .{dev.description(&buf)});
 }
 
 // ----------------------------------------------------------------------

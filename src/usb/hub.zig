@@ -7,11 +7,7 @@ const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.usb);
 
-const root = @import("root");
-const HCI = root.HAL.USBHCI;
-// this is odd... should probably move Device to usb/device.zig
-//const Device = HCI.Device;
-
+const synchronize = @import("../synchronize.zig");
 const time = @import("../time.zig");
 
 const descriptor = @import("descriptor.zig");
@@ -23,6 +19,7 @@ const Header = descriptor.Header;
 const device = @import("device.zig");
 const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;
+const DeviceClass = device.DeviceClass;
 const DeviceDriver = device.DeviceDriver;
 const StandardDeviceRequests = device.StandardDeviceRequests;
 const UsbSpeed = device.UsbSpeed;
@@ -43,6 +40,12 @@ const setup = transfer.setup;
 const TransferType = transfer.TransferType;
 
 const TransferFactory = @import("transfer_factory.zig");
+
+const usb = @import("../usb.zig");
+
+// ----------------------------------------------------------------------
+// Hub definitions from USB 2.0 spec
+// ----------------------------------------------------------------------
 
 pub const HubDescriptor = extern struct {
     header: Header,
@@ -272,6 +275,11 @@ pub const PortStatus = packed struct {
     }
 };
 
+// ----------------------------------------------------------------------
+// Local implementation
+// ----------------------------------------------------------------------
+pub const MAX_HUBS = 8;
+
 pub const Hub = struct {
     const reset_timeout = 100;
 
@@ -286,48 +294,81 @@ pub const Hub = struct {
         device: *Device,
     };
 
-    allocator: Allocator = undefined,
-    host: *HCI,
+    in_use: bool = false,
+    //    host: *HCI,
     device: *Device,
-    descriptor: HubDescriptor = undefined,
-    port_count: u8 = undefined,
-    port: []Port = undefined,
+    descriptor: HubDescriptor,
+    port_count: u8,
+    port: []Port,
 
-    pub fn initialize(self: *Hub, allocator: Allocator) !void {
-        self.allocator = allocator;
+    pub fn init(self: *Hub) !void {
+        self.* = .{
+            .in_use = false,
+            .host = undefined,
+            .device = undefined,
+            .descriptor = undefined,
+            .port_count = 0,
+            .port = undefined,
+        };
+    }
 
-        // get hub descriptor
-
-        var desc = TransferFactory.initHubDescriptorTransfer(0, std.mem.asBytes(&self.descriptor));
-
-        try self.host.perform(&desc);
-
-        if (self.descriptor.header.descriptor_type != .hub) {
-            return Error.InvalidResponse;
+    pub fn deviceBind(self: *Hub, dev: *Device) !void {
+        // The device should already have it's device descriptor and
+        // configuration descriptor populated.
+        if (dev.device_descriptor.device_class != @intFromEnum(DeviceClass.hub) or
+            dev.configuration.configuration_descriptor.interface_count != 1 or
+            dev.configuration.interfaces[0].?.endpoint_count != 1 or
+            dev.configuration.endpoints[0][0].?.attributes.transfer_type != .interrupt)
+        {
+            return Error.DeviceUnsupported;
         }
 
+        self.device = dev;
+
+        log.debug("reading hub descriptor", .{});
+        try self.hubReadHubDescriptor();
+
         self.descriptor.dump();
-
-        self.port_count = self.descriptor.number_ports;
-        self.port = try self.allocator.alloc(Port, self.port_count);
-
-        // for (0..self.port_count) |i| {
-        //     const port_number: u8 = @truncate(i + 1);
-        //     log.debug("Port status check {d}", .{port_number});
-        //     try self.checkPort(port_number);
-
-        //     if (self.port[i].connected) {
-        //         try self.initializePortDevice(port_number);
-        //     }
-        // }
-
-        self.dump();
     }
 
-    pub fn deinit(self: *Hub) void {
-        self.allocator.free(self.port);
-        self.port = undefined;
+    fn hubReadHubDescriptor(self: *Hub) !void {
+        var xfer = TransferFactory.initHubDescriptorTransfer(0, std.mem.asBytes(&self.descriptor));
+        xfer.addressTo(self.device);
+
+        try usb.transferSubmit(&xfer);
+        try usb.transferAwait(&xfer, 100);
     }
+
+    // pub fn initialize(self: *Hub, allocator: Allocator) !void {
+    //     self.allocator = allocator;
+
+    //     // get hub descriptor
+
+    //     var desc = TransferFactory.initHubDescriptorTransfer(0, std.mem.asBytes(&self.descriptor));
+
+    //     try self.host.perform(&desc);
+
+    //     if (self.descriptor.header.descriptor_type != .hub) {
+    //         return Error.InvalidResponse;
+    //     }
+
+    //     self.descriptor.dump();
+
+    //     self.port_count = self.descriptor.number_ports;
+    //     self.port = try self.allocator.alloc(Port, self.port_count);
+
+    //     // for (0..self.port_count) |i| {
+    //     //     const port_number: u8 = @truncate(i + 1);
+    //     //     log.debug("Port status check {d}", .{port_number});
+    //     //     try self.checkPort(port_number);
+
+    //     //     if (self.port[i].connected) {
+    //     //         try self.initializePortDevice(port_number);
+    //     //     }
+    //     // }
+
+    //     self.dump();
+    // }
 
     pub fn checkPort(self: *Hub, port_number: u8) !void {
         // ports are numbered from 1, arrays count from 0
@@ -402,8 +443,32 @@ pub const Hub = struct {
     }
 };
 
+var hubs: [MAX_HUBS]Hub = undefined;
+
+var allocator: Allocator = undefined;
+
+pub fn initialize(alloc: Allocator) void {
+    allocator = alloc;
+
+    for (0..MAX_HUBS) |i| {
+        hubs[i].init();
+    }
+}
+
 pub fn hubDriverDeviceBind(dev: *Device) Error!void {
-    _ = dev;
+    synchronize.criticalEnter(.FIQ);
+    defer synchronize.criticalLeave();
+
+    for (0..MAX_HUBS) |i| {
+        if (!hubs[i].in_use) {
+            var hub = &hubs[i];
+            hub.in_use = true;
+            errdefer hub.in_use = false;
+
+            try hub.deviceBind(dev);
+        }
+    }
+    return Error.TooManyHubs;
 }
 
 pub fn hubDriverDeviceUnbind(dev: *Device) void {
