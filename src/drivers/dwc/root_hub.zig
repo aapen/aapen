@@ -131,7 +131,11 @@ const root_hub_configuration: RootHubConfiguration = .{
             .descriptor_type = .endpoint,
         },
         .endpoint_address = (1 << 7) | 1,
-        .attributes = @bitCast(@as(u8, 0x03)),
+        .attributes = .{
+            .transfer_type = .interrupt,
+            .iso_synch_type = .none,
+            .usage_type = .data,
+        },
         .max_packet_size = 64,
         .interval = 0xff,
     },
@@ -328,13 +332,7 @@ fn hubGetDeviceDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
 
 fn hubGetConfigurationDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
     _ = self;
-    const descriptor_index = transfer.setup.value & 0x0f;
-    if (descriptor_index == 1) {
-        return replyWithStructure(transfer, &root_hub_configuration, @sizeOf(@TypeOf(root_hub_configuration)));
-    } else {
-        log.warn("hubGetConfigurationDescriptor: descriptor_index {d} not supported", .{descriptor_index});
-        return .unsupported_request;
-    }
+    return replyWithStructure(transfer, &root_hub_configuration, @sizeOf(@TypeOf(root_hub_configuration)));
 }
 
 fn hubGetStringDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
@@ -382,6 +380,7 @@ fn hubSetConfiguration(self: *Self, transfer: *Transfer) TransferStatus {
     _ = self;
     const requested_configuration = transfer.setup.value;
     if (requested_configuration == 1) {
+        log.debug("hubSetConfiguration: using requested configuration {d}", .{requested_configuration});
         return .ok;
     } else {
         log.warn("hubSetConfiguration: requested configuration {d} not supported", .{requested_configuration});
@@ -451,7 +450,7 @@ fn hubClearPortFeature(self: *Self, transfer: *Transfer) TransferStatus {
 }
 
 pub fn hubHandleTransfer(self: *Self, transfer: *Transfer) void {
-    switch (transfer.transfer_type) {
+    switch (transfer.endpoint_type) {
         .control => {
             const req_type = transfer.setup.request_type.type;
             const request = transfer.setup.request;
@@ -465,7 +464,7 @@ pub fn hubHandleTransfer(self: *Self, transfer: *Transfer) void {
             }
         },
         else => {
-            log.warn("hubHandleTransfer: transfer type {any} not supported", .{transfer.transfer_type});
+            log.warn("hubHandleTransfer: endpoint type {any} not supported", .{transfer.endpoint_type});
             transfer.complete(.unsupported_request);
         },
     }
@@ -492,18 +491,18 @@ test "only control transfers are supported" {
     std.debug.print("\n", .{});
 
     var iso: Transfer = .{
-        .transfer_type = .isochronous,
+        .endpoint_type = .isochronous,
         .setup = undefined,
         .data_buffer = &.{},
     };
 
     var bulk: Transfer = .{
-        .transfer_type = .bulk,
+        .endpoint_type = .bulk,
         .setup = undefined,
         .data_buffer = &.{},
     };
     var interrupt: Transfer = .{
-        .transfer_type = .interrupt,
+        .endpoint_type = .interrupt,
         .setup = undefined,
         .data_buffer = &.{},
     };

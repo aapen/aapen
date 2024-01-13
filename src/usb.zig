@@ -220,10 +220,21 @@ pub fn attachDevice(devid: DeviceAddress) !void {
     // responding to address 0, endpoint 0
     try deviceDescriptorRead(dev);
 
+    dev.device_descriptor.dump();
+
     log.debug("device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
 
     log.debug("assigning address {d}", .{devid});
     try deviceSetAddress(dev, devid);
+
+    log.debug("reading configuration descriptor", .{});
+    try deviceConfigurationDescriptorRead(dev);
+
+    dev.configuration.dump();
+
+    const use_config = dev.configuration.configuration_descriptor.configuration_value;
+    log.debug("setting device to use configuration {d}", .{use_config});
+    try deviceSetConfiguration(dev, use_config);
 }
 
 // ----------------------------------------------------------------------
@@ -270,10 +281,7 @@ pub fn transferAwait(xfer: *Transfer, timeout: u32) !void {
 // ----------------------------------------------------------------------
 pub fn deviceDescriptorRead(dev: *Device) !void {
     var xfer = TransferFactory.initDeviceDescriptorTransfer(0, 0, std.mem.asBytes(&dev.device_descriptor));
-    xfer.device = dev;
-    xfer.device_address = dev.address;
-    xfer.endpoint_number = 0;
-    xfer.endpoint_type = .control;
+    xfer.addressTo(dev);
 
     try transferSubmit(&xfer);
     try transferAwait(&xfer, 100);
@@ -281,12 +289,43 @@ pub fn deviceDescriptorRead(dev: *Device) !void {
 
 pub fn deviceSetAddress(dev: *Device, address: DeviceAddress) !void {
     var xfer = TransferFactory.initSetAddressTransfer(address);
-    xfer.device = dev;
-    xfer.endpoint_number = 0;
-    xfer.endpoint_type = .control;
+    xfer.addressTo(dev);
 
     try transferSubmit(&xfer);
     try transferAwait(&xfer, 100);
 
     dev.address = address;
+}
+
+pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
+    // first transfer returns the configuration descriptor which
+    // includes the total length of the whole configuration tree
+    var desc: ConfigurationDescriptor = undefined;
+    var xfer = TransferFactory.initConfigurationDescriptorTransfer(0, std.mem.asBytes(&desc));
+    xfer.addressTo(dev);
+
+    try transferSubmit(&xfer);
+    try transferAwait(&xfer, 100);
+
+    // now allocate enough space for the whole configuration (which
+    // includes the interface descriptors and endpoint descriptors)
+    const buffer_size = desc.total_length;
+    var configuration: []u8 = try allocator.alloc(u8, buffer_size);
+    defer allocator.free(configuration);
+
+    xfer = TransferFactory.initConfigurationDescriptorTransfer(0, configuration);
+    xfer.addressTo(dev);
+
+    try transferSubmit(&xfer);
+    try transferAwait(&xfer, 100);
+
+    dev.configuration = try DeviceConfiguration.initFromBytes(allocator, configuration);
+}
+
+pub fn deviceSetConfiguration(dev: *Device, use_config: u8) !void {
+    var xfer = TransferFactory.initSetConfigurationTransfer(use_config);
+    xfer.addressTo(dev);
+
+    try transferSubmit(&xfer);
+    try transferAwait(&xfer, 100);
 }

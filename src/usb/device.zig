@@ -108,15 +108,10 @@ pub const Device = struct {
     /// Port on the parent hub this is attached to
     parent_port: u32,
 
-    configuration_index: u8,
-
     device_descriptor: DeviceDescriptor,
-    configuration_descriptor: ?*ConfigurationDescriptor,
-    interfaces: [MAX_INTERFACES]?*InterfaceDescriptor,
-    endpoints: [MAX_INTERFACES][MAX_ENDPOINTS]?*EndpointDescriptor,
+    configuration: *DeviceConfiguration,
 
     product: []u8,
-    configuration: []u8,
 
     state: DeviceState,
 
@@ -132,16 +127,12 @@ pub const Device = struct {
             .speed = .Full,
             .parent = null,
             .parent_port = 0,
-            .configuration_index = 0,
             .device_descriptor = undefined,
-            .configuration_descriptor = undefined,
-            .interfaces = undefined,
-            .endpoints = undefined,
             .product = "",
-            .configuration = "",
             .state = .unconfigured,
             .driver = null,
             .driver_private = &.{},
+            .configuration = undefined,
         };
     }
 
