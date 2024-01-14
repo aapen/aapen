@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const time = @import("../time.zig");
+
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
@@ -103,9 +105,9 @@ pub fn wordReset(_: *Forth, _: *Header) ForthError!void {
 }
 
 /// --
-pub fn wordPause(forth: *Forth, _: *Header) ForthError!void {
-    const n = try forth.stack.pop();
-    for (0..(n * 10000)) |_| {}
+pub fn wordSleep(forth: *Forth, _: *Header) ForthError!void {
+    const n = try forth.popAs(u32);
+    time.delayMillis(n);
 }
 
 /// --
@@ -558,7 +560,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
     _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
-    _ = try forth.definePrimitiveDesc("pause", " n -- : Pause for a bit", &wordPause, false);
+    _ = try forth.definePrimitiveDesc("sleep", " n -- : Pause for some milliseconds", &wordSleep, false);
 
     // Basic Forth words.
     _ = try forth.definePrimitiveDesc("exec", "pHeader -- <Results>", &wordExec, false);
