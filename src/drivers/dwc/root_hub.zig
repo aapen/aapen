@@ -45,12 +45,12 @@ root_hub_device_status: DeviceStatus = usb.STATUS_SELF_POWERED,
 
 root_hub_hub_status: HubStatus = .{
     .hub_status = .{
-        .local_power_source = .local_power_good,
-        .overcurrent = .not_detected,
+        .local_power_source = 1,
+        .overcurrent = 0,
     },
     .change_status = .{
-        .local_power_changed = .not_changed,
-        .overcurrent_changed = .not_changed,
+        .local_power_changed = 0,
+        .overcurrent_changed = 0,
     },
 },
 
@@ -59,7 +59,7 @@ root_hub_port_status: PortStatus = .{
     .port_change = @bitCast(@as(u16, 0)),
 },
 
-pending_interrupt_transfer: ?*Transfer = null,
+root_hub_status_change_transfer: ?*Transfer = null,
 
 pub fn init(self: *Self, registers: *volatile HostRegisters) void {
     self.* = .{
@@ -202,6 +202,8 @@ fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) HostPort
 
 fn hostPortPowerOn(self: *Self) TransferStatus {
     if (self.host_registers) |host_reg| {
+        log.debug("hostPortPowerOn", .{});
+
         var hw_status = self.hostPortSafeRead(host_reg);
 
         hw_status.power = 1;
@@ -244,16 +246,16 @@ fn hostPortReset(self: *Self) TransferStatus {
 // interrupt
 pub fn hubHandlePortInterrupt(self: *Self) void {
     if (self.host_registers) |host_reg| {
-        const hw_status = host_reg.port;
+        var hw_status = host_reg.port;
 
         self.root_hub_port_status.port_status.connected = hw_status.connect;
         self.root_hub_port_status.port_status.enabled = hw_status.enabled;
-        self.root_hub_port_status.port_status.suspended = hw_status.suspended;
+        self.root_hub_port_status.port_status.suspended = hw_status.status_suspend;
         self.root_hub_port_status.port_status.overcurrent = hw_status.overcurrent;
         self.root_hub_port_status.port_status.reset = hw_status.reset;
-        self.root_hub_port_status.port_status.powered = hw_status.power;
-        self.root_hub_port_status.port_status.low_speed_device = hw_status.speed == .low;
-        self.root_hub_port_status.port_status.high_speed_device = hw_status.speed == .high;
+        self.root_hub_port_status.port_status.power = hw_status.power;
+        self.root_hub_port_status.port_status.low_speed_device = if (hw_status.speed == .low) 1 else 0;
+        self.root_hub_port_status.port_status.high_speed_device = if (hw_status.speed == .high) 1 else 0;
 
         self.root_hub_port_status.port_change.connected_changed = hw_status.connect_changed;
         self.root_hub_port_status.port_change.enabled_changed = hw_status.enabled_changed;
@@ -265,7 +267,7 @@ pub fn hubHandlePortInterrupt(self: *Self) void {
         hw_status.enabled = 0;
         host_reg.port = hw_status;
 
-        hubNotifyPortChange();
+        self.hubNotifyPortChange();
     }
 }
 
@@ -282,9 +284,17 @@ pub fn hubHandlePortInterrupt(self: *Self) void {
 // from completing the USB interrupt transfer!)
 
 fn hubNotifyPortChange(self: *Self) void {
-    if (self.pending_interrupt_transfer) |request| {
-        self.pending_interrupt_transfer = null;
+    if (self.root_hub_status_change_transfer) |request| {
+        log.debug("root hub completing pending interrupt transfer", .{});
+        self.root_hub_status_change_transfer = null;
         if (request.data_buffer.len >= 1) {
+            // in the status change, bit 0 indicates the hub changed,
+            // bits 1..N indicate a port change. We pretend the DWC
+            // host port is port 1, so we set bit 1 in the one-byte
+            // response.
+            //
+            // See USB specification, revision 2.0 dated April 2000,
+            // section 11.12.4
             request.data_buffer[0] = 0x02;
             request.actual_size = 1;
         } else {
@@ -319,6 +329,7 @@ const handlers: []const Handler = &.{
 fn replyWithStructure(transfer: *Transfer, v: *const anyopaque, size: usize) TransferStatus {
     const requested_length = transfer.setup.data_size;
     const provided_length = @min(requested_length, size);
+    log.debug("responding with {d} bytes from the structure", .{provided_length});
     @memcpy(transfer.data_buffer[0..provided_length], @as([*]const u8, @ptrCast(v))[0..provided_length]);
     transfer.actual_size = provided_length;
     return .ok;
@@ -403,6 +414,7 @@ fn hubGetHubStatus(self: *Self, transfer: *Transfer) TransferStatus {
 }
 
 fn hubGetPortStatus(self: *Self, transfer: *Transfer) TransferStatus {
+    log.debug("hubGetPortStatus: port {d}", .{transfer.setup.index});
     return replyWithStructure(transfer, &self.root_hub_port_status, @sizeOf(@TypeOf(self.root_hub_port_status)));
 }
 
@@ -435,11 +447,11 @@ fn hubClearPortFeature(self: *Self, transfer: *Transfer) TransferStatus {
     const feature = transfer.setup.value;
 
     switch (feature) {
-        @intFromEnum(PortFeature.c_port_connection) => self.root_hub_port_status.port_change.connected_changed = .not_changed,
-        @intFromEnum(PortFeature.c_port_enable) => self.root_hub_port_status.port_change.enabled_changed = .not_changed,
-        @intFromEnum(PortFeature.c_port_suspend) => self.root_hub_port_status.port_change.suspended_changed = .not_changed,
-        @intFromEnum(PortFeature.c_port_over_current) => self.root_hub_port_status.port_change.overcurrent_changed = .not_changed,
-        @intFromEnum(PortFeature.c_port_reset) => self.root_hub_port_status.port_change.reset_changed = .not_changed,
+        @intFromEnum(PortFeature.c_port_connection) => self.root_hub_port_status.port_change.connected_changed = 0,
+        @intFromEnum(PortFeature.c_port_enable) => self.root_hub_port_status.port_change.enabled_changed = 0,
+        @intFromEnum(PortFeature.c_port_suspend) => self.root_hub_port_status.port_change.suspended_changed = 0,
+        @intFromEnum(PortFeature.c_port_over_current) => self.root_hub_port_status.port_change.overcurrent_changed = 0,
+        @intFromEnum(PortFeature.c_port_reset) => self.root_hub_port_status.port_change.reset_changed = 0,
         else => {
             log.warn("hubClearPortFeature: feature {d} not supported", .{feature});
             return .unsupported_request;
@@ -460,6 +472,17 @@ pub fn hubHandleTransfer(self: *Self, transfer: *Transfer) void {
                     transfer.complete(h[3](self, transfer));
                     return;
                 }
+            }
+        },
+        .interrupt => {
+            // assume this is for endpoint 1
+            log.debug("hubHandleTransfer: holding interrupt transfer for when a status change happens", .{});
+            self.root_hub_status_change_transfer = transfer;
+
+            // we might have previously gotten a status change that we
+            // need to report right now
+            if (@as(u16, @bitCast(self.root_hub_port_status.port_change)) != 0) {
+                self.hubNotifyPortChange();
             }
         },
         else => {
@@ -486,7 +509,7 @@ fn expectTransferStatus(expected_status: TransferStatus, xfer: *Transfer) !void 
     try expectEqual(expected_status, xfer.status);
 }
 
-test "only control transfers are supported" {
+test "only control and interrupt transfers are supported" {
     std.debug.print("\n", .{});
 
     var iso: Transfer = .{
@@ -500,15 +523,9 @@ test "only control transfers are supported" {
         .setup = undefined,
         .data_buffer = &.{},
     };
-    var interrupt: Transfer = .{
-        .endpoint_type = .interrupt,
-        .setup = undefined,
-        .data_buffer = &.{},
-    };
 
     try expectTransferStatus(.unsupported_request, &iso);
     try expectTransferStatus(.unsupported_request, &bulk);
-    try expectTransferStatus(.unsupported_request, &interrupt);
 }
 
 test "get device descriptor" {
@@ -794,4 +811,13 @@ test "we don't support 'clear hub feature'" {
     var xfer = TransferFactory.initHubClearHubFeatureTransfer(.c_hub_local_power);
 
     try expectTransferStatus(.unsupported_request, &xfer);
+}
+
+test "the hub holds on to an interrupt request until a change happens" {
+    std.debug.print("\n", .{});
+
+    const buffer_size = 1;
+    var buffer: [buffer_size]u8 = undefined;
+    var xfer = TransferFactory.initInterruptTransfer(&buffer);
+    try expectTransferStatus(.incomplete, &xfer);
 }

@@ -140,6 +140,7 @@ pub fn init() !void {
         devices[i].init();
     }
 
+    hub.initialize(allocator);
     try registerDriver(&usb_hub_driver);
     log.debug("registered hub driver", .{});
 
@@ -284,7 +285,7 @@ pub fn transferSubmit(xfer: *Transfer) !void {
     synchronize.criticalEnter(.FIQ);
     defer synchronize.criticalLeave();
 
-    xfer.completion = transferNotify;
+    //    xfer.completion = transferNotify;
 
     try root.hal.usb_hci.perform(xfer);
 }

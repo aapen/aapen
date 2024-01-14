@@ -16,6 +16,7 @@ const EndpointDirection = endpoint.EndpointDirection;
 const EndpointNumber = endpoint.EndpointNumber;
 
 const request = @import("request.zig");
+const RequestType = request.RequestType;
 const RequestTypeDirection = request.RequestTypeDirection;
 const RequestTypeRecipient = request.RequestTypeRecipient;
 const RequestTypeType = request.RequestTypeType;
@@ -79,6 +80,17 @@ pub const Transfer = struct {
         };
     }
 
+    pub fn initInterrupt(data_buffer: []u8) Transfer {
+        return .{
+            .device = null,
+            .endpoint_number = 0,
+            .endpoint_type = .interrupt,
+            // only the data size on the setup packet matters.
+            .setup = SetupPacket.init(.device, .standard, .device_to_host, 0, 0, 0, @truncate(data_buffer.len)),
+            .data_buffer = data_buffer,
+        };
+    }
+
     pub fn addressTo(self: *Transfer, dev: *Device) void {
         self.device = dev;
         self.device_address = dev.address;
@@ -95,10 +107,11 @@ pub const Transfer = struct {
 
     pub fn transferCompleteTransaction(self: *Transfer, txn_status: TransactionStatus) void {
         // The Transfer's state machine goes in here.
-        switch (self.transfer_type) {
+        switch (self.endpoint_type) {
             .control => self.transferCompleteControlTransaction(txn_status),
+            .interrupt => self.complete(.ok),
             else => {
-                log.warn("transferCompleteTransaction: unsupported transfer type {s}", .{@tagName(self.transfer_type)});
+                log.warn("transferCompleteTransaction: unsupported transfer type {s}", .{@tagName(self.endpoint_type)});
             },
         }
     }
@@ -180,7 +193,7 @@ pub const TransferType = enum(u2) {
 };
 
 pub const SetupPacket = extern struct {
-    request_type: request.RequestType,
+    request_type: RequestType,
     request: u8,
     value: u16,
     index: u16,

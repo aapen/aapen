@@ -23,6 +23,10 @@ pub fn systemTicks() u64 {
     return root.hal.clock.ticks();
 }
 
+pub fn delayMillis(count: u32) void {
+    root.hal.clock.delayMillis(count);
+}
+
 pub const Clock = struct {
     const Self = @This();
 

@@ -27,6 +27,10 @@ const TransferType = transfer.TransferType;
 const SetupPacket = transfer.SetupPacket;
 
 /// Create various Transfer instances with a goal-oriented API
+pub fn initInterruptTransfer(data_buffer: []u8) Transfer {
+    return Transfer.initInterrupt(data_buffer);
+}
+
 pub fn initControlTransfer(setup_packet: SetupPacket, data_buffer: []u8) Transfer {
     return Transfer.initControl(setup_packet, @constCast(data_buffer));
 }
@@ -130,7 +134,7 @@ test "factory can create a transfer for a descriptor query" {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initDescriptorTransfer(.device, 0, 0, &buffer);
-    try expectEqual(TransferType.control, xfer.transfer_type);
+    try expectEqual(TransferType.control, xfer.endpoint_type);
     try expectEqual(@intFromEnum(StandardDeviceRequests.get_descriptor), xfer.setup.request);
 }
 
@@ -138,7 +142,7 @@ test "factory can create a specific transfer for a device descriptor query" {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initDeviceDescriptorTransfer(0, 0, &buffer);
-    try expectEqual(TransferType.control, xfer.transfer_type);
+    try expectEqual(TransferType.control, xfer.endpoint_type);
     try expectEqual(@intFromEnum(StandardDeviceRequests.get_descriptor), xfer.setup.request);
 }
 
@@ -146,7 +150,7 @@ test "factory can create a specific transfer for a configuration descriptor quer
     const buffer_size = 2;
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initConfigurationDescriptorTransfer(0, &buffer);
-    try expectEqual(TransferType.control, xfer.transfer_type);
+    try expectEqual(TransferType.control, xfer.endpoint_type);
     try expectEqual(@intFromEnum(StandardDeviceRequests.get_descriptor), xfer.setup.request);
 }
 
@@ -154,7 +158,7 @@ test "factory can create a specific transfer for a string descriptor query" {
     const buffer_size = @sizeOf(descriptor.StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initStringDescriptorTransfer(0, LangID.none, &buffer);
-    try expectEqual(TransferType.control, xfer.transfer_type);
+    try expectEqual(TransferType.control, xfer.endpoint_type);
     try expectEqual(@intFromEnum(StandardDeviceRequests.get_descriptor), xfer.setup.request);
 }
 
@@ -162,7 +166,7 @@ test "factory can create a specific transfer for an interface descriptor query" 
     const buffer_size = @sizeOf(descriptor.StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initInterfaceDescriptorTransfer(0, &buffer);
-    try expectEqual(TransferType.control, xfer.transfer_type);
+    try expectEqual(TransferType.control, xfer.endpoint_type);
     try expectEqual(@intFromEnum(StandardDeviceRequests.get_descriptor), xfer.setup.request);
 }
 
@@ -170,7 +174,7 @@ test "factory can create a specific transfer for an endpoint descriptor query" {
     const buffer_size = @sizeOf(descriptor.StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initEndpointDescriptorTransfer(0, &buffer);
-    try expectEqual(TransferType.control, xfer.transfer_type);
+    try expectEqual(TransferType.control, xfer.endpoint_type);
     try expectEqual(@intFromEnum(StandardDeviceRequests.get_descriptor), xfer.setup.request);
 }
 
@@ -178,6 +182,13 @@ test "factory can create a specific transfer for a hub descriptor query" {
     const buffer_size = @sizeOf(descriptor.StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initGetHubDescriptorTransfer(0, &buffer);
-    try expectEqual(TransferType.control, xfer.transfer_type);
+    try expectEqual(TransferType.control, xfer.endpoint_type);
     try expectEqual(@intFromEnum(StandardDeviceRequests.get_descriptor), xfer.setup.request);
+}
+
+test "factory can create an interrupt transfer" {
+    const buffer_size = 1;
+    var buffer: [buffer_size]u8 = undefined;
+    const xfer = initInterruptTransfer(&buffer);
+    try expectEqual(TransferType.interrupt, xfer.endpoint_type);
 }

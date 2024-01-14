@@ -407,25 +407,8 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
 
     // check if the host port raised the interrupt
     if (intr_status.port == 1) {
-        const port_status = self.host_registers.port;
-
-        if (port_status.connect_changed == 1) {
-            log.debug("irqHandle: Host port connected changed, {d}", .{self.host_registers.port.connect});
-            // setting this to 1 clears the interrupt
-            self.host_registers.port.connect_changed = 1;
-        }
-
-        if (port_status.enabled_changed == 1) {
-            log.debug("irqHandle: Host port enabled changed, {d}", .{self.host_registers.port.enabled});
-            // setting this to 1 clears the interrupt
-            self.host_registers.port.enabled_changed = 1;
-        }
-
-        if (port_status.overcurrent_changed == 1) {
-            log.debug("irqHandle: Host port overcurrent changed, {d}", .{self.host_registers.port.overcurrent});
-            // setting this to 1 clears the interrupt
-            self.host_registers.port.overcurrent_changed = 1;
-        }
+        // pass it on to the root hub
+        self.root_hub.hubHandlePortInterrupt();
     }
 
     // clear the interrupt bits
@@ -588,9 +571,8 @@ pub fn perform(self: *Self, xfer: *Transfer) !void {
     // put the transfer in the pending_transfers list.
     const node = try self.pendingTransferAdd(xfer);
     self.pending_transfers_lock.acquire();
-    defer self.pending_transfers_lock.release();
-
     self.pending_transfers.append(node);
+    self.pending_transfers_lock.release();
 
     // This driver-level routine assumes that a higher-level caller
     // has already checked the Transfer's consistency against USB
@@ -750,16 +732,17 @@ pub fn poll() !void {
     }
 
     self.pending_transfers_lock.acquire();
-    defer self.pending_transfers_lock.release();
+    var maybe_xfernode = self.pending_transfers.popFirst();
+    self.pending_transfers_lock.release();
 
-    if (self.pending_transfers.popFirst()) |xfernode| {
+    if (maybe_xfernode) |xfernode| {
         var xfer = xfernode.data;
 
         if (xfer.device) |dev| {
             if (dev.isRootHub()) {
                 self.root_hub.hubHandleTransfer(xfer);
             } else {
-                log.debug("this is where we do a real transfer", .{});
+                log.debug("this is where we do a transfer to external devices", .{});
             }
         } else {
             log.err("Malformed transfer: no device", .{});
