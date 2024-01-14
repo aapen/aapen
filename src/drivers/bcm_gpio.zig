@@ -140,7 +140,19 @@ pub fn enable(self: *Self, bc_id: u64) void {
     self.registers.pull_up_pull_down_enable_clock[p.data_register_index] = 0;
 }
 
-pub fn set(self: *Self, bc_id: u64) void {
+const Serial = @import("../serial.zig");
+
+pub fn set(self: *Self, bc_id: u64, pin_on: bool) void {
+    try Serial.writer.print("set: id: {} pin_on: {}\n", .{ bc_id, pin_on });
+    const p = &self.pins[bc_id];
+    if (pin_on) {
+        self.registers.output_set[p.data_register_index] = p.getset_mask;
+    } else {
+        self.registers.output_clear[p.data_register_index] = p.getset_mask;
+    }
+}
+
+pub fn xset(self: *Self, bc_id: u64) void {
     const p = &self.pins[bc_id];
     self.registers.output_set[p.data_register_index] = p.getset_mask;
 }

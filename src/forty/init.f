@@ -426,12 +426,7 @@ finish
 ;
 
 : pin-set (bool p-no -- : Set or clear the given pin)
-  swap
-  if 
-    pins gpio-pin-set
-  else
-    pins gpio-pin-clear
-  endif
+  pins gpio-pin-set
 ;
 
 ( Testing... )

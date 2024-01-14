@@ -190,7 +190,7 @@ fn coerceParameter(comptime PT: type, into: *PT, comptime field_num: usize, comp
             }
         },
         .Bool => {
-            into[field_num] = if (val) 1 else 0;
+            into[field_num] = if (val != 0) true else false;
         },
         .Pointer => {
             into[field_num] = @ptrFromInt(val);
