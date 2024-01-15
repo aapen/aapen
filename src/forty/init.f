@@ -407,10 +407,8 @@ finish
 
 : pins hal hal.gpio + ;
 
-: pin-init  (p-no -- : Initialize the given pin and set it to output)
-  dup dup
+: pin-enable  (p-no -- : Initialize the given pin and set it to output)
   pins gpio-pin-enable 
-  1 swap pins gpio-pin-func
 ;
 
 : pin-in (p-no -- : Set the given pin to input)
@@ -421,6 +419,18 @@ finish
   1 swap pins gpio-pin-func
 ;
 
+: pin-up (p-no -- : Set the pin to pull up)
+  2 swap pins gpio-pin-pull
+;
+
+: pin-down (p-no -- : Set the pin to pull down)
+  1 swap pins gpio-pin-pull
+;
+
+: pin-float (p-no -- : Turn off the pin pull up/down)
+  0 swap pins gpio-pin-pull
+;
+
 : pin-get (p-no -- n : Get the state of the pin)
   pins gpio-pin-get
 ;
@@ -428,6 +438,46 @@ finish
 : pin-set (bool p-no -- : Set or clear the given pin)
   pins gpio-pin-set
 ;
+
+: pin-blink (p-no -- : Blink the pin 10 times)
+  10 times
+    "loop" s. cr
+    dup 1 swap
+    pin-set
+    500 sleep
+    dup 0 swap 
+    pin-set
+    500 sleep
+  repeat
+  drop
+;
+
+: pin-demo ( -- : Turn pin 6 on when pin 26 is high)
+  26 pin-enable (Pin with the button)
+  26 pin-in
+  26 pin-up
+
+  6 pin-enable  (Pin with the led)
+  6 pin-out
+  6 pin-down
+  0 6 pin-set
+
+  20 times
+    ->stack p
+    26 pin-get
+    not 6 pin-set
+    500 sleep
+  repeat
+;
+
+: pin-sweep (p-no -- : Print out the pin value a few times times.)
+  30 times
+    dup pin-get . " " s.
+    400 sleep
+  repeat
+  drop
+;
+
 
 ( Testing... )
 

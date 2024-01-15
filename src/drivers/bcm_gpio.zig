@@ -7,9 +7,9 @@ pub fn defineModule(forth: *Forth) !void {
     try auto.defineNamespace(Self, .{
         .{ "enable", "gpio-pin-enable" },
         .{ "set", "gpio-pin-set" },
-        .{ "clear", "gpio-pin-clear" },
         .{ "get", "gpio-pin-get" },
         .{ "selectFunction", "gpio-pin-func" },
+        .{ "selectPull", "gpio-pin-pull" },
     }, forth);
 }
 
@@ -24,6 +24,12 @@ pub const FunctionSelect = enum(u3) {
     alt3 = 0b111,
     alt4 = 0b011,
     alt5 = 0b010,
+};
+
+pub const PullUpDownSelect = enum(u32) {
+    off = 0x00,
+    down = 0x01,
+    up = 0x02,
 };
 
 const Registers = extern struct {
@@ -49,7 +55,7 @@ const Registers = extern struct {
     reserved_10: u32,
     pin_async_falling_detect_enable: [2]u32,
     reserved_11: u32,
-    pull_up_pull_down_enable: [1]u32,
+    pull_up_pull_down_enable: u32,
     pull_up_pull_down_enable_clock: [2]u32,
 };
 
@@ -117,6 +123,11 @@ pub fn init(register_base: u64) Self {
     };
 }
 
+pub fn enable(self: *Self, bc_id: u64) void {
+    self.selectFunction(bc_id, .output);
+    self.selectPull(bc_id, .off);
+}
+
 pub fn selectFunction(self: *Self, bc_id: u64, fsel: FunctionSelect) void {
     const p = &self.pins[bc_id];
     var val = self.registers.function_select[p.function_select_register_index];
@@ -125,41 +136,31 @@ pub fn selectFunction(self: *Self, bc_id: u64, fsel: FunctionSelect) void {
     self.registers.function_select[p.function_select_register_index] = val;
 }
 
-pub fn enable(self: *Self, bc_id: u64) void {
+pub fn selectPull(self: *Self, bc_id: u64, pull: PullUpDownSelect) void {
     const p = &self.pins[bc_id];
 
-    self.registers.pull_up_pull_down_enable[0] = 0;
+    self.registers.pull_up_pull_down_enable = 0;
     spinDelay(150);
 
-    // enable PU/PD for this pin
+    self.registers.pull_up_pull_down_enable = @intFromEnum(pull);
+    spinDelay(150);
+
+    // En/disable PU/PD for this pin
     self.registers.pull_up_pull_down_enable_clock[p.data_register_index] = p.getset_mask;
     spinDelay(150);
 
-    // clock in a zero
-    self.registers.pull_up_pull_down_enable[0] = 0;
+    // Clock in a zero
+    self.registers.pull_up_pull_down_enable = 0;
     self.registers.pull_up_pull_down_enable_clock[p.data_register_index] = 0;
 }
 
-const Serial = @import("../serial.zig");
-
 pub fn set(self: *Self, bc_id: u64, pin_on: bool) void {
-    try Serial.writer.print("set: id: {} pin_on: {}\n", .{ bc_id, pin_on });
     const p = &self.pins[bc_id];
     if (pin_on) {
         self.registers.output_set[p.data_register_index] = p.getset_mask;
     } else {
         self.registers.output_clear[p.data_register_index] = p.getset_mask;
     }
-}
-
-pub fn xset(self: *Self, bc_id: u64) void {
-    const p = &self.pins[bc_id];
-    self.registers.output_set[p.data_register_index] = p.getset_mask;
-}
-
-pub fn clear(self: *Self, bc_id: u64) void {
-    const p = &self.pins[bc_id];
-    self.registers.output_clear[p.data_register_index] = p.getset_mask;
 }
 
 pub fn get(self: *Self, bc_id: u64) bool {
