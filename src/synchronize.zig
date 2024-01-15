@@ -116,15 +116,18 @@ pub const Spinlock = struct {
 
         // This is an atomic test-and-set operation on lock.locked
         //
-        // See Section K13.3.1 "Acquiring a lock" in "Arm Architecture
-        // Reference Manual for A-profile architecture" revision J.a
-        // from 21 April 2023
+        // See Section K13.3.4 "Use of Wait for Event (WFE) and Send
+        // Event (SEV) with locks" in "Arm Architecture Reference
+        // Manual for A-profile architecture" revision J.a from 21
+        // April 2023
 
         asm volatile (
             \\ mov x1, %[ptr_locked]
-            \\ mov w2, #1
+            \\ sevl
             \\ prfm pstl1keep, [x1]
-            \\ 1: ldaxr w3, [x1]
+            \\ 1:
+            \\ wfe
+            \\ ldaxr w3, [x1]
             \\ cbnz w3, 1b
             \\ stxr w3, w2, [x1]
             \\ cbnz w3, 1b
@@ -137,9 +140,10 @@ pub const Spinlock = struct {
     pub fn release(lock: *Spinlock) void {
         // This is an atomic reset operation on lock.locked
         //
-        // See Section K13.3.2 "Releasing a lock" in "Arm Architecture
-        // Reference Manual for A-profile architecture" revision J.a
-        // from 21 April 2023
+        // See Section K13.3.4 "Use of Wait for Event (WFE) and Send
+        // Event (SEV) with locks" in "Arm Architecture Reference
+        // Manual for A-profile architecture" revision J.a from 21
+        // April 2023
         asm volatile (
             \\ mov x1, %[ptr_locked]
             \\ stlr wzr, [x1]

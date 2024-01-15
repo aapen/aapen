@@ -153,7 +153,6 @@ fn readSlice(dest: []u8) void {
 
 pub fn timerSignal() !void {
     enqueue(.{ .type = EventType.Timer });
-
     root.schedule.sleep(3000);
 }
 
