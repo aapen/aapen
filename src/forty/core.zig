@@ -362,42 +362,46 @@ pub fn wordNot(forth: *Forth, _: *Header) ForthError!void {
     }
 }
 
-/// b b -- b
+/// n n -- n
 pub fn wordOr(forth: *Forth, _: *Header) ForthError!void {
     const a = try forth.stack.pop();
     const b = try forth.stack.pop();
-    if (a != 0) {
-        try forth.stack.push(a);
-    } else if (b != 0) {
-        try forth.stack.push(b);
-    } else {
-        try forth.stack.push(0);
-    }
+    try forth.stack.push(a | b);
 }
 
-/// b b -- b
+/// n n -- n
 pub fn wordXor(forth: *Forth, _: *Header) ForthError!void {
     const a = try forth.stack.pop();
     const b = try forth.stack.pop();
-    if (a != 0 and b != 0) {
-        try forth.stack.push(0);
-    } else if (a != 0) {
-        try forth.stack.push(a);
-    } else if (b != 0) {
-        try forth.stack.push(b);
-    } else {
-        try forth.stack.push(0);
-    }
+    try forth.stack.push(a ^ b);
 }
 
-/// b b -- b
+/// n n -- n
 pub fn wordAnd(forth: *Forth, _: *Header) ForthError!void {
     const a = try forth.stack.pop();
     const b = try forth.stack.pop();
-    if (a == 0 or b == 0) {
+    try forth.stack.push(a & b);
+}
+
+/// n u -- n
+pub fn wordLeftShift(forth: *Forth, _: *Header) ForthError!void {
+    const a = try forth.stack.pop();
+    const b = try forth.stack.pop();
+    if (a > 64) {
         try forth.stack.push(0);
     } else {
-        try forth.stack.push(b);
+        try forth.stack.push(b << @truncate(a));
+    }
+}
+
+/// n u -- n
+pub fn wordRightShift(forth: *Forth, _: *Header) ForthError!void {
+    const a = try forth.stack.pop();
+    const b = try forth.stack.pop();
+    if (a > 64) {
+        try forth.stack.push(0);
+    } else {
+        try forth.stack.push(b >> @truncate(a));
     }
 }
 
@@ -605,6 +609,8 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("or", "n -- n :u64 or", &wordOr, false);
     _ = try forth.definePrimitiveDesc("xor", "n -- n :u64 xor", &wordXor, false);
     _ = try forth.definePrimitiveDesc("and", "n -- n :u64 and", &wordAnd, false);
+    _ = try forth.definePrimitiveDesc("lshift", "n u -- n : u64 bitwise left shift", &wordLeftShift, false);
+    _ = try forth.definePrimitiveDesc("rshift", "n u -- n : u64 bitwise right shift", &wordRightShift, false);
     _ = try forth.definePrimitiveDesc("<", "n n -- n :u64 less-than test", &wordLessThanU64, false);
     _ = try forth.definePrimitiveDesc("<=", "n n -- n :u64 less-than or equal test", &wordLessThanEqualU64, false);
     _ = try forth.definePrimitiveDesc(">", "n n -- n :u64 greater-than test", &wordGreaterThanU64, false);
