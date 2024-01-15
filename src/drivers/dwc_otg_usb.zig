@@ -725,6 +725,8 @@ const Transaction = struct {
 pub fn poll() !void {
     const self: *Self = root.hal.usb_hci;
 
+    root.debug.kernelMessage("p");
+
     // The scheduler is running before all initialization
     // completes. Don't go any farther unless init is finished
     if (!self.pending_transfers_lock.enabled) {
@@ -734,6 +736,8 @@ pub fn poll() !void {
     self.pending_transfers_lock.acquire();
     var maybe_xfernode = self.pending_transfers.popFirst();
     self.pending_transfers_lock.release();
+
+    root.debug.kernelMessage("P");
 
     if (maybe_xfernode) |xfernode| {
         var xfer = xfernode.data;

@@ -4,6 +4,7 @@ const ScopeLevel = std.log.ScopeLevel;
 const arch = @import("architecture.zig");
 const qemu = @import("qemu.zig");
 
+const Event = @import("event.zig");
 const Heap = @import("heap.zig");
 const FrameBuffer = @import("frame_buffer.zig");
 const CharBuffer = @import("char_buffer.zig");
@@ -192,6 +193,12 @@ fn kernelInit() void {
     MainConsole.defineModule(&interpreter, main_console) catch |err| {
         debug.kernelError("Main console define module", err);
     };
+
+    Event.defineModule(&interpreter) catch |err| {
+        debug.kernelError("Event queue define module", err);
+    };
+
+    Event.enqueue(.{ .type = 0x42, .subtype = 0x99, .value = 0x1234, .extra = 0x01020304 });
 
     if (schedule.init()) {
         debug.kernelMessage("schedule init");

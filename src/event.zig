@@ -1,8 +1,29 @@
 const std = @import("std");
 const RingBuffer = std.RingBuffer;
 
+const root = @import("root");
+
+const arch = @import("architecture.zig");
+
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
+
+const Forth = @import("forty/forth.zig").Forth;
+const auto = @import("forty/auto.zig");
+
+// ----------------------------------------------------------------------
+// Forty interop
+// ----------------------------------------------------------------------
+
+pub fn defineModule(forth: *Forth) !void {
+    try auto.defineNamespace(@This(), .{
+        .{ "nextEvent", "next-event" },
+    }, forth);
+}
+
+pub fn nextEvent() u64 {
+    return @bitCast(dequeue());
+}
 
 // ----------------------------------------------------------------------
 // Public API
@@ -22,21 +43,27 @@ pub fn enqueue(event: Event) void {
     defer queue_lock.release();
 
     queue.writeSliceAssumeCapacity(std.mem.asBytes(&event));
+    wakeWaiting();
 }
 
 pub fn dequeue() Event {
     queue_lock.acquire();
-    defer queue_lock.release();
 
     // TODO if the queue is empty, park (but remember to release the
     // spinlock before parking!)
+    if (queue.isEmpty()) {
+        queue_lock.release();
+        waitForEvent();
+        queue_lock.acquire();
+    }
+    defer queue_lock.release();
 
     // this looks like it will return stack memory, but when you
     // return a struct value Zig automatically generates code to copy
     // it out of the stack to the caller's space.
     var buf: [EVENT_SIZE]u8 = undefined;
-    queue.readFirstAssumeLength(buf, EVENT_SIZE);
-    const ev = std.mem.bytesAsValue(Event, &buf);
+    readSlice(&buf);
+    const ev: Event = std.mem.bytesAsValue(Event, &buf).*;
     return ev;
 }
 
@@ -83,6 +110,19 @@ pub const EventSubtype = struct {
 // Implementation
 // ----------------------------------------------------------------------
 
+fn wakeWaiting() void {
+    arch.cpu.barriers.dsb(.SY);
+    arch.cpu.sev();
+}
+
+// Park the CPU until an event arrives (presumably via interrupt or
+// from another core)
+fn waitForEvent() void {
+    while (queue.isEmpty()) {
+        arch.cpu.wfe();
+    }
+}
+
 var queue_lock: Spinlock = Spinlock.init("kevqueue", true);
 const queue_size = 1024 * @sizeOf(Event); // room for 1K events
 var queue_storage: [queue_size]u8 = undefined;
@@ -91,6 +131,31 @@ var queue: RingBuffer = .{
     .write_index = 0,
     .read_index = 0,
 };
+
+// This is the same thing as RingBuffer.readFirstAssumeLength, but
+// that function doesn't exist yet in our currently-pinned version of
+// Zig.
+fn readSlice(dest: []u8) void {
+    const length = dest.len;
+
+    const data_start = queue.mask(queue.read_index);
+    const part1_data_end = @min(queue.data.len, data_start + length);
+    const part1_len = part1_data_end - data_start;
+    const part2_len = length - part1_len;
+    @memcpy(dest[0..part1_len], queue.data[data_start..part1_data_end]);
+    @memcpy(dest[part1_len..length], queue.data[0..part2_len]);
+    queue.read_index = queue.mask2(queue.read_index + length);
+}
+
+// ----------------------------------------------------------------------
+// Heartbeat
+// ----------------------------------------------------------------------
+
+pub fn timerSignal() !void {
+    enqueue(.{ .type = EventType.Timer });
+
+    root.schedule.sleep(3000);
+}
 
 // ----------------------------------------------------------------------
 // Tests

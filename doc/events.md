@@ -170,7 +170,7 @@ Subtypes:
 | subtype | meaning       |
 +---------+---------------+
 |    0x00 | succeeded     |
-|    0x01 | failed        |
+|    0x7f | failed        |
 +---------+---------------+
 ```
 

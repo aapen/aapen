@@ -34,6 +34,16 @@ pub inline fn wfi() void {
     asm volatile ("wfi");
 }
 
+/// Wait for event
+pub inline fn wfe() void {
+    asm volatile ("wfe");
+}
+
+/// Send event
+pub inline fn sev() void {
+    asm volatile ("sev");
+}
+
 /// Cause a software breakpoint
 pub inline fn brk(breakpoint_id: u32) void {
     asm volatile ("brk " ++ breakpoint_id);

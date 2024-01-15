@@ -19,18 +19,20 @@ const std = @import("std");
 const root = @import("root");
 const HAL = root.HAL;
 
+const event = @import("event.zig");
 const heartbeat = @import("heartbeat.zig");
 
 const TaskDefinition = struct { []const u8, Task.Proc };
 
 const task_definitions: []const TaskDefinition = &.{
-    .{ "heartbeat", heartbeat.heartbeat },
     .{ "usb_poll", HAL.USBHCI.poll },
+    .{ "heartbeat", heartbeat.heartbeat },
+    .{ "kev_send", event.timerSignal },
     //    .{ "hb2", heartbeat.heartbeat2 },
 };
 
-const TID = usize;
-pub var current_task: ?TID = 0;
+const TID = u32;
+pub var current_task: ?TID = null;
 
 const Task = struct {
     name: []const u8,
@@ -90,12 +92,12 @@ pub fn sleep(millis: u32) void {
 
 fn scheduleRun(_: *const HAL.TimerHandler, _: *HAL.Timer) u32 {
     awakenSleepingTasks();
-    taskRun(firstReadyTask());
+    taskRun(roundRobin());
     return quantum;
 }
 
-fn taskRun(maybe_tid: ?TID) void {
-    if (maybe_tid) |tid| {
+fn taskRun(next_tid: ?TID) void {
+    if (next_tid) |tid| {
         var task_to_run: *Task = &tasks[tid];
         task_to_run.next_state = .ready;
         task_to_run.state = .running;
@@ -118,10 +120,20 @@ fn awakenSleepingTasks() void {
     }
 }
 
-fn firstReadyTask() ?TID {
-    for (0..tasks.len) |next| {
+fn roundRobin() ?TID {
+    const first_considered = current_task orelse 0;
+    var next: TID = first_considered + 1;
+    if (next >= tasks.len) {
+        next -= @truncate(tasks.len);
+    }
+
+    while (next != first_considered) {
         if (tasks[next].state == .ready) {
             return next;
+        }
+        next += 1;
+        if (next >= tasks.len) {
+            next -= @truncate(tasks.len);
         }
     }
     return null;
