@@ -158,6 +158,29 @@ pub const Spinlock = struct {
     }
 };
 
+// Keeping this around for later:
+//
+// acquire_semaphore:
+//     // x0: address of the semaphore variable
+// 1:  ldaxr   w1, [x0]         // Load the semaphore value atomically
+//     cbz     w1, 2f           // If the semaphore is 0, wait for an event
+//     sub     w1, w1, #1       // Decrement the semaphore value
+//     stlxr   w2, w1, [x0]     // Attempt to store the new value atomically
+//     cbnz    w2, 1b           // If the store failed, retry
+//     ret                      // Return when successful
+// 2:  wfe                      // Wait for an event
+//     b        1b              // Go back to try again
+//
+// release_semaphore:
+//     // x0: address of the semaphore variable
+// 1:  ldaxr   w1, [x0]         // Load the semaphore value atomically
+//     add     w1, w1, #1       // Increment the semaphore value
+//     stlxr   w2, w1, [x0]     // Attempt to store the new value atomically
+//     cbnz    w2, 1b           // If the store failed, retry
+//     dsb                      // Ensure the semaphore update is visible to all cores
+//     sev                      // Send an event to wake up waiting cores
+//     ret                      // Return when successful
+
 // ----------------------------------------------------------------------
 // Cache coherence and maintenance
 // ----------------------------------------------------------------------
