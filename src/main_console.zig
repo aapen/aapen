@@ -15,7 +15,7 @@ const Readline = @import("readline.zig");
 const Self = @This();
 
 pub fn defineModule(forth: *Forth, console: *Self) !void {
-    try forth.defineStruct("MainConsole", Self);
+    try forth.defineStruct("MainConsole", Self, .{});
     try forth.defineConstant("console", @intFromPtr(console));
 }
 

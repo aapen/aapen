@@ -1,14 +1,13 @@
 const std = @import("std");
 
 const Forth = @import("../forty/forth.zig").Forth;
-const auto = @import("../forty/auto.zig");
 
 const root = @import("root");
 const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(PeripheralClockController, .{
+    try forth.defineNamespace(PeripheralClockController, .{
         .{ "clockRateCurrent", "clock-rate" },
         .{ "clockRateMax", "clock-rate-max" },
         .{ "clockRateMin", "clock-rate-min" },
@@ -17,7 +16,7 @@ pub fn defineModule(forth: *Forth) !void {
         .{ "clockState", "clock-state" },
         .{ "clockOn", "clock-on" },
         .{ "clockOff", "clock-off" },
-    }, forth);
+    });
 }
 
 pub const ClockId = enum(u32) {

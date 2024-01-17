@@ -127,6 +127,7 @@ pub const Device = struct {
     driver_private: *anyopaque,
 
     pub fn init(self: *Device) void {
+        const nothing_private = [_]u8{};
         self.* = .{
             .in_use = false,
             .depth = 0,
@@ -138,7 +139,7 @@ pub const Device = struct {
             .product = "",
             .state = .unconfigured,
             .driver = null,
-            .driver_private = &.{},
+            .driver_private = &nothing_private,
             .configuration = undefined,
         };
     }

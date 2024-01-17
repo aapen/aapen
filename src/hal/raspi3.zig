@@ -110,7 +110,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 }
 
 pub fn defineModule(forth: *Forth, hal: *Self) !void {
-    try forth.defineStruct("hal", Self);
+    try forth.defineStruct("hal", Self, .{});
     try forth.defineConstant("hal", @intFromPtr(hal));
 
     // dwc_otg_usb and bcm_board_info are initialized under different

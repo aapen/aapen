@@ -8,15 +8,14 @@ const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
 
 const Forth = @import("../forty/forth.zig").Forth;
-const auto = @import("../forty/auto.zig");
 
 const synchronize = @import("../synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(@This(), .{
+    try forth.defineNamespace(@This(), .{
         .{ "systemTicks", "ticks", "system clock ticks since boot" },
-    }, forth);
+    });
 }
 
 pub fn systemTicks() u64 {

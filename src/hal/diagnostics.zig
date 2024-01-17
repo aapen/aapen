@@ -6,7 +6,6 @@ const kprint = root.kprint;
 const BoardInfo = root.HAL.BoardInfoController.BoardInfo;
 
 const Forth = @import("../forty/forth.zig").Forth;
-const auto = @import("../forty/auto.zig");
 
 const Self = @This();
 
@@ -14,7 +13,7 @@ pub var board: BoardInfo = BoardInfo{};
 
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineConstant("board", @intFromPtr(&board));
-    try auto.defineNamespace(Self, .{
+    try forth.defineNamespace(Self, .{
         .{ "print", "print-board-info" },
         .{"name"},
         .{"version"},
@@ -23,7 +22,7 @@ pub fn defineModule(forth: *Forth) !void {
         .{"manufacturer"},
         .{ "serialNumber", "serial-number" },
         .{ "macAddress", "mac-address" },
-    }, forth);
+    });
 }
 
 pub fn init(allocator: Allocator) !void {

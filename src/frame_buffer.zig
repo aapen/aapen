@@ -33,7 +33,8 @@ pub const Self = @This();
 
 pub fn defineModule(forth: *Forth, fb: *Self) !void {
     try forth.defineConstant("fb", @intFromPtr(fb));
-    try auto.defineNamespace(Self, .{
+    try forth.defineStruct("FrameBuffer", Self, .{ .declarations = true });
+    try forth.defineNamespace(Self, .{
         .{ "line", "line", "draw a line" },
         .{"fill"},
         .{"text"},
@@ -43,8 +44,7 @@ pub fn defineModule(forth: *Forth, fb: *Self) !void {
         .{ "clear", "clear-fb" },
         .{ "getXres", "fb-xres", "X resolution in pixels" },
         .{ "getYres", "fb-yres", "Y resolution in pixels" },
-    }, forth);
-    try forth.defineStruct("FrameBuffer", Self);
+    });
 }
 
 // Font dimensions

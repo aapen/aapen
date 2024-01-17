@@ -11,7 +11,6 @@ const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
 
 const Forth = @import("../forty/forth.zig").Forth;
-const auto = @import("../forty/auto.zig");
 
 const time = @import("../time.zig");
 
@@ -157,9 +156,9 @@ root_hub: RootHub = .{},
 // ----------------------------------------------------------------------
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(Self, .{
+    try forth.defineNamespace(Self, .{
         .{ "initialize", "usb-init-hcd" },
-    }, forth);
+    });
 }
 
 // ----------------------------------------------------------------------

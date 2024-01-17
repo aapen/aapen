@@ -9,19 +9,18 @@ const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
 const Forth = @import("forty/forth.zig").Forth;
-const auto = @import("forty/auto.zig");
 
 // ----------------------------------------------------------------------
 // Forty interop
 // ----------------------------------------------------------------------
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(@This(), .{
+    try forth.defineNamespace(@This(), .{
         .{ "nextEvent", "next-event" },
-    }, forth);
+    });
 
-    try forth.defineStructRecursive("event-type", EventType);
-    try forth.defineStructRecursive("event-subtype", EventSubtype);
+    try forth.defineStruct("event-type", EventType, .{ .recursive = true, .declarations = true });
+    try forth.defineStruct("event-subtype", EventSubtype, .{ .recursive = true, .declarations = true });
 }
 
 pub fn nextEvent() u64 {

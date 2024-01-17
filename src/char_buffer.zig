@@ -6,7 +6,6 @@ const serial = @import("serial.zig");
 const FrameBuffer = @import("frame_buffer.zig");
 
 const Forth = @import("forty/forth.zig").Forth;
-const auto = @import("forty/auto.zig");
 
 const Readline = @import("readline.zig");
 const RichChar = @import("rich_char.zig").RichChar;
@@ -20,13 +19,12 @@ pub const DEFAULT_BACKGROUND: u8 = 0x00;
 const Self = @This();
 
 pub fn defineModule(forth: *Forth, cb: *Self) !void {
-    try forth.defineStruct("CharBuffer", Self);
+    try forth.defineStruct("CharBuffer", Self, .{ .declarations = true, .recursive = true });
     try forth.defineConstant("char-buffer", @intFromPtr(cb));
-
-    try auto.defineNamespace(Self, .{
+    try forth.defineNamespace(Self, .{
         .{ "getNumCols", "cb-cols", "Columns in a char buffer" },
         .{ "getNumRows", "cb-rows", "Rows in a char buffer" },
-    }, forth);
+    });
 }
 
 pub fn getNumCols(self: *Self) u64 {

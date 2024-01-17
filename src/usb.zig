@@ -14,8 +14,6 @@ const time = @import("time.zig");
 
 const Forth = root.Forth;
 
-const auto = @import("forty/auto.zig");
-
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;
 
@@ -110,7 +108,7 @@ const Self = @This();
 // ----------------------------------------------------------------------
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(Self, .{.{ "init", "usb-init" }}, forth);
+    try forth.defineNamespace(Self, .{.{ "init", "usb-init" }});
 
     try HCI.defineModule(forth);
     try forth.defineConstant("usbhci", @intFromPtr(&root.hal.usb_hci));

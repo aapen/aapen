@@ -3,15 +3,14 @@ const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
 
 const Forth = @import("../forty/forth.zig").Forth;
-const auto = @import("../forty/auto.zig");
 
 const Self = @This();
 
 pub fn defineModule(forth: *Forth) !void {
-    try auto.defineNamespace(Self, .{
+    try forth.defineNamespace(Self, .{
         .{ "systemPowerQuery", "?power", "check power state of device" },
         .{ "systemPowerControl", "power", "set device to power state" },
-    }, forth);
+    });
 }
 
 // global wrappers that uses the initialized device to call the

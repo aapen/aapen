@@ -10,6 +10,7 @@ const CharBuffer = @import("../char_buffer.zig");
 const Readline = @import("../readline.zig");
 const buffer = @import("buffer.zig");
 
+const auto = @import("auto.zig");
 const stack = @import("stack.zig");
 const string = @import("string.zig");
 const core = @import("core.zig");
@@ -92,9 +93,9 @@ pub const Forth = struct {
         try this.defineConstant("inner", @intFromPtr(&inner));
         try this.defineConstant("forth", @intFromPtr(this));
         try this.defineConstant("this", @intFromPtr(this));
-        try this.defineStruct("forth", Forth);
-        try this.defineStruct("header", Header);
-        try this.defineStruct("memory", Memory);
+        try this.defineStruct("forth", Forth, .{});
+        try this.defineStruct("header", Header, .{});
+        try this.defineStruct("memory", Memory, .{});
 
         try compiler.defineCompiler(this);
         try core.defineCore(this);
@@ -240,6 +241,10 @@ pub const Forth = struct {
         return header;
     }
 
+    pub fn defineNamespace(this: *Forth, comptime Module: type, exports: anytype) !void {
+        try auto.defineNamespace(Module, exports, this);
+    }
+
     // Define a constant with a single u64 value. What we really end up with
     // is a secondary word that pushes the value onto the stack.
     pub fn defineConstant(this: *Forth, name: []const u8, v: u64) !void {
@@ -248,12 +253,45 @@ pub const Forth = struct {
         try this.completeWord();
     }
 
-    pub fn defineStruct(this: *Forth, comptime name: []const u8, comptime It: type) !void {
+    const DefineStructOptions = struct {
+        recursive: bool = false,
+        declarations: bool = false,
+        debug: bool = false,
+    };
+
+    pub fn defineStruct(this: *Forth, comptime name: []const u8, comptime It: type, comptime opt: DefineStructOptions) !void {
         switch (@typeInfo(It)) {
             .Struct => |struct_info| {
                 try this.defineConstant(name ++ ".*len", @sizeOf(It));
                 inline for (struct_info.fields) |field| {
-                    try this.defineConstant(name ++ "." ++ field.name, @offsetOf(It, field.name));
+                    const fname = comptime kebabCase(field.name);
+                    try this.defineConstant(name ++ "." ++ fname, @offsetOf(It, field.name));
+                }
+                if (opt.declarations) {
+                    inline for (struct_info.decls) |decl| {
+                        const d = decl.name;
+                        const f = @field(It, d);
+                        const decl_type = @TypeOf(f);
+                        const decl_info = @typeInfo(decl_type);
+                        const fname = comptime kebabCase(d);
+
+                        switch (decl_info) {
+                            .ComptimeInt => try this.defineConstant(name ++ "." ++ fname, f),
+                            .Int => try this.defineConstant(name ++ "." ++ fname, f),
+                            .Type => |t| {
+                                _ = t;
+                                if (opt.recursive) {
+                                    try this.defineStruct(name ++ "." ++ fname, f, opt);
+                                }
+                            },
+                            inline else => {
+                                if (opt.debug) {
+                                    @compileLog("encountered decl " ++ d ++ " with type " ++ @typeName(decl_type));
+                                }
+                                // ignore it
+                            },
+                        }
+                    }
                 }
             },
             else => {
@@ -262,35 +300,7 @@ pub const Forth = struct {
         }
     }
 
-    pub fn defineStructRecursive(this: *Forth, comptime name: []const u8, comptime It: type) !void {
-        switch (@typeInfo(It)) {
-            .Struct => |struct_info| {
-                try this.defineConstant(name ++ ".*len", @sizeOf(It));
-                inline for (struct_info.fields) |field| {
-                    const fname = comptime toLower(field.name);
-                    try this.defineConstant(name ++ "." ++ fname, @offsetOf(It, field.name));
-                }
-                inline for (struct_info.decls) |decl| {
-                    const d = decl.name;
-                    const f = @field(It, d);
-                    const decl_type = @TypeOf(f);
-                    const decl_info = @typeInfo(decl_type);
-                    const fname = comptime toLower(d);
-
-                    switch (decl_info) {
-                        .ComptimeInt => try this.defineConstant(name ++ "." ++ fname, f),
-                        .Type => try this.defineStructRecursive(name ++ "." ++ fname, f),
-                        inline else => {
-                            // ignore it
-                        },
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-
-    fn toLower(comptime in: []const u8) []u8 {
+    fn kebabCase(comptime in: []const u8) []u8 {
         @setEvalBranchQuota(5000);
         var out: [in.len]u8 = undefined;
         for (in, 0..) |c, i| {
