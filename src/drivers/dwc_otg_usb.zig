@@ -734,13 +734,13 @@ pub fn poll() !void {
     }
 
     self.pending_transfers_lock.acquire();
-    var maybe_xfernode = self.pending_transfers.popFirst();
+    const maybe_xfernode = self.pending_transfers.popFirst();
     self.pending_transfers_lock.release();
 
     root.debug.kernelMessage("P");
 
     if (maybe_xfernode) |xfernode| {
-        var xfer = xfernode.data;
+        const xfer = xfernode.data;
 
         if (xfer.device) |dev| {
             if (dev.isRootHub()) {

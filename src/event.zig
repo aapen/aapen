@@ -19,6 +19,9 @@ pub fn defineModule(forth: *Forth) !void {
     try auto.defineNamespace(@This(), .{
         .{ "nextEvent", "next-event" },
     }, forth);
+
+    try forth.defineStructRecursive("event-type", EventType);
+    try forth.defineStructRecursive("event-subtype", EventSubtype);
 }
 
 pub fn nextEvent() u64 {
@@ -90,7 +93,7 @@ pub const EventSubtype = struct {
     };
 
     pub const Key = struct {
-        pub const Pressed = 0x00;
+        pub const Pressed = 0x01;
         pub const Released = 0x00;
     };
 

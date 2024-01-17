@@ -308,7 +308,7 @@ pub fn getTag(self: *Self, tag: anytype) !void {
     if (!@hasField(Tag, "tag")) @compileError("tag field missing, expected: tag: PropertyTag");
     if (@TypeOf(tag.tag) != PropertyTag) @compileError("tag expected type PropertyTag, found: " ++ @typeName(@TypeOf(tag.tag)));
 
-    var u32slice = PropertyTag.asU32Slice(tag);
+    const u32slice = PropertyTag.asU32Slice(tag);
     try self.getTags(u32slice);
 
     // a valid response should have the high bit set on the "value

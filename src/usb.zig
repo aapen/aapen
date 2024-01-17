@@ -343,7 +343,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
     // now allocate enough space for the whole configuration (which
     // includes the interface descriptors and endpoint descriptors)
     const buffer_size = desc.total_length;
-    var configuration: []u8 = try allocator.alloc(u8, buffer_size);
+    const configuration: []u8 = try allocator.alloc(u8, buffer_size);
     defer allocator.free(configuration);
 
     xfer = TransferFactory.initConfigurationDescriptorTransfer(0, configuration);
