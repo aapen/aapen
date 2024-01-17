@@ -39,7 +39,7 @@ GDB_TARGET_DEV  = --ex "target extended-remote :3333"
 rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
 # How to recursively find all files that match a pattern
-SRCS           := $(call rwildcard,src/,*.zig) $(call rwildcard,src/,*.f) $(call rwildcard,src/,*.S)
+SRCS           := $(call rwildcard,src/,*.zig) $(call rwildcard,src/,*.f) $(call rwildcard,src/,*.S) $(call rwildcard,src/,*.c) $(call rwildcard,include,*.h) $(call rwildcard,include/*,*.h)
 
 TEST_SRC        = src/tests.zig
 

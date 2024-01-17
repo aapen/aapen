@@ -14,12 +14,39 @@ const Readline = @import("readline.zig");
 
 const Self = @This();
 
+// ----------------------------------------------------------------------
+// Forty interop
+// ----------------------------------------------------------------------
+
 pub fn defineModule(forth: *Forth, console: *Self) !void {
     try forth.defineStruct("MainConsole", Self, .{});
     try forth.defineConstant("console", @intFromPtr(console));
+    try forth.defineNamespace(Self, .{.{"chello"}});
 }
 
+// ----------------------------------------------------------------------
+// Zig affordances
+// ----------------------------------------------------------------------
 pub const Writer = std.io.Writer(*Self, error{}, write);
+
+// ----------------------------------------------------------------------
+// C interop
+// ----------------------------------------------------------------------
+
+const cstub = @import("cstub.zig");
+
+export fn _putchar(ch: u8) callconv(.C) c_int {
+    root.main_console.putc(ch);
+    return ch;
+}
+
+pub fn chello() void {
+    _ = cstub.printf("Hello, world!\n");
+}
+
+// ----------------------------------------------------------------------
+// Implementation
+// ----------------------------------------------------------------------
 
 char_buffer_console: *CharBufferConsole = undefined,
 

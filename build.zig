@@ -48,6 +48,7 @@ pub fn build(b: *std.Build) !void {
     kernel.addOptions("config", options);
 
     kernel.addIncludePath(.{ .path = "include" });
+    kernel.addCSourceFile(.{ .file = .{ .path = "src/printf.c" }, .flags = &[_][]const u8{} });
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/exceptions.S" });
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/mmu.S" });
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/cache.S" });
