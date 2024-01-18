@@ -33,12 +33,14 @@ pub const Writer = std.io.Writer(*Self, error{}, write);
 // C interop
 // ----------------------------------------------------------------------
 
-const cstub = @import("cstub.zig");
-
 export fn _putchar(ch: u8) callconv(.C) c_int {
     root.main_console.putc(ch);
     return ch;
 }
+
+const cstub = @cImport({
+    @cInclude("printf.h");
+});
 
 pub fn chello() void {
     _ = cstub.printf("Hello, world!\n");

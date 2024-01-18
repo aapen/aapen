@@ -4,6 +4,7 @@ const ScopeLevel = std.log.ScopeLevel;
 const arch = @import("architecture.zig");
 const qemu = @import("qemu.zig");
 
+const Disassemble = @import("disassemble.zig");
 const Event = @import("event.zig");
 const Heap = @import("heap.zig");
 const FrameBuffer = @import("frame_buffer.zig");
@@ -196,6 +197,10 @@ fn kernelInit() void {
 
     Event.defineModule(&interpreter) catch |err| {
         debug.kernelError("Event queue define module", err);
+    };
+
+    Disassemble.defineModule(&interpreter) catch |err| {
+        debug.kernelError("Disassembler define module", err);
     };
 
     Event.enqueue(.{ .type = 0x42, .subtype = 0x99, .value = 0x1234, .extra = 0x01020304 });
