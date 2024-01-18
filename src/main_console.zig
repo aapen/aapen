@@ -43,7 +43,7 @@ const cstub = @cImport({
 });
 
 pub fn chello() void {
-    _ = cstub.printf("Hello, world!\n");
+    _ = cstub.printf("Hello, %s!\n%d\n%08x", "world", @as(u32, 1234), &init);
 }
 
 // ----------------------------------------------------------------------
