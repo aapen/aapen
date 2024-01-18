@@ -42,8 +42,10 @@ const cstub = @cImport({
     @cInclude("printf.h");
 });
 
+pub const printf = cstub.printf;
+
 pub fn chello() void {
-    _ = cstub.printf("Hello, %s!\n%d\n%08x", "world", @as(u32, 1234), &init);
+    _ = printf("Hello, %s!\nmain_console.init = 0x%08x\n", "world", &init);
 }
 
 // ----------------------------------------------------------------------
