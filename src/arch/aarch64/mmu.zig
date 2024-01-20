@@ -101,10 +101,6 @@ pub fn init() void {
     mmu_on();
 }
 
-//extern const __page_tables_start: u64;
-
-//extern fn memzero(begin: u64, end_exclusive: u64) void;
-
 fn tableEntryCreate(table: [*]u64, next_level_table: [*]u64, virtual_address: u64, chosen_table_shift: u6, flags: u64) void {
     const table_index = (virtual_address >> chosen_table_shift) & (PTRS_PER_TABLE - 1);
     table[table_index] = @intFromPtr(next_level_table) | flags;
