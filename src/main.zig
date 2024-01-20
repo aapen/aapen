@@ -295,14 +295,14 @@ pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn
     @setCold(true);
 
     if (return_addr) |ret| {
-        kprint("[{x:0>8}] {s}\n", .{ ret, msg });
+        _ = printf("[0x%08x] %s\n", ret, msg.ptr);
     } else {
-        kprint("[unknown] {s}\n", .{msg});
+        _ = printf("[unknown] %\n", msg.ptr);
     }
 
     if (stack) |stack_trace| {
         for (stack_trace.instruction_addresses, 0..) |addr, i| {
-            kprint("{d}: {x:0>8}\n", .{ i, addr });
+            _ = printf("%d: 0x%08x\n", i, addr);
         }
     }
 
