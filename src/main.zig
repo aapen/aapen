@@ -14,6 +14,7 @@ const MainConsole = @import("main_console.zig");
 
 pub const debug = @import("debug.zig");
 pub const kprint = debug.kprint;
+pub const printf = MainConsole.printf;
 
 const synchronize = @import("synchronize.zig");
 const Spinlock = synchronize.Spinlock;

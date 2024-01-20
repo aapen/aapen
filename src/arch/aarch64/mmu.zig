@@ -3,6 +3,10 @@ const HAL = root.HAL;
 
 const cortex_a = @import("../cortex-a.zig");
 
+const mmu_h = @cImport({
+    @cInclude("asm/mmu.h");
+});
+
 // Assumptions
 //
 // - Translation granule is 4KB
@@ -10,38 +14,43 @@ const cortex_a = @import("../cortex-a.zig");
 //   devices above that
 
 // These are fundamental to the processor
-pub const page_shift: u8 = 12;
-pub const table_shift: u8 = 9;
-pub const section_shift: u8 = page_shift + table_shift;
+pub const PAGE_SHIFT: u8 = mmu_h.PAGE_SHIFT;
+pub const TABLE_SHIFT: u8 = mmu_h.TABLE_SHIFT;
+pub const SECTION_SHIFT: u8 = mmu_h.SECTION_SHIFT;
 
-pub const entries_per_table: u16 = 1 << table_shift;
-pub const page_size: u64 = 1 << page_shift;
-pub const section_size: u64 = 1 << section_shift;
+pub const PTRS_PER_TABLE: u16 = mmu_h.PTRS_PER_TABLE;
+pub const PAGE_SIZE: u64 = mmu_h.PAGE_SIZE;
+pub const SECTION_SIZE: u64 = mmu_h.SECTION_SIZE;
 
 // These are choices about memory layout
-// pub const VA_START = 0xffff000000000000;
-pub const block_size: u64 = 0x40000000;
-pub const device_start: u64 = HAL.device_start;
+pub const VA_START = mmu_h.VA_START;
+
+// TODO: How to reconcile this with the PHYS_MEMORY_SIZE from the
+// include file?
+pub const BLOCK_SIZE: u64 = 0x40000000;
+
+// TODO: How to reconcile the include file with the build-time Zig module?
+pub const DEVICE_START: u64 = HAL.device_start;
 
 // These are choices about memory protection
 // These must match the value written to MAIR_EL1 in mmu.S
-//pub const mair_device_ng_nr_ne: u8 = 0x0;
-pub const mair_device_ng_nr_ne_index: u2 = 0;
+pub const MT_DEVICE_nGnRnE: u8 = mmu_h.MT_DEVICE_nGnRnE;
+pub const MT_NORMAL_NC: u8 = mmu_h.MT_NORMAL_NC;
+pub const MT_NORMAL: u8 = mmu_h.MT_NORMAL;
 
-//pub const mair_normal_nc: u8 = 0xff;
-pub const mair_normal_nc_index: u2 = 2;
+pub const MM_ACCESS: u64 = mmu_h.MM_ACCESS;
+pub const MM_ACCESS_PERMISSION = mmu_h.MM_ACCESS_PERMISSION;
+pub const MM_KERNEL_PERMISSION: u64 = mmu_h.MM_KERNEL_PERMISSION;
+pub const MM_INNER_SHAREABLE: u64 = mmu_h.MM_INNER_SHAREABLE;
 
-//pub const mair_value: u64 = (mair_normal_nc << (8 * mair_normal_nc_index)) | (mair_device_ng_nr_ne << (8 * mair_device_ng_nr_ne_index));
+pub const MM_TYPE_PAGE_TABLE: u8 = mmu_h.MM_TYPE_PAGE_TABLE;
+pub const MM_TYPE_PAGE: u8 = mmu_h.MM_TYPE_PAGE;
+pub const MM_TYPE_BLOCK: u8 = mmu_h.MM_TYPE_BLOCK;
 
-pub const table_descriptor_valid: u64 = (1 << 0);
-pub const table_descriptor_is_table: u64 = (1 << 1);
-pub const table_descriptor_access: u64 = (1 << 10);
-pub const table_descriptor_kernel_perms: u64 = (1 << 54);
-pub const table_descriptor_inner_shareable: u64 = (3 << 8);
+pub const MMU_PTE_FLAGS = mmu_h.MMU_PTE_FLAGS;
 
-pub const kernel_table_flags: u64 = (table_descriptor_is_table | table_descriptor_valid);
-pub const kernel_block_flags: u64 = (table_descriptor_access | table_descriptor_inner_shareable | table_descriptor_kernel_perms | (@as(u8, mair_normal_nc_index) << 2) | table_descriptor_valid);
-pub const device_block_flags: u64 = (table_descriptor_access | table_descriptor_kernel_perms | (@as(u8, mair_device_ng_nr_ne_index) << 2) | table_descriptor_valid);
+pub const MMU_BLOCK_FLAGS: u64 = mmu_h.MMU_BLOCK_FLAGS;
+pub const MMU_DEVICE_FLAGS: u64 = mmu_h.MMU_DEVICE_FLAGS;
 
 // AArch64 address translation
 // Assumes 4KB translation granule
@@ -75,14 +84,14 @@ pub const device_block_flags: u64 = (table_descriptor_access | table_descriptor_
 // For RPi3 we can use just 1 PGD, and 1 PUD. These will cover the 1GB
 // address space.
 
-pub const page_global_directory_shift: u8 = page_shift + 3 * table_shift;
-pub const page_upper_directory_shift: u8 = page_shift + 2 * table_shift;
-pub const page_middle_directory_shift: u8 = page_shift + table_shift;
-pub const page_upper_directory_entry_map_size: u64 = 1 << page_upper_directory_shift;
+pub const PGD_SHIFT: u8 = mmu_h.PGD_SHIFT;
+pub const PUD_SHIFT: u8 = mmu_h.PUD_SHIFT;
+pub const PMD_SHIFT: u8 = mmu_h.PMD_SHIFT;
+pub const PUD_ENTRY_MAP_SIZE: u64 = mmu_h.PUD_ENTRY_MAP_SIZE;
 
 // The tables we need will fit in 6 memory pages.
 // Make sure this matches the section allocation in kernel.ld
-pub const page_table_size: u64 = 6 * page_size;
+pub const PG_DIR_SIZE: u64 = mmu_h.PG_DIR_SIZE;
 
 extern fn mmu_on() void;
 
@@ -96,38 +105,34 @@ pub fn init() void {
 
 //extern fn memzero(begin: u64, end_exclusive: u64) void;
 
-fn tableEntryCreate(table: u64, next_level_table: u64, virtual_address: u64, chosen_table_shift: u6, flags: u64) void {
-    var table_index = virtual_address >> chosen_table_shift;
-    table_index &= (entries_per_table - 1);
-    const descriptor: u64 = next_level_table | flags;
-    const word: *u64 = @ptrFromInt(table + (table_index << 3));
-    word.* = descriptor;
+fn tableEntryCreate(table: [*]u64, next_level_table: [*]u64, virtual_address: u64, chosen_table_shift: u6, flags: u64) void {
+    const table_index = (virtual_address >> chosen_table_shift) & (PTRS_PER_TABLE - 1);
+    table[table_index] = @intFromPtr(next_level_table) | flags;
 }
 
-fn blockMappingCreate(page_middle_directory: u64, virtual_addr_start: u64, virtual_addr_end: u64, phys_addr_start: u64) void {
-    var vstart = virtual_addr_start >> section_shift;
-    vstart &= (entries_per_table - 1);
+fn blockMappingCreate(page_middle_directory: [*]u64, virtual_addr_start: u64, virtual_addr_end: u64, phys_addr_start: u64) void {
+    var vstart = virtual_addr_start >> SECTION_SHIFT;
+    vstart &= (PTRS_PER_TABLE - 1);
 
-    var vend = virtual_addr_end >> section_shift;
+    var vend = virtual_addr_end >> SECTION_SHIFT;
     vend -= 1;
-    vend &= (entries_per_table - 1);
+    vend &= (PTRS_PER_TABLE - 1);
 
     // zero out the bottom `section_shift` bits of the address, to
     // turn it into a table entry
-    var pa = phys_addr_start >> section_shift;
-    pa <<= section_shift;
+    var pa = phys_addr_start >> SECTION_SHIFT;
+    pa <<= SECTION_SHIFT;
 
     while (vstart <= vend) {
         var entry: u64 = pa;
-        if (pa >= device_start) {
-            entry |= device_block_flags;
+        if (pa >= DEVICE_START) {
+            entry |= MMU_DEVICE_FLAGS;
         } else {
-            entry |= kernel_block_flags;
+            entry |= MMU_BLOCK_FLAGS;
         }
 
-        const word: *u64 = @ptrFromInt(page_middle_directory + (vstart << 3));
-        word.* = entry;
-        const ss = section_size;
+        page_middle_directory[vstart] = entry;
+        const ss = SECTION_SIZE;
         pa += ss;
         vstart += 1;
     }
@@ -135,32 +140,35 @@ fn blockMappingCreate(page_middle_directory: u64, virtual_addr_start: u64, virtu
 
 /// Define an identity-mapped set of page tables
 fn pageTablesCreate() void {
-    const tables_start: [*]u8 = @ptrCast(&cortex_a.Sections.__page_tables_start);
-    @memset(tables_start[0..page_table_size], 0);
+    const table_size_dwords = PG_DIR_SIZE / 8;
+    const page_size_dwords = PAGE_SIZE / 8;
+
+    const tables_start: [*]u64 = @alignCast(@ptrCast(&cortex_a.Sections.__page_tables_start));
+    @memset(tables_start[0..table_size_dwords], 0);
 
     var map_base: u64 = 0;
-    var table: u64 = @intFromPtr(tables_start);
-    var next_level_table: u64 = table + page_size;
+    var table: [*]u64 = tables_start;
+    var next_level_table: [*]u64 = table + page_size_dwords;
 
     // Level 0
-    tableEntryCreate(table, next_level_table, map_base, page_global_directory_shift, kernel_table_flags);
+    tableEntryCreate(table, next_level_table, map_base, PGD_SHIFT, MMU_PTE_FLAGS);
 
-    table += page_size;
-    next_level_table += page_size;
+    table += page_size_dwords;
+    next_level_table += page_size_dwords;
 
-    var block_table: u64 = table;
+    var block_table: [*]u64 = table;
 
     for (0..4) |i| {
         // Level 1
-        tableEntryCreate(table, next_level_table, map_base, page_upper_directory_shift, kernel_table_flags);
+        tableEntryCreate(table, next_level_table, map_base, PUD_SHIFT, MMU_PTE_FLAGS);
 
-        next_level_table += page_size;
-        map_base += page_upper_directory_entry_map_size;
+        next_level_table += page_size_dwords;
+        map_base += PUD_ENTRY_MAP_SIZE;
 
-        block_table += page_size;
-        const offset: u64 = block_size * i;
+        block_table += page_size_dwords;
+        const offset: u64 = BLOCK_SIZE * i;
 
         // Level 2
-        blockMappingCreate(block_table, offset, offset + block_size, offset);
+        blockMappingCreate(block_table, offset, offset + BLOCK_SIZE, offset);
     }
 }

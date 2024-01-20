@@ -13,11 +13,6 @@ pub const Shareability = enum(u2) {
     inner_shareable = 0b11,
 };
 
-pub const TranslationGranule = enum(u2) {
-    granule_4kb = 0b00,
-    granule_64kb = 0b01,
-    granule_16kb = 0b10,
-};
 pub const TopByteUsed = enum(u1) {
     top_byte_used = 0b0,
     top_byte_ignored = 0b1,
@@ -28,12 +23,6 @@ pub const HierarchicalPermissions = enum(u1) {
     hierarchical_permissions_disabled = 0b1,
 };
 
-// 0x200803518 (value used in mmu.S)
-
-//    6    5    5    4    4    4    3    3    2    2    2    1    1
-//    0    6    2    8    4    0    6    2    8    4    0    6    2    8    4    0
-// 0000 0000 0000 0000 0000 0000 0000 0010 0000 0000 1000 0000 0011 0101 0001 1000
-
 pub const Layout = packed struct {
     t0sz: u6 = 0x18, // 0..5
     _reserved_0: u1 = 0, // 6
@@ -41,7 +30,11 @@ pub const Layout = packed struct {
     irgn0: Cacheability = .wt_ra_nwa_cacheable, // 8..9
     orgn0: Cacheability = .wt_ra_nwa_cacheable, // 10..11
     sh0: Shareability = .inner_shareable, // 12..13
-    tg0: TranslationGranule = .granule_4kb, // 14..15
+    tg0: enum(u2) {
+        granule_4kb = 0b00,
+        granule_16kb = 0b10,
+        granule_64kb = 0b01,
+    } = .granule_4kb, // 14..15
     t1sz: u6 = 0, // 16..21
     a1: enum(u1) {
         ttbr0_defines_asid = 0b0,
@@ -54,7 +47,12 @@ pub const Layout = packed struct {
     irgn1: Cacheability = .noncacheable, // 24..25
     orgn1: Cacheability = .noncacheable, // 26..27
     sh1: Shareability = .non_shareable, // 28..29
-    tg1: TranslationGranule = .granule_4kb, // 30..31
+    // BEWARE! The bit coding for tg1 and tg0 are different!
+    tg1: enum(u2) {
+        granule_4kb = 0b10,
+        granule_16kb = 0b01,
+        granule_64kb = 0b11,
+    }= .granule_4kb, // 30..31
     ips: enum(u3) {
         as_4gb = 0b000, // 32 bits
         as_64gb = 0b001, // 36 bits

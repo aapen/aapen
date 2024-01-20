@@ -1,5 +1,5 @@
 #include <asm/macro.h>
-
+#include <asm/mmu.h>
 
 // ----------------------------------------------------------------------
 // fn mmu_on
@@ -20,7 +20,7 @@
 	msr     ttbr1_el1,xzr		//
 	.endif				//
 
-        // Set up memory attributes
+        // MAIR: Set up memory attributes
         //
         // This equates to:
         // 0 = b00000000 = Device-nGnRnE
@@ -30,16 +30,18 @@
         //
         // This must match the definitions in arch/aarch64/mmu.zig
 
-	LDR_IMM64 x1, 0xbbff4400        // program mair on this PE
+	LDR_IMM64 x1, MAIR_VALUE        // program mair on this PE
 	msr     mair_el1, x1		//
-	LDR_IMM64 x1, 0x200803518       // program tcr on this PE
+
+        // TCR: Translation control
+	LDR_IMM64 x1, TCR_VALUE         // program tcr on this PE
 	msr     tcr_el1, x1		//
 	isb				//
 	mrs     x2, tcr_el1		// verify PE supports desired config
 	cmp     x2, x1			//
 	b.ne    pe_hang			//
-//      LDR_IMM64(x1, 0x1005)		// program sctlr on this PE
-//      msr     sctlr_el1, x1		//
+
+        // SCTLR: System Control Register
         mrs     x1, sctlr_el1           // get the control register
         orr     x1, x1, #1              // turn on the MMU enable bit
 	msr     sctlr_el1, x1		// and make it so
