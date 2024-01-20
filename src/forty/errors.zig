@@ -9,5 +9,6 @@ pub const ForthError = error{
     OutOfMemory,
     AlreadyCompiling,
     NotCompiling,
+    NotAnOpCode,
     EOF,
 };

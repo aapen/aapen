@@ -299,18 +299,7 @@ pub fn defineCompiler(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("?istack", " -- :Print the return stack.", &wordIStack, false);
 
     // OpCode constants.
-
-    try forth.defineConstant("*return", @intFromEnum(OpCode.Return));
-    try forth.defineConstant("*push-u64", @intFromEnum(OpCode.PushU64));
-    try forth.defineConstant("*push-string", @intFromEnum(OpCode.PushString));
-    try forth.defineConstant("*jump", @intFromEnum(OpCode.Jump));
-    try forth.defineConstant("*jump-if-not", @intFromEnum(OpCode.JumpIfNot));
-    try forth.defineConstant("*jump-if-rle", @intFromEnum(OpCode.JumpIfRLE));
-    try forth.defineConstant("*drop", @intFromEnum(OpCode.Drop));
-    try forth.defineConstant("*idrop", @intFromEnum(OpCode.IDrop));
-    try forth.defineConstant("*inc-istack", @intFromEnum(OpCode.IncIStack));
-    try forth.defineConstant("*to-istack", @intFromEnum(OpCode.ToIStack));
-    try forth.defineConstant("*to-dstack", @intFromEnum(OpCode.ToDStack));
+    try forth.defineStruct("forth.opcodes", OpCode, .{ .declarations = true });
 
     // Secondary definition words.
 

@@ -29,6 +29,7 @@ const intAlignBy = memory_module.intAlignBy;
 const inner_module = @import("inner.zig");
 const inner = inner_module.inner;
 const OpCode = inner_module.OpCode;
+const isOpCode = inner_module.isOpCode;
 
 const history = @import("history.zig");
 const History = history.History;
@@ -497,8 +498,12 @@ pub const Forth = struct {
     }
 
     // Add an opcode to memory.
-    pub inline fn addOpCode(this: *Forth, oc: OpCode) !void {
-        try this.addNumber(@intFromEnum(oc));
+    pub inline fn addOpCode(this: *Forth, oc: u64) !void {
+        if (isOpCode(oc)) {
+            try this.addNumber(oc);
+        } else {
+            return ForthError.NotAnOpCode;
+        }
     }
 
     // Copy a call to a word into memory.

@@ -16,25 +16,52 @@ const opcode_base: u64 = 0x888000;
 /// The heart of the interpreter are these op codes plus
 /// pointers to WordFunction function. We can always tell the
 /// difference because all of the op code values are odd.
-pub const OpCode = enum(u64) {
-    Return = opcode_base + 0x1,
-    CallSecondary = opcode_base + 0x3,
-    PushU64 = opcode_base + 0x5,
-    PushString = opcode_base + 0x7,
-    JumpIfNot = opcode_base + 0x9,
-    JumpIfRLE = opcode_base + 0xb,
-    Drop = opcode_base + 0xd,
-    IDrop = opcode_base + 0xf,
-    Dup = opcode_base + 0x11,
-    Swap = opcode_base + 0x13,
-    IncIStack = opcode_base + 0x15,
-    Jump = opcode_base + 0x17,
-    ToIStack = opcode_base + 0x19,
-    ToDStack = opcode_base + 0x1b,
+pub const OpCode = struct {
+    pub const Return: u64 = opcode_base + 0x1;
+    pub const CallSecondary: u64 = opcode_base + 0x3;
+    pub const PushU64: u64 = opcode_base + 0x5;
+    pub const PushString: u64 = opcode_base + 0x7;
+    pub const JumpIfNot: u64 = opcode_base + 0x9;
+    pub const JumpIfRLE: u64 = opcode_base + 0xb;
+    pub const Drop: u64 = opcode_base + 0xd;
+    pub const IDrop: u64 = opcode_base + 0xf;
+    pub const Dup: u64 = opcode_base + 0x11;
+    pub const Swap: u64 = opcode_base + 0x13;
+    pub const IncIStack: u64 = opcode_base + 0x15;
+    pub const Jump: u64 = opcode_base + 0x17;
+    pub const ToIStack: u64 = opcode_base + 0x19;
+    pub const ToDStack: u64 = opcode_base + 0x1b;
 };
 
+const NumOpCodes = (OpCode.ToDStack - opcode_base + 1) / 2;
+
+const Names: [NumOpCodes][]const u8 = .{
+    "Return",
+    "CallSecondary",
+    "PushU64",
+    "PushString",
+    "JumpIfNot",
+    "JumpIfRLE",
+    "Drop",
+    "IDrop",
+    "Dup",
+    "Swap",
+    "IncIStack",
+    "Jump",
+    "ToIStack",
+    "ToDStack",
+};
+
+pub fn opCodeNameLookup(i: u64) []const u8 {
+    if (isOpCode(i)) {
+        const index = (i - opcode_base) / 2;
+        return Names[index];
+    }
+    return "Not an opcode!";
+}
+
 pub fn isOpCode(i: u64) bool {
-    if (i < opcode_base or i > @intFromEnum(OpCode.ToDStack)) {
+    if (i < opcode_base or i > OpCode.ToDStack) {
         return false;
     } else if (i % 2 == 0) {
         return false;
@@ -65,7 +92,7 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
         switch (body[i]) {
             // Call a secondary: Push the current execution state onto the istack and
             // replace them with the start of the called word.
-            @intFromEnum(OpCode.CallSecondary) => {
+            OpCode.CallSecondary => {
                 try forth.call_stack.push(@intFromPtr(header));
                 try forth.call_stack.push(i + 2);
                 const p: *Header = @ptrFromInt(body[i + 1]);
@@ -78,7 +105,7 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
             // Return from a secondary: Restore the current execution state from
             // the istack. If the istack is the depth we started with then
             // it's time to return from *this* secondary so break out of the loop.
-            @intFromEnum(OpCode.Return) => {
+            OpCode.Return => {
                 //try forth.trace("Return from [{s}]\n", .{header.name});
                 if (forth.call_stack.depth() == initialStackDepth) {
                     //try forth.trace("Return from inner\n", .{});
@@ -90,27 +117,27 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
                 try forth.trace("back in {s}, header: {*} i {}\n", .{ header.name, header, i });
             },
 
-            @intFromEnum(OpCode.PushU64) => {
+            OpCode.PushU64 => {
                 const v = body[i + 1];
                 try forth.stack.push(v);
                 i += 2;
             },
 
-            @intFromEnum(OpCode.PushString) => {
+            OpCode.PushString => {
                 const data_size = body[i + 1];
                 const p_string: [*]u8 = @ptrCast(body + i + 2);
                 try forth.stack.push(@intFromPtr(p_string));
                 i = i + data_size + 2;
             },
 
-            @intFromEnum(OpCode.Jump) => {
+            OpCode.Jump => {
                 const delta: i64 = @as(i64, @bitCast(body[i + 1]));
                 var new_i: i64 = @intCast(i);
                 new_i = new_i + delta;
                 i = @intCast(new_i);
             },
 
-            @intFromEnum(OpCode.JumpIfNot) => {
+            OpCode.JumpIfNot => {
                 const c: u64 = try forth.stack.pop();
                 const delta: i64 = @as(i64, @bitCast(body[i + 1]));
                 try forth.trace("JumpIfNot cond: {} delta {} ", .{ c, delta });
@@ -125,7 +152,7 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
 
             // Jump if top value of the loop stack is <= the 2nd value.
             // Does not modify the loop stack.
-            @intFromEnum(OpCode.JumpIfRLE) => {
+            OpCode.JumpIfRLE => {
                 const first: u64 = try forth.istack.pop();
                 const second: u64 = try forth.istack.pop();
                 try forth.istack.push(second);
@@ -143,24 +170,24 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
                 try forth.trace(": -> {}\n", .{i});
             },
 
-            @intFromEnum(OpCode.Drop) => {
+            OpCode.Drop => {
                 _ = try forth.stack.pop();
                 i += 1;
             },
 
-            @intFromEnum(OpCode.IDrop) => {
+            OpCode.IDrop => {
                 _ = try forth.istack.pop();
                 i += 1;
             },
 
-            @intFromEnum(OpCode.Dup) => {
+            OpCode.Dup => {
                 const a = try forth.stack.pop();
                 try forth.stack.push(a);
                 try forth.stack.push(a);
                 i += 1;
             },
 
-            @intFromEnum(OpCode.Swap) => {
+            OpCode.Swap => {
                 const a = try forth.stack.pop();
                 const b = try forth.stack.pop();
                 try forth.stack.push(a);
@@ -168,19 +195,19 @@ pub fn inner(forth: *Forth, head: *Header) ForthError!void {
                 i += 1;
             },
 
-            @intFromEnum(OpCode.IncIStack) => {
+            OpCode.IncIStack => {
                 const v = try forth.istack.pop() + 1;
                 try forth.istack.push(v);
                 i += 1;
             },
 
-            @intFromEnum(OpCode.ToIStack) => {
+            OpCode.ToIStack => {
                 const v = try forth.stack.peek();
                 try forth.istack.push(v);
                 i += 1;
             },
 
-            @intFromEnum(OpCode.ToDStack) => {
+            OpCode.ToDStack => {
                 const v = try forth.istack.peek();
                 try forth.stack.push(v);
                 i += 1;

@@ -412,23 +412,23 @@ finish
 ;
 
 : pin-in (p-no -- : Set the given pin to input)
-  0 swap pins gpio-pin-func
+  gpio.function.input swap pins gpio-pin-func
 ;
 
 : pin-out (p-no -- : Set the given pin to output)
-  1 swap pins gpio-pin-func
+  gpio.function.output swap pins gpio-pin-func
 ;
 
 : pin-up (p-no -- : Set the pin to pull up)
-  2 swap pins gpio-pin-pull
+  gpio.pull.up swap pins gpio-pin-pull
 ;
 
 : pin-down (p-no -- : Set the pin to pull down)
-  1 swap pins gpio-pin-pull
+  gpio.pull.down swap pins gpio-pin-pull
 ;
 
 : pin-float (p-no -- : Turn off the pin pull up/down)
-  0 swap pins gpio-pin-pull
+  gpio.pull.float swap pins gpio-pin-pull
 ;
 
 : pin-get (p-no -- n : Get the state of the pin)
@@ -478,6 +478,14 @@ finish
   drop
 ;
 
+( Simple uptime testing words )
+
+: repeat-hello ( n - : Say hello once per minute for n minutes )
+  times
+    hello
+    60000 sleep
+  repeat
+;
 
 ( Testing... )
 
@@ -499,18 +507,18 @@ finish
 ;
 
 :by-hand create
-  *push-u64 ,
+  forth.opcodes.pushu64 ,
   900 ,
-  *push-u64 ,
+  forth.opcodes.pushu64 ,
   99 ,
   '+ ,
-  *return ,
+  forth.opcodes.return ,
 finish
 
 'by-hand secondary!
 
 : test-math
-  "." s.
+  "math ." s.
   103      103  = "Equality" assert clear
   1 1 +      2  = "Simple addition" assert clear
   99 1 -    98  = "Subtraction" assert clear
@@ -520,7 +528,7 @@ finish
 ;
 
 : test-if
-  "." s.
+  "if ." s.
   77 1    if 100 endif         100 = "If true" assert clear
   77 0    if 100 endif          77 = "If false" assert clear
   1       if 100 else 99 endif 100 = "If else true" assert clear
@@ -528,7 +536,7 @@ finish
 ;
 
 : test-loop
-  "." s.
+  "loop ." s.
    0 power-of-two     1 = "While loop, zero iterations" assert clear
   16 power-of-two 65536 = "While loop, 16 iterations" assert clear
   0  sum-ints         0 = "Repeat loop, 0 iterations" assert clear
@@ -537,22 +545,22 @@ finish
 ;
 
 : test-strings
-  "." s.
+  "strings ." s.
   "hello world" "hello world" s= "String comparison" assert clear
 ;
 
 : test-create
-  "." s.
+  "create ." s.
   by-hand 999 = "Word created with create/finish" assert clear
 ;
 
 : test-constants
-  "." s.
+  "const ." s.
   word 8 = "Word size constant" assert clear
 ;
 
 : test-structures
-  "." s.
+  "struct ." s.
   'hello header.name + @ "hello" s= "Struct offsets" assert clear
 ;
 

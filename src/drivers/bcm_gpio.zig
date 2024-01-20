@@ -1,8 +1,13 @@
 const Forth = @import("../forty/forth.zig").Forth;
 
 const Self = @This();
-
 pub fn defineModule(forth: *Forth) !void {
+    try forth.defineStruct("gpio.pull", PullUpDownSelect, .{
+        .declarations = true,
+    });
+    try forth.defineStruct("gpio.function", FunctionSelect, .{
+        .declarations = true,
+    });
     try forth.defineNamespace(Self, .{
         .{ "enable", "gpio-pin-enable" },
         .{ "set", "gpio-pin-set" },
@@ -14,21 +19,21 @@ pub fn defineModule(forth: *Forth) !void {
 
 extern fn spinDelay(cpu_cycles: u32) void;
 
-pub const FunctionSelect = enum(u3) {
-    input = 0b000,
-    output = 0b001,
-    alt0 = 0b100,
-    alt1 = 0b101,
-    alt2 = 0b110,
-    alt3 = 0b111,
-    alt4 = 0b011,
-    alt5 = 0b010,
+pub const FunctionSelect = struct {
+    pub const Input: u3 = 0b000;
+    pub const Output: u3 = 0b001;
+    pub const Alt0: u3 = 0b100;
+    pub const Alt1: u3 = 0b101;
+    pub const Alt2: u3 = 0b110;
+    pub const Alt3: u3 = 0b111;
+    pub const Alt4: u3 = 0b011;
+    pub const Alt5: u3 = 0b010;
 };
 
-pub const PullUpDownSelect = enum(u32) {
-    off = 0x00,
-    down = 0x01,
-    up = 0x02,
+pub const PullUpDownSelect = struct {
+    pub const Float: u32 = 0x00;
+    pub const Down: u32 = 0b01;
+    pub const Up: u32 = 0b10;
 };
 
 const Registers = extern struct {
@@ -123,25 +128,25 @@ pub fn init(register_base: u64) Self {
 }
 
 pub fn enable(self: *Self, bc_id: u64) void {
-    self.selectFunction(bc_id, .output);
-    self.selectPull(bc_id, .off);
+    self.selectFunction(bc_id, FunctionSelect.Output);
+    self.selectPull(bc_id, PullUpDownSelect.Float);
 }
 
-pub fn selectFunction(self: *Self, bc_id: u64, fsel: FunctionSelect) void {
+pub fn selectFunction(self: *Self, bc_id: u64, fsel: u3) void {
     const p = &self.pins[bc_id];
     var val = self.registers.function_select[p.function_select_register_index];
     val &= ~(@as(u32, 7) << p.function_select_register_shift);
-    val |= (@as(u32, @intFromEnum(fsel)) << p.function_select_register_shift);
+    val |= (@as(u32, fsel) << p.function_select_register_shift);
     self.registers.function_select[p.function_select_register_index] = val;
 }
 
-pub fn selectPull(self: *Self, bc_id: u64, pull: PullUpDownSelect) void {
+pub fn selectPull(self: *Self, bc_id: u64, pull: u32) void {
     const p = &self.pins[bc_id];
 
     self.registers.pull_up_pull_down_enable = 0;
     spinDelay(150);
 
-    self.registers.pull_up_pull_down_enable = @intFromEnum(pull);
+    self.registers.pull_up_pull_down_enable = pull;
     spinDelay(150);
 
     // En/disable PU/PD for this pin

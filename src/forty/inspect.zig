@@ -25,6 +25,7 @@ const Header = memory_module.Header;
 const inner_module = @import("inner.zig");
 const inner = inner_module.inner;
 const OpCode = inner_module.OpCode;
+const opCodeNameLookup = inner_module.opCodeNameLookup;
 
 ///  --
 pub fn wordStackTrace(forth: *Forth, _: *Header) ForthError!void {
@@ -162,11 +163,10 @@ pub fn wordDumpWord(forth: *Forth, _: *Header) ForthError!void {
         const chars = string.u64ToChars(ubody[j]);
         try forth.print("{:4} {x:16}   {s}", .{ j, ubody[j], chars });
         if (inner_module.isOpCode(ubody[j])) {
-            const opCode: OpCode = @enumFromInt(ubody[j]);
-            try forth.print("     {}", .{opCode});
+            try forth.print("     {s}", .{opCodeNameLookup(ubody[j])});
         } else if (forth.isWordP(ubody[j])) {
             const hp: *Header = @ptrFromInt(ubody[j]);
-            try forth.print("     Call {s}", .{hp.name});
+            try forth.print("     => {s}", .{hp.name});
         }
         try forth.print("\n", .{});
     }

@@ -203,8 +203,8 @@ pub fn initializeUart(self: *Self) void {
     self.gpio.enable(14);
     self.gpio.enable(15);
 
-    self.gpio.selectFunction(14, .alt0);
-    self.gpio.selectFunction(15, .alt0);
+    self.gpio.selectFunction(14, GPIO.FunctionSelect.Alt0);
+    self.gpio.selectFunction(15, GPIO.FunctionSelect.Alt0);
 
     // Turn UART off while initializing
     self.registers.control.uart_enable = .disable;
