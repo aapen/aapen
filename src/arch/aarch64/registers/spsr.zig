@@ -16,44 +16,44 @@ pub const Layout = packed struct {
         el0t = 0b0000,
         el1t = 0b0100,
         el1h = 0b0101,
-    },
-    es: u1 = 0,
-    _unused_reserved_0: u1 = 0,
+    }, // 0..3
+    es: u1 = 0, // 4
+    _unused_reserved_0: u1 = 0, // 5
     // FIQ interrupt mask
-    f: InterruptMask,
+    f: InterruptMask, // 6
     // IRQ interrupt mask
-    i: InterruptMask,
+    i: InterruptMask, // 7
     // SError interrupt mask
-    a: InterruptMask,
+    a: InterruptMask, // 8
     // Debug exception mask
-    d: InterruptMask,
+    d: InterruptMask, // 9
     // Branch type indicator
-    btype: u2 = 0,
+    btype: u2 = 0, // 10..11
     // Speculative store bypass
-    ssbs: u1 = 0,
+    ssbs: u1 = 0, // 12
     // All IRQ or FIQ interrupts mask
-    allint: u1 = 0,
-    _unused_reserved_1: u6 = 0,
+    allint: u1 = 0, // 13
+    _unused_reserved_1: u6 = 0, // 14..19
     // Illegal execution state
-    il: u1 = 0,
+    il: u1 = 0, // 20
     // Software step
-    ss: u1 = 0,
+    ss: u1 = 0, // 21
     // Privileged access never
-    pan: u1 = 0,
+    pan: u1 = 0, // 22
     // User access override
-    uao: u1 = 0,
+    uao: u1 = 0, // 23
     // Data independent timing
-    dit: u1 = 0,
+    dit: u1 = 0, // 24
     // Tag check override
-    tco: u1 = 0,
-    _unused_reserved_2: u2 = 0,
+    tco: u1 = 0, // 25
+    _unused_reserved_2: u2 = 0, // 26..27
     // Overflow condition flag
-    v: u1 = 0,
+    v: u1 = 0, // 28
     // Carry condition flag
-    c: u1 = 0,
+    c: u1 = 0, // 29
     // Zero condition flag
-    z: u1 = 0,
+    z: u1 = 0, // 30
     // Negative condition flag
-    n: u1 = 0,
-    _unused_reserved_3: u32 = 0,
+    n: u1 = 0, // 31
+    _unused_reserved_3: u32 = 0, // 32..63
 };
