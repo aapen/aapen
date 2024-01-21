@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const root = @import("root");
-const kprint = root.kprint;
+const printf = root.printf;
 
 const debug = @import("../../debug.zig");
 const cpu = @import("../../architecture.zig").cpu;
@@ -89,26 +89,26 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
 
 fn panicDisplay(elr: ?u64) void {
     if (elr) |addr| {
-        kprint("Panic!\nELR: 0x{x:0>8}\n", .{addr});
+        _ = printf("Panic!\nELR: 0x%08x\n", addr);
         stackTraceDisplay(addr);
     } else {
-        kprint("Panic!\nSource unknown.\n", .{});
+        _ = printf("Panic!\nSource unknown.\n");
     }
 }
 
 fn unknownBreakpointDisplay(from_addr: ?u64, bkpt_number: u16) void {
     if (from_addr) |addr| {
-        kprint("Breakpoint\nComment: 0x{x:0>8}\n ELR: 0x{x:0>8}\n", .{ bkpt_number, addr });
+        _ = printf("Breakpoint\nComment: 0x%08x\n ELR: 0x%08x\n", bkpt_number, addr);
     } else {
-        kprint("Breakpoint\nComment: 0x{x:0>8}\n ELR: unknown\n", .{bkpt_number});
+        _ = printf("Breakpoint\nComment: 0x%08x\n ELR: unknown\n", bkpt_number);
     }
 }
 
 fn unhandledExceptionDisplay(from_addr: ?u64, entry_type: u64, esr: u64, ec: cpu.registers.EC) void {
     if (from_addr) |addr| {
-        kprint("Unhandled exception!\nType: 0x{x:0>8}\n ESR: 0x{x:0>8}\n ELR: 0x{x:0>8}\n  EC: {s}\n", .{ entry_type, @as(u64, @bitCast(esr)), addr, @tagName(ec) });
+        _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: 0x%08x\n  EC: 0b%06b\n", entry_type, @as(u64, @bitCast(esr)), addr, @as(u16, @intFromEnum(ec)));
     } else {
-        kprint("Unhandled exception!\nType: 0x{x:0>8}\n ESR: 0x{x:0>8}\n ELR: unknown\n  EC: 0b{b:0>6}\n", .{ entry_type, esr, @tagName(ec) });
+        _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: unknown\n  EC: 0b%06b\n", entry_type, esr, @as(u16, @intFromEnum(ec)));
     }
 }
 
@@ -117,18 +117,18 @@ fn stackTraceDisplay(from_addr: u64) void {
     var it = std.debug.StackIterator.init(null, null);
     defer it.deinit();
 
-    kprint("\nStack trace\n", .{});
-    kprint("Frame\tPC\n", .{});
+    _ = printf("\nStack trace\n");
+    _ = printf("Frame\tPC\n");
     for (0..40) |i| {
         const addr = it.next() orelse {
-            kprint(".\n", .{});
+            _ = printf(".\n");
             return;
         };
         stackFrameDisplay(i, addr);
     }
-    kprint("--stack trace truncated--\n", .{});
+    _ = printf("--stack trace truncated--\n");
 }
 
 fn stackFrameDisplay(frame_number: usize, frame_pointer: usize) void {
-    kprint("{d}\t0x{x:0>8}\n", .{ frame_number, frame_pointer });
+    _ = printf("%d\t0x%08x\n", frame_number, frame_pointer);
 }

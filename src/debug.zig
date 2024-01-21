@@ -4,6 +4,7 @@ const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
+const printf = root.printf;
 
 const Forth = @import("forty/forth.zig").Forth;
 const auto = @import("forty/auto.zig");
@@ -35,21 +36,13 @@ pub fn log(
     }
 }
 
-pub fn kprint(comptime fmt: []const u8, args: anytype) void {
-    if (root.main_console_valid) {
-        root.main_console.print(fmt, args) catch {};
-    } else {
-        serial.writer.print(fmt, args) catch {};
-    }
-}
-
 pub fn sliceDumpAsWords(buf: []const u8) void {
     const buf_words = std.mem.bytesAsSlice(u32, buf);
     const len = buf_words.len;
     var offset: usize = 0;
 
     while (offset < len) {
-        kprint("{x:16}  {x:0>8}\n", .{ @intFromPtr(buf_words.ptr) + offset, buf_words[offset] });
+        _ = printf("%016x  %08x\n", @intFromPtr(buf_words.ptr) + offset, buf_words[offset]);
         offset += 1;
     }
 }
@@ -59,27 +52,27 @@ pub fn sliceDump(buf: []const u8) void {
     var offset: usize = 0;
 
     while (offset < len) {
-        kprint("{x:16}  ", .{@intFromPtr(buf.ptr) + offset});
+        _ = printf("%016x  ", @intFromPtr(buf.ptr) + offset);
 
         for (0..16) |iByte| {
             if (offset + iByte < len) {
-                kprint("{x:0>2} ", .{buf[offset + iByte]});
+                _ = printf("%02x ", buf[offset + iByte]);
             } else {
-                kprint("   ", .{});
+                _ = printf("   ");
             }
             if (iByte == 7) {
-                kprint("  ", .{});
+                _ = printf("  ");
             }
         }
-        kprint("  |", .{});
+        printf("  |");
         for (0..16) |iByte| {
             if (offset + iByte < len) {
-                kprint("{c}", .{string.toPrintable(buf[offset + iByte])});
+                _ = printf("%c", string.toPrintable(buf[offset + iByte]));
             } else {
-                kprint(" ", .{});
+                _ = printf(" ");
             }
         }
-        kprint("|\n", .{});
+        printf("|\n");
         offset += 16;
     }
 }
@@ -118,5 +111,5 @@ pub fn kernelMessage(msg: []const u8) void {
 pub fn kernelError(msg: []const u8, err: anyerror) void {
     kernelMessage(msg);
     kernelMessage(@errorName(err));
-    kprint("{s}: {any}\n", .{ msg, err });
+    _ = printf("%s: %s\n", msg.ptr, @errorName(err).ptr);
 }

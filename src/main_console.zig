@@ -3,7 +3,6 @@ const Allocator = std.mem.Allocator;
 
 const root = @import("root");
 const debug = root.debug;
-const kprint = root.kprint;
 
 const Forth = @import("forty/forth.zig").Forth;
 const auto = @import("forty/auto.zig");

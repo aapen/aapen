@@ -34,9 +34,9 @@ pub const Region = struct {
 
     pub fn print(self: *const Region) !void {
         if (self.name) |n| {
-            root.kprint("{?s:>15}: 0x{x:0>8} .. 0x{x:0>8}\n", .{ n, self.base, self.end });
+            _ = root.printf("%15s: 0x%08x .. 0x%08x\n", n.ptr, self.base, self.end);
         } else {
-            root.kprint("{?s:>15}: 0x{x:0>8} .. 0x{x:0>8}\n", .{ "unnamed region", self.base, self.end });
+            _ = root.printf("unnamed region: 0x%08x .. 0x%08x\n", self.base, self.end);
         }
     }
 
