@@ -37,28 +37,21 @@ name:                                           \
 // Generate the optimal set of instructions to load a 64-bit immediate
 // value into a register.
 .macro  LDR_IMM64 reg,value
-    .if \value & 0xffff || (\value == 0)
-    movz    \reg,#\value & 0xffff
-    .endif
-    .if \value > 0xffff && ((\value>>16) & 0xffff) != 0
-    .if \value & 0xffff
-    movk    \reg,#(\value>>16) & 0xffff,lsl #16
-    .else
-    movz    \reg,#(\value>>16) & 0xffff,lsl #16
-    .endif
-    .endif
-    .if \value > 0xffffffff && ((\value>>32) & 0xffff) != 0
-    .if \value & 0xffffffff
-    movk    \reg,#(\value>>32) & 0xffff,lsl #32
-    .else
-    movz    \reg,#(\value>>32) & 0xffff,lsl #32
-    .endif
-    .endif
-    .if \value > 0xffffffffffff && ((\value>>48) & 0xffff) != 0
-    .if \value & 0xffffffffffff
-    movk    \reg,#(\value>>48) & 0xffff,lsl #48
-    .else
-    movz    \reg,#(\value>>48) & 0xffff,lsl #48
-    .endif
-    .endif
+  .if \value > 0xffffffffffff
+  movz \reg, #(\value & 0xffff)
+  movk \reg, #((\value >> 16) & 0xffff), lsl #16
+  movk \reg, #((\value >> 32) & 0xffff), lsl #32
+  movk \reg, #((\value >> 48) & 0xffff), lsl #48
+  .elseif \value > 0xffffffff
+  movz \reg, #(\value & 0xffff)
+  movk \reg, #((\value >> 16) & 0xffff), lsl #16
+  movk \reg, #((\value >> 32) & 0xffff), lsl #32
+  .elseif \value > 0xffff
+  movz \reg, #(\value & 0xffff)
+  movk \reg, #((\value >> 16) & 0xffff), lsl #16
+  .elseif \value > 0
+  movz \reg, #(\value & 0xffff)
+  .elseif
+  movz \reg, #0
+  .endif
 .endm

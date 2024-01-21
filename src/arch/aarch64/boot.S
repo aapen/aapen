@@ -79,7 +79,7 @@
         LDR_IMM64 x0, CPACR_EL1_VALUE
         msr       cpacr_el1, x0
 
-        ldr       x0, 0
+        mov       x0, #0
         msr       cntvoff_el2, x0
 
         LDR_IMM64 x0, HCR_EL2_VALUE
