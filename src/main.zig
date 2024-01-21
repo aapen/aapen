@@ -74,7 +74,7 @@ pub var uart_valid = false;
 pub var char_buffer_console_valid = false;
 pub var main_console_valid = false;
 
-fn kernelInit() void {
+export fn kernelInit() noreturn {
     // State: one core, no interrupts, no MMU, no heap Allocator, no
     // display, serial
     arch.cpu.mmu.init();
@@ -231,62 +231,6 @@ fn repl() callconv(.C) noreturn {
             std.log.err("REPL error: {any}\n\nABORT.\n", .{err});
         };
     }
-}
-
-export fn _start_zig(phys_boot_core_stack_end_exclusive: u64) noreturn {
-    const registers = arch.cpu.registers;
-
-    registers.sctlr_el1.write(.{
-        .mmu_enable = .disable,
-        .a = .disable,
-        .sa = 0,
-        .sa0 = 0,
-        .naa = .trap_disable,
-        .ee = .little_endian,
-        .e0e = .little_endian,
-        .i_cache = .enabled,
-        .d_cache = .enabled,
-        .wxn = 0,
-    });
-
-    // this is harmless at the moment, but it lets me get the code
-    // infrastructure in place to make the EL2 -> EL1 transition
-    registers.cnthctl_el2.modify(.{
-        .el1pcen = .trap_disable,
-        .el1pcten = .trap_disable,
-    });
-
-    // Zig and LLVM like to use vector registers. Must not trap on the
-    // SIMD/FPE instructions for that to work.
-    registers.cpacr_el1.write(.{
-        .zen = .trap_none,
-        .fpen = .trap_none,
-        .tta = .trap_disable,
-    });
-
-    registers.cntvoff_el2.write(0);
-
-    registers.hcr_el2.modify(.{ .rw = .el1_is_aarch64 });
-
-    registers.spsr_el2.write(.{
-        .m = .el1h,
-        .d = .masked,
-        .i = .masked,
-        .a = .masked,
-        .f = .masked,
-    });
-
-    // fake a return stack pointer and exception link register to a function
-    // this function will begin executing when we do `eret` from here
-    registers.elr_el2.write(@intFromPtr(&kernelInit));
-    registers.sp_el1.write(phys_boot_core_stack_end_exclusive);
-
-    asm volatile ("mov x29, xzr");
-    asm volatile ("mov x30, xzr");
-
-    arch.cpu.eret();
-
-    unreachable;
 }
 
 const StackTrace = std.builtin.StackTrace;
