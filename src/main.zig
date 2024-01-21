@@ -254,10 +254,3 @@ pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn
 
     unreachable;
 }
-
-// The assembly portion of soft reset (does the stack magic)
-pub extern fn _soft_reset(resume_address: u64) noreturn;
-
-pub fn resetSoft() noreturn {
-    _soft_reset(@intFromPtr(&kernelInit));
-}

@@ -563,7 +563,6 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
-    _ = try forth.definePrimitiveDesc("reset", " -- : Soft reset the system", &wordReset, false);
     _ = try forth.definePrimitiveDesc("sleep", " n -- : Pause for some milliseconds", &wordSleep, false);
 
     // Basic Forth words.

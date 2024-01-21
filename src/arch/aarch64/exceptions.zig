@@ -55,13 +55,6 @@ export fn irqCurrentElx(context: *const ExceptionContext) void {
     root.hal.interrupt_controller.irqHandle(context);
 }
 
-// This is an arbitrary, but unique, number
-const soft_reset_breakpoint = 0x7c5;
-
-pub fn triggerSoftReset() void {
-    cpu.breakpoint(soft_reset_breakpoint);
-}
-
 // ----------------------------------------------------------------------
 // Exception display
 // ----------------------------------------------------------------------
@@ -83,11 +76,6 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
                 context.force_sp = unwind.sp;
                 context.gpr[29] = unwind.fp;
             }
-        } else if (breakpoint_number == soft_reset_breakpoint) {
-            root.resetSoft();
-
-            // Adjust ELR to resume execution _after_ the breakpoint instruction
-            context.elr += 4;
         } else {
             unknownBreakpointDisplay(context.elr, breakpoint_number);
 
