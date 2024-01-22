@@ -19,20 +19,20 @@ pub fn defineModule(forth: *Forth) !void {
     });
 }
 
-pub const clock_reserved: u32 = 0;
-pub const clock_emmc: u32 = 1;
-pub const clock_uart: u32 = 2;
-pub const clock_arm: u32 = 3;
-pub const clock_core: u32 = 4;
-pub const clock_v3d: u32 = 5;
-pub const clock_h264: u32 = 6;
-pub const clock_isp: u32 = 7;
-pub const clock_sdram: u32 = 8;
-pub const clock_pixel: u32 = 9;
-pub const clock_pwm: u32 = 10;
+pub const CLOCK_RESERVED: u32 = 0;
+pub const CLOCK_EMMC: u32 = 1;
+pub const CLOCK_UART: u32 = 2;
+pub const CLOCK_ARM: u32 = 3;
+pub const CLOCK_CORE: u32 = 4;
+pub const CLOCK_V3D: u32 = 5;
+pub const CLOCK_H264: u32 = 6;
+pub const CLOCK_ISP: u32 = 7;
+pub const CLOCK_SDRAM: u32 = 8;
+pub const CLOCK_PIXEL: u32 = 9;
+pub const CLOCK_PWM: u32 = 10;
 
-pub const state_off: u32 = 0;
-pub const state_on: u32 = 1;
+pub const STATE_OFF: u32 = 0;
+pub const STATE_ON: u32 = 1;
 
 pub const ClockResult = enum(u64) {
     unknown = 0,
@@ -147,10 +147,10 @@ pub const PeripheralClockController = struct {
     }
 
     pub fn clockOn(self: *PeripheralClockController, clock_id: u32) !ClockResult {
-        return self.clockStateSet(clock_id, state_on);
+        return self.clockStateSet(clock_id, STATE_ON);
     }
 
     pub fn clockOff(self: *PeripheralClockController, clock_id: u32) !ClockResult {
-        return self.clockStateSet(clock_id, state_off);
+        return self.clockStateSet(clock_id, STATE_OFF);
     }
 };

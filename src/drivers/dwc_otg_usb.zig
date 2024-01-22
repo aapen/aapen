@@ -9,6 +9,7 @@ const InterruptController = root.HAL.InterruptController;
 const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
+const POWER_DEVICE_USB_HCD = root.HAL.PowerController.POWER_DEVICE_USB_HCD;
 
 const Forth = @import("../forty/forth.zig").Forth;
 
@@ -210,7 +211,7 @@ pub fn initialize(self: *Self) !void {
 }
 
 fn powerOn(self: *Self) !void {
-    const power_result = try self.power_controller.powerOn(.usb_hcd);
+    const power_result = try self.power_controller.powerOn(POWER_DEVICE_USB_HCD);
 
     if (power_result != .power_on) {
         log.err("Failed to power on USB device: {any}", .{power_result});
@@ -222,7 +223,7 @@ fn powerOn(self: *Self) !void {
 }
 
 fn powerOff(self: *Self) !void {
-    const power_result = try self.power_controller.powerOff(.usb_hcd);
+    const power_result = try self.power_controller.powerOff(POWER_DEVICE_USB_HCD);
 
     if (power_result != .power_off) {
         log.err("Failed to power off USB device: {any}", .{power_result});

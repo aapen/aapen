@@ -16,35 +16,29 @@ pub fn defineModule(forth: *Forth) !void {
 // global wrappers that uses the initialized device to call the
 // instance function below (which leads to the question, "why do we
 // make these instance methods at all?")
-pub fn systemPowerQuery(device: PowerDevice) !PowerResult {
+pub fn systemPowerQuery(device: u32) !PowerResult {
     return root.hal.power_controller.isPowered(device);
 }
 
-pub fn systemPowerControl(device: PowerDevice, desired_state: DesiredState) !PowerResult {
+pub fn systemPowerControl(device: u32, desired_state: u32) !PowerResult {
     return root.hal.power_controller.setState(device, desired_state);
 }
 
-pub const PowerDevice = enum(u32) {
-    sdhci = 0,
-    uart0 = 1,
-    uart1 = 2,
-    usb_hcd = 3,
-    i2c0 = 4,
-    i2c1 = 5,
-    i2c2 = 6,
-    spi = 7,
-    ccp2tx = 8,
-};
+pub const POWER_DEVICE_SDHCI: u32 = 0;
+pub const POWER_DEVICE_UART0: u32 = 1;
+pub const POWER_DEVICE_UART1: u32 = 2;
+pub const POWER_DEVICE_USB_HCD: u32 = 3;
+pub const POWER_DEVICE_I2C0: u32 = 4;
+pub const POWER_DEVICE_I2C1: u32 = 5;
+pub const POWER_DEVICE_I2C2: u32 = 6;
+pub const POWER_DEVICE_SPI: u32 = 7;
+pub const POWER_DEVICE_CCP2TX: u32 = 8;
 
-pub const WaitForTransition = enum(u2) {
-    do_not_wait = 0b00,
-    wait = 0b10,
-};
+pub const STATE_OFF: u32 = 0b0;
+pub const STATE_ON: u32 = 0b1;
 
-pub const DesiredState = enum(u1) {
-    off = 0b0,
-    on = 0b1,
-};
+pub const DO_NOT_WAIT_FOR_TRANSITION: u32 = 0b00;
+pub const WAIT_FOR_TRANSITION: u32 = 0b10;
 
 pub const PowerResult = enum {
     unknown,
@@ -59,19 +53,19 @@ const PropertyPower = extern struct {
     device: u32,
     state: u32,
 
-    pub fn initQuery(device: PowerDevice) @This() {
+    pub fn initQuery(device: u32) @This() {
         return .{
             .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_GET_POWER_STATE, 1, 2),
-            .device = @intFromEnum(device),
+            .device = device,
             .state = 0,
         };
     }
 
-    pub fn initControl(device: PowerDevice, state: DesiredState, wait: WaitForTransition) @This() {
+    pub fn initControl(device: u32, state: u32, wait: bool) @This() {
         return .{
             .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_SET_POWER_STATE, 2, 2),
-            .device = @intFromEnum(device),
-            .state = @intFromEnum(state) | @intFromEnum(wait),
+            .device = device,
+            .state = state | (if (wait) WAIT_FOR_TRANSITION else DO_NOT_WAIT_FOR_TRANSITION),
         };
     }
 };
@@ -97,22 +91,22 @@ fn decode(state: u32) PowerResult {
     }
 }
 
-pub fn isPowered(self: *Self, device: PowerDevice) !PowerResult {
+pub fn isPowered(self: *Self, device: u32) !PowerResult {
     const query = PropertyPower.initQuery(device);
     try self.mailbox.getTag(&query);
     return decode(query.state);
 }
 
-pub fn setState(self: *Self, device: PowerDevice, desired_state: DesiredState) !PowerResult {
-    var control = PropertyPower.initControl(device, desired_state, .wait);
+pub fn setState(self: *Self, device: u32, desired_state: u32) !PowerResult {
+    var control = PropertyPower.initControl(device, desired_state, true);
     try self.mailbox.getTag(&control);
     return decode(control.state);
 }
 
-pub fn powerOn(self: *Self, device: PowerDevice) !PowerResult {
-    return self.setState(device, .on);
+pub fn powerOn(self: *Self, device: u32) !PowerResult {
+    return self.setState(device, STATE_ON);
 }
 
-pub fn powerOff(self: *Self, device: PowerDevice) PowerResult {
-    return self.setState(device, .off);
+pub fn powerOff(self: *Self, device: u32) PowerResult {
+    return self.setState(device, STATE_OFF);
 }
