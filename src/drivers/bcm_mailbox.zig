@@ -61,24 +61,20 @@ const MailboxStatusRegister = packed struct {
     mail_full: u1,
 };
 
-const IrqEnableBit = enum(u1) {
-    disabled = 0b0,
-    enabled = 0b1,
-};
+pub const IRQ_DISABLE: u1 = 0;
+pub const IRQ_ENABLE: u1 = 1;
 
-const IrqPendingBit = enum(u1) {
-    not_raised = 0b0,
-    raised = 0b1,
-};
+pub const IRQ_IDLE: u1 = 0;
+pub const IRQ_PENDING: u1 = 1;
 
 const MailboxConfigurationRegister = packed struct {
-    data_available_irq_enable: IrqEnableBit = .disabled,
-    space_available_irq_enable: IrqEnableBit = .disabled,
-    opp_empty_irq_enable: IrqEnableBit = .disabled,
+    data_available_irq_enable: u1 = IRQ_DISABLE,
+    space_available_irq_enable: u1 = IRQ_DISABLE,
+    opp_empty_irq_enable: u1 = IRQ_DISABLE,
     mail_clear: u1 = 0,
-    data_available_irq_pending: IrqPendingBit = .not_raised,
-    space_available_irq_pending: IrqPendingBit = .not_raised,
-    opp_empty_irq_pending: IrqPendingBit = .not_raised,
+    data_available_irq_pending: u1 = IRQ_IDLE,
+    space_available_irq_pending: u1 = IRQ_IDLE,
+    opp_empty_irq_pending: u1 = IRQ_IDLE,
     _unused_reserved_0: u1 = 0,
     error_non_owner_read: u1 = 0,
     error_overflow: u1 = 0,
@@ -175,113 +171,111 @@ pub fn sendReceive(self: *Self, data_location: u32, channel: u4) !void {
 // ARM <-> Videocore protocol
 // ----------------------------------------------------------------------
 
-const MailboxChannel = struct {
-    pub const power = 0;
-    pub const framebuffer = 1;
-    pub const virtual_uart = 2;
-    pub const vchiq = 3;
-    pub const leds = 4;
-    pub const buttons = 5;
-    pub const touch_screen = 6;
-    pub const property_arm_to_vc = 8;
-    pub const property_vc_to_arm = 9;
-};
+// Channel numbers
+pub const CHANNEL_POWER: u4 = 0;
+pub const CHANNEL_FRAMEBUFFER: u4 = 1;
+pub const CHANNEL_VIRTUAL_UART: u4 = 2;
+pub const CHANNEL_VCHIQ: u4 = 3;
+pub const CHANNEL_LEDS: u4 = 4;
+pub const CHANNEL_BUTTONS: u4 = 5;
+pub const CHANNEL_TOUCH_SCREEN: u4 = 6;
+pub const CHANNEL_PROPERTY_ARM_TO_VC: u4 = 8;
+pub const CHANNEL_PROPERTY_VC_TO_ARM: u4 = 9;
 
-pub const RpiFirmwarePropertyTag = struct {
-    pub const rpi_firmware_property_end: u32 = 0x00000000;
-    pub const rpi_firmware_get_firmware_revision: u32 = 0x00000001;
+// Tag numbers
+pub const RPI_FIRMWARE_PROPERTY_END: u32 = 0x00000000;
+pub const RPI_FIRMWARE_GET_FIRMWARE_REVISION: u32 = 0x00000001;
 
-    pub const rpi_firmware_set_cursor_info: u32 = 0x00008010;
-    pub const rpi_firmware_set_cursor_state: u32 = 0x00008011;
+pub const RPI_FIRMWARE_SET_CURSOR_INFO: u32 = 0x00008010;
+pub const RPI_FIRMWARE_SET_CURSOR_STATE: u32 = 0x00008011;
 
-    pub const rpi_firmware_get_board_model: u32 = 0x00010001;
-    pub const rpi_firmware_get_board_revision: u32 = 0x00010002;
-    pub const rpi_firmware_get_board_mac_address: u32 = 0x00010003;
-    pub const rpi_firmware_get_board_serial: u32 = 0x00010004;
-    pub const rpi_firmware_get_arm_memory: u32 = 0x00010005;
-    pub const rpi_firmware_get_vc_memory: u32 = 0x00010006;
-    pub const rpi_firmware_get_clocks: u32 = 0x00010007;
-    pub const rpi_firmware_get_power_state: u32 = 0x00020001;
-    pub const rpi_firmware_get_timing: u32 = 0x00020002;
-    pub const rpi_firmware_set_power_state: u32 = 0x00028001;
-    pub const rpi_firmware_get_clock_state: u32 = 0x00030001;
-    pub const rpi_firmware_get_clock_rate: u32 = 0x00030002;
-    pub const rpi_firmware_get_voltage: u32 = 0x00030003;
-    pub const rpi_firmware_get_max_clock_rate: u32 = 0x00030004;
-    pub const rpi_firmware_get_max_voltage: u32 = 0x00030005;
-    pub const rpi_firmware_get_temperature: u32 = 0x00030006;
-    pub const rpi_firmware_get_min_clock_rate: u32 = 0x00030007;
-    pub const rpi_firmware_get_min_voltage: u32 = 0x00030008;
-    pub const rpi_firmware_get_turbo: u32 = 0x00030009;
-    pub const rpi_firmware_get_max_temperature: u32 = 0x0003000a;
-    pub const rpi_firmware_get_stc: u32 = 0x0003000b;
-    pub const rpi_firmware_allocate_memory: u32 = 0x0003000c;
-    pub const rpi_firmware_lock_memory: u32 = 0x0003000d;
-    pub const rpi_firmware_unlock_memory: u32 = 0x0003000e;
-    pub const rpi_firmware_release_memory: u32 = 0x0003000f;
-    pub const rpi_firmware_execute_code: u32 = 0x00030010;
-    pub const rpi_firmware_execute_qpu: u32 = 0x00030011;
-    pub const rpi_firmware_set_enable_qpu: u32 = 0x00030012;
-    pub const rpi_firmware_get_dispmanx_resource_mem_handle: u32 = 0x00030014;
-    pub const rpi_firmware_get_edid_block: u32 = 0x00030020;
-    pub const rpi_firmware_get_customer_otp: u32 = 0x00030021;
-    pub const rpi_firmware_get_domain_state: u32 = 0x00030030;
-    pub const rpi_firmware_set_clock_state: u32 = 0x00038001;
-    pub const rpi_firmware_set_clock_rate: u32 = 0x00038002;
-    pub const rpi_firmware_set_voltage: u32 = 0x00038003;
-    pub const rpi_firmware_set_turbo: u32 = 0x00038009;
-    pub const rpi_firmware_set_customer_otp: u32 = 0x00038021;
-    pub const rpi_firmware_set_domain_state: u32 = 0x00038030;
-    pub const rpi_firmware_get_gpio_state: u32 = 0x00030041;
-    pub const rpi_firmware_set_gpio_state: u32 = 0x00038041;
-    pub const rpi_firmware_set_sdhost_clock: u32 = 0x00038042;
-    pub const rpi_firmware_get_gpio_config: u32 = 0x00030043;
-    pub const rpi_firmware_set_gpio_config: u32 = 0x00038043;
-    pub const rpi_firmware_get_periph_reg: u32 = 0x00030045;
-    pub const rpi_firmware_set_periph_reg: u32 = 0x00038045;
+pub const RPI_FIRMWARE_GET_BOARD_MODEL: u32 = 0x00010001;
+pub const RPI_FIRMWARE_GET_BOARD_REVISION: u32 = 0x00010002;
+pub const RPI_FIRMWARE_GET_BOARD_MAC_ADDRESS: u32 = 0x00010003;
+pub const RPI_FIRMWARE_GET_BOARD_SERIAL: u32 = 0x00010004;
+pub const RPI_FIRMWARE_GET_ARM_MEMORY: u32 = 0x00010005;
+pub const RPI_FIRMWARE_GET_VC_MEMORY: u32 = 0x00010006;
+pub const RPI_FIRMWARE_GET_CLOCKS: u32 = 0x00010007;
+pub const RPI_FIRMWARE_GET_POWER_STATE: u32 = 0x00020001;
+pub const RPI_FIRMWARE_GET_TIMING: u32 = 0x00020002;
+pub const RPI_FIRMWARE_SET_POWER_STATE: u32 = 0x00028001;
+pub const RPI_FIRMWARE_GET_CLOCK_STATE: u32 = 0x00030001;
+pub const RPI_FIRMWARE_GET_CLOCK_RATE: u32 = 0x00030002;
+pub const RPI_FIRMWARE_GET_VOLTAGE: u32 = 0x00030003;
+pub const RPI_FIRMWARE_GET_MAX_CLOCK_RATE: u32 = 0x00030004;
+pub const RPI_FIRMWARE_GET_MAX_VOLTAGE: u32 = 0x00030005;
+pub const RPI_FIRMWARE_GET_TEMPERATURE: u32 = 0x00030006;
+pub const RPI_FIRMWARE_GET_MIN_CLOCK_RATE: u32 = 0x00030007;
+pub const RPI_FIRMWARE_GET_MIN_VOLTAGE: u32 = 0x00030008;
+pub const RPI_FIRMWARE_GET_TURBO: u32 = 0x00030009;
+pub const RPI_FIRMWARE_GET_MAX_TEMPERATURE: u32 = 0x0003000a;
+pub const RPI_FIRMWARE_GET_STC: u32 = 0x0003000b;
+pub const RPI_FIRMWARE_ALLOCATE_MEMORY: u32 = 0x0003000c;
+pub const RPI_FIRMWARE_LOCK_MEMORY: u32 = 0x0003000d;
+pub const RPI_FIRMWARE_UNLOCK_MEMORY: u32 = 0x0003000e;
+pub const RPI_FIRMWARE_RELEASE_MEMORY: u32 = 0x0003000f;
+pub const RPI_FIRMWARE_EXECUTE_CODE: u32 = 0x00030010;
+pub const RPI_FIRMWARE_EXECUTE_QPU: u32 = 0x00030011;
+pub const RPI_FIRMWARE_SET_ENABLE_QPU: u32 = 0x00030012;
+pub const RPI_FIRMWARE_GET_DISPMANX_RESOURCE_MEM_HANDLE: u32 = 0x00030014;
+pub const RPI_FIRMWARE_GET_EDID_BLOCK: u32 = 0x00030020;
+pub const RPI_FIRMWARE_GET_CUSTOMER_OTP: u32 = 0x00030021;
+pub const RPI_FIRMWARE_GET_DOMAIN_STATE: u32 = 0x00030030;
+pub const RPI_FIRMWARE_SET_CLOCK_STATE: u32 = 0x00038001;
+pub const RPI_FIRMWARE_SET_CLOCK_RATE: u32 = 0x00038002;
+pub const RPI_FIRMWARE_SET_VOLTAGE: u32 = 0x00038003;
+pub const RPI_FIRMWARE_SET_TURBO: u32 = 0x00038009;
+pub const RPI_FIRMWARE_SET_CUSTOMER_OTP: u32 = 0x00038021;
+pub const RPI_FIRMWARE_SET_DOMAIN_STATE: u32 = 0x00038030;
+pub const RPI_FIRMWARE_GET_GPIO_STATE: u32 = 0x00030041;
+pub const RPI_FIRMWARE_SET_GPIO_STATE: u32 = 0x00038041;
+pub const RPI_FIRMWARE_SET_SDHOST_CLOCK: u32 = 0x00038042;
+pub const RPI_FIRMWARE_GET_GPIO_CONFIG: u32 = 0x00030043;
+pub const RPI_FIRMWARE_SET_GPIO_CONFIG: u32 = 0x00038043;
+pub const RPI_FIRMWARE_GET_PERIPH_REG: u32 = 0x00030045;
+pub const RPI_FIRMWARE_SET_PERIPH_REG: u32 = 0x00038045;
 
-    // Dispmanx TAGS
-    pub const rpi_firmware_framebuffer_allocate: u32 = 0x00040001;
-    pub const rpi_firmware_framebuffer_blank: u32 = 0x00040002;
-    pub const rpi_firmware_framebuffer_get_physical_width_height: u32 = 0x00040003;
-    pub const rpi_firmware_framebuffer_get_virtual_width_height: u32 = 0x00040004;
-    pub const rpi_firmware_framebuffer_get_depth: u32 = 0x00040005;
-    pub const rpi_firmware_framebuffer_get_pixel_order: u32 = 0x00040006;
-    pub const rpi_firmware_framebuffer_get_alpha_mode: u32 = 0x00040007;
-    pub const rpi_firmware_framebuffer_get_pitch: u32 = 0x00040008;
-    pub const rpi_firmware_framebuffer_get_virtual_offset: u32 = 0x00040009;
-    pub const rpi_firmware_framebuffer_get_overscan: u32 = 0x0004000a;
-    pub const rpi_firmware_framebuffer_get_palette: u32 = 0x0004000b;
-    pub const rpi_firmware_framebuffer_get_touchbuf: u32 = 0x0004000f;
-    pub const rpi_firmware_framebuffer_get_gpiovirtbuf: u32 = 0x00040010;
-    pub const rpi_firmware_framebuffer_release: u32 = 0x00048001;
-    pub const rpi_firmware_framebuffer_test_physical_width_height: u32 = 0x00044003;
-    pub const rpi_firmware_framebuffer_test_virtual_width_height: u32 = 0x00044004;
-    pub const rpi_firmware_framebuffer_test_depth: u32 = 0x00044005;
-    pub const rpi_firmware_framebuffer_test_pixel_order: u32 = 0x00044006;
-    pub const rpi_firmware_framebuffer_test_alpha_mode: u32 = 0x00044007;
-    pub const rpi_firmware_framebuffer_test_virtual_offset: u32 = 0x00044009;
-    pub const rpi_firmware_framebuffer_test_overscan: u32 = 0x0004400a;
-    pub const rpi_firmware_framebuffer_test_palette: u32 = 0x0004400b;
-    pub const rpi_firmware_framebuffer_test_vsync: u32 = 0x0004400e;
-    pub const rpi_firmware_framebuffer_set_physical_width_height: u32 = 0x00048003;
-    pub const rpi_firmware_framebuffer_set_virtual_width_height: u32 = 0x00048004;
-    pub const rpi_firmware_framebuffer_set_depth: u32 = 0x00048005;
-    pub const rpi_firmware_framebuffer_set_pixel_order: u32 = 0x00048006;
-    pub const rpi_firmware_framebuffer_set_alpha_mode: u32 = 0x00048007;
-    pub const rpi_firmware_framebuffer_set_virtual_offset: u32 = 0x00048009;
-    pub const rpi_firmware_framebuffer_set_overscan: u32 = 0x0004800a;
-    pub const rpi_firmware_framebuffer_set_palette: u32 = 0x0004800b;
-    pub const rpi_firmware_framebuffer_set_touchbuf: u32 = 0x0004801f;
-    pub const rpi_firmware_framebuffer_set_gpiovirtbuf: u32 = 0x00048020;
-    pub const rpi_firmware_framebuffer_set_vsync: u32 = 0x0004800e;
-    pub const rpi_firmware_framebuffer_set_backlight: u32 = 0x0004800f;
+// Dispmanx TAGS
+pub const RPI_FIRMWARE_FRAMEBUFFER_ALLOCATE: u32 = 0x00040001;
+pub const RPI_FIRMWARE_FRAMEBUFFER_BLANK: u32 = 0x00040002;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_PHYSICAL_WIDTH_HEIGHT: u32 = 0x00040003;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_VIRTUAL_WIDTH_HEIGHT: u32 = 0x00040004;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_DEPTH: u32 = 0x00040005;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_PIXEL_ORDER: u32 = 0x00040006;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_ALPHA_MODE: u32 = 0x00040007;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_PITCH: u32 = 0x00040008;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_VIRTUAL_OFFSET: u32 = 0x00040009;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_OVERSCAN: u32 = 0x0004000a;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_PALETTE: u32 = 0x0004000b;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_TOUCHBUF: u32 = 0x0004000f;
+pub const RPI_FIRMWARE_FRAMEBUFFER_GET_GPIOVIRTBUF: u32 = 0x00040010;
+pub const RPI_FIRMWARE_FRAMEBUFFER_RELEASE: u32 = 0x00048001;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_PHYSICAL_WIDTH_HEIGHT: u32 = 0x00044003;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_VIRTUAL_WIDTH_HEIGHT: u32 = 0x00044004;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_DEPTH: u32 = 0x00044005;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_PIXEL_ORDER: u32 = 0x00044006;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_ALPHA_MODE: u32 = 0x00044007;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_VIRTUAL_OFFSET: u32 = 0x00044009;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_OVERSCAN: u32 = 0x0004400a;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_PALETTE: u32 = 0x0004400b;
+pub const RPI_FIRMWARE_FRAMEBUFFER_TEST_VSYNC: u32 = 0x0004400e;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_PHYSICAL_WIDTH_HEIGHT: u32 = 0x00048003;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_VIRTUAL_WIDTH_HEIGHT: u32 = 0x00048004;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_DEPTH: u32 = 0x00048005;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_PIXEL_ORDER: u32 = 0x00048006;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_ALPHA_MODE: u32 = 0x00048007;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_VIRTUAL_OFFSET: u32 = 0x00048009;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_OVERSCAN: u32 = 0x0004800a;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_PALETTE: u32 = 0x0004800b;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_TOUCHBUF: u32 = 0x0004801f;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_GPIOVIRTBUF: u32 = 0x00048020;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_VSYNC: u32 = 0x0004800e;
+pub const RPI_FIRMWARE_FRAMEBUFFER_SET_BACKLIGHT: u32 = 0x0004800f;
 
-    pub const rpi_firmware_vchiq_init: u32 = 0x00048010;
+pub const RPI_FIRMWARE_VCHIQ_INIT: u32 = 0x00048010;
 
-    pub const rpi_firmware_get_command_line: u32 = 0x00050001;
-    pub const rpi_firmware_get_dma_channels: u32 = 0x00060001;
-};
+pub const RPI_FIRMWARE_GET_COMMAND_LINE: u32 = 0x00050001;
+pub const RPI_FIRMWARE_GET_DMA_CHANNELS: u32 = 0x00060001;
 
 // ----------------------------------------------------------------------
 // High level "tags" interface
@@ -296,7 +290,7 @@ const TagError = error{
 const CODE_REQUEST = 0x0;
 const CODE_RESPONSE_SUCCESS = 0x80000000;
 
-const VALUE_LENGTH_RESPONSE: u32 = 1 << 31;
+const VALUE_LENGTH_RESPONSE: u32 = 0x80000000;
 const PROPERTY_TAG_REQUIRED_ALIGNMENT = 16;
 
 pub fn getTag(self: *Self, tag: anytype) !void {
@@ -333,7 +327,7 @@ pub fn getTags(self: *Self, buffer: []u32) !void {
     synchronize.dataCacheRangeClean(@intFromPtr(message.ptr), payload_size);
 
     const buffer_address_mailbox: u32 = @truncate(@intFromPtr(message.ptr));
-    try self.sendReceive(buffer_address_mailbox, MailboxChannel.property_arm_to_vc);
+    try self.sendReceive(buffer_address_mailbox, CHANNEL_PROPERTY_ARM_TO_VC);
 
     // Make sure changes from the GPU are visible to us
     synchronize.dataCacheRangeInvalidate(@intFromPtr(message.ptr), payload_size);

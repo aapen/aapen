@@ -4,7 +4,6 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
-const RpiFirmwarePropertyTag = root.HAL.Mailbox.RpiFirmwarePropertyTag;
 
 const memory = @import("../memory.zig");
 
@@ -111,11 +110,11 @@ fn decode_revision_new_scheme(revision: u32, info: *BoardInfo) void {
 }
 
 const PropertyBoardInfo = extern struct {
-    arm_memory: PropertyMemory = .{ .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_get_arm_memory, 0, 2) },
-    vc_memory: PropertyMemory = .{ .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_get_vc_memory, 0, 2) },
-    revision: PropertyInfo = .{ .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_get_board_revision, 1, 1) },
-    mac_address: PropertyInfo = .{ .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_get_board_mac_address, 1, 1) },
-    serial: PropertyInfo = .{ .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_get_board_serial, 1, 1) },
+    arm_memory: PropertyMemory = .{ .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_GET_ARM_MEMORY, 0, 2) },
+    vc_memory: PropertyMemory = .{ .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_GET_VC_MEMORY, 0, 2) },
+    revision: PropertyInfo = .{ .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_GET_BOARD_REVISION, 1, 1) },
+    mac_address: PropertyInfo = .{ .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_GET_BOARD_MAC_ADDRESS, 1, 1) },
+    serial: PropertyInfo = .{ .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_GET_BOARD_SERIAL, 1, 1) },
 
     pub fn init() PropertyBoardInfo {
         return .{};

@@ -5,7 +5,6 @@ const Forth = @import("../forty/forth.zig").Forth;
 const root = @import("root");
 const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
-const RpiFirmwarePropertyTag = root.HAL.Mailbox.RpiFirmwarePropertyTag;
 
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(PeripheralClockController, .{
@@ -50,7 +49,7 @@ const PropertyClock = extern struct {
 
     pub fn initStateQuery(clock: u32) @This() {
         return .{
-            .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_get_clock_state, 1, 2),
+            .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_GET_CLOCK_STATE, 1, 2),
             .clock = clock,
             .param2 = 0,
         };
@@ -58,7 +57,7 @@ const PropertyClock = extern struct {
 
     pub fn initStateControl(clock: u32, desired_state: u32) @This() {
         return .{
-            .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_set_clock_state, 2, 2),
+            .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_SET_CLOCK_STATE, 2, 2),
             .clock = clock,
             .param2 = desired_state,
         };
@@ -81,7 +80,7 @@ const PropertyClockRateControl = extern struct {
 
     pub fn initRateControl(clock: u32, desired_rate: u32) @This() {
         return .{
-            .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_set_clock_rate, 3, 2),
+            .tag = PropertyTag.init(Mailbox.RPI_FIRMWARE_SET_CLOCK_RATE, 3, 2),
             .clock = clock,
             .rate = desired_rate,
             .skip_turbo = 1,
@@ -118,15 +117,15 @@ pub const PeripheralClockController = struct {
     }
 
     pub fn clockRateCurrent(self: *PeripheralClockController, clock_id: u32) !u32 {
-        return self.clockRate(clock_id, RpiFirmwarePropertyTag.rpi_firmware_get_clock_rate);
+        return self.clockRate(clock_id, Mailbox.RPI_FIRMWARE_GET_CLOCK_RATE);
     }
 
     pub fn clockRateMax(self: *PeripheralClockController, clock_id: u32) !u32 {
-        return self.clockRate(clock_id, RpiFirmwarePropertyTag.rpi_firmware_get_max_clock_rate);
+        return self.clockRate(clock_id, Mailbox.RPI_FIRMWARE_GET_MAX_CLOCK_RATE);
     }
 
     pub fn clockRateMin(self: *PeripheralClockController, clock_id: u32) !u32 {
-        return self.clockRate(clock_id, RpiFirmwarePropertyTag.rpi_firmware_get_min_clock_rate);
+        return self.clockRate(clock_id, Mailbox.RPI_FIRMWARE_GET_MIN_CLOCK_RATE);
     }
 
     pub fn clockRateSet(self: *PeripheralClockController, clock_id: u32, desired_rate: u32) !u32 {
