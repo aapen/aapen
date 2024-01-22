@@ -1,24 +1,24 @@
-pub const BarrierType = enum {
-    SY,
-    ST,
-    LD,
-    ISH,
-    ISHST,
-    ISHLD,
-    NSH,
-    NSHST,
-    NSHLD,
-    OSH,
-    OSHHT,
-    OSHLD,
+pub const BarrierType = struct {
+    pub const SY = "SY";
+    pub const ST = "ST";
+    pub const LD = "LD";
+    pub const ISH = "ISH";
+    pub const ISHST = "ISHST";
+    pub const ISHLD = "ISHLD";
+    pub const NSH = "NSH";
+    pub const NSHST = "NSHST";
+    pub const NSHLD = "NSHLD";
+    pub const OSH = "OSH";
+    pub const OSHHT = "OSHHT";
+    pub const OSHLD = "OSHLD";
 };
 
-pub fn dmb(comptime ty: BarrierType) void {
-    asm volatile ("dmb " ++ @tagName(ty));
+pub fn dmb(comptime ty: [*:0]const u8) void {
+    asm volatile ("dmb " ++ ty);
 }
 
-pub fn dsb(comptime ty: BarrierType) void {
-    asm volatile ("dsb " ++ @tagName(ty));
+pub fn dsb(comptime ty: [*:0]const u8) void {
+    asm volatile ("dsb " ++ ty);
 }
 
 pub fn isb() void {

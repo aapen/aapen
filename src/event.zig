@@ -113,7 +113,7 @@ pub const EventSubtype = struct {
 // ----------------------------------------------------------------------
 
 fn wakeWaiting() void {
-    arch.cpu.barriers.dsb(.SY);
+    arch.cpu.barriers.dsb(arch.cpu.barriers.BarrierType.SY);
     arch.cpu.sev();
 }
 
