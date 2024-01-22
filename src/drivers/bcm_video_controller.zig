@@ -4,6 +4,7 @@ const root = @import("root");
 const DMA = root.HAL.DMA;
 const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
+const RpiFirmwarePropertyTag = root.HAL.Mailbox.RpiFirmwarePropertyTag;
 
 const FrameBuffer = @import("../frame_buffer.zig");
 
@@ -42,7 +43,7 @@ const PropertySize = extern struct {
 
     pub fn initPhysical(xres: u32, yres: u32) @This() {
         return .{
-            .tag = PropertyTag.init(.rpi_firmware_framebuffer_set_physical_width_height, 2, 2),
+            .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_framebuffer_set_physical_width_height, 2, 2),
             .xres = xres,
             .yres = yres,
         };
@@ -50,7 +51,7 @@ const PropertySize = extern struct {
 
     pub fn initVirtual(xres: u32, yres: u32) @This() {
         return .{
-            .tag = PropertyTag.init(.rpi_firmware_framebuffer_set_virtual_width_height, 2, 2),
+            .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_framebuffer_set_virtual_width_height, 2, 2),
             .xres = xres,
             .yres = yres,
         };
@@ -63,14 +64,14 @@ const PropertyDepth = extern struct {
 
     pub fn init(depth: u32) @This() {
         return .{
-            .tag = PropertyTag.init(.rpi_firmware_framebuffer_set_depth, 1, 1),
+            .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_framebuffer_set_depth, 1, 1),
             .depth = depth,
         };
     }
 };
 
 const PropertyAllocateFrameBuffer = extern struct {
-    tag: PropertyTag = PropertyTag.init(.rpi_firmware_framebuffer_allocate, 1, 2),
+    tag: PropertyTag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_framebuffer_allocate, 1, 2),
     base: u32 = 16,
     buffer_size: u32 = undefined,
 
@@ -80,7 +81,7 @@ const PropertyAllocateFrameBuffer = extern struct {
 };
 
 const PropertyPitch = extern struct {
-    tag: PropertyTag = PropertyTag.init(.rpi_firmware_framebuffer_get_pitch, 1, 1),
+    tag: PropertyTag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_framebuffer_get_pitch, 1, 1),
     pitch: u32 = undefined,
 
     pub fn init() @This() {
@@ -89,7 +90,7 @@ const PropertyPitch = extern struct {
 };
 
 const PropertySetPalette = extern struct {
-    tag: PropertyTag = PropertyTag.init(.rpi_firmware_framebuffer_set_palette, 34, 34),
+    tag: PropertyTag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_framebuffer_set_palette, 34, 34),
     param1: extern union {
         offset: u32,
         valid: u32,
@@ -117,7 +118,7 @@ const PropertySetPalette = extern struct {
 };
 
 const PropertyOverscan = extern struct {
-    tag: PropertyTag = PropertyTag.init(.rpi_firmware_framebuffer_set_overscan, 4, 4),
+    tag: PropertyTag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_framebuffer_set_overscan, 4, 4),
     top: u32 = 0,
     bottom: u32 = 0,
     left: u32 = 0,

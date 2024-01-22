@@ -1,6 +1,7 @@
 const root = @import("root");
 const Mailbox = root.HAL.Mailbox;
 const PropertyTag = root.HAL.Mailbox.PropertyTag;
+const RpiFirmwarePropertyTag = root.HAL.Mailbox.RpiFirmwarePropertyTag;
 
 const Forth = @import("../forty/forth.zig").Forth;
 
@@ -61,7 +62,7 @@ const PropertyPower = extern struct {
 
     pub fn initQuery(device: PowerDevice) @This() {
         return .{
-            .tag = PropertyTag.init(.rpi_firmware_get_power_state, 1, 2),
+            .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_get_power_state, 1, 2),
             .device = @intFromEnum(device),
             .state = 0,
         };
@@ -69,7 +70,7 @@ const PropertyPower = extern struct {
 
     pub fn initControl(device: PowerDevice, state: DesiredState, wait: WaitForTransition) @This() {
         return .{
-            .tag = PropertyTag.init(.rpi_firmware_set_power_state, 2, 2),
+            .tag = PropertyTag.init(RpiFirmwarePropertyTag.rpi_firmware_set_power_state, 2, 2),
             .device = @intFromEnum(device),
             .state = @intFromEnum(state) | @intFromEnum(wait),
         };
