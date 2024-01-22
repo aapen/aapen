@@ -6,7 +6,9 @@ const printf = root.printf;
 const debug = @import("../../debug.zig");
 const cpu = @import("../../architecture.zig").cpu;
 const registers = @import("registers.zig");
-const Esr = @import("registers/esr.zig").Layout;
+const reg_esr = @import("registers/esr.zig");
+const Esr = reg_esr.Layout;
+const ErrorCodes = reg_esr.ErrorCodes;
 
 const __exception_handler_table = @extern([*]u8, .{ .name = "__exception_handler_table" });
 
@@ -61,7 +63,7 @@ export fn irqCurrentElx(context: *const ExceptionContext) void {
 
 export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) void {
     // Check if this was a breakpoint due to std.builtin.default_panic
-    if (context.esr.ec == .brk) {
+    if (context.esr.ec == ErrorCodes.brk) {
         // Breakpoint number is the lower 16 bits of ESR's ISS
         const breakpoint_number: u16 = @truncate(context.esr.iss & 0xffff);
 
@@ -104,11 +106,11 @@ fn unknownBreakpointDisplay(from_addr: ?u64, bkpt_number: u16) void {
     }
 }
 
-fn unhandledExceptionDisplay(from_addr: ?u64, entry_type: u64, esr: u64, ec: cpu.registers.EC) void {
+fn unhandledExceptionDisplay(from_addr: ?u64, entry_type: u64, esr: u64, ec: u6) void {
     if (from_addr) |addr| {
-        _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: 0x%08x\n  EC: 0b%06b\n", entry_type, @as(u64, @bitCast(esr)), addr, @as(u16, @intFromEnum(ec)));
+        _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: 0x%08x\n  EC: 0b%06b (%s)\n", entry_type, esr, addr, @as(u8, ec), reg_esr.errorCodeName(ec).ptr);
     } else {
-        _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: unknown\n  EC: 0b%06b\n", entry_type, esr, @as(u16, @intFromEnum(ec)));
+        _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: unknown\n  EC: 0b%06b (%s)\n", entry_type, esr, @as(u8, ec), reg_esr.errorCodeName(ec).ptr);
     }
 }
 

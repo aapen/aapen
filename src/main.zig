@@ -234,19 +234,13 @@ fn repl() callconv(.C) noreturn {
 
 const StackTrace = std.builtin.StackTrace;
 
-pub fn panic(msg: []const u8, stack: ?*StackTrace, return_addr: ?usize) noreturn {
+pub fn panic(msg: []const u8, _: ?*StackTrace, return_addr: ?usize) noreturn {
     @setCold(true);
 
     if (return_addr) |ret| {
-        _ = printf("[0x%08x] %s\n", ret, msg.ptr);
+        _ = printf("panic from [0x%08x]: '%s'\n", ret, msg.ptr);
     } else {
-        _ = printf("[unknown] %\n", msg.ptr);
-    }
-
-    if (stack) |stack_trace| {
-        for (stack_trace.instruction_addresses, 0..) |addr, i| {
-            _ = printf("%d: 0x%08x\n", i, addr);
-        }
+        _ = printf("panic from [unknown]: '%s'\n", msg.ptr);
     }
 
     @breakpoint();
