@@ -25,9 +25,12 @@ pub fn build(b: *std.Build) !void {
         .abi = Target.Abi.none,
     };
 
+    const testname = b.option([]const u8, "testname", "Name of the in-kernel test to build and run") orelse "";
+
     const board = b.option(SupportedBoard, "board", "Select a target board for the kernel build") orelse .pi3;
     const options = b.addOptions();
     options.addOption(SupportedBoard, "board", board);
+    options.addOption([]const u8, "testname", testname);
 
     const optimize = b.standardOptimizeOption(.{});
     const bin_basename = b.option([]const u8, "image", "Base name for the kernel binaries (both elf and img)") orelse "kernel8";
@@ -44,9 +47,7 @@ pub fn build(b: *std.Build) !void {
         .link_libc = false,
     });
 
-    //    kernel.addModule("config", configModule(b));
     kernel.addOptions("config", options);
-
     kernel.addIncludePath(.{ .path = "include" });
     kernel.addCSourceFile(.{ .file = .{ .path = "src/printf.c" }, .flags = &[_][]const u8{} });
     kernel.addCSourceFile(.{ .file = .{ .path = "src/disassemble.c" }, .flags = &[_][]const u8{} });

@@ -2,7 +2,6 @@ const std = @import("std");
 const ScopeLevel = std.log.ScopeLevel;
 
 const arch = @import("architecture.zig");
-const qemu = @import("qemu.zig");
 
 const Disassemble = @import("disassemble.zig");
 const Event = @import("event.zig");
@@ -72,6 +71,11 @@ pub var message_ring_valid = false;
 pub var uart_valid = false;
 pub var char_buffer_console_valid = false;
 pub var main_console_valid = false;
+
+const proc0 = if (std.mem.eql(u8, config.testname, ""))
+    jumpToForty
+else
+    locateTest(config.testname);
 
 export fn kernelInit() noreturn {
     // State: one core, no interrupts, no MMU, no heap Allocator, no
@@ -161,6 +165,14 @@ export fn kernelInit() noreturn {
     //     debug.kernelError("USB core init error", err);
     // }
 
+    // State: one core, interrupts, MMU, heap Allocator, display,
+    // serial, logging available, exception recovery available
+    proc0();
+
+    unreachable;
+}
+
+fn jumpToForty() void {
     if (interpreter.init(heap.allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
     } else |err| {
@@ -203,8 +215,6 @@ export fn kernelInit() noreturn {
         debug.kernelError("Disassembler define module", err);
     };
 
-    Event.enqueue(.{ .type = 0x42, .subtype = 0x99, .value = 0x1234, .extra = 0x01020304 });
-
     if (schedule.init()) {
         debug.kernelMessage("schedule init");
     } else |err| {
@@ -214,14 +224,7 @@ export fn kernelInit() noreturn {
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
 
-    // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial, logging available, exception recovery available
     repl();
-
-    // Does not return
-    qemu.exit(0);
-
-    unreachable;
 }
 
 fn repl() callconv(.C) noreturn {
@@ -246,4 +249,11 @@ pub fn panic(msg: []const u8, _: ?*StackTrace, return_addr: ?usize) noreturn {
     @breakpoint();
 
     unreachable;
+}
+
+const TestFn = fn () void;
+
+fn locateTest(comptime testname: []const u8) TestFn {
+    const tests = @import("test/all.zig");
+    return @field(tests, testname);
 }
