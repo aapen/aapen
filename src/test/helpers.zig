@@ -179,6 +179,7 @@ pub fn expectEqualSlices(comptime T: type, expected: []const T, actual: []const 
     if (expected.ptr == actual.ptr and expected.len == actual.len) {
         return;
     }
+
     const diff_index: usize = diff_index: {
         const shortest = @min(expected.len, actual.len);
         var index: usize = 0;
@@ -215,27 +216,15 @@ pub fn expectEqualSlices(comptime T: type, expected: []const T, actual: []const 
         .actual = actual_window,
     };
 
-    // Print indexes as hex for slices of u8 since it's more likely to be binary data where
-    // that is usually useful.
-    const index_fmt = if (T == u8) "0x%X" else "%d";
-
     _ = printf("\n============ expected this output: =============  len: %d (0x%X)\n\n", expected.len, expected.len);
     if (window_start > 0) {
-        if (T == u8) {
-            _ = printf("... truncated, start index: " ++ index_fmt ++ " ...\n", window_start);
-        } else {
-            _ = printf("... truncated ...\n");
-        }
+        _ = printf("... truncated, start index: 0x%X ...\n", window_start);
     }
     differ.print() catch {};
     if (expected_truncated) {
         const end_offset = window_start + expected_window.len;
         const num_missing_items = expected.len - (window_start + expected_window.len);
-        if (T == u8) {
-            _ = printf("... truncated, indexes [" ++ index_fmt ++ "..] not shown, remaining bytes: " ++ index_fmt ++ " ...\n", end_offset, num_missing_items);
-        } else {
-            _ = printf("... truncated, remaining items: " ++ index_fmt ++ " ...\n", num_missing_items);
-        }
+        _ = printf("... truncated, indexes [0x%X..] not shown, remaining bytes: 0x%X...\n", end_offset, num_missing_items);
     }
 
     // now reverse expected/actual and print again
@@ -243,21 +232,13 @@ pub fn expectEqualSlices(comptime T: type, expected: []const T, actual: []const 
     differ.actual = expected_window;
     _ = printf("\n============= instead found this: ==============  len: %d (0x%X)\n\n", actual.len, actual.len);
     if (window_start > 0) {
-        if (T == u8) {
-            _ = printf("... truncated, start index: " ++ index_fmt ++ " ...\n", window_start);
-        } else {
-            _ = printf("... truncated ...\n");
-        }
+        _ = printf("... truncated, start index: 0x%X ...\n", window_start);
     }
     differ.print() catch {};
     if (actual_truncated) {
         const end_offset = window_start + actual_window.len;
         const num_missing_items = actual.len - (window_start + actual_window.len);
-        if (T == u8) {
-            _ = printf("... truncated, indexes [" ++ index_fmt ++ "..] not shown, remaining bytes: " ++ index_fmt ++ " ...\n", end_offset, num_missing_items);
-        } else {
-            _ = printf("... truncated, remaining items: " ++ index_fmt ++ " ...\n", num_missing_items);
-        }
+        _ = printf("... truncated, indexes [0x%X..] not shown, remaining bytes: 0x%X ...\n", end_offset, num_missing_items);
     }
     _ = printf("\n================================================\n\n");
 
@@ -320,8 +301,6 @@ fn SliceDiffer(comptime T: type) type {
         pub fn print(self: Self) !void {
             for (self.expected, 0..) |value, i| {
                 const full_index = self.start_index + i;
-                const diff = if (i < self.actual.len) !std.meta.eql(self.actual[i], value) else true;
-                _ = diff;
 
                 if (@typeInfo(T) == .Pointer) {
                     _ = printf("[%d] %08x: %x\n", full_index, value, value);
