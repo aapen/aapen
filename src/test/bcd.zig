@@ -12,19 +12,6 @@ pub fn testBody() !void {
     try testSmallNumbers();
     try testMiddleyNumbers();
     try testLargeNumbers();
-
-    var buf1: [512]u16 = undefined;
-    var buf2: [512]u16 = undefined;
-
-    for (0..16) |i| {
-        buf1[i] = @truncate(i);
-    }
-
-    for (0..22) |i| {
-        buf2[i] = @truncate(i);
-    }
-
-    helpers.expectEqualSlices(u16, &buf1, &buf2);
 }
 
 fn testSmallNumbers() !void {
