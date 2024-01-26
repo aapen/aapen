@@ -1,4 +1,6 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const ScopeLevel = std.log.ScopeLevel;
 
 const arch = @import("architecture.zig");
@@ -46,13 +48,22 @@ pub const std_options = struct {
     };
 };
 
+/// Present an "operating system" interface layer to Zig's stdlib.
 const Freestanding = struct {
-    page_allocator: std.mem.Allocator,
+    const Self = @This();
+
+    pub const system = struct {};
+
+    pub const heap = struct {
+        pub var page_allocator = Allocator{
+            .ptr = undefined,
+            .vtable = undefined,
+        };
+    };
 };
 
-var os: Freestanding = undefined;
+pub const os = Freestanding;
 
-pub var heap: *Heap = undefined;
 pub var hal: *HAL = undefined;
 pub var fb: *FrameBuffer = undefined;
 pub var char_buffer_console: *CharBufferConsole = undefined;
@@ -75,7 +86,7 @@ pub var main_console_valid = false;
 const proc0 = if (std.mem.eql(u8, config.testname, ""))
     jumpToForty
 else
-    locateTest(config.testname);
+    @import("test/all.zig").locateTest(config.testname);
 
 export fn kernelInit() noreturn {
     // State: one core, no interrupts, no MMU, no heap Allocator, no
@@ -92,18 +103,18 @@ export fn kernelInit() noreturn {
         // not much we can do here
     }
 
-    if (Heap.init()) |h| {
+    if (Heap.init()) {
         debug.kernelMessage("heap init");
-        heap = h;
+        os.heap.page_allocator = Heap.allocator;
+
+        //        heap = h;
     } else |err| {
         debug.kernelError("heap init error", err);
     }
 
-    os = Freestanding{
-        .page_allocator = heap.allocator,
-    };
+    //    os.heap.page_allocator = heap.allocator;
 
-    if (HAL.init(heap.allocator)) |h| {
+    if (HAL.init(os.heap.page_allocator)) |h| {
         debug.kernelMessage("hal init");
         hal = h;
         uart_valid = true;
@@ -121,21 +132,21 @@ export fn kernelInit() noreturn {
 
     // State: one core, interrupts, MMU, heap Allocator, no display,
     // serial
-    if (FrameBuffer.init(heap.allocator, hal)) |buf| {
+    if (FrameBuffer.init(os.heap.page_allocator, hal)) |buf| {
         debug.kernelMessage("frame buffer init");
         fb = buf;
     } else |err| {
         debug.kernelError("frame buffer init error", err);
     }
 
-    if (CharBuffer.init(heap.allocator, fb)) |cb| {
+    if (CharBuffer.init(os.heap.page_allocator, fb)) |cb| {
         debug.kernelMessage("char buffer init");
         char_buffer = cb;
     } else |err| {
         debug.kernelError("char buffer init error", err);
     }
 
-    if (CharBufferConsole.init(heap.allocator, char_buffer)) |cbc| {
+    if (CharBufferConsole.init(os.heap.page_allocator, char_buffer)) |cbc| {
         debug.kernelMessage("fbcons init");
         char_buffer_console = cbc;
         char_buffer_console_valid = true;
@@ -143,7 +154,7 @@ export fn kernelInit() noreturn {
         debug.kernelError("fbcons init error", err);
     }
 
-    if (MainConsole.init(heap.allocator, char_buffer_console)) |c| {
+    if (MainConsole.init(os.heap.page_allocator, char_buffer_console)) |c| {
         debug.kernelMessage("console init");
         main_console = c;
         main_console_valid = true;
@@ -153,7 +164,7 @@ export fn kernelInit() noreturn {
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial
-    if (diagnostics.init(heap.allocator)) {
+    if (diagnostics.init(os.heap.page_allocator)) {
         debug.kernelMessage("diagnostics init");
     } else |err| {
         debug.kernelError("diagnostics init error", err);
@@ -173,7 +184,7 @@ export fn kernelInit() noreturn {
 }
 
 fn jumpToForty() void {
-    if (interpreter.init(heap.allocator, main_console, char_buffer)) {
+    if (interpreter.init(os.heap.page_allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
     } else |err| {
         debug.kernelError("Forth init error", err);
@@ -249,11 +260,4 @@ pub fn panic(msg: []const u8, _: ?*StackTrace, return_addr: ?usize) noreturn {
     @breakpoint();
 
     unreachable;
-}
-
-const TestFn = fn () void;
-
-fn locateTest(comptime testname: []const u8) TestFn {
-    const tests = @import("test/all.zig");
-    return @field(tests, testname);
 }

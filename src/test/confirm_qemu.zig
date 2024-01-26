@@ -6,8 +6,4 @@
 // expected_output
 // end_expected_output
 
-const helpers = @import("helpers.zig");
-
-pub fn testBody() void {
-    helpers.exit(0);
-}
+pub fn testBody() !void {}

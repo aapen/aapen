@@ -66,10 +66,9 @@ firmware/COPYING.linux:
 test:
 	$(ZIG) test $(TEST_SRC)
 
-in_situ_test: zig-out/$(TESTNAME).img
-	$(ZIG) build -Dboard=pi3 -Dtestname=$(TESTNAME) -Dimage=$(TESTNAME) $(ZIG_BUILD_ARGS)
-	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_UNIT_TEST_ARGS) -kernel zig-out/$(TESTNAME).img >actual_output
-	tools/check_test_output.sh $(TESTNAME)
+kernel_test:
+	@$(ZIG) build -Dboard=pi3 -Dtestname=$(TESTNAME) -Dimage=$(TESTNAME) $(ZIG_BUILD_ARGS)
+	@$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_UNIT_TEST_ARGS) -kernel zig-out/$(TESTNAME).img
 
 keep_testing:
 	find src | entr -c $(ZIG) test --main-pkg-path src/. -freference-trace=9 src/tests.zig

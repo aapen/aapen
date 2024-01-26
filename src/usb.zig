@@ -127,7 +127,7 @@ var root_hub: ?*Device = undefined;
 var bus_lock: Spinlock = undefined;
 
 pub fn init() !void {
-    allocator = root.heap.allocator;
+    allocator = root.os.heap.page_allocator;
     drivers = Drivers.init(allocator);
     bus_lock = Spinlock.initWithTargetLevel("usb bus", true, .FIQ);
 
