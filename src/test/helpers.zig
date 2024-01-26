@@ -23,7 +23,7 @@ pub fn exitWithTestResult() noreturn {
 
 var any_test_error = false;
 
-// The 'expect' functions here are modified versions from the Zig
+// 'expect' functions here are modified versions from the Zig
 // standard library. They have been altered to use printf() instead of
 // std.debug.print so we can avoid writing an entire OS interface just
 // to make Zig happy.
@@ -31,6 +31,14 @@ var any_test_error = false;
 // These also set the mutable variable 'any_test_error' instead of
 // returning a Zig error so we can report multiple test failures in a
 // single execution.
+
+pub fn expect(ok: bool) void {
+    if (!ok) {
+        _ = printf("error\n");
+        any_test_error = true;
+    }
+}
+
 pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
     switch (@typeInfo(@TypeOf(actual))) {
         .NoReturn,
@@ -58,6 +66,8 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
             }
         },
 
+        .Enum,
+        .EnumLiteral,
         .Int,
         .Float,
         .ComptimeFloat,
@@ -76,15 +86,6 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
         => {
             if (actual != expected) {
                 _ = printf("expected fn differs from actual\n");
-                any_test_error = true;
-            }
-        },
-
-        .Enum,
-        .EnumLiteral,
-        => {
-            if (actual != expected) {
-                _ = printf("expected %s (%d), found %s (%d)\n", @tagName(expected).ptr, @intFromEnum(expected), @tagName(actual).ptr, @intFromEnum(actual));
                 any_test_error = true;
             }
         },

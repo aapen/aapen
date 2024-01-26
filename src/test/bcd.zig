@@ -1,7 +1,3 @@
-// expected_output
-// Hello, world!
-// end_expected_output
-
 const helpers = @import("helpers.zig");
 const expectEqual = helpers.expectEqual;
 const expectError = helpers.expectError;

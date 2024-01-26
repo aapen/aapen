@@ -7,6 +7,9 @@ pub const confirm_qemu = @import("confirm_qemu.zig").testBody;
 pub const console_output = @import("console_output.zig").testBody;
 pub const bcd = @import("bcd.zig").testBody;
 pub const event = @import("event.zig").testBody;
+pub const stack = @import("stack.zig").testBody;
+pub const transfer = @import("transfer.zig").testBody;
+pub const transfer_factory = @import("transfer_factory.zig").testBody;
 
 pub fn locateTest(comptime testname: []const u8) fn () void {
     const test_fn = @field(@This(), testname);
