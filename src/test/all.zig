@@ -6,10 +6,9 @@ const helpers = @import("helpers.zig");
 pub const confirm_qemu = @import("confirm_qemu.zig").testBody;
 pub const console_output = @import("console_output.zig").testBody;
 pub const bcd = @import("bcd.zig").testBody;
+pub const event = @import("event.zig").testBody;
 
-pub const TestFn = fn () void;
-
-pub fn locateTest(comptime testname: []const u8) TestFn {
+pub fn locateTest(comptime testname: []const u8) fn () void {
     const test_fn = @field(@This(), testname);
     const Runner = struct {
         pub fn execute() void {

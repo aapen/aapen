@@ -157,26 +157,3 @@ pub fn timerSignal() !void {
     enqueue(.{ .type = EventType.Timer });
     root.schedule.sleep(3000);
 }
-
-// ----------------------------------------------------------------------
-// Tests
-// ----------------------------------------------------------------------
-
-const expectEqual = std.testing.expectEqual;
-
-test "Event must by 64 bits long" {
-    std.debug.print("\n", .{});
-
-    try expectEqual(64, @bitSizeOf(Event));
-}
-
-test "Event type is easy to extract" {
-    std.debug.print("\n", .{});
-
-    const ev: Event = .{};
-    try expectEqual(0, ev.type);
-
-    const ev2: Event = .{ .type = EventType.Key, .subtype = EventSubtype.Key.Pressed };
-    try expectEqual(2, ev2.type);
-    try expectEqual(0, ev2.subtype);
-}

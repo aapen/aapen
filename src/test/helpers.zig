@@ -51,18 +51,40 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
             }
         },
 
-        .Bool,
+        .Bool => {
+            if (actual != expected) {
+                _ = printf("expected %d, found %d\n", expected, actual);
+                any_test_error = true;
+            }
+        },
+
         .Int,
         .Float,
         .ComptimeFloat,
         .ComptimeInt,
-        .EnumLiteral,
-        .Enum,
+        => {
+            if (actual != expected) {
+                var buf_act: [256]u8 = undefined;
+                const b = std.fmt.bufPrint(&buf_act, "expected {}, found {}", .{ expected, actual }) catch "";
+                _ = printf("%s\n", b.ptr);
+                any_test_error = true;
+            }
+        },
+
         .Fn,
         .ErrorSet,
         => {
             if (actual != expected) {
-                _ = printf("expected %d, found %d\n", expected, actual);
+                _ = printf("expected fn differs from actual\n");
+                any_test_error = true;
+            }
+        },
+
+        .Enum,
+        .EnumLiteral,
+        => {
+            if (actual != expected) {
+                _ = printf("expected %s (%d), found %s (%d)\n", @tagName(expected).ptr, @intFromEnum(expected), @tagName(actual).ptr, @intFromEnum(actual));
                 any_test_error = true;
             }
         },
