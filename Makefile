@@ -42,9 +42,7 @@ rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$
 # How to recursively find all files that match a pattern
 SRCS           := $(call rwildcard,src/,*.zig) $(call rwildcard,src/,*.f) $(call rwildcard,src/,*.S) $(call rwildcard,src/,*.c) $(call rwildcard,include,*.h) $(call rwildcard,include/*,*.h)
 
-TEST_SRC        = src/tests.zig
-
-.PHONY: test clean kernels emulate
+.PHONY: kernel_test clean kernels emulate
 
 all: init emulate
 
@@ -63,15 +61,9 @@ download_firmware: firmware/COPYING.linux
 firmware/COPYING.linux:
 	./tools/fetch_firmware.sh
 
-test:
-	$(ZIG) test $(TEST_SRC)
-
 kernel_test:
 	@$(ZIG) build -Dboard=pi3 -Dtestname=$(TESTNAME) -Dimage=$(TESTNAME) $(ZIG_BUILD_ARGS)
 	@$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_UNIT_TEST_ARGS) -kernel zig-out/$(TESTNAME).img
-
-keep_testing:
-	find src | entr -c $(ZIG) test --main-pkg-path src/. -freference-trace=9 src/tests.zig
 
 emulate: $(TEST_KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(TEST_KERNEL)
