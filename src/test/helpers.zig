@@ -21,6 +21,8 @@ pub fn exitWithTestResult() noreturn {
     unreachable;
 }
 
+pub var allocator: std.mem.Allocator = undefined;
+
 var any_test_error = false;
 
 // 'expect' functions here are modified versions from the Zig

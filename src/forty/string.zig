@@ -99,35 +99,3 @@ pub fn u64ToChars(i: u64) [8]u8 {
     }
     return result;
 }
-
-test "toPrintable" {
-    std.debug.print("\n", .{});
-    const assert = std.debug.assert;
-    assert(toPrintable(' ') == ' ');
-    assert(toPrintable('a') == 'a');
-    assert(toPrintable(4) == '.');
-
-    //const allocator = std.testing.allocator;
-    //allocator.free(p);
-}
-
-test "streq" {
-    std.debug.print("\n", .{});
-    const assert = std.debug.assert;
-    assert(streql("abc", "abc"));
-    assert(streql("a", "a"));
-    assert(streql("", ""));
-
-    assert(!streql("x", ""));
-    assert(!streql("", "x"));
-    assert(!streql("ab", "qq"));
-    assert(!streql("abc", "abx"));
-}
-test "strlen" {
-    std.debug.print("\n", .{});
-    const assert = std.debug.assert;
-    assert(strlen("abc") == 3);
-    assert(strlen("ab") == 2);
-    assert(strlen("a") == 1);
-    assert(strlen("") == 0);
-}
