@@ -405,7 +405,7 @@ finish
 
 (GPIO pins)
 
-: pins hal hal.gpio + ;
+: pins hal hal.gpio + @ ;
 
 : pin-enable  (p-no -- : Initialize the given pin and set it to output)
   pins gpio-pin-enable 
@@ -439,7 +439,19 @@ finish
   pins gpio-pin-set
 ;
 
-: pin-blink (p-no -- : Blink the pin 10 times)
+: pin-listen (bool p-no -- : Turn off/on events for a pin)
+  swap if
+    gpio.event.rising
+  else
+    gpio.event.none
+  endif
+  swap
+  pins gpio-listen
+;
+
+: p-listen gpio.event.rising swap pins gpio-listen ;
+
+: pin-demo-blink (p-no -- : Blink the pin 10 times)
   10 times
     "loop" s. cr
     dup 1 swap
@@ -452,7 +464,7 @@ finish
   drop
 ;
 
-: pin-demo ( -- : Turn pin 6 on when pin 26 is high)
+: pin-demo-toggle ( -- : Turn pin 6 on when pin 26 is high)
   26 pin-enable (Pin with the button)
   26 pin-in
   26 pin-up
@@ -470,12 +482,16 @@ finish
   repeat
 ;
 
-: pin-sweep (p-no -- : Print out the pin value a few times times.)
+: pin-demo-sweep (p-no -- : Print out the pin value a few times times.)
   30 times
     dup pin-get . " " s.
     400 sleep
   repeat
   drop
+;
+
+: next-events (n -- : Read the next n events.)
+  times next-event p repeat
 ;
 
 ( Simple uptime testing words )

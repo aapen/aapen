@@ -29,6 +29,10 @@ pub const IrqId = enum(u6) {
     TIMER_2 = 2,
     TIMER_3 = 3,
     USB_HCI = 9,
+    GPIO_0 = 49,
+    GPIO_1 = 50,
+    GPIO_2 = 51,
+    GPIO_3 = 52,
     UART = 57,
 };
 
@@ -99,6 +103,11 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
     self.routeAddFromId(.TIMER_3);
     self.routeAddFromId(.USB_HCI);
     self.routeAddFromId(.UART);
+
+    self.routeAddFromId(.GPIO_0);
+    self.routeAddFromId(.GPIO_1);
+    self.routeAddFromId(.GPIO_2);
+    self.routeAddFromId(.GPIO_3);
 
     return self;
 }
@@ -217,6 +226,9 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
         while (pending_2 != 0) {
             const next: u5 = @truncate(@ctz(pending_2));
             switch (next) {
+                17, 18, 19, 20 => {
+                    self.irqHandleBasic(@enumFromInt(next + @as(u6, 32)));
+                },
                 21, 22, 23, 24, 25, 30 => {
                     // already handled, these were presented on the basic register
                 },

@@ -54,7 +54,7 @@ board_info_controller: BoardInfoController,
 clock: *Clock,
 dma: DMA,
 interrupt_controller: *InterruptController,
-gpio: GPIO,
+gpio: *GPIO,
 mailbox: Mailbox,
 peripheral_clock_controller: PeripheralClockController,
 power_controller: PowerController,
@@ -82,7 +82,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.dma = DMA.init(allocator, peripheral_base + 0x7000, self.interrupt_controller, &self.soc.dma_ranges);
 
-    self.gpio = GPIO.init(peripheral_base + 0x200000);
+    self.gpio = try GPIO.init(allocator, peripheral_base + 0x200000, self.interrupt_controller);
 
     self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
 
@@ -92,7 +92,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.power_controller = PowerController.init(&self.mailbox);
 
-    self.uart = Uart.init(peripheral_base + 0x201000, &self.gpio);
+    self.uart = Uart.init(peripheral_base + 0x201000, self.gpio);
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
