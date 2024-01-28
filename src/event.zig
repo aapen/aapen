@@ -17,6 +17,7 @@ const Forth = @import("forty/forth.zig").Forth;
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
         .{ "nextEvent", "next-event" },
+        .{ "clear", "events-clear" },
     });
 
     try forth.defineStruct("event-type", EventType, .{ .recursive = true, .declarations = true });
@@ -69,6 +70,15 @@ pub fn dequeue() Event {
     return ev;
 }
 
+// Voilent clear of the envent queue, mostly for debugging.
+pub fn clear() void {
+    queue_lock.acquire();
+    defer queue_lock.release();
+
+    queue.write_index = 0;
+    queue.read_index = 0;
+}
+
 // ----------------------------------------------------------------------
 // Public Constants
 // ----------------------------------------------------------------------
@@ -85,10 +95,7 @@ pub const EventType = struct {
 
 pub const EventSubtype = struct {
     pub const GPIO = struct {
-        pub const RisingEdge = 0b00;
-        pub const FallingEdge = 0b01;
-        pub const HighLevel = 0b10;
-        pub const LowLevel = 0b11;
+        pub const EdgeChange = 0b00;
     };
 
     pub const Key = struct {
