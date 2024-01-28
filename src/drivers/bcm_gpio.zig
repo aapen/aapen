@@ -165,21 +165,14 @@ pub fn init(allocator: Allocator, register_base: u64, interrupt_controller: *Int
     self.interrupt_controller.connect(.GPIO_1, &self.irq_handler);
     self.interrupt_controller.connect(.GPIO_2, &self.irq_handler);
     self.interrupt_controller.connect(.GPIO_3, &self.irq_handler);
+    self.interrupt_controller.enable(.GPIO_3);
+    self.interrupt_controller.enable(.GPIO_2);
+    self.interrupt_controller.enable(.GPIO_1);
+    self.interrupt_controller.enable(.GPIO_0);
     return self;
 }
 
-fn enable_interrupts(self: *Self) void {
-    if (!self.interrupts_enabled) {
-        self.interrupt_controller.enable(GPIO_3);
-        self.interrupt_controller.enable(GPIO_2);
-        self.interrupt_controller.enable(GPIO_1);
-        self.interrupt_controller.enable(GPIO_0);
-    }
-    self.interrupts_enabled = true;
-}
-
 pub fn enable(self: *Self, bc_id: u64) void {
-    self.enable_interrupts();
     self.selectFunction(bc_id, FunctionSelect.Output);
     self.selectPull(bc_id, PullUpDownSelect.Float);
 }
