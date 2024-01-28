@@ -15,8 +15,6 @@ const GPIO_3 = InterruptController.IrqId.GPIO_3;
 
 const Event = @import("../event.zig");
 
-const kprint = root.kprint;
-
 const Self = @This();
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineStruct("gpio.pull", PullUpDownSelect, .{
@@ -233,7 +231,7 @@ pub fn eventListen(self: *Self, bc_id: u64, edge: u32) void {
             self.registers.event_detect_status[p.data_register_index] = @as(u32, 1) << p.data_register_shift;
         },
         else => {
-            kprint("Bad event enable type {}\n", .{edge});
+            _ = root.printf("Bad event enable type %d\n", edge);
         },
     }
 }
