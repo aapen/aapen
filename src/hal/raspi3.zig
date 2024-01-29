@@ -21,6 +21,7 @@ const pl011 = @import("../drivers/pl011.zig");
 // Broadcom devices
 const bcm_dma = @import("../drivers/bcm_dma.zig");
 const bcm_gpio = @import("../drivers/bcm_gpio.zig");
+const bcm_i2c = @import("../drivers/bcm_i2c.zig");
 const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
 const bcm_board_info = @import("../drivers/bcm_board_info.zig");
 const bcm_peripheral_clocks = @import("../drivers/bcm_peripheral_clocks.zig");
@@ -36,6 +37,7 @@ pub const Clock = arm_local_timer.Clock;
 pub const DMA = bcm_dma;
 pub const InterruptController = arm_local_interrupt;
 pub const GPIO = bcm_gpio;
+pub const I2C = bcm_i2c;
 pub const Mailbox = bcm_mailbox;
 pub const PeripheralClockController = bcm_peripheral_clocks.PeripheralClockController;
 pub const PowerController = bcm_power;
@@ -55,6 +57,7 @@ clock: *Clock,
 dma: DMA,
 interrupt_controller: *InterruptController,
 gpio: *GPIO,
+i2c: *I2C,
 mailbox: Mailbox,
 peripheral_clock_controller: PeripheralClockController,
 power_controller: PowerController,
@@ -83,6 +86,10 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     self.dma = DMA.init(allocator, peripheral_base + 0x7000, self.interrupt_controller, &self.soc.dma_ranges);
 
     self.gpio = try GPIO.init(allocator, peripheral_base + 0x200000, self.interrupt_controller);
+
+    self.i2c = try I2C.init(allocator, peripheral_base + 0x00804000, self.gpio, self.interrupt_controller);
+
+    self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
 
     self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
 
@@ -120,6 +127,7 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
     try arm_local_timer.defineModule(forth);
     try bcm_dma.defineModule(forth);
     try bcm_gpio.defineModule(forth);
+    try bcm_i2c.defineModule(forth);
     try bcm_mailbox.defineModule(forth);
     try bcm_peripheral_clocks.defineModule(forth);
     try bcm_power.defineModule(forth);

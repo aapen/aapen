@@ -27,7 +27,7 @@ pub const Duration = struct {
     }
 };
 
-fn frequency() u32 {
+pub fn frequency() u32 {
     return @truncate(registers.cntfrq_el0.read());
 }
 
