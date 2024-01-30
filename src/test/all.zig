@@ -3,6 +3,7 @@ const printf = root.printf;
 
 const helpers = @import("helpers.zig");
 
+pub const atomic = @import("atomic.zig").testBody;
 pub const bcd = @import("bcd.zig").testBody;
 pub const confirm_qemu = @import("confirm_qemu.zig").testBody;
 pub const console_output = @import("console_output.zig").testBody;
