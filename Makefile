@@ -34,7 +34,7 @@ GDB_EXEC        = aarch64-unknown-linux-gnu-gdb
 endif
 
 GDB_ARGS        = -s lib
-GDB_TARGET_HOST = --ex "target extended-remote :1234" -ex "layout split" -ex "layout regs"
+GDB_TARGET_HOST = --ex "target extended-remote :1234"
 GDB_TARGET_DEV  = --ex "target extended-remote :3333"
 
 rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
