@@ -132,7 +132,7 @@ fn waitForEvent() void {
     }
 }
 
-var queue_lock: Spinlock = Spinlock.init("kevqueue", true);
+var queue_lock: Spinlock = Spinlock.initWithTargetLevel("kevqueue", true, .FIQ);
 const queue_size = 1024 * @sizeOf(Event); // room for 1K events
 var queue_storage: [queue_size]u8 = undefined;
 var queue: RingBuffer = .{
