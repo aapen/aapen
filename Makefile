@@ -16,7 +16,7 @@ KERNEL_FILES = $(addprefix zig-out/kernel-,$(addsuffix .img,$(BOARD_FLAVORS)))
 TEST_KERNEL = zig-out/kernel-$(BOARD).img
 TEST_KERNEL_ELF = zig-out/kernel-$(BOARD).elf
 
-QEMU_EXEC       = qemu-system-aarch64 -semihosting
+QEMU_EXEC       = qemu-system-aarch64 -semihosting -smp 4
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
 #QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2711-rpi-400.dtb
 QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd 

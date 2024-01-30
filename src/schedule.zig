@@ -27,7 +27,7 @@ const TaskDefinition = struct { []const u8, Task.Proc };
 const task_definitions: []const TaskDefinition = &.{
     .{ "usb_poll", HAL.USBHCI.poll },
     .{ "heartbeat", heartbeat.heartbeat },
-    .{ "kev_send", event.timerSignal },
+    //    .{ "kev_send", event.timerSignal },
     //    .{ "hb2", heartbeat.heartbeat2 },
 };
 

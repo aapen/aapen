@@ -45,31 +45,25 @@
         // All cores boot from the same image. We're going to have one core
         // handle system initialization. It will later activate the other cores.
 
-        mrs       x0, MPIDR_EL1                 // Get the core ID from the CPU's
+        mrs       x5, MPIDR_EL1                 // Get the core ID from the CPU's
                                                 // multiprocessor affinity register
-        and       x0, x0, #0xff                 // The lower 8 bits hold the core number
-        cbnz      x0, pe_hang                   // Are we on the boot core?  If not, park
-                                                // the core
+        and       x5, x5, #0x3                  // The lower 8 bits hold the core number
+
+        // Calculate the stack top according to the core ID.
+        //
+        // x5: core ID
+        // x19: stack top (note this is a callee-saved register)
+        LDR_IMM64 x2, STACK_SIZE
+        mul       x19, x5, x2                   // Bottom of each stack is core # * stack_size
+        add       x19, x19, x2                  // But the stack pointer needs to be the top
+        mov       sp, x19                       // Use this stack pointer on this core
+        cbnz      x5, skip_bss_init             // Are we on the boot core? Only init BSS on the boot core.
 
         // We're on the main core. Initialize memory and stack.
-        //
-        // __boot_core_stack_end_exclusive is provided by the linker
-        // script which puts it right below _start itself
-        LDR_REL   (x0, __boot_core_stack_end_exclusive)
-        mov       sp, x0
-
-        // The BSS symbols are provided by the linker script, which
-        // computes them from the object files produced by the
-        // compiler.
-        //
-        // BSS is never loaded from the program image only the
-        // addresses are specified. We're required to zero out that
-        // range of memory.
-        mov       x19, x0                       // Save the stack top
         bl        bssInit
 
+skip_bss_init:
         // Prepare for the transition to EL1
-
         LDR_IMM64 x0, SCTLR_EL1_VALUE
         msr       sctlr_el1, x0
 
@@ -88,13 +82,35 @@
         LDR_IMM64 x0, SPSR_EL1_TRANSITION_VALUE
         msr       spsr_el2, x0
 
-        LDR_REL   (x0, kernelInit)
-        msr       elr_el2, x0
-        msr       sp_el1, x19
-
-        // Drop to EL1, starting at kernelInit
+        // Prepare for the drop to EL1, make a null stack frame
         movz      x29, #0
         movz      x30, #0
+
+        // Use the stack top we computed before
+        msr       sp_el1, x19
+
+        // from here the boot core does all the hardware init, all other
+        // cores skip to a scheduler function
+        cbnz      x5, secondary
+
+        // Provide a vector for other cores
+        ldr       x3, =0xe0                     // load x3 with core 1's vector
+        LDR_ABS   (x4, _start)                  // load x4 with the
+                                                // execution address
+        str       x4, [x3], #8                  // put _start in core 1's vector
+        str       x4, [x3], #8                  // put _start in core 2's vector
+        str       x4, [x3]                      // put _start in core 3's vector
+        dsb       sy
+        sev                                     // wake up the cores
+
+        LDR_REL   (x1, kernelInit)
+        msr       elr_el2, x1
+        eret
+
+secondary:
+        mov       x0, x5                        // pass the core id to the secondary fn
+        LDR_REL   (x1, secondaryCore)
+        msr       elr_el2, x1
         eret
 
         // unreachable

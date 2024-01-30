@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const ScopeLevel = std.log.ScopeLevel;
 
+const atomic = @import("atomic.zig");
 const arch = @import("architecture.zig");
 
 const Disassemble = @import("disassemble.zig");
@@ -243,6 +244,15 @@ fn repl() callconv(.C) noreturn {
         interpreter.repl() catch |err| {
             std.log.err("REPL error: {any}\n\nABORT.\n", .{err});
         };
+    }
+}
+
+extern fn spinDelay(ticks: u64) void;
+
+export fn secondaryCore(core_id: u64) noreturn {
+    while (true) {
+        spinDelay(100_000_000 * (core_id + 1));
+//        Event.enqueue(.{ .type = Event.EventType.Core, .subtype = @truncate(core_id & 0xf) });
     }
 }
 

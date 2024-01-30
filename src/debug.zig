@@ -90,9 +90,13 @@ pub var mring_storage: [mring_space_bytes]u8 = undefined;
 var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
 var ring: RingBuffer = undefined;
 
+// implementation variables... not for use outside of init()
+var fba: FixedBufferAllocator = undefined;
+var allocator: Allocator = undefined;
+
 pub fn init() !void {
-    var fba = FixedBufferAllocator.init(&mring_storage);
-    const allocator = fba.allocator();
+    fba = FixedBufferAllocator.init(&mring_storage);
+    allocator = fba.allocator();
     ring = try RingBuffer.init(allocator, mring_storage.len);
 }
 

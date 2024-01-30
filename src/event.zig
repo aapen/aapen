@@ -91,6 +91,7 @@ pub const EventType = struct {
     pub const I2C = 0x05;
     pub const SPI = 0x06;
     pub const Timer = 0x07;
+    pub const Core = 0x80;
 };
 
 pub const EventSubtype = struct {
