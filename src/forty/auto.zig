@@ -55,7 +55,7 @@ fn isSuitable(comptime t: std.builtin.Type) Suitability {
     switch (t) {
         .Fn => |f| {
             if (f.is_generic) return .Generic;
-            if (f.calling_convention != .Unspecified) return .CallingConvention;
+            if (f.calling_convention != .Unspecified and f.calling_convention != .Inline) return .CallingConvention;
             if (f.is_var_args) return .VarArgs;
             if (!acceptableReturnType(f.return_type.?)) return .CantHandleReturnType;
             return .OK;

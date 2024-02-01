@@ -24,6 +24,9 @@ pub fn defineModule(forth: *Forth, cb: *Self) !void {
     try forth.defineNamespace(Self, .{
         .{ "getNumCols", "cb-cols", "Columns in a char buffer" },
         .{ "getNumRows", "cb-rows", "Rows in a char buffer" },
+        .{ "charSet", "cb-set-char", "ch row col cb: Set char at position" },
+        .{ "charGet", "cb-get-char", "row col cb: Get char at position" },
+        .{ "sync", "cb-sync", "cb: Make screen reflect memory" },
     });
 }
 
