@@ -17,9 +17,6 @@ const MainConsole = @import("main_console.zig");
 pub const debug = @import("debug.zig");
 pub const printf = MainConsole.printf;
 
-const synchronize = @import("synchronize.zig");
-const Spinlock = synchronize.Spinlock;
-
 const forty = @import("forty/forth.zig");
 pub const Forth = forty.Forth;
 

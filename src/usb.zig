@@ -15,7 +15,7 @@ const time = @import("time.zig");
 const Forth = root.Forth;
 
 const synchronize = @import("synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+const TicketLock = synchronize.TicketLock;
 
 pub const Bus = @import("usb/bus.zig");
 
@@ -124,12 +124,12 @@ pub var allocator: Allocator = undefined;
 var devices: [MAX_DEVICES]Device = undefined;
 var drivers: Drivers = undefined;
 var root_hub: ?*Device = undefined;
-var bus_lock: Spinlock = undefined;
+var bus_lock: TicketLock = undefined;
 
 pub fn init() !void {
     allocator = root.os.heap.page_allocator;
     drivers = Drivers.init(allocator);
-    bus_lock = Spinlock.initWithTargetLevel("usb bus", true, .FIQ);
+    bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
 
     bus_lock.acquire();
     defer bus_lock.release();

@@ -12,7 +12,7 @@ const auto = @import("forty/auto.zig");
 const serial = @import("serial.zig");
 
 const synchronize = @import("synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+const TicketLock = synchronize.TicketLock;
 
 const string = @import("forty/string.zig");
 
@@ -87,7 +87,7 @@ pub fn defineModule(forth: *Forth) !void {
 
 const mring_space_bytes = 1024 * 1024;
 pub var mring_storage: [mring_space_bytes]u8 = undefined;
-var mring_spinlock: Spinlock = Spinlock.init("kernel_message_ring", true);
+var mring_spinlock: TicketLock = TicketLock.init("kernel_message_ring", true);
 var ring: RingBuffer = undefined;
 
 // implementation variables... not for use outside of init()

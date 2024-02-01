@@ -118,116 +118,20 @@ pub const TicketLock = struct {
         }
 
         const my_ticket = atomic.atomicInc(&lock.next_ticket);
-        while (atomic.atomicFetch(&lock.now_serving) != my_ticket) {}
+        while (atomic.atomicFetch(&lock.now_serving) != my_ticket) {
+            cpu.wfe();
+        }
     }
 
     pub fn release(lock: *TicketLock) void {
         _ = atomic.atomicInc(&lock.now_serving);
+        cpu.sev();
 
         if (lock.target_level == .IRQ or lock.target_level == .FIQ) {
             criticalLeave();
         }
     }
 };
-
-/// Only one holder can have the spinlock locked at any time.
-/// This is not re-entrant. If a PE already holds the lock and
-/// attempts to acquire it again, deadlock will result.
-///
-/// "target_level" refers to the interruptibility of the
-/// operation. Precedence order is Task < IRQ < FIQ.
-pub const Spinlock = struct {
-    name: []const u8,
-    target_level: cpu.InterruptLevel = .Task,
-    locked: u32 = 0,
-    enabled: bool,
-
-    pub fn init(name: []const u8, enabled: bool) Spinlock {
-        return .{
-            .name = name,
-            .enabled = enabled,
-        };
-    }
-
-    pub fn initWithTargetLevel(name: []const u8, enabled: bool, target_level: cpu.InterruptLevel) Spinlock {
-        return .{
-            .name = name,
-            .enabled = enabled,
-            .target_level = target_level,
-        };
-    }
-
-    pub fn acquire(lock: *Spinlock) void {
-        if (lock.target_level == .IRQ or lock.target_level == .FIQ) {
-            criticalEnter(lock.target_level);
-        }
-
-        // This is an atomic test-and-set operation on lock.locked
-        //
-        // See Section K13.3.4 "Use of Wait for Event (WFE) and Send
-        // Event (SEV) with locks" in "Arm Architecture Reference
-        // Manual for A-profile architecture" revision J.a from 21
-        // April 2023
-
-        asm volatile (
-            \\ mov x1, %[ptr_locked]
-            \\ sevl
-            \\ prfm pstl1keep, [x1]
-            \\ 1:
-            \\ wfe
-            \\ ldaxr w3, [x1]
-            \\ cbnz w3, 1b
-            \\ stxr w3, w2, [x1]
-            \\ cbnz w3, 1b
-            :
-            : [ptr_locked] "r" (&lock.locked),
-            : "w3", "w2", "x1"
-        );
-    }
-
-    pub fn release(lock: *Spinlock) void {
-        // This is an atomic reset operation on lock.locked
-        //
-        // See Section K13.3.4 "Use of Wait for Event (WFE) and Send
-        // Event (SEV) with locks" in "Arm Architecture Reference
-        // Manual for A-profile architecture" revision J.a from 21
-        // April 2023
-        asm volatile (
-            \\ mov x1, %[ptr_locked]
-            \\ stlr wzr, [x1]
-            :
-            : [ptr_locked] "r" (&lock.locked),
-            : "x1"
-        );
-
-        if (lock.target_level == .IRQ or lock.target_level == .FIQ) {
-            criticalLeave();
-        }
-    }
-};
-
-// Keeping this around for later:
-//
-// acquire_semaphore:
-//     // x0: address of the semaphore variable
-// 1:  ldaxr   w1, [x0]         // Load the semaphore value atomically
-//     cbz     w1, 2f           // If the semaphore is 0, wait for an event
-//     sub     w1, w1, #1       // Decrement the semaphore value
-//     stlxr   w2, w1, [x0]     // Attempt to store the new value atomically
-//     cbnz    w2, 1b           // If the store failed, retry
-//     ret                      // Return when successful
-// 2:  wfe                      // Wait for an event
-//     b        1b              // Go back to try again
-//
-// release_semaphore:
-//     // x0: address of the semaphore variable
-// 1:  ldaxr   w1, [x0]         // Load the semaphore value atomically
-//     add     w1, w1, #1       // Increment the semaphore value
-//     stlxr   w2, w1, [x0]     // Attempt to store the new value atomically
-//     cbnz    w2, 1b           // If the store failed, retry
-//     dsb                      // Ensure the semaphore update is visible to all cores
-//     sev                      // Send an event to wake up waiting cores
-//     ret                      // Return when successful
 
 // ----------------------------------------------------------------------
 // Cache coherence and maintenance

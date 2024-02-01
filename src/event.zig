@@ -6,7 +6,6 @@ const root = @import("root");
 const arch = @import("architecture.zig");
 
 const synchronize = @import("synchronize.zig");
-//const Spinlock = synchronize.Spinlock;
 const TicketLock = synchronize.TicketLock;
 
 const Forth = @import("forty/forth.zig").Forth;

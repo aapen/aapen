@@ -10,7 +10,7 @@ const IrqHandler = InterruptController.IrqHandler;
 const Forth = @import("../forty/forth.zig").Forth;
 
 const synchronize = @import("../synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+const TicketLock = synchronize.TicketLock;
 
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
@@ -94,7 +94,7 @@ pub const Timer = struct {
     control: *volatile TimerControlStatus,
     compare: *volatile u32,
     match_reset: u4 = 0,
-    schedule_spinlock: Spinlock,
+    schedule_lock: TicketLock,
     next_callback: *const TimerHandler,
     irq_handler: IrqHandler = .{
         .callback = irqHandle,
@@ -115,8 +115,8 @@ pub const Timer = struct {
             .next_callback = &null_handler,
             .clock = clock,
             .intc = intc,
-            .schedule_spinlock = blk: {
-                var lock = Spinlock.init("scheduler", true);
+            .schedule_lock = blk: {
+                var lock = TicketLock.init("scheduler", true);
                 lock.target_level = .IRQ;
                 break :blk lock;
             },
@@ -146,8 +146,8 @@ pub const Timer = struct {
     }
 
     pub fn schedule(self: *Timer, in_ticks: u32, handler: *const TimerHandler) void {
-        self.schedule_spinlock.acquire();
-        defer self.schedule_spinlock.release();
+        self.schedule_lock.acquire();
+        defer self.schedule_lock.release();
 
         self.clearDetectedFlag();
         self.setNextTrigger(in_ticks);

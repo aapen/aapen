@@ -26,7 +26,7 @@ const toParent = memory.toParent;
 const memory_map = root.HAL.memory_map;
 
 const synchronize = @import("../synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+const TicketLock = synchronize.TicketLock;
 
 const ChannelSet = @import("../channel_set.zig");
 
@@ -133,7 +133,7 @@ allocator: Allocator,
 core_registers: *volatile CoreRegisters,
 host_registers: *volatile HostRegisters,
 power_and_clock_control: *volatile PowerAndClock,
-all_channel_intmask_lock: Spinlock,
+all_channel_intmask_lock: TicketLock,
 intc: *InterruptController,
 irq_id: IrqId,
 irq_handler: IrqHandler = .{
@@ -145,7 +145,7 @@ num_host_channels: u4,
 channel_assignments: HcdChannels = .{},
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
 pending_transfers: PendingTransfers = undefined,
-pending_transfers_lock: Spinlock,
+pending_transfers_lock: TicketLock,
 root_hub: RootHub = .{},
 
 // Ideas for improving this:
@@ -180,14 +180,14 @@ pub fn init(
         .core_registers = @ptrFromInt(register_base),
         .host_registers = @ptrFromInt(register_base + 0x400),
         .power_and_clock_control = @ptrFromInt(register_base + 0xe00),
-        .all_channel_intmask_lock = Spinlock.init("all channels interrupt mask", true),
+        .all_channel_intmask_lock = TicketLock.init("all channels interrupt mask", true),
         .intc = intc,
         .irq_id = irq_id,
         .translations = translations,
         .power_controller = power,
         .num_host_channels = 0,
         .pending_transfers = .{},
-        .pending_transfers_lock = Spinlock.init("pending transfers", false),
+        .pending_transfers_lock = TicketLock.init("pending transfers", false),
     };
 
     self.root_hub.init(self.host_registers);
