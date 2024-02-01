@@ -84,6 +84,8 @@ pub var uart_valid = false;
 pub var char_buffer_console_valid = false;
 pub var main_console_valid = false;
 
+extern fn _start() noreturn;
+
 const proc0 = if (std.mem.eql(u8, config.testname, ""))
     jumpToForty
 else
@@ -92,10 +94,7 @@ else
 export fn kernelInit() noreturn {
     // State: one core, no interrupts, no MMU, no heap Allocator, no
     // display, serial
-    arch.cpu.mmu.init();
-
-    // Needed for enter/leave critical sections
-    arch.cpu.fiqEnable();
+    arch.cpu.initBootCore();
 
     if (debug.init()) {
         debug.kernelMessage("init");
@@ -107,13 +106,9 @@ export fn kernelInit() noreturn {
     if (Heap.init()) {
         debug.kernelMessage("heap init");
         os.heap.page_allocator = Heap.allocator;
-
-        //        heap = h;
     } else |err| {
         debug.kernelError("heap init error", err);
     }
-
-    //    os.heap.page_allocator = heap.allocator;
 
     if (HAL.init(os.heap.page_allocator)) |h| {
         debug.kernelMessage("hal init");
@@ -123,13 +118,8 @@ export fn kernelInit() noreturn {
         debug.kernelError("hal init error", err);
     }
 
-    // State: one core, no interrupts, MMU, heap Allocator, no
+    // State: one core, interrupts, MMU, heap Allocator, no
     // display, serial
-    if (arch.cpu.exceptions.init()) {
-        debug.kernelMessage("exceptions init");
-    } else |err| {
-        debug.kernelError("exceptions init error", err);
-    }
 
     // State: one core, interrupts, MMU, heap Allocator, no display,
     // serial
@@ -179,6 +169,13 @@ export fn kernelInit() noreturn {
 
     // State: one core, interrupts, MMU, heap Allocator, display,
     // serial, logging available, exception recovery available
+
+    // Allow other cores to start. They will begin at _start (from
+    // boot.S) which will take them from EL2 to EL1 via eret to
+    // secondaryCore() below. This all has to happen _after_ we've
+    // initialized page tables and zeroed bss
+    HAL.releaseSecondaryCores(@intFromPtr(&_start));
+
     proc0();
 
     unreachable;
@@ -250,6 +247,8 @@ fn repl() callconv(.C) noreturn {
 extern fn spinDelay(ticks: u64) void;
 
 export fn secondaryCore(core_id: u64) noreturn {
+    arch.cpu.initSecondaryCore();
+
     while (true) {
         spinDelay(100_000_000 * (core_id + 1));
 //        Event.enqueue(.{ .type = Event.EventType.Core, .subtype = @truncate(core_id & 0xf) });

@@ -9,6 +9,7 @@ pub fn testBody() !void {
     try atomicAddFetch();
     try atomicSubtract();
     try atomicSubtractFetch();
+    try atomicFetch();
 }
 
 // Note that this doesn't verify atomicity, just that the return value
@@ -39,4 +40,10 @@ fn atomicSubtractFetch() !void {
     const r = atomic.atomicSubFetch(&dec_value, 564);
     expectEqual(@as(u64, 225), r);
     expectEqual(r, dec_value);
+}
+
+fn atomicFetch() !void {
+    var val: u64 = 192837;
+    const r = atomic.atomicFetch(&val);
+    expectEqual(@as(u64, 192837), r);
 }

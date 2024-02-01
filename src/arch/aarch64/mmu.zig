@@ -101,6 +101,18 @@ pub fn init() void {
     mmu_on();
 }
 
+pub fn enable() void {
+    // use the assembly routine from mmu.S
+    mmu_on();
+}
+
+// initialization for secondary cores. for now, this does not create
+// its own set of page tables, but _does_ write the address of the
+// page tables to its own TTBR0 and TTBR1
+pub fn initSecondary() void {
+    mmu_on();
+}
+
 fn tableEntryCreate(table: [*]u64, next_level_table: [*]u64, virtual_address: u64, chosen_table_shift: u6, flags: u64) void {
     const table_index = (virtual_address >> chosen_table_shift) & (PTRS_PER_TABLE - 1);
     table[table_index] = @intFromPtr(next_level_table) | flags;
@@ -135,7 +147,7 @@ fn blockMappingCreate(page_middle_directory: [*]u64, virtual_addr_start: u64, vi
 }
 
 /// Define an identity-mapped set of page tables
-fn pageTablesCreate() void {
+pub fn pageTablesCreate() void {
     const table_size_dwords = PG_DIR_SIZE / 8;
     const page_size_dwords = PAGE_SIZE / 8;
 

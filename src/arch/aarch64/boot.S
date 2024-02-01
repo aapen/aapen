@@ -93,16 +93,6 @@ skip_bss_init:
         // cores skip to a scheduler function
         cbnz      x5, secondary
 
-        // Provide a vector for other cores
-        ldr       x3, =0xe0                     // load x3 with core 1's vector
-        LDR_ABS   (x4, _start)                  // load x4 with the
-                                                // execution address
-        str       x4, [x3], #8                  // put _start in core 1's vector
-        str       x4, [x3], #8                  // put _start in core 2's vector
-        str       x4, [x3]                      // put _start in core 3's vector
-        dsb       sy
-        sev                                     // wake up the cores
-
         LDR_REL   (x1, kernelInit)
         msr       elr_el2, x1
         eret

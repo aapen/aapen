@@ -2,6 +2,7 @@ const std = @import("std");
 const panic = std.builtin.panic;
 const Ordering = std.atomic.Ordering;
 
+const atomic = @import("atomic.zig");
 const arch = @import("architecture.zig");
 const barriers = arch.barriers;
 const cpu = arch.cpu;
@@ -81,6 +82,53 @@ pub fn criticalLeave() void {
 // ----------------------------------------------------------------------
 // Locks and Mutexes
 // ----------------------------------------------------------------------
+
+/// Ticket lock. One holder can have the lock at any time. Not
+/// re-entrant.
+///
+/// "target_level" refers to the interruptibility of the
+/// operation. Precedence order is Task < IRQ < FIQ.
+pub const TicketLock = struct {
+    name: []const u8,
+    target_level: cpu.InterruptLevel = .Task,
+    now_serving: u64 = 0,
+    next_ticket: u64 = 0,
+    enabled: bool = false,
+
+    pub fn init(name: []const u8, enabled: bool) TicketLock {
+        return .{
+            .name = name,
+            .enabled = enabled,
+        };
+    }
+
+    pub fn initWithTargetLevel(name: []const u8, enabled: bool, target_level: cpu.InterruptLevel) TicketLock {
+        return .{
+            .name = name,
+            .enabled = enabled,
+            .target_level = target_level,
+        };
+    }
+
+    pub fn acquire(lock: *TicketLock) void {
+        if (!lock.enabled) return;
+
+        if (lock.target_level == .IRQ or lock.target_level == .FIQ) {
+            criticalEnter(lock.target_level);
+        }
+
+        const my_ticket = atomic.atomicInc(&lock.next_ticket);
+        while (atomic.atomicFetch(&lock.now_serving) != my_ticket) {}
+    }
+
+    pub fn release(lock: *TicketLock) void {
+        _ = atomic.atomicInc(&lock.now_serving);
+
+        if (lock.target_level == .IRQ or lock.target_level == .FIQ) {
+            criticalLeave();
+        }
+    }
+};
 
 /// Only one holder can have the spinlock locked at any time.
 /// This is not re-entrant. If a PE already holds the lock and

@@ -2,6 +2,9 @@ const std = @import("std");
 const memory = @import("../memory.zig");
 const Region = memory.Region;
 
+const arch = @import("../architecture.zig");
+const synchronize = @import("../synchronize.zig");
+
 const Forth = @import("../forty/forth.zig").Forth;
 const auto = @import("../forty/auto.zig");
 
@@ -133,4 +136,29 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
     try bcm_power.defineModule(forth);
     try pl011.defineModule(forth);
     try simple_bus.defineModule(forth);
+}
+
+/// Provide an execution vector for non-boot cores to jump to.
+///
+/// Non-boot cores spin looking for a nonzero vector at $e0, $e8, or
+/// $f0. (Each core looks at one address.) Once a core sees that
+/// vector, it jumps directly there.
+///
+/// It's unclear whether this mechanism is specific to the Raspberry
+/// Pi. It's also not clear whether the stub code comes from RPi
+/// itself, from Broadcom, or from ARM. (It seems to be in the
+/// bootcode.bin blob though, so maybe it's from Raspberry Pi.)
+pub fn releaseSecondaryCores(vector: u64) void {
+    for(1..4) |i| {
+        coreVectorWrite(i, vector);
+    }
+    arch.cpu.barriers.barrierMemoryWrite();
+    synchronize.dataCacheRangeClean(0, 0xff);
+    arch.cpu.sev();
+}
+
+fn coreVectorWrite(core_id: usize, vector: u64) void {
+    const core_vector_addr: u64 = 0xd8 + (8 * core_id);
+    const core_vector_ptr: *u64 = @ptrFromInt(core_vector_addr);
+    core_vector_ptr.* = vector;
 }

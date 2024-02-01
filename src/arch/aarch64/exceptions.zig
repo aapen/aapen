@@ -23,7 +23,7 @@ pub extern fn markUnwindPoint(point: *UnwindPoint) void;
 
 const IrqHandler = *const fn (context: *const ExceptionContext) void;
 
-pub fn init() !void {
+pub fn init() void {
     cpu.exceptionHandlerTableWrite(__exception_handler_table);
     cpu.irqEnable();
 }

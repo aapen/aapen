@@ -1,6 +1,30 @@
 #include <asm/macro.h>
 
 // ----------------------------------------------------------------------
+// fn __arch_atomic_fetch
+//
+// Return the value of an atomic, using Aarch64 exclusives to ensure
+// currency and atomicity
+//
+// Alignment: none
+//
+// Arguments:
+// x0 - address of the value
+//
+// Returns:
+// Value of the atomic
+//
+// Clobbers:
+// ----------------------------------------------------------------------
+        ENTRY(__arch_atomic_fetch)
+        stp     x29, x30, [sp, -32]!            // prepare stack frame
+        mov     x29, sp                         // link frame pointer
+        ldar    x0, [x0]                        // load the value, with memory-ordering __ATOMIC_RELEASE
+        ldp     x29, x30, [sp], 32              // tear down frame
+        ret
+        END(__arch_atomic_fetch)
+
+// ----------------------------------------------------------------------
 // fn __arch_atomic_fetch_add
 //
 // Add to a 64-bit value, returning the _prior_ value

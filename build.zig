@@ -54,7 +54,6 @@ pub fn build(b: *std.Build) !void {
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/atomic.S" });
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/exceptions.S" });
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/mmu.S" });
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/cache.S" });
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/boot.S" });
     kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/util.S" });
     kernel.setLinkerScriptPath(.{ .path = "src/arch/aarch64/kernel.ld" });

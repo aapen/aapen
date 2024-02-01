@@ -1,9 +1,15 @@
 const std = @import("std");
 
+extern fn __arch_atomic_fetch(atomic_val: *u64) u64;
 extern fn __arch_atomic_fetch_add(atomic_val: *u64, addend: u64) u64;
 extern fn __arch_atomic_add_fetch(atomic_val: *u64, addend: u64) u64;
 extern fn __arch_atomic_fetch_sub(atomic_val: *u64, subtrahend: u64) u64;
 extern fn __arch_atomic_sub_fetch(atomic_val: *u64, subtrahend: u64) u64;
+
+/// Atomically get value.
+pub fn atomicFetch(atomic_val: *u64) u64 {
+    return __arch_atomic_fetch(atomic_val);
+}
 
 /// Atomically add values. Returns the value _prior_ to adding.
 pub fn atomicAdd(atomic_val: *u64, addend: u64) u64 {
