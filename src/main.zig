@@ -16,6 +16,7 @@ const MainConsole = @import("main_console.zig");
 
 pub const debug = @import("debug.zig");
 pub const printf = MainConsole.printf;
+pub const panic = debug.panic;
 
 const forty = @import("forty/forth.zig");
 pub const Forth = forty.Forth;
@@ -251,20 +252,4 @@ export fn secondaryCore(core_id: u64) noreturn {
         spinDelay(100_000_000 * (core_id + 1));
         Event.enqueue(.{ .type = Event.EventType.Core, .subtype = @truncate(core_id & 0xf) });
     }
-}
-
-const StackTrace = std.builtin.StackTrace;
-
-pub fn panic(msg: []const u8, _: ?*StackTrace, return_addr: ?usize) noreturn {
-    @setCold(true);
-
-    if (return_addr) |ret| {
-        _ = printf("panic from [0x%08x]: '%s'\n", ret, msg.ptr);
-    } else {
-        _ = printf("panic from [unknown]: '%s'\n", msg.ptr);
-    }
-
-    @breakpoint();
-
-    unreachable;
 }

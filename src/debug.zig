@@ -16,6 +16,22 @@ const TicketLock = synchronize.TicketLock;
 
 const string = @import("forty/string.zig");
 
+const StackTrace = std.builtin.StackTrace;
+
+pub fn panic(msg: []const u8, _: ?*StackTrace, return_addr: ?usize) noreturn {
+    @setCold(true);
+
+    if (return_addr) |ret| {
+        _ = printf("panic from [0x%08x]: '%s'\n", ret, msg.ptr);
+    } else {
+        _ = printf("panic from [unknown]: '%s'\n", msg.ptr);
+    }
+
+    @breakpoint();
+
+    unreachable;
+}
+
 pub fn log(
     comptime level: std.log.Level,
     comptime scope: @TypeOf(.EnumLiteral),
