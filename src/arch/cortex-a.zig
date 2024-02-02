@@ -67,14 +67,10 @@ pub inline fn coreId() u8 {
     return @truncate(mpidr & (MAX_CORES - 1));
 }
 
-pub fn initBootCore() void {
-    mmu.pageTablesCreate();
-    mmu.enable();
-    fiqEnable();
-    exceptions.init();
-}
-
-pub fn initSecondaryCore() void {
+pub fn init(core_id: usize) void {
+    if (core_id == 0) {
+        mmu.pageTablesCreate();
+    }
     mmu.enable();
     fiqEnable();
     exceptions.init();

@@ -27,24 +27,16 @@
 
         ENTRY(_start)
 
-        // Save the flattened device tree for later use
-        LDR_REL   (x8, __fdt_address)           // Address of the pointer
-        str       x0, [x8]                      // Store the
-                                                // firmware-supplied
-                                                // location of the FDT
-                                                // into that pointer.
-
         // At boot time, the core should be executing in EL2 (high
         // privilege). If it is not, we are in a strange state and
         // should not proceed
-
         mrs       x0, CurrentEL                 // Get execution level from CPU into x0
         cmp       x0, 0x08                      // It should be EL2 at boot time
         b.ne      pe_hang                       // If not, something is wrong, park the core
 
-        // All cores boot from the same image. We're going to have one core
-        // handle system initialization. It will later activate the other cores.
-
+        // All cores boot from the same image. We're going to have one
+        // core handle system initialization. It will later activate
+        // the other cores which will start executing at _start.
         mrs       x5, MPIDR_EL1                 // Get the core ID from the CPU's
                                                 // multiprocessor affinity register
         and       x5, x5, #0x3                  // The lower 8 bits hold the core number
@@ -59,7 +51,7 @@
         mov       sp, x19                       // Use this stack pointer on this core
         cbnz      x5, skip_bss_init             // Are we on the boot core? Only init BSS on the boot core.
 
-        // We're on the main core. Initialize memory and stack.
+        // We're on the main core. Zero out the BSS.
         bl        bssInit
 
 skip_bss_init:
@@ -89,17 +81,8 @@ skip_bss_init:
         // Use the stack top we computed before
         msr       sp_el1, x19
 
-        // from here the boot core does all the hardware init, all other
-        // cores skip to a scheduler function
-        cbnz      x5, secondary
-
+        mov       x0, x5                        // pass the core id as argument
         LDR_REL   (x1, kernelInit)
-        msr       elr_el2, x1
-        eret
-
-secondary:
-        mov       x0, x5                        // pass the core id to the secondary fn
-        LDR_REL   (x1, secondaryCore)
         msr       elr_el2, x1
         eret
 
