@@ -149,8 +149,8 @@ pinout](https://www.olimex.com/Products/ARM/JTAG/_resources/openocd-jtag-layout.
 for reference.
 
 ```
-Function   Olimex pin    RPi GPIO       GPIO pin
-                         header pin     (aka Broadcom pin)
+Function   Olimex pin    Broadcom       Physical board
+                         GPIO pin       pin number
 --------   ----------    ----------     ------------------
 Vref       1                            1
 GND        4                            9
