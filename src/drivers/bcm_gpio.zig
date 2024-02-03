@@ -15,8 +15,6 @@ const GPIO_3 = InterruptController.IrqId.GPIO_3;
 
 const Event = @import("../event.zig");
 
-const kprint = root.kprint;
-
 const Self = @This();
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineStruct("gpio.pull", PullUpDownSelect, .{
@@ -167,21 +165,14 @@ pub fn init(allocator: Allocator, register_base: u64, interrupt_controller: *Int
     self.interrupt_controller.connect(.GPIO_1, &self.irq_handler);
     self.interrupt_controller.connect(.GPIO_2, &self.irq_handler);
     self.interrupt_controller.connect(.GPIO_3, &self.irq_handler);
+    self.interrupt_controller.enable(.GPIO_3);
+    self.interrupt_controller.enable(.GPIO_2);
+    self.interrupt_controller.enable(.GPIO_1);
+    self.interrupt_controller.enable(.GPIO_0);
     return self;
 }
 
-fn enable_interrupts(self: *Self) void {
-    if (!self.interrupts_enabled) {
-        self.interrupt_controller.enable(GPIO_3);
-        self.interrupt_controller.enable(GPIO_2);
-        self.interrupt_controller.enable(GPIO_1);
-        self.interrupt_controller.enable(GPIO_0);
-    }
-    self.interrupts_enabled = true;
-}
-
 pub fn enable(self: *Self, bc_id: u64) void {
-    self.enable_interrupts();
     self.selectFunction(bc_id, FunctionSelect.Output);
     self.selectPull(bc_id, PullUpDownSelect.Float);
 }
@@ -233,7 +224,7 @@ pub fn eventListen(self: *Self, bc_id: u64, edge: u32) void {
             self.registers.event_detect_status[p.data_register_index] = @as(u32, 1) << p.data_register_shift;
         },
         else => {
-            kprint("Bad event enable type {}\n", .{edge});
+            _ = root.printf("Bad event enable type %d\n", edge);
         },
     }
 }

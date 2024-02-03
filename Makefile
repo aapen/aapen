@@ -16,7 +16,11 @@ KERNEL_FILES = $(addprefix zig-out/kernel-,$(addsuffix .img,$(BOARD_FLAVORS)))
 TEST_KERNEL = zig-out/kernel-$(BOARD).img
 TEST_KERNEL_ELF = zig-out/kernel-$(BOARD).elf
 
-QEMU_EXEC       = qemu-system-aarch64 -semihosting
+KERNEL_UNIT_TESTS = bcd confirm_qemu console_output 
+KERNEL_UNIT_TEST_TARGETS = $(addprefix kernel_test_, $(KERNEL_UNIT_TESTS))
+
+CORE_COUNT      = 4
+QEMU_EXEC       = qemu-system-aarch64 -semihosting -smp $(CORE_COUNT)
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
 #QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2711-rpi-400.dtb
 QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd 
@@ -34,7 +38,7 @@ GDB_EXEC        = aarch64-unknown-linux-gnu-gdb
 endif
 
 GDB_ARGS        = -s lib
-GDB_TARGET_HOST = --ex "target extended-remote :1234" -ex "layout split" -ex "layout regs"
+GDB_TARGET_HOST = --ex "target extended-remote :1234"
 GDB_TARGET_DEV  = --ex "target extended-remote :3333"
 
 rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
@@ -61,9 +65,14 @@ download_firmware: firmware/COPYING.linux
 firmware/COPYING.linux:
 	./tools/fetch_firmware.sh
 
-kernel_test:
-	@$(ZIG) build -Dboard=pi3 -Dtestname=$(TESTNAME) -Dimage=$(TESTNAME) $(ZIG_BUILD_ARGS)
-	@$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_UNIT_TEST_ARGS) -kernel zig-out/$(TESTNAME).img
+.PHONEY: kernel_tests $(KERNEL_UNIT_TEST_TARGETS)
+
+kernel_tests: $(KERNEL_UNIT_TEST_TARGETS)
+
+kernel_test_%:
+	@echo Kernel Test: $(*F)
+	@$(ZIG) build -Dboard=pi3 -Dtestname=$(*F) -Dimage=$(*F) $(ZIG_BUILD_ARGS)
+	@$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_UNIT_TEST_ARGS) -kernel zig-out/$(*F).img
 
 emulate: $(TEST_KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(TEST_KERNEL)
@@ -76,6 +85,9 @@ gdb: $(TEST_KERNEL)
 
 openocd_gdb: $(TEST_KERNEL)
 	$(GDB_EXEC) $(GDB_ARGS) $(GDB_TARGET_DEV) $(TEST_KERNEL_ELF)
+
+openocd_gdb2: $(TEST_KERNEL)
+	$(GDB_EXEC) $(GDB_ARGS) --ex "target extended-remote :3334" $(TEST_KERNEL_ELF)
 
 sdcard: $(KERNEL_FILES) firmware/COPYING.linux
 ifndef SDCARD_PATH

@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const ScopeLevel = std.log.ScopeLevel;
 
+const atomic = @import("atomic.zig");
 const arch = @import("architecture.zig");
 
 const Disassemble = @import("disassemble.zig");
@@ -15,9 +16,7 @@ const MainConsole = @import("main_console.zig");
 
 pub const debug = @import("debug.zig");
 pub const printf = MainConsole.printf;
-
-const synchronize = @import("synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+pub const panic = debug.panic;
 
 const forty = @import("forty/forth.zig");
 pub const Forth = forty.Forth;
@@ -83,107 +82,107 @@ pub var uart_valid = false;
 pub var char_buffer_console_valid = false;
 pub var main_console_valid = false;
 
+extern fn _start() noreturn;
+
 const proc0 = if (std.mem.eql(u8, config.testname, ""))
-    jumpToForty
+    startForty
 else
     @import("test/all.zig").locateTest(config.testname);
 
-export fn kernelInit() noreturn {
+export fn kernelInit(core_id: usize) noreturn {
     // State: one core, no interrupts, no MMU, no heap Allocator, no
     // display, serial
-    arch.cpu.mmu.init();
+    arch.cpu.init(core_id);
 
-    // Needed for enter/leave critical sections
-    arch.cpu.fiqEnable();
+    if (core_id == 0) {
+        if (debug.init()) {
+            debug.kernelMessage("init");
+            message_ring_valid = true;
+        } else |_| {
+            // not much we can do here
+        }
 
-    if (debug.init()) {
-        debug.kernelMessage("init");
-        message_ring_valid = true;
-    } else |_| {
-        // not much we can do here
+        if (Heap.init()) {
+            debug.kernelMessage("heap init");
+            os.heap.page_allocator = Heap.allocator;
+        } else |err| {
+            debug.kernelError("heap init error", err);
+        }
+
+        if (HAL.init(os.heap.page_allocator)) |h| {
+            debug.kernelMessage("hal init");
+            hal = h;
+            uart_valid = true;
+        } else |err| {
+            debug.kernelError("hal init error", err);
+        }
+
+        // State: one core, interrupts, MMU, heap Allocator, no
+        // display, serial
+
+        // State: one core, interrupts, MMU, heap Allocator, no display,
+        // serial
+        if (FrameBuffer.init(os.heap.page_allocator, hal)) |buf| {
+            debug.kernelMessage("frame buffer init");
+            fb = buf;
+        } else |err| {
+            debug.kernelError("frame buffer init error", err);
+        }
+
+        if (CharBuffer.init(os.heap.page_allocator, fb)) |cb| {
+            debug.kernelMessage("char buffer init");
+            char_buffer = cb;
+        } else |err| {
+            debug.kernelError("char buffer init error", err);
+        }
+
+        if (CharBufferConsole.init(os.heap.page_allocator, char_buffer)) |cbc| {
+            debug.kernelMessage("fbcons init");
+            char_buffer_console = cbc;
+            char_buffer_console_valid = true;
+        } else |err| {
+            debug.kernelError("fbcons init error", err);
+        }
+
+        if (MainConsole.init(os.heap.page_allocator, char_buffer_console)) |c| {
+            debug.kernelMessage("console init");
+            main_console = c;
+            main_console_valid = true;
+        } else |err| {
+            debug.kernelError("console init error", err);
+        }
+
+        // State: one core, interrupts, MMU, heap Allocator, display,
+        // serial
+        if (diagnostics.init(os.heap.page_allocator)) {
+            debug.kernelMessage("diagnostics init");
+        } else |err| {
+            debug.kernelError("diagnostics init error", err);
+        }
+
+        // if (Usb.init(heap.allocator)) |_| {
+        //     debug.kernelMessage("USB core init");
+        // } else |err| {
+        //     debug.kernelError("USB core init error", err);
+        // }
+
+        // State: one core, interrupts, MMU, heap Allocator, display,
+        // serial, logging available, exception recovery available
+
+        // Allow other cores to start. They will begin at _start (from
+        // boot.S) which will take them from EL2 to EL1 back to the
+        // start of this function. This all has to happen _after_
+        // we've initialized page tables and zeroed bss
+        HAL.releaseSecondaryCores(@intFromPtr(&_start));
+
+        proc0();
+    } else {
+        secondaryCore(core_id);
     }
-
-    if (Heap.init()) {
-        debug.kernelMessage("heap init");
-        os.heap.page_allocator = Heap.allocator;
-
-        //        heap = h;
-    } else |err| {
-        debug.kernelError("heap init error", err);
-    }
-
-    //    os.heap.page_allocator = heap.allocator;
-
-    if (HAL.init(os.heap.page_allocator)) |h| {
-        debug.kernelMessage("hal init");
-        hal = h;
-        uart_valid = true;
-    } else |err| {
-        debug.kernelError("hal init error", err);
-    }
-
-    // State: one core, no interrupts, MMU, heap Allocator, no
-    // display, serial
-    if (arch.cpu.exceptions.init()) {
-        debug.kernelMessage("exceptions init");
-    } else |err| {
-        debug.kernelError("exceptions init error", err);
-    }
-
-    // State: one core, interrupts, MMU, heap Allocator, no display,
-    // serial
-    if (FrameBuffer.init(os.heap.page_allocator, hal)) |buf| {
-        debug.kernelMessage("frame buffer init");
-        fb = buf;
-    } else |err| {
-        debug.kernelError("frame buffer init error", err);
-    }
-
-    if (CharBuffer.init(os.heap.page_allocator, fb)) |cb| {
-        debug.kernelMessage("char buffer init");
-        char_buffer = cb;
-    } else |err| {
-        debug.kernelError("char buffer init error", err);
-    }
-
-    if (CharBufferConsole.init(os.heap.page_allocator, char_buffer)) |cbc| {
-        debug.kernelMessage("fbcons init");
-        char_buffer_console = cbc;
-        char_buffer_console_valid = true;
-    } else |err| {
-        debug.kernelError("fbcons init error", err);
-    }
-
-    if (MainConsole.init(os.heap.page_allocator, char_buffer_console)) |c| {
-        debug.kernelMessage("console init");
-        main_console = c;
-        main_console_valid = true;
-    } else |err| {
-        debug.kernelError("console init error", err);
-    }
-
-    // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial
-    if (diagnostics.init(os.heap.page_allocator)) {
-        debug.kernelMessage("diagnostics init");
-    } else |err| {
-        debug.kernelError("diagnostics init error", err);
-    }
-
-    // if (Usb.init(heap.allocator)) |_| {
-    //     debug.kernelMessage("USB core init");
-    // } else |err| {
-    //     debug.kernelError("USB core init error", err);
-    // }
-
-    // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial, logging available, exception recovery available
-    proc0();
-
     unreachable;
 }
 
-fn jumpToForty() void {
+fn startForty() void {
     if (interpreter.init(os.heap.page_allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
     } else |err| {
@@ -246,18 +245,11 @@ fn repl() callconv(.C) noreturn {
     }
 }
 
-const StackTrace = std.builtin.StackTrace;
+extern fn spinDelay(ticks: u64) void;
 
-pub fn panic(msg: []const u8, _: ?*StackTrace, return_addr: ?usize) noreturn {
-    @setCold(true);
-
-    if (return_addr) |ret| {
-        _ = printf("panic from [0x%08x]: '%s'\n", ret, msg.ptr);
-    } else {
-        _ = printf("panic from [unknown]: '%s'\n", msg.ptr);
+export fn secondaryCore(core_id: u64) noreturn {
+    while (true) {
+        spinDelay(100_000_000 * (core_id + 1));
+        Event.enqueue(.{ .type = Event.EventType.Core, .subtype = @truncate(core_id & 0xf) });
     }
-
-    @breakpoint();
-
-    unreachable;
 }

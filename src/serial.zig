@@ -4,13 +4,13 @@ const root = @import("root");
 const HAL = root.HAL;
 
 const synchronize = @import("synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+const TicketLock = synchronize.TicketLock;
 
 // ----------------------------------------------------------------------
 // Private
 // ----------------------------------------------------------------------
 
-var serial_lock = Spinlock.init("serial output", false);
+var serial_lock = TicketLock.init("serial output", false);
 
 // ----------------------------------------------------------------------
 // Low level interface

@@ -123,13 +123,13 @@ Generic USB-to-TTL cables seem to work OK. Here is how to make the
 connections:
 
 ```
-USB-to-TTL    RPi GPIO       GPIO pin
+USB-to-TTL    RPi board      GPIO pin
 label         header pin     (aka Broadcom pin)
 ----------    ----------     ------------------
 3v3           Not connected
 TXD           10             GPIO 15 / RXD1
 RXD           8              GPIO 14 / TXD1
-GND           GND            6
+GND           6, 34, 39 or 9 -
 +5V           Not connected
 ```
 
@@ -149,8 +149,8 @@ pinout](https://www.olimex.com/Products/ARM/JTAG/_resources/openocd-jtag-layout.
 for reference.
 
 ```
-Function   Olimex pin    RPi GPIO       GPIO pin
-                         header pin     (aka Broadcom pin)
+Function   Olimex pin    Broadcom       Physical board
+                         GPIO pin       pin number
 --------   ----------    ----------     ------------------
 Vref       1                            1
 GND        4                            9

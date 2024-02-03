@@ -30,7 +30,7 @@
         //
         // This must match the definitions in arch/aarch64/mmu.zig
 
-	LDR_IMM64 x1, MAIR_VALUE        // program mair on this PE
+        LDR_IMM64 x1, MAIR_VALUE        // program mair on this PE
 	msr     mair_el1, x1		//
 
         // TCR: Translation control

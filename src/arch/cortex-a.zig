@@ -1,5 +1,4 @@
 pub const barriers = @import("aarch64/barriers.zig");
-pub const cache = @import("aarch64/cache.zig");
 pub const exceptions = @import("aarch64/exceptions.zig");
 pub const mmu = @import("aarch64/mmu.zig");
 pub const registers = @import("aarch64/registers.zig");
@@ -20,6 +19,10 @@ export fn bssInit() void {
 
     @memset(bss_start[0..bss_len], 0);
 }
+
+// ----------------------------------------------------------------------
+// Primitive instructions
+// ----------------------------------------------------------------------
 
 /// Note: this performs an "exception return" on the CPU. It will
 /// change the stack point and exception level, meaning that this does
@@ -49,6 +52,10 @@ pub inline fn brk(breakpoint_id: u32) void {
     asm volatile ("brk " ++ breakpoint_id);
 }
 
+// ----------------------------------------------------------------------
+// Core control
+// ----------------------------------------------------------------------
+
 pub const MAX_CORES = 8;
 
 /// Return core # for the currently executing PE
@@ -60,7 +67,12 @@ pub inline fn coreId() u8 {
     return @truncate(mpidr & (MAX_CORES - 1));
 }
 
-pub fn init() void {
+pub fn init(core_id: usize) void {
+    if (core_id == 0) {
+        mmu.pageTablesCreate();
+    }
+    mmu.enable();
+    fiqEnable();
     exceptions.init();
 }
 

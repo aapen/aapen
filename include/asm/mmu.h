@@ -30,10 +30,10 @@
 #define MT_NORMAL_FLAGS                 0xff
 #define MT_NORMAL_WT_FLAGS              0xbb
 
-#define MAIR_VALUE			(MT_DEVICE_nGnRnE_FLAGS << (8 * MT_DEVICE_nGnRnE)) |\
-                                        (MT_NORMAL_NC_FLAGS << (8 * MT_NORMAL_NC)) |\
-                                        (MT_NORMAL_FLAGS << (8 * MT_NORMAL)) |\
-                                        (MT_NORMAL_WT_FLAGS << (8 * MT_NORMAL_WT))
+#define MAIR_VALUE			((MT_DEVICE_nGnRnE_FLAGS << (8 * MT_DEVICE_nGnRnE)) | \
+                                         (MT_NORMAL_NC_FLAGS << (8 * MT_NORMAL_NC)) | \
+                                         (MT_NORMAL_FLAGS << (8 * MT_NORMAL)) | \
+                                         (MT_NORMAL_WT_FLAGS << (8 * MT_NORMAL_WT)))
 
 #define MMU_BLOCK_FLAGS	 		(MM_TYPE_BLOCK | MM_KERNEL_PERMISSION | MM_INNER_SHAREABLE | (MT_NORMAL << 2) | MM_ACCESS)
 #define MMU_DEVICE_FLAGS		(MM_TYPE_BLOCK | MM_KERNEL_PERMISSION | (MT_DEVICE_nGnRnE << 2) | MM_ACCESS)

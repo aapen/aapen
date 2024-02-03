@@ -2,7 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.channel_set);
 
 const synchronize = @import("synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+const TicketLock = synchronize.TicketLock;
 
 pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
     return struct {
@@ -14,7 +14,7 @@ pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
         // std.bit_set.ArrayBitSet API... all its functions look for
         // bits set, not cleared)
         available: Bitset = Bitset.initFull(),
-        lock: Spinlock = Spinlock.init(name, true),
+        lock: TicketLock = TicketLock.init(name, true),
 
         pub fn allocate(this: *Self) error{NoAvailableChannel}!T {
             this.lock.acquire();

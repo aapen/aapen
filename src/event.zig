@@ -6,7 +6,7 @@ const root = @import("root");
 const arch = @import("architecture.zig");
 
 const synchronize = @import("synchronize.zig");
-const Spinlock = synchronize.Spinlock;
+const TicketLock = synchronize.TicketLock;
 
 const Forth = @import("forty/forth.zig").Forth;
 
@@ -91,6 +91,7 @@ pub const EventType = struct {
     pub const I2C = 0x05;
     pub const SPI = 0x06;
     pub const Timer = 0x07;
+    pub const Core = 0x80;
 };
 
 pub const EventSubtype = struct {
@@ -132,7 +133,7 @@ fn waitForEvent() void {
     }
 }
 
-var queue_lock: Spinlock = Spinlock.init("kevqueue", true);
+var queue_lock: TicketLock = TicketLock.initWithTargetLevel("kevqueue", true, .FIQ);
 const queue_size = 1024 * @sizeOf(Event); // room for 1K events
 var queue_storage: [queue_size]u8 = undefined;
 var queue: RingBuffer = .{
