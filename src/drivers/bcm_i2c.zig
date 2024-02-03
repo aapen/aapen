@@ -41,7 +41,7 @@ const Control = struct {
     pub const IntWrite: u32 = (1 << 9); // INTT
     pub const IntDone: u32 = (1 << 8); // INTD
     pub const StartXfer: u32 = (1 << 7); // ST
-    pub const Clear: u32 = (1 << 5); // CLEAR
+    pub const Clear: u32 = (1 << 4) | (1 << 5); // CLEAR
     pub const ReadTransfer: u32 = (1 << 0); // READ
 };
 
@@ -94,27 +94,45 @@ pub fn enable(self: *Self) void {
     self.gpio.enable(2);
     self.gpio.enable(3);
 
+    self.gpio.selectPull(3, GPIO.PullUpDownSelect.Up);
+    self.gpio.selectPull(2, GPIO.PullUpDownSelect.Up);
     self.gpio.selectFunction(2, GPIO.FunctionSelect.Alt0);
     self.gpio.selectFunction(3, GPIO.FunctionSelect.Alt0);
 
     self.registers.div = time.frequency() / DefaultSpeed;
+    _ = root.printf("speed feq %d def speed %d div %d\n", time.frequency(), DefaultSpeed, time.frequency() / DefaultSpeed);
+    _ = root.printf("registers address %x\n", self.registers);
 }
 
 pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
     // Start the transfer.
+    _ = root.printf("send target %x count %d\n", target_address, count);
 
     self.registers.target_address = target_address;
     self.registers.control = Control.Clear;
     self.registers.status = StatusBits.ClockTimeout | StatusBits.AckError | StatusBits.Done;
     self.registers.data_length = count;
-    self.registers.control = Control.Enable | Control.StartXfer;
 
-    // Wait for it to finish.
+    // Prepopulate the FIFO.
 
     var i: u32 = 0;
 
+    _ = root.printf("filling up buffer i: %d count %d\n", i, count);
+
+    while ((i < count) and (i < 16)) {
+        _ = root.printf("inside fill loop i: %d count %d\n", i, count);
+        self.registers.fifo = buffer[i];
+        i += 1;
+    }
+    _ = root.printf("after filling up buffer i: %d count %d\n", i, count);
+
+    // Start the xfer.
+
+    self.registers.control = Control.Enable | Control.StartXfer;
+
     while ((self.registers.status & StatusBits.Done) != 0) {
-        while ((i < count) and ((self.registers.status & StatusBits.FifoCanAccept) != 0)) {
+        while ((i < count) and (self.registers.status & StatusBits.FifoCanAccept) != 0) {
+            _ = root.printf("doing the rest of the xfer i: %d count %d\n", i, count);
             self.registers.fifo = buffer[i];
             i += 1;
         }
@@ -122,6 +140,7 @@ pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
 
     // Interpret final status.
     const status = self.registers.status;
+    _ = root.printf("send status %x\n", status);
 
     self.registers.status = StatusBits.Done;
 
@@ -130,6 +149,7 @@ pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
     } else if (status & StatusBits.ClockTimeout != 0) {
         return Status.TimeOut;
     } else if (i < count) {
+        _ = root.printf("Data loss %d %d\n", i, count);
         return Status.DataLoss;
     }
     return Status.Success;
@@ -160,6 +180,7 @@ pub fn receive(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
 
     // Interpret final status.
     const status = self.registers.status;
+    _ = root.printf("recv status %x\n", status);
     self.registers.status = StatusBits.Done;
 
     if (status & StatusBits.AckError != 0) {

@@ -101,6 +101,10 @@ finish
   swap -
 ;
 
+( Handy all purpose buffer )
+
+:buffer create 64 allot finish
+
 (Character)
 
 8   :char-bs    let
@@ -493,6 +497,12 @@ finish
 : next-events (n -- : Read the next n events.)
   times next-event p repeat
 ;
+
+( i2c )
+
+[[ hal hal.i2c +]] @ :i2c let
+
+
 
 ( Simple uptime testing words )
 
