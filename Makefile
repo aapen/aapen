@@ -16,6 +16,9 @@ KERNEL_FILES = $(addprefix zig-out/kernel-,$(addsuffix .img,$(BOARD_FLAVORS)))
 TEST_KERNEL = zig-out/kernel-$(BOARD).img
 TEST_KERNEL_ELF = zig-out/kernel-$(BOARD).elf
 
+KERNEL_UNIT_TESTS = bcd confirm_qemu console_output 
+KERNEL_UNIT_TEST_TARGETS = $(addprefix kernel_test_, $(KERNEL_UNIT_TESTS))
+
 CORE_COUNT      = 4
 QEMU_EXEC       = qemu-system-aarch64 -semihosting -smp $(CORE_COUNT)
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
@@ -62,9 +65,14 @@ download_firmware: firmware/COPYING.linux
 firmware/COPYING.linux:
 	./tools/fetch_firmware.sh
 
-kernel_test:
-	@$(ZIG) build -Dboard=pi3 -Dtestname=$(TESTNAME) -Dimage=$(TESTNAME) $(ZIG_BUILD_ARGS)
-	@$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_UNIT_TEST_ARGS) -kernel zig-out/$(TESTNAME).img
+.PHONEY: kernel_tests $(KERNEL_UNIT_TEST_TARGETS)
+
+kernel_tests: $(KERNEL_UNIT_TEST_TARGETS)
+
+kernel_test_%:
+	@echo Kernel Test: $(*F)
+	@$(ZIG) build -Dboard=pi3 -Dtestname=$(*F) -Dimage=$(*F) $(ZIG_BUILD_ARGS)
+	@$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_UNIT_TEST_ARGS) -kernel zig-out/$(*F).img
 
 emulate: $(TEST_KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(TEST_KERNEL)
