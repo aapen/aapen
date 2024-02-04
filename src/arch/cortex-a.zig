@@ -88,6 +88,22 @@ pub fn exceptionHandlerTableWrite(table_base: *anyopaque) void {
 // Low level interrupt control
 // ----------------------------------------------------------------------
 
+pub fn enable() void {
+    fiqEnable();
+    irqEnable();
+}
+
+pub fn disable() u32 {
+    const ret = irqFlagsRead();
+    irqDisable();
+    fiqDisable();
+    return ret;
+}
+
+pub fn restore(flags: u32) void {
+    irqFlagsWrite(flags);
+}
+
 pub fn irqFlagsRead() u32 {
     return asm (
         \\ mrs %[ret], daif

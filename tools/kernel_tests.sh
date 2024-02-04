@@ -1,5 +1,5 @@
 #! /usr/bin/env bash
-TESTS="confirm_qemu console_output bcd atomic event root_hub stack string synchronize transfer_factory transfer"
+TESTS="confirm_qemu console_output bcd atomic event queue root_hub stack string synchronize transfer_factory transfer"
 
 FAILED=0
 
