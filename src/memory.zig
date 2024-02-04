@@ -1,7 +1,7 @@
 const printf = @import("root").printf;
 
-const arch = @import("architecture.zig");
-const cpu = arch.cpu;
+const synchronize = @import("synchronize.zig");
+const TicketLock = synchronize.TicketLock;
 
 const translations = @import("memory/translations.zig");
 pub const AddressTranslation = translations.AddressTranslation;
@@ -32,8 +32,8 @@ pub fn get(bytes: usize) !u64 {
 
     const alloc_size = roundmb(bytes);
 
-    const irq_mask = cpu.disable();
-    defer cpu.restore(irq_mask);
+    freelist_lock.acquire();
+    defer freelist_lock.release();
 
     var prev: *Memblock = &freelist;
     var curr: ?*Memblock = prev.next;
@@ -81,8 +81,8 @@ pub fn free(memptr: u64, bytes: usize) !void {
     var block: *Memblock = @ptrFromInt(memptr);
     const free_size = roundmb(bytes);
 
-    const irq_mask = cpu.disable();
-    defer cpu.restore(irq_mask);
+    freelist_lock.acquire();
+    defer freelist_lock.release();
 
     var prev = &freelist;
     var next = freelist.next;
@@ -135,8 +135,13 @@ var freelist: Memblock = .{
     .length = 0,
 };
 
+var freelist_lock: TicketLock = TicketLock.initWithTargetLevel("memory", true, .FIQ);
+
 /// initialize freelist
 pub fn init(start_addr: u64, end_addr: u64) void {
+    freelist_lock.acquire();
+    defer freelist_lock.release();
+
     // Align the start to 8 bytes
     const freemem_start = roundmb(start_addr);
     const freemem_end = truncmb(end_addr);
