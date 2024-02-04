@@ -16,7 +16,11 @@ pub var allocator: Allocator = undefined;
 const HAL = root.HAL;
 
 pub fn init() !void {
-    range = Region.fromStartToEnd("kernel heap", @intFromPtr(HAL.heap_start), HAL.heap_end);
+    // while testing the new allocator, make sure we push this way up
+    // out of the way
+    const heap_start: u64 = @intFromPtr(HAL.heap_start) + 10_000_000;
+
+    range = Region.fromStartToEnd("kernel heap", heap_start, HAL.heap_end);
     fba = range.allocator();
     allocator = fba.allocator();
 }

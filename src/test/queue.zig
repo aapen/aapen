@@ -30,15 +30,15 @@ fn setupQueue() void {
 
 fn setupThreads() void {
     for (0..10) |i| {
-        schedule2.threads[i].state = schedule2.THREAD_READY;
+        schedule2.thread_table[i].state = schedule2.THREAD_READY;
     }
-    schedule2.threads[0].state = schedule2.THREAD_RUNNING;
+    schedule2.thread_table[0].state = schedule2.THREAD_RUNNING;
 }
 
 fn allocate() !void {
     const qid = try queue.allocate();
 
-    expect(qid >= schedule2.NUM_THREADS);
+    expect(qid >= schedule2.NUM_THREAD_ENTRIES);
 
     const qhead = quehead(qid);
     const qtail = quetail(qid);
