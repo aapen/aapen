@@ -184,12 +184,33 @@ inline fn truncmb(x: u64) u64 {
 // Test support
 // ----------------------------------------------------------------------
 pub fn dumpFreelist() void {
+    const FreelistSnapshot = struct {
+        const Entry = struct { u64, u64 };
+        var entries: [16]Entry = undefined;
+        var count: usize = 0;
+    };
+
+    // Snapshot the freelist before displaying it. (Display can scroll
+    // which causes allocation. It's a Heisenberg situation.)
+    {
+        freelist_lock.acquire();
+        defer freelist_lock.release();
+
+        var i: usize = 0;
+        var head: ?*Memblock = &freelist;
+        while (head != null and i < 16) {
+            FreelistSnapshot.entries[i][0] = @intFromPtr(head.?.next);
+            FreelistSnapshot.entries[i][1] = head.?.length;
+            head = head.?.next;
+            i += 1;
+        }
+        FreelistSnapshot.count = i;
+    }
+
+    // Display now that we've unlocked the freelist.
     _ = printf("freelist [\n");
-    var head: ?*Memblock = &freelist;
-    while (head != null) {
-        const block = head.?;
-        _ = printf("    [0x%08x : 0x%08x bytes]\n", @intFromPtr(block.next), block.length);
-        head = block.next;
+    for (0..FreelistSnapshot.count) |i| {
+        _ = printf("    [0x%08x : 0x%08x bytes]\n", FreelistSnapshot.entries[i][0], FreelistSnapshot.entries[i][1]);
     }
     _ = printf("]\n");
 }

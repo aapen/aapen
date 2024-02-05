@@ -49,16 +49,8 @@ pub const std_options = struct {
 
 /// Present an "operating system" interface layer to Zig's stdlib.
 const Freestanding = struct {
-    const Self = @This();
-
     pub const system = struct {};
-
-    pub const heap = struct {
-        pub var page_allocator = Allocator{
-            .ptr = undefined,
-            .vtable = undefined,
-        };
-    };
+    pub const heap = Heap;
 };
 
 pub const os = Freestanding;
@@ -104,7 +96,6 @@ export fn kernelInit(core_id: usize) noreturn {
 
         if (Heap.init()) {
             debug.kernelMessage("heap init");
-            os.heap.page_allocator = Heap.allocator;
         } else |err| {
             debug.kernelError("heap init error", err);
         }

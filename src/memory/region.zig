@@ -39,9 +39,4 @@ pub const Region = struct {
             _ = root.printf("unnamed region: 0x%08x .. 0x%08x\n", self.base, self.end);
         }
     }
-
-    pub fn allocator(self: *const Region) std.heap.FixedBufferAllocator {
-        const base: [*]u8 = @ptrFromInt(self.base);
-        return std.heap.FixedBufferAllocator.init(base[0..self.size]);
-    }
 };
