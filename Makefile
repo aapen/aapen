@@ -52,6 +52,9 @@ all: init emulate
 
 init: download_firmware dirs
 
+.PHONEY: build
+build: $(TEST_KERNEL)
+
 dirs:
 	mkdir -p zig-out
 
