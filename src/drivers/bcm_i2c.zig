@@ -11,8 +11,6 @@ const InterruptController = root.HAL.InterruptController;
 const IrqHandler = InterruptController.IrqHandler;
 const IrqId = InterruptController.IrqId;
 
-const DefaultSpeed: u32 = 100000;
-
 const Self = @This();
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineStruct("i2c.status", Status, .{
@@ -41,7 +39,7 @@ const Control = struct {
     pub const IntWrite: u32 = (1 << 9); // INTT
     pub const IntDone: u32 = (1 << 8); // INTD
     pub const StartXfer: u32 = (1 << 7); // ST
-    pub const Clear: u32 = (1 << 5); // CLEAR
+    pub const Clear: u32 = (1 << 4) | (1 << 5); // CLEAR
     pub const ReadTransfer: u32 = (1 << 0); // READ
 };
 
@@ -70,6 +68,8 @@ const Registers = extern struct {
     clock_stretch: u32,
 };
 
+const DefaultFrequency: u32 = 100_000;
+
 registers: *volatile Registers,
 interrupt_controller: *InterruptController,
 gpio: *GPIO,
@@ -90,14 +90,18 @@ pub fn init(allocator: Allocator, register_base: u64, gpio: *GPIO, interrupt_con
     return self;
 }
 
-pub fn enable(self: *Self) void {
+pub fn enable(self: *Self, i2c_freq: u64) void {
     self.gpio.enable(2);
     self.gpio.enable(3);
 
+    self.gpio.selectPull(3, GPIO.PullUpDownSelect.Up);
+    self.gpio.selectPull(2, GPIO.PullUpDownSelect.Up);
     self.gpio.selectFunction(2, GPIO.FunctionSelect.Alt0);
     self.gpio.selectFunction(3, GPIO.FunctionSelect.Alt0);
 
-    self.registers.div = time.frequency() / DefaultSpeed;
+    const desired_freq = if (i2c_freq == 0 ) DefaultFrequency else i2c_freq;
+    const divisor: u64 = time.frequency() / desired_freq * 10;
+    self.registers.div = @truncate(divisor);
 }
 
 pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
@@ -107,17 +111,26 @@ pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
     self.registers.control = Control.Clear;
     self.registers.status = StatusBits.ClockTimeout | StatusBits.AckError | StatusBits.Done;
     self.registers.data_length = count;
-    self.registers.control = Control.Enable | Control.StartXfer;
 
-    // Wait for it to finish.
+    // Prepopulate the FIFO.
 
     var i: u32 = 0;
 
-    while ((self.registers.status & StatusBits.Done) != 0) {
-        while ((i < count) and ((self.registers.status & StatusBits.FifoCanAccept) != 0)) {
+    while ((i < count) and (i < 16)) {
+        self.registers.fifo = buffer[i];
+        i += 1;
+    }
+
+    // Start the xfer.
+
+    self.registers.control = Control.Enable | Control.StartXfer;
+
+    while ((self.registers.status & StatusBits.Done) == 0) {
+        while ((i < count) and (self.registers.status & StatusBits.FifoCanAccept) != 0) {
             self.registers.fifo = buffer[i];
             i += 1;
         }
+	spinDelay(10);
     }
 
     // Interpret final status.
@@ -146,16 +159,11 @@ pub fn receive(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
 
     var i: u64 = 0;
 
-    while ((self.registers.status & StatusBits.Done) != 0) {
+    while ((i < count) and (self.registers.status & StatusBits.Done) == 0) {
         while ((self.registers.status & StatusBits.FifoNotEmpty) != 0) {
             buffer[i] = @truncate(self.registers.fifo);
             i += 1;
         }
-    }
-
-    while ((i < count) and ((self.registers.status & StatusBits.FifoNotEmpty) != 0)) {
-        buffer[i] = @truncate(self.registers.fifo);
-        i += 1;
     }
 
     // Interpret final status.
