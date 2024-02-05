@@ -502,6 +502,20 @@ finish
 
 [[ hal hal.i2c +]] @ :i2c let
 
+: i2c-write (len data-address dev-no -- status)
+  i2c i2c-send
+;
+
+: i2c-read (len buf-address dev-no -- status)
+  i2c i2c-receive
+;
+
+: i2c-scan (--)
+  128 times 
+    1 "A" ->stack i2c-write
+    ->stack swap . " " s. p
+  repeat
+;
 
 
 ( Simple uptime testing words )
