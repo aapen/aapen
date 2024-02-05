@@ -1,7 +1,7 @@
 const root = @import("root");
 const HAL = root.HAL;
 
-const cortex_a = @import("../cortex-a.zig");
+const cortex_a = @import("../cortex_a.zig");
 
 const mmu_h = @cImport({
     @cInclude("asm/mmu.h");

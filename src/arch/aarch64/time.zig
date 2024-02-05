@@ -1,5 +1,5 @@
 const std = @import("std");
-const cpu = @import("../cortex-a.zig");
+const cpu = @import("../cortex_a.zig");
 const registers = @import("registers.zig");
 
 // TODO: is there a way to integrate this with std.time?
