@@ -277,15 +277,6 @@ pub inline fn isBadTid(tid: TID) bool {
 // switching to the thread. Below that is the first activation frame
 // that represents invocation of the thread's main function.
 //
-// +----------------------------------+   high address
-// | sp, nzcv, daif, x30, x29, x17-x0 |   Context record (23 words)
-// +----------------------------------+
-// | saved "fp" ($0), saved "lr" ($0) |   Root activation frame (2 words)
-// +----------------------------------+   low address
-//
-// The root activation frame is two words of zeroes to make backtraces
-// look sensible.
-//
 // Register state when the thread starts:
 //
 // x0 - pointer to struct of launch arguments. (Zig is bad with
@@ -374,36 +365,37 @@ pub fn dumpThread(tid: TID) void {
 }
 
 const context_record_field_names = [_][]const u8{
-    "saved sp",
+    "daif",
+    "nzcv",
+    "lr (x30)",
+    "fp (x29)",
+    "x17",
+    "x16",
+    "x15",
+    "x14",
+    "x13",
+    "x12",
+    "x11",
+    "x10",
+    "x9",
+    "x8",
+    "x7",
+    "x6",
+    "x5",
+    "x4",
+    "x3",
+    "x2",
+    "x1",
+    "x0",
     "fp",
     "lr",
-    "x0",
-    "x1",
-    "x2",
-    "x3",
-    "x4",
-    "x5",
-    "x6",
-    "x7",
-    "x8",
-    "x9",
-    "x10",
-    "x11",
-    "x12",
-    "x13",
-    "x14",
-    "x15",
-    "x16",
-    "x17",
-    "fp (x29)",
-    "lr (x30)",
-    "nzcv",
-    "daif",
+    "saved pc",
+    "zero fill",
 };
 
-pub fn dumpContextRecord(stack_top: u64) void {
-    _ = printf("Thread context at 0x%08x\n", stack_top);
-    const stack_ptr: [*]u64 = @ptrFromInt(stack_top);
+pub fn dumpContextRecord(stack_bottom: u64) void {
+    _ = printf("Thread context at 0x%08x\n", stack_bottom);
+    const stack_ptr: [*]u64 = @ptrFromInt(stack_bottom);
     for (0..CONTEXT_WORDS) |i| {
         _ = printf("[0x%08x] (%02d): 0x%08x    %s\n", @intFromPtr(&stack_ptr[i]), i, stack_ptr[i], context_record_field_names[i].ptr);
     }
