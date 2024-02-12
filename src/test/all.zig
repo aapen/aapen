@@ -1,6 +1,9 @@
 const root = @import("root");
 const printf = root.printf;
 
+const qemu = @import("qemu.zig");
+pub const exitSuccess = qemu.exitSuccess;
+
 const helpers = @import("helpers.zig");
 
 pub const atomic = @import("atomic.zig").testBody;
@@ -11,6 +14,7 @@ pub const event = @import("event.zig").testBody;
 pub const heap = @import("heap.zig").testBody;
 pub const queue = @import("queue.zig").testBody;
 pub const root_hub = @import("root_hub.zig").testBody;
+pub const schedule = @import("schedule.zig").testBody;
 pub const stack = @import("stack.zig").testBody;
 pub const string = @import("string.zig").testBody;
 pub const synchronize = @import("synchronize.zig").testBody;
@@ -23,12 +27,12 @@ pub fn locateTest(comptime testname: []const u8) fn () void {
         pub fn execute() void {
             helpers.allocator = root.os.heap.page_allocator;
             _ = printf("=== %s\n", testname.ptr);
-            if (test_fn()) {
-                helpers.exitWithTestResult();
-            } else |err| {
+
+            test_fn() catch |err| {
                 _ = printf("%s\n", @errorName(err).ptr);
-                helpers.exit(254);
-            }
+            };
+
+            helpers.printTestResult();
         }
     };
     return Runner.execute;

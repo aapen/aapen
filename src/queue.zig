@@ -32,7 +32,7 @@ pub const Error = error{
 pub const NUM_THREADS = 128;
 
 // TODO move this to a common "definitions" module
-pub const NUM_SEMAPHORES = 0;
+pub const NUM_SEMAPHORES = 128;
 
 /// Number of queue entries allowed in the entire system, across all queues.
 const NUM_QUEUE_ENTRIES = NUM_THREADS + 4 + (2 * NUM_SEMAPHORES);
@@ -42,7 +42,7 @@ pub const QID = i16;
 pub const QEMPTY = -1; // Placeholder for a "pointer" to null
 
 /// Value of a queue entry's priority key.
-pub const Key = i32;
+pub const Key = i16;
 pub const MINKEY: Key = std.math.minInt(Key);
 pub const MAXKEY: Key = std.math.maxInt(Key);
 

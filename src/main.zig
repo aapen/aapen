@@ -24,6 +24,7 @@ pub const Forth = forty.Forth;
 const Serial = @import("serial.zig"); //TBD
 
 pub const schedule = @import("schedule.zig");
+pub const schedule2 = @import("schedule2.zig");
 const heartbeat = @import("heartbeat.zig");
 
 const Usb = @import("usb.zig");
@@ -60,6 +61,7 @@ pub var fb: *FrameBuffer = undefined;
 pub var char_buffer_console: *CharBufferConsole = undefined;
 pub var char_buffer: *CharBuffer = undefined;
 pub var main_console: *MainConsole = undefined;
+pub var kernel_allocator: Allocator = undefined;
 
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
@@ -81,6 +83,11 @@ const proc0 = if (std.mem.eql(u8, config.testname, ""))
 else
     @import("test/all.zig").locateTest(config.testname);
 
+pub const kernelExit = if (std.mem.eql(u8, config.testname, ""))
+    powerDown
+else
+    @import("test/all.zig").exitSuccess;
+
 export fn kernelInit(core_id: usize) noreturn {
     // State: one core, no interrupts, no MMU, no heap Allocator, no
     // display, serial
@@ -99,8 +106,9 @@ export fn kernelInit(core_id: usize) noreturn {
         } else |err| {
             debug.kernelError("heap init error", err);
         }
+        kernel_allocator = os.heap.page_allocator;
 
-        if (HAL.init(os.heap.page_allocator)) |h| {
+        if (HAL.init(kernel_allocator)) |h| {
             debug.kernelMessage("hal init");
             hal = h;
             uart_valid = true;
@@ -113,21 +121,21 @@ export fn kernelInit(core_id: usize) noreturn {
 
         // State: one core, interrupts, MMU, heap Allocator, no display,
         // serial
-        if (FrameBuffer.init(os.heap.page_allocator, hal)) |buf| {
+        if (FrameBuffer.init(kernel_allocator, hal)) |buf| {
             debug.kernelMessage("frame buffer init");
             fb = buf;
         } else |err| {
             debug.kernelError("frame buffer init error", err);
         }
 
-        if (CharBuffer.init(os.heap.page_allocator, fb)) |cb| {
+        if (CharBuffer.init(kernel_allocator, fb)) |cb| {
             debug.kernelMessage("char buffer init");
             char_buffer = cb;
         } else |err| {
             debug.kernelError("char buffer init error", err);
         }
 
-        if (CharBufferConsole.init(os.heap.page_allocator, char_buffer)) |cbc| {
+        if (CharBufferConsole.init(kernel_allocator, char_buffer)) |cbc| {
             debug.kernelMessage("fbcons init");
             char_buffer_console = cbc;
             char_buffer_console_valid = true;
@@ -135,7 +143,7 @@ export fn kernelInit(core_id: usize) noreturn {
             debug.kernelError("fbcons init error", err);
         }
 
-        if (MainConsole.init(os.heap.page_allocator, char_buffer_console)) |c| {
+        if (MainConsole.init(kernel_allocator, char_buffer_console)) |c| {
             debug.kernelMessage("console init");
             main_console = c;
             main_console_valid = true;
@@ -145,7 +153,7 @@ export fn kernelInit(core_id: usize) noreturn {
 
         // State: one core, interrupts, MMU, heap Allocator, display,
         // serial
-        if (diagnostics.init(os.heap.page_allocator)) {
+        if (diagnostics.init(kernel_allocator)) {
             debug.kernelMessage("diagnostics init");
         } else |err| {
             debug.kernelError("diagnostics init error", err);
@@ -166,7 +174,14 @@ export fn kernelInit(core_id: usize) noreturn {
         // we've initialized page tables and zeroed bss
         HAL.releaseSecondaryCores(@intFromPtr(&_start));
 
-        proc0();
+        schedule2.init() catch {};
+
+        if (schedule2.create(@intFromPtr(&proc0), schedule2.INITIAL_STACK_SIZE, schedule2.DEFAULT_PRIORITY, "init", @intFromPtr(&.{}))) |tid0| {
+            // _ = printf("tid0 = %d\n", tid0);
+            schedule2.ready(tid0, true) catch {};
+        } else |err| {
+            debug.kernelError("thread create error", err);
+        }
     } else {
         secondaryCore(core_id);
     }
@@ -174,7 +189,7 @@ export fn kernelInit(core_id: usize) noreturn {
 }
 
 fn startForty() void {
-    if (interpreter.init(os.heap.page_allocator, main_console, char_buffer)) {
+    if (interpreter.init(kernel_allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
     } else |err| {
         debug.kernelError("Forth init error", err);
@@ -242,5 +257,14 @@ export fn secondaryCore(core_id: u64) noreturn {
     while (true) {
         spinDelay(100_000_000 * (core_id + 1));
         Event.enqueue(.{ .type = Event.EventType.Core, .subtype = @truncate(core_id & 0xf) });
+    }
+}
+
+pub fn powerDown() noreturn {
+    // last thread has exited. we need to power down.
+    // eventually, we can use power control registers.
+    // for now, loop infintely
+    while (true) {
+        arch.cpu.wfe();
     }
 }

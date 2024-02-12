@@ -211,6 +211,8 @@ https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifica
 ** Allocators
 - https://nega.tv/writing-your-own-vulkan-memory-allocator/
 - Simple [[https://github.com/yannik520/YakOS/blob/master/mm/slob.c][SLOB allocator]]
+- https://gist.github.com/silversquirl/c1e4840048fdf48e669b6eac76d80634
+- https://github.com/suirad/adma/tree/master
 ** Interrupt controllers
 *** RPi 3
 This has the integrated "local" interrupt controller. It maps pending

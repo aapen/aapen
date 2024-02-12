@@ -30,7 +30,7 @@ fn reportHeapBounds() void {
 
 fn freelistInit() !void {
     initializeMemory();
-    memory.dumpFreelist();
+    // memory.dumpFreelist();
 }
 
 fn memgetSingle() !void {
@@ -64,20 +64,20 @@ fn getAndFree() !void {
 
     const size: usize = 2048;
 
-    _ = printf("allocate 3 blocks of size %d\n", size);
+    // _ = printf("allocate 3 blocks of size %d\n", size);
 
     const r1 = try memory.get(size);
     const r2 = try memory.get(size);
     const r3 = try memory.get(size);
 
-    memory.dumpFreelist();
+    // memory.dumpFreelist();
 
-    _ = printf("free them in reverse order\n");
+    // _ = printf("free them in reverse order\n");
     try memory.free(r3, size);
     try memory.free(r2, size);
     try memory.free(r1, size);
 
-    memory.dumpFreelist();
+    // memory.dumpFreelist();
 }
 
 fn getAndFreeOutOfOrder() !void {
@@ -85,7 +85,7 @@ fn getAndFreeOutOfOrder() !void {
 
     const size: usize = 4096;
 
-    _ = printf("allocate 10 blocks of size %d\n", size);
+    // _ = printf("allocate 10 blocks of size %d\n", size);
 
     const r1 = try memory.get(size);
     const r2 = try memory.get(size);
@@ -98,9 +98,9 @@ fn getAndFreeOutOfOrder() !void {
     const r9 = try memory.get(size);
     const r10 = try memory.get(size);
 
-    memory.dumpFreelist();
+    // memory.dumpFreelist();
 
-    _ = printf("free them in a scattered order\n");
+    // _ = printf("free them in a scattered order\n");
     try memory.free(r3, size);
     try memory.free(r2, size);
     try memory.free(r1, size);
@@ -112,5 +112,5 @@ fn getAndFreeOutOfOrder() !void {
     try memory.free(r5, size);
     try memory.free(r10, size);
 
-    memory.dumpFreelist();
+    // memory.dumpFreelist();
 }

@@ -16,7 +16,7 @@ KERNEL_FILES = $(addprefix zig-out/kernel-,$(addsuffix .img,$(BOARD_FLAVORS)))
 TEST_KERNEL = zig-out/kernel-$(BOARD).img
 TEST_KERNEL_ELF = zig-out/kernel-$(BOARD).elf
 
-KERNEL_UNIT_TESTS = confirm_qemu console_output bcd atomic event heap queue root_hub stack string synchronize transfer_factory transfer
+KERNEL_UNIT_TESTS = confirm_qemu console_output bcd atomic event heap queue root_hub schedule stack string synchronize transfer_factory transfer
 KERNEL_UNIT_TEST_TARGETS = $(addprefix kernel_test_, $(KERNEL_UNIT_TESTS))
 
 CORE_COUNT      = 4

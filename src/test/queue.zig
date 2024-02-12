@@ -61,7 +61,7 @@ fn allocate() !void {
 }
 
 fn enqueueAndDequeue() !void {
-    setupQueue();
+    //    setupQueue();
     setupThreads();
 
     const qid = try queue.allocate();
@@ -83,7 +83,7 @@ fn enqueueAndDequeue() !void {
 }
 
 fn priorityQueueing() !void {
-    setupQueue();
+    //    setupQueue();
     setupThreads();
 
     const readyq = try queue.allocate();
@@ -100,8 +100,8 @@ fn priorityQueueing() !void {
         expectEqual(tp[0], try queue.insert(tp[0], tp[1], readyq));
     }
 
-    _ = printf("readyQ ");
-    queue.dumpQ(readyq);
+    // _ = printf("readyQ ");
+    // queue.dumpQ(readyq);
 
     // dequeue order should be from highest priority to lowest
     const threads_expected = [_]TID{ 5, 8, 2, 7 };
