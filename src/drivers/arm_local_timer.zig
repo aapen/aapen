@@ -74,21 +74,11 @@ pub const Clock = struct {
     }
 };
 
-pub const TimerHandler = struct {
-    callback: *const fn (*const TimerHandler, *Timer) u32,
+pub const TimerHandler = fn (*Timer) u32;
 
-    fn invoke(self: *const TimerHandler, timer: *Timer) u32 {
-        return self.callback(self, timer);
-    }
-};
-
-fn do_nothing(_: *const TimerHandler, _: *Timer) u32 {
+fn nullHandler(_: *Timer) u32 {
     return 0;
 }
-
-const null_handler: TimerHandler = .{
-    .callback = do_nothing,
-};
 
 pub const Timer = struct {
     const TimerControlStatus = packed struct {
@@ -121,7 +111,7 @@ pub const Timer = struct {
             .match_reset = @as(u4, 1) << timer_id,
             .control = @ptrFromInt(base),
             .compare = @ptrFromInt(base + 0x0c + (@as(u64, timer_id) * 4)),
-            .next_callback = &null_handler,
+            .next_callback = nullHandler,
             .clock = clock,
             .intc = intc,
             .schedule_lock = blk: {
@@ -163,27 +153,23 @@ pub const Timer = struct {
         self.next_callback = handler;
         self.intc.enable(self.irq);
     }
-
-    fn doCallback(self: *Timer) u32 {
-        return self.next_callback.invoke(self);
-    }
 };
 
 pub fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
     const timer: *Timer = @fieldParentPtr(Timer, "irq_handler", this);
 
     // invoke callback
-    const next_delta = timer.doCallback();
+    const next_delta = timer.next_callback(timer);
     timer.clearDetectedFlag();
 
-    if (next_delta >= 0) {
+    if (next_delta > 0) {
         // repeating, reset the schedule
         const tick = timer.clock.ticksReadLow();
         const next_tick = @addWithOverflow(tick, next_delta)[0];
         timer.compare.* = next_tick;
     } else {
         // else clear the callback and disable
-        timer.next_callback = &null_handler;
-        timer.disable();
+        timer.next_callback = nullHandler;
+        timer.intc.disable(timer.irq);
     }
 }

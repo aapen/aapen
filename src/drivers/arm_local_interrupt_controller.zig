@@ -12,6 +12,9 @@ const arch = @import("../architecture.zig");
 const exceptions = arch.cpu.exceptions;
 const ExceptionContext = exceptions.ExceptionContext;
 
+const synchronize = @import("../synchronize.zig");
+const TicketLock = synchronize.TicketLock;
+
 const Self = @This();
 
 pub fn defineModule(forth: *Forth) !void {
@@ -78,15 +81,22 @@ const Registers = extern struct {
     disable_basic_irqs: u32,
 };
 
+routing_lock: TicketLock = TicketLock.initWithTargetLevel("irq routing", true, .FIQ),
 routing: [max_irq_id]IrqRouting = undefined,
 registers: *volatile Registers,
 
 fn routeAdd(self: *Self, id: IrqId, en: u32, enx: u64) void {
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
     const index = @intFromEnum(id);
     self.routing[index] = IrqRouting.mk(en, enx);
 }
 
 fn routeAddFromId(self: *Self, id: IrqId) void {
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
     const index = @intFromEnum(id);
     const enable_extended = @as(u64, 1) << index;
     self.routeAdd(id, 0, enable_extended);
@@ -96,6 +106,9 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
     var self: *Self = try allocator.create(Self);
 
     self.registers = @ptrFromInt(register_base);
+
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
 
     self.routeAddFromId(.TIMER_0);
     self.routeAddFromId(.TIMER_1);
@@ -113,10 +126,16 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
 }
 
 pub fn connect(self: *Self, id: IrqId, handler: *IrqHandler) void {
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
     self.routing[@intFromEnum(id)].handler = handler;
 }
 
 pub fn disconnect(self: *Self, id: IrqId) void {
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
     self.routing[@intFromEnum(id)].handler = &null_handler;
 }
 
@@ -148,11 +167,11 @@ pub fn disable(self: *Self, id: IrqId) void {
     }
 
     if (extended & 0xffff_ffff != 0) {
-        self.registers.disable_irqs_1 = @as(u32, extended & 0xffff_ffff);
+        self.registers.disable_irqs_1 = @as(u32, @truncate(extended & 0xffff_ffff));
     }
 
     if ((extended >> 32) & 0xffff_ffff != 0) {
-        self.registers.disable_irqs_2 = @as(u32, extended >> 32);
+        self.registers.disable_irqs_2 = @as(u32, @truncate(extended >> 32));
     }
 }
 
@@ -160,9 +179,13 @@ pub fn disable(self: *Self, id: IrqId) void {
 // Specific to interrupt routing on BCM2835 - 2837
 // ----------------------------------------------------------------------
 
-fn irqHandleBasic(self: *Self, id: IrqId) void {
+fn invokeHandler(self: *Self, id: IrqId) void {
     const index = @intFromEnum(id);
+
+    self.routing_lock.acquire();
     const h = self.routing[index].handler;
+    self.routing_lock.release();
+
     if (h != undefined) {
         h.invoke(self, id);
     }
@@ -189,10 +212,10 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
             },
             11 => {
                 // Basic IRQ bit 11 -> GPU IRQ 9 -> USB_HCI
-                self.irqHandleBasic(.USB_HCI);
+                self.invokeHandler(.USB_HCI);
             },
             19 => {
-                self.irqHandleBasic(.UART);
+                self.invokeHandler(.UART);
             },
             else => {
                 // do nothing
@@ -210,7 +233,7 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
             const next: u5 = @truncate(@ctz(pending_1));
             switch (next) {
                 0, 1, 2, 3 => {
-                    self.irqHandleBasic(@enumFromInt(next));
+                    self.invokeHandler(@enumFromInt(next));
                 },
                 7, 9, 10, 18, 19 => {
                     // already handled, these were presented on the basic register
@@ -227,7 +250,7 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
             const next: u5 = @truncate(@ctz(pending_2));
             switch (next) {
                 17, 18, 19, 20 => {
-                    self.irqHandleBasic(@enumFromInt(next + @as(u6, 32)));
+                    self.invokeHandler(@enumFromInt(next + @as(u6, 32)));
                 },
                 21, 22, 23, 24, 25, 30 => {
                     // already handled, these were presented on the basic register
