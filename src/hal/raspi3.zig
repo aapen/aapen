@@ -93,8 +93,6 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.gpio = try GPIO.init(allocator, peripheral_base + 0x200000, self.interrupt_controller);
 
-    self.i2c = try I2C.init(allocator, peripheral_base + 0x00804000, self.gpio, self.interrupt_controller);
-
     self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
 
     self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
@@ -117,6 +115,8 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.system_timer = self.timer[1];
 
+    //self.i2c = try I2C.init(allocator, peripheral_base + 0x205000, self.gpio, self.interrupt_controller);
+    self.i2c = try I2C.init(allocator, peripheral_base + 0x804000, self.gpio, self.interrupt_controller);
     self.uart.initializeUart();
 
     return self;
