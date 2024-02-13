@@ -42,7 +42,7 @@ pub const QID = i16;
 pub const QEMPTY = -1; // Placeholder for a "pointer" to null
 
 /// Value of a queue entry's priority key.
-pub const Key = i16;
+pub const Key = u32;
 pub const MINKEY: Key = std.math.minInt(Key);
 pub const MAXKEY: Key = std.math.maxInt(Key);
 
@@ -230,6 +230,12 @@ pub inline fn nonEmpty(q: QID) bool {
 
 pub inline fn firstKey(q: QID) Key {
     return quetab(quetab(quehead(q)).next).key;
+}
+
+pub inline fn decrementFirstKey(q: QID) Key {
+    const qent = quetab(quetab(quehead(q)).next);
+    qent.key -= 1;
+    return qent.key;
 }
 
 pub inline fn lastKey(q: QID) Key {

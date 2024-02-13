@@ -176,11 +176,11 @@ export fn kernelInit(core_id: usize) noreturn {
         // we've initialized page tables and zeroed bss
         HAL.releaseSecondaryCores(@intFromPtr(&_start));
 
-        time.init();
         schedule2.init() catch {};
 
         if (schedule2.create(@intFromPtr(&proc0), schedule2.INITIAL_STACK_SIZE, schedule2.DEFAULT_PRIORITY, "init", @intFromPtr(&.{}))) |tid0| {
             // _ = printf("tid0 = %d\n", tid0);
+            time.init();
             schedule2.ready(tid0, true) catch {};
         } else |err| {
             debug.kernelError("thread create error", err);

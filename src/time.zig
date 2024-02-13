@@ -6,9 +6,11 @@ const HAL = root.HAL;
 const Forth = @import("forty/forth.zig").Forth;
 
 const atomic = @import("atomic.zig");
+const queue = @import("queue.zig");
+const schedule = @import("schedule2.zig");
 
 pub const TICKS_PER_SECOND = root.HAL.timer_frequency_hz;
-pub const QUANTA_PER_SECOND = 100;
+pub const QUANTA_PER_SECOND = 1000;
 pub const TICKS_PER_MILLI = TICKS_PER_SECOND / 1000;
 
 pub var quanta_since_boot: u64 = 0;
@@ -73,6 +75,13 @@ fn clockHandle(_: *HAL.Timer) u32 {
     if (now == QUANTA_PER_SECOND) {
         _ = atomic.atomicInc(&seconds_since_boot);
         _ = atomic.atomicReset(&quanta_since_boot, 0);
+    }
+
+    // Check for sleeping threads that have reached their wakeup time
+    if (queue.nonEmpty(schedule.sleepq) and queue.decrementFirstKey(schedule.sleepq) <= 0) {
+        schedule.wakeup();
+    } else {
+        schedule.reschedule();
     }
 
     return quantum;

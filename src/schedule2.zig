@@ -50,7 +50,7 @@ var thread_count: u16 = 0;
 var readylist: QID = undefined;
 
 /// queue of sleeping threads
-var sleepq: QID = undefined;
+pub var sleepq: QID = undefined;
 
 pub const InterruptMask = u32;
 
@@ -193,37 +193,38 @@ fn kill(tid: TID) void {
 }
 
 pub fn sleep(millis: u32) !void {
-    const ticks = time.deadlineMillis(millis);
+    const ticks: u32 = millis * time.TICKS_PER_MILLI;
 
     const im = cpu.disable();
     defer cpu.restore(im);
 
     try queue.insertDelta(current, ticks, sleepq);
+    thrent(current).state = THREAD_SLEEP;
     reschedule();
 }
 
-pub fn unsleep(tid: TID) !void {
-    if (isBadTid(tid)) return error.BadThreadId;
-
-    const im = cpu.disable();
-    defer cpu.restore(im);
-
-    const thr = thrent(tid);
-    if (thr.state != THREAD_SLEEP and thr.state != THREAD_TIMEOUT) {
-        return error.NotSleeping;
-    }
-    const next = queue.quetab(tid).next;
-    if (next < NUM_THREAD_ENTRIES) {
-        queue.quetab(next).key += queue.quetab(tid).key;
-    }
-    _ = queue.getItem(tid); // removes thread from its queue
-}
+// pub fn unsleep(tid: TID) !void {
+//     if (isBadTid(tid)) return error.BadThreadId;
+//
+//     const im = cpu.disable();
+//     defer cpu.restore(im);
+//
+//     const thr = thrent(tid);
+//     if (thr.state != THREAD_SLEEP and thr.state != THREAD_TIMEOUT) {
+//         return error.NotSleeping;
+//     }
+//     const next = queue.quetab(tid).next;
+//     if (next < NUM_THREAD_ENTRIES) {
+//         queue.quetab(next).key += queue.quetab(tid).key;
+//     }
+//     _ = queue.getItem(tid); // removes thread from its queue
+// }
 
 /// Ready all threads that should be done sleeping
 pub fn wakeup() void {
     while (queue.nonEmpty(sleepq) and queue.firstKey(sleepq) <= 0) {
         if (queue.dequeue(sleepq)) |tid| {
-            ready(tid, false);
+            _ = ready(tid, false) catch {};
         } else |_| {
             // complain?
         }
