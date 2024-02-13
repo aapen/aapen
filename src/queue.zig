@@ -125,7 +125,7 @@ pub fn dequeue(qid: QID) !TID {
 }
 
 /// Insert in the queue according to priority ordering (highest to lowest)
-pub fn insert(tid: TID, priority: Key, qid: QID) !TID {
+pub fn insert(tid: TID, priority: Key, qid: QID) !void {
     if (isBadTid(tid)) return Error.BadThreadId;
     if (isBadQid(qid)) return Error.BadQueueId;
 
@@ -140,8 +140,31 @@ pub fn insert(tid: TID, priority: Key, qid: QID) !TID {
     quetab(tid).key = priority;
     quetab(prev).next = tid;
     quetab(next).prev = tid;
+}
 
-    return tid;
+// Insert thread into a queue, sorted by ascending value, but once
+// inserted, record only the delta from the predecessor. (Useful for
+// tracking timeouts.)
+pub fn insertDelta(tid: TID, value: Key, qid: QID) !void {
+    if (isBadTid(tid)) return Error.BadThreadId;
+    if (isBadQid(qid)) return Error.BadQueueId;
+
+    var key = value;
+    var prev = quehead(qid);
+    var next = quetab(prev).next;
+    while (quetab(next).key <= key and next != quetail(qid)) {
+        key -= quetab(next).key;
+        prev = next;
+        next = quetab(next).next;
+    }
+    quetab(tid).next = next;
+    quetab(tid).prev = prev;
+    quetab(tid).key = key;
+    quetab(prev).next = tid;
+    quetab(next).prev = tid;
+    if (next != quetail(qid)) {
+        quetab(next).key -= key;
+    }
 }
 
 // ----------------------------------------------------------------------

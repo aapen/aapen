@@ -147,3 +147,33 @@
         ret
 
         END(__arch_atomic_sub_fetch)
+
+// ----------------------------------------------------------------------
+// fn __arch_atomic_reset
+//
+// Reset a 64-bit value, return the _prior_ value
+//
+// Alignment: none
+//
+// Arguments:
+// x0 - address of the value
+// x1 - value to set
+//
+// Returns:
+// Resulting value of the atomic
+//
+// Clobbers: x2, x3, x4
+// ----------------------------------------------------------------------
+
+        ENTRY(__arch_atomic_reset)
+        stp     x29, x30, [sp, -32]!            // prepare stack frame
+        mov     x29, sp                         // link frame pointer
+1:
+        ldaxr   x2, [x0]                        // load-exclusive the current value
+        stlxr   w4, x1, [x0]                    // attempt to store exclusive the new value
+        cbnz    w4, 1b                          // zero means store-excl failed, loop
+        mov     x0, x2                          // return the old value
+        ldp     x29, x30, [sp], 32              // destroy stack frame
+        ret
+
+        END(__arch_atomic_reset)

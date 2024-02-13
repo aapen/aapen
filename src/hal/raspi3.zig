@@ -16,6 +16,9 @@ pub const heap_end: usize = device_start - 1;
 
 pub const data_cache_line_length: usize = 64;
 
+// Clock
+pub const timer_frequency_hz = 1_000_000;
+
 // ARM devices
 const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
 const arm_local_timer = @import("../drivers/arm_local_timer.zig");
@@ -84,7 +87,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.interrupt_controller = try InterruptController.init(allocator, peripheral_base + 0xb200);
 
-    self.clock = try Clock.init(allocator, peripheral_base + 0x3000);
+    self.clock = try Clock.init(allocator, peripheral_base + 0x3000, timer_frequency_hz);
 
     self.dma = DMA.init(allocator, peripheral_base + 0x7000, self.interrupt_controller, &self.soc.dma_ranges);
 
@@ -149,7 +152,7 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
 /// itself, from Broadcom, or from ARM. (It seems to be in the
 /// bootcode.bin blob though, so maybe it's from Raspberry Pi.)
 pub fn releaseSecondaryCores(vector: u64) void {
-    for(1..4) |i| {
+    for (1..4) |i| {
         coreVectorWrite(i, vector);
     }
     arch.cpu.barriers.barrierMemoryWrite();

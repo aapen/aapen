@@ -11,6 +11,8 @@ const queue = @import("queue.zig");
 const Key = queue.Key;
 const QID = queue.QID;
 
+const time = @import("time.zig");
+
 pub const Error = error{
     NoMoreThreads,
 };
@@ -22,6 +24,7 @@ pub const THREAD_RECEIVING: u8 = 3; // thread waiting for message
 pub const THREAD_SLEEP: u8 = 4; // thread sleeping
 pub const THREAD_SUSPEND: u8 = 5; // thread suspended
 pub const THREAD_WAIT: u8 = 6; // waiting on a semaphore
+pub const THREAD_TIMEOUT: u8 = 7; // timed out waiting for event
 
 // TODO move this to a common "definitions" module
 pub const NUM_THREAD_ENTRIES = 128;
@@ -37,12 +40,17 @@ pub const TID = i16;
 pub const NULL_THREAD: TID = 0;
 pub const NO_TID: TID = -1;
 
-// currently executing thread
+/// currently executing thread
 var current: TID = 0;
+
+/// number of live threads
 var thread_count: u16 = 0;
 
-// queue of threads ready to run
+/// queue of threads ready to run
 var readylist: QID = undefined;
+
+/// queue of sleeping threads
+var sleepq: QID = undefined;
 
 pub const InterruptMask = u32;
 
@@ -81,9 +89,14 @@ pub var thread_table: [NUM_THREAD_ENTRIES]ThreadEntry = init: {
 
 pub fn init() !void {
     readylist = try queue.allocate();
+    sleepq = try queue.allocate();
     current = NULL_THREAD;
     thread_table[NULL_THREAD].stack_pointer = @intFromPtr(&null_thread_dummy_context);
 }
+
+// ----------------------------------------------------------------------
+// Thread control
+// ----------------------------------------------------------------------
 
 pub fn create(proc: u64, ssize: u64, priority: Key, name: [*:0]const u8, args_ptr: u64) !TID {
     // _ = printf("create: current is %d, thread_count is %d\n", current, thread_count);
@@ -123,7 +136,7 @@ pub fn ready(tid: TID, resched: bool) !void {
     const thr = thrent(tid);
     thr.state = THREAD_READY;
 
-    _ = try queue.insert(tid, thr.priority, readylist);
+    try queue.insert(tid, thr.priority, readylist);
 
     // _ = printf("ready: readylist after insert");
     // queue.dumpQ(readylist);
@@ -131,66 +144,6 @@ pub fn ready(tid: TID, resched: bool) !void {
     if (resched) {
         reschedule();
     }
-}
-
-pub fn reschedule() void {
-    const old: *ThreadEntry = thrent(current);
-    var new: *ThreadEntry = undefined;
-
-    old.irq_mask = cpu.disable();
-
-    //    _ = printf("reschedule: old tid is %d, old state is %d\n", current, old.state);
-
-    if (THREAD_RUNNING == old.state) {
-        if (queue.nonEmpty(readylist) and old.priority > queue.firstKey(readylist)) {
-            // the current thread is still the highest priority, keep
-            // running it
-            cpu.restore(old.irq_mask);
-            return;
-        }
-
-        old.state = THREAD_READY;
-
-        //        _ = printf("reschedule: old thread is still runnable. inserting %d to readylist\n", current);
-
-        _ = queue.insert(current, old.priority, readylist) catch {};
-    }
-
-    var next_tid: TID = NO_TID;
-
-    //    _ = printf("reschedule: readylist ");
-    // queue.dumpQ(readylist);
-
-    while (isBadTid(next_tid)) {
-        next_tid = queue.dequeue(readylist) catch NO_TID;
-
-        if (next_tid == NO_TID) {
-            cpu.wfe();
-        } else {
-            //            _ = printf("reschedule: selected %d\n", next_tid);
-        }
-    }
-
-    current = next_tid;
-    new = thrent(current);
-    new.state = THREAD_RUNNING;
-
-    //    _ = printf("reschedule: current is now %d, current state is now %d\n", current, new.state);
-    //    _ = printf("reschedule: &old.stack_pointer = 0x%08x, &new.stack_pointer = 0x%08x\n", &old.stack_pointer, &new.stack_pointer);
-    // _ = printf("reschedule: old.stack_pointer = 0x%08x, new.stack_pointer = 0x%08x\n", old.stack_pointer, new.stack_pointer);
-
-    context_switch(&old.stack_pointer, &new.stack_pointer);
-
-    // IMPORTANT: contextSwitch returns here once the _old_ thread
-    // resumes. When it switches to the _new_ thread, it returns with
-    // _that_ thread's stack (and therefore, _that_ thread's value of
-    // `old` and `new`)
-
-    cpu.restore(old.irq_mask);
-}
-
-fn threadExit() void {
-    kill(current);
 }
 
 fn kill(tid: TID) void {
@@ -239,9 +192,108 @@ fn kill(tid: TID) void {
     }
 }
 
+pub fn sleep(millis: u32) !void {
+    const ticks = time.deadlineMillis(millis);
+
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
+    try queue.insertDelta(current, ticks, sleepq);
+    reschedule();
+}
+
+pub fn unsleep(tid: TID) !void {
+    if (isBadTid(tid)) return error.BadThreadId;
+
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
+    const thr = thrent(tid);
+    if (thr.state != THREAD_SLEEP and thr.state != THREAD_TIMEOUT) {
+        return error.NotSleeping;
+    }
+    const next = queue.quetab(tid).next;
+    if (next < NUM_THREAD_ENTRIES) {
+        queue.quetab(next).key += queue.quetab(tid).key;
+    }
+    _ = queue.getItem(tid); // removes thread from its queue
+}
+
+/// Ready all threads that should be done sleeping
+pub fn wakeup() void {
+    while (queue.nonEmpty(sleepq) and queue.firstKey(sleepq) <= 0) {
+        if (queue.dequeue(sleepq)) |tid| {
+            ready(tid, false);
+        } else |_| {
+            // complain?
+        }
+    }
+    reschedule();
+}
+
 // ----------------------------------------------------------------------
-// Low level functions
+// Internals
 // ----------------------------------------------------------------------
+
+pub fn reschedule() void {
+    const old: *ThreadEntry = thrent(current);
+    var new: *ThreadEntry = undefined;
+
+    old.irq_mask = cpu.disable();
+
+    //    _ = printf("reschedule: old tid is %d, old state is %d\n", current, old.state);
+
+    if (THREAD_RUNNING == old.state) {
+        if (queue.nonEmpty(readylist) and old.priority > queue.firstKey(readylist)) {
+            // the current thread is still the highest priority, keep
+            // running it
+            cpu.restore(old.irq_mask);
+            return;
+        }
+
+        old.state = THREAD_READY;
+
+        //        _ = printf("reschedule: old thread is still runnable. inserting %d to readylist\n", current);
+
+        queue.insert(current, old.priority, readylist) catch {};
+    }
+
+    var next_tid: TID = NO_TID;
+
+    //    _ = printf("reschedule: readylist ");
+    // queue.dumpQ(readylist);
+
+    while (isBadTid(next_tid)) {
+        next_tid = queue.dequeue(readylist) catch NO_TID;
+
+        if (next_tid == NO_TID) {
+            cpu.wfe();
+        } else {
+            //            _ = printf("reschedule: selected %d\n", next_tid);
+        }
+    }
+
+    current = next_tid;
+    new = thrent(current);
+    new.state = THREAD_RUNNING;
+
+    //    _ = printf("reschedule: current is now %d, current state is now %d\n", current, new.state);
+    //    _ = printf("reschedule: &old.stack_pointer = 0x%08x, &new.stack_pointer = 0x%08x\n", &old.stack_pointer, &new.stack_pointer);
+    // _ = printf("reschedule: old.stack_pointer = 0x%08x, new.stack_pointer = 0x%08x\n", old.stack_pointer, new.stack_pointer);
+
+    context_switch(&old.stack_pointer, &new.stack_pointer);
+
+    // IMPORTANT: contextSwitch returns here once the _old_ thread
+    // resumes. When it switches to the _new_ thread, it returns with
+    // _that_ thread's stack (and therefore, _that_ thread's value of
+    // `old` and `new`)
+
+    cpu.restore(old.irq_mask);
+}
+
+fn threadExit() void {
+    kill(current);
+}
 
 var nexttid: TID = 0;
 
@@ -256,15 +308,16 @@ pub fn allocate() !TID {
     return Error.NoMoreThreads;
 }
 
+// ----------------------------------------------------------------------
+// Table manipulation
+// ----------------------------------------------------------------------
+
 /// Convenience for indexing into the table with an i16
 /// Caller MUST verify the value is non-negative
 pub inline fn thrent(x: TID) *ThreadEntry {
     return &thread_table[@intCast(x)];
 }
 
-// ----------------------------------------------------------------------
-// Table manipulation
-// ----------------------------------------------------------------------
 pub inline fn isBadTid(tid: TID) bool {
     return (tid >= NUM_THREAD_ENTRIES or tid < 0 or THREAD_FREE == thrent(tid).state);
 }

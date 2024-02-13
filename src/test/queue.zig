@@ -97,7 +97,7 @@ fn priorityQueueing() !void {
         .{ 5, 900 },
     };
     for (threads_with_priority) |tp| {
-        expectEqual(tp[0], try queue.insert(tp[0], tp[1], readyq));
+        try queue.insert(tp[0], tp[1], readyq);
     }
 
     // _ = printf("readyQ ");

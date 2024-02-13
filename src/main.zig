@@ -9,6 +9,8 @@ const arch = @import("architecture.zig");
 const Disassemble = @import("disassemble.zig");
 const Event = @import("event.zig");
 const Heap = @import("heap.zig");
+const time = @import("time.zig");
+
 const FrameBuffer = @import("frame_buffer.zig");
 const CharBuffer = @import("char_buffer.zig");
 const CharBufferConsole = @import("char_buffer_console.zig");
@@ -174,6 +176,7 @@ export fn kernelInit(core_id: usize) noreturn {
         // we've initialized page tables and zeroed bss
         HAL.releaseSecondaryCores(@intFromPtr(&_start));
 
+        time.init();
         schedule2.init() catch {};
 
         if (schedule2.create(@intFromPtr(&proc0), schedule2.INITIAL_STACK_SIZE, schedule2.DEFAULT_PRIORITY, "init", @intFromPtr(&.{}))) |tid0| {
@@ -203,6 +206,10 @@ fn startForty() void {
         debug.kernelError("HAL define module", err);
     };
 
+    time.defineModule(&interpreter) catch |err| {
+        debug.kernelError("time define module", err);
+    };
+
     diagnostics.defineModule(&interpreter) catch |err| {
         debug.kernelError("diagnostics define module", err);
     };
@@ -230,12 +237,6 @@ fn startForty() void {
     Disassemble.defineModule(&interpreter) catch |err| {
         debug.kernelError("Disassembler define module", err);
     };
-
-    if (schedule.init()) {
-        debug.kernelMessage("schedule init");
-    } else |err| {
-        debug.kernelMessage("schedule init error", err);
-    }
 
     arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
     global_unwind_point.pc = @as(u64, @intFromPtr(&repl));

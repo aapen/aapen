@@ -5,6 +5,7 @@ extern fn __arch_atomic_fetch_add(atomic_val: *u64, addend: u64) u64;
 extern fn __arch_atomic_add_fetch(atomic_val: *u64, addend: u64) u64;
 extern fn __arch_atomic_fetch_sub(atomic_val: *u64, subtrahend: u64) u64;
 extern fn __arch_atomic_sub_fetch(atomic_val: *u64, subtrahend: u64) u64;
+extern fn __arch_atomic_reset(atomic_val: *u64, new_value: u64) u64;
 
 /// Atomically get value.
 pub fn atomicFetch(atomic_val: *u64) u64 {
@@ -41,4 +42,9 @@ pub inline fn atomicInc(atomic_val: *u64) u64 {
 /// decrementing
 pub inline fn atomicDec(atomic_val: *u64) u64 {
     return atomicSub(atomic_val, 1);
+}
+
+/// Atomically set the value, returns the value _prior_ to reset
+pub inline fn atomicReset(atomic_val: *u64, new_value: u64) u64 {
+    return __arch_atomic_reset(atomic_val, new_value);
 }
