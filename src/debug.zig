@@ -110,10 +110,14 @@ var ring: RingBuffer = undefined;
 var fba: FixedBufferAllocator = undefined;
 var allocator: Allocator = undefined;
 
-pub fn init() !void {
+pub fn init() void {
     fba = FixedBufferAllocator.init(&mring_storage);
     allocator = fba.allocator();
-    ring = try RingBuffer.init(allocator, mring_storage.len);
+    ring = RingBuffer{
+        .data = &mring_storage,
+        .write_index = 0,
+        .read_index = 0,
+    };
 }
 
 /// Use this to report low-level errors. It bypasses the serial

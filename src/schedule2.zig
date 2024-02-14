@@ -39,6 +39,7 @@ pub const DEFAULT_PRIORITY: Key = 100;
 pub const TID = i16;
 pub const NULL_THREAD: TID = 0;
 pub const NO_TID: TID = -1;
+pub const NAME_LEN = 16;
 
 /// currently executing thread
 var current: TID = 0;
@@ -47,7 +48,7 @@ var current: TID = 0;
 var thread_count: u16 = 0;
 
 /// queue of threads ready to run
-var readylist: QID = undefined;
+var readyq: QID = undefined;
 
 /// queue of sleeping threads
 pub var sleepq: QID = undefined;
@@ -62,7 +63,7 @@ pub const ThreadEntry = struct {
     stack_pointer: u64,
     stack_base: u64,
     stack_length: usize,
-    name: [16]u8,
+    name: [NAME_LEN]u8,
     irq_mask: InterruptMask,
 
     pub fn init() ThreadEntry {
@@ -88,17 +89,57 @@ pub var thread_table: [NUM_THREAD_ENTRIES]ThreadEntry = init: {
 };
 
 pub fn init() !void {
-    readylist = try queue.allocate();
+    readyq = try queue.allocate();
     sleepq = try queue.allocate();
     current = NULL_THREAD;
     thread_table[NULL_THREAD].stack_pointer = @intFromPtr(&null_thread_dummy_context);
+}
+
+/// Configure the kernel's main thread of execution as thread0 in the
+/// table. This should be done exactly once during boot.
+pub fn becomeThread0(kernel_stack_top: u64, kernel_stack_size: u64) void {
+    const thr0 = thrent(0);
+    strncpy(thr0.name[0..NAME_LEN], "null");
+    thr0.state = THREAD_RUNNING;
+    thr0.priority = queue.MINKEY + 1;
+    thr0.stack_base = kernel_stack_top - kernel_stack_size;
+    thr0.stack_length = kernel_stack_size;
+    // the stack pointer will be overwritten on first context change
+    thr0.stack_pointer = 0;
+
+    current = 0;
 }
 
 // ----------------------------------------------------------------------
 // Thread control
 // ----------------------------------------------------------------------
 
-pub fn create(proc: u64, ssize: u64, priority: Key, name: [*:0]const u8, args_ptr: u64) !TID {
+pub const SpawnOptions = struct {
+    stack_size: u64 = INITIAL_STACK_SIZE,
+    priority: Key = DEFAULT_PRIORITY,
+    name: []const u8,
+};
+
+pub const ThreadFunction = *const fn (*anyopaque) void;
+
+/// High level function to create and ready a thread in one step.
+pub fn spawn(proc: ThreadFunction, name: []const u8, args: *anyopaque) !TID {
+    return spawnWithOptions(proc, args, &SpawnOptions{ .name = name });
+}
+
+pub fn spawnWithOptions(proc: ThreadFunction, args: *anyopaque, options: *const SpawnOptions) !TID {
+    const tid = try create(
+        @intFromPtr(proc),
+        options.stack_size,
+        options.priority,
+        options.name,
+        @intFromPtr(args),
+    );
+    try ready(tid, true);
+    return tid;
+}
+
+pub fn create(proc: u64, ssize: u64, priority: Key, name: []const u8, args_ptr: u64) !TID {
     // _ = printf("create: current is %d, thread_count is %d\n", current, thread_count);
 
     const im = cpu.disable();
@@ -120,7 +161,7 @@ pub fn create(proc: u64, ssize: u64, priority: Key, name: [*:0]const u8, args_pt
     thr.priority = priority;
     thr.stack_base = stack_addr;
     thr.stack_length = stack_size;
-    @memcpy(&thr.name, name);
+    strncpy(thr.name[0..NAME_LEN], name);
     thr.stack_pointer = stackSetup(stack_addr, stack_size, proc, @intFromPtr(&threadExit), args_ptr);
 
     return tid;
@@ -136,7 +177,7 @@ pub fn ready(tid: TID, resched: bool) !void {
     const thr = thrent(tid);
     thr.state = THREAD_READY;
 
-    try queue.insert(tid, thr.priority, readylist);
+    try queue.insert(tid, thr.priority, readyq);
 
     // _ = printf("ready: readylist after insert");
     // queue.dumpQ(readylist);
@@ -165,13 +206,14 @@ fn kill(tid: TID) void {
         kernelExit();
     }
 
+    // signal parent thread? do we need a concept of parent thread?
     stackFree(thr.stack_base, thr.stack_length);
 
     // depending on the thread's state, we have some bookkeeping to do
     switch (thr.state) {
         THREAD_SLEEP => {
             // TODO remove from sleep queue
-            thr.state = THREAD_FREE;
+            unsleep(tid) catch {};
         },
         THREAD_RUNNING => {
             thr.state = THREAD_FREE;
@@ -179,21 +221,21 @@ fn kill(tid: TID) void {
         },
         THREAD_WAIT => {
             // TODO update semaphores, reduce waiter count
-            thr.state = THREAD_FREE;
+            _ = queue.getItem(tid);
         },
         THREAD_READY => {
             // remove thread from readylist or any other queue it
             // might be in
             _ = queue.getItem(tid);
         },
-        else => {
-            thr.state = THREAD_FREE;
-        },
+        else => {},
     }
+
+    thr.state = THREAD_FREE;
 }
 
 pub fn sleep(millis: u32) !void {
-    const ticks: u32 = millis * time.TICKS_PER_MILLI;
+    const ticks: u32 = millis * time.QUANTA_PER_MILLI;
 
     const im = cpu.disable();
     defer cpu.restore(im);
@@ -203,22 +245,22 @@ pub fn sleep(millis: u32) !void {
     reschedule();
 }
 
-// pub fn unsleep(tid: TID) !void {
-//     if (isBadTid(tid)) return error.BadThreadId;
-//
-//     const im = cpu.disable();
-//     defer cpu.restore(im);
-//
-//     const thr = thrent(tid);
-//     if (thr.state != THREAD_SLEEP and thr.state != THREAD_TIMEOUT) {
-//         return error.NotSleeping;
-//     }
-//     const next = queue.quetab(tid).next;
-//     if (next < NUM_THREAD_ENTRIES) {
-//         queue.quetab(next).key += queue.quetab(tid).key;
-//     }
-//     _ = queue.getItem(tid); // removes thread from its queue
-// }
+pub fn unsleep(tid: TID) !void {
+    if (isBadTid(tid)) return error.BadThreadId;
+
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
+    const thr = thrent(tid);
+    if (thr.state != THREAD_SLEEP and thr.state != THREAD_TIMEOUT) {
+        return error.NotSleeping;
+    }
+    const next = queue.quetab(tid).next;
+    if (next < NUM_THREAD_ENTRIES) {
+        queue.quetab(next).key += queue.quetab(tid).key;
+    }
+    _ = queue.getItem(tid); // removes thread from its queue
+}
 
 /// Ready all threads that should be done sleeping
 pub fn wakeup() void {
@@ -245,7 +287,7 @@ pub fn reschedule() void {
     //    _ = printf("reschedule: old tid is %d, old state is %d\n", current, old.state);
 
     if (THREAD_RUNNING == old.state) {
-        if (queue.nonEmpty(readylist) and old.priority > queue.firstKey(readylist)) {
+        if (queue.nonEmpty(readyq) and old.priority > queue.firstKey(readyq)) {
             // the current thread is still the highest priority, keep
             // running it
             cpu.restore(old.irq_mask);
@@ -256,7 +298,7 @@ pub fn reschedule() void {
 
         //        _ = printf("reschedule: old thread is still runnable. inserting %d to readylist\n", current);
 
-        queue.insert(current, old.priority, readylist) catch {};
+        queue.insert(current, old.priority, readyq) catch {};
     }
 
     var next_tid: TID = NO_TID;
@@ -265,7 +307,7 @@ pub fn reschedule() void {
     // queue.dumpQ(readylist);
 
     while (isBadTid(next_tid)) {
-        next_tid = queue.dequeue(readylist) catch NO_TID;
+        next_tid = queue.dequeue(readyq) catch NO_TID;
 
         if (next_tid == NO_TID) {
             cpu.wfe();
@@ -307,6 +349,13 @@ pub fn allocate() !TID {
         }
     }
     return Error.NoMoreThreads;
+}
+
+fn strncpy(dst: []u8, src: []const u8) void {
+    const l = @min(dst.len, src.len);
+    for (0..l) |i| {
+        dst[i] = src[i];
+    }
 }
 
 // ----------------------------------------------------------------------

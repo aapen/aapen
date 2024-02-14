@@ -21,10 +21,10 @@ pub const synchronize = @import("synchronize.zig").testBody;
 pub const transfer = @import("transfer.zig").testBody;
 pub const transfer_factory = @import("transfer_factory.zig").testBody;
 
-pub fn locateTest(comptime testname: []const u8) fn () void {
+pub fn locateTest(comptime testname: []const u8) fn (*anyopaque) void {
     const test_fn = @field(@This(), testname);
     const Runner = struct {
-        pub fn execute() void {
+        pub fn execute(_: *anyopaque) void {
             helpers.allocator = root.os.heap.page_allocator;
             _ = printf("=== %s\n", testname.ptr);
 

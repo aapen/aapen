@@ -6,9 +6,9 @@ const ScopeLevel = std.log.ScopeLevel;
 const atomic = @import("atomic.zig");
 const arch = @import("architecture.zig");
 
-const Disassemble = @import("disassemble.zig");
-const Event = @import("event.zig");
-const Heap = @import("heap.zig");
+const disassemble = @import("disassemble.zig");
+const event = @import("event.zig");
+const heap = @import("heap.zig");
 const time = @import("time.zig");
 
 const FrameBuffer = @import("frame_buffer.zig");
@@ -51,9 +51,10 @@ pub const std_options = struct {
 };
 
 /// Present an "operating system" interface layer to Zig's stdlib.
+const kheap = heap;
 const Freestanding = struct {
     pub const system = struct {};
-    pub const heap = Heap;
+    pub const heap = kheap;
 };
 
 pub const os = Freestanding;
@@ -73,14 +74,13 @@ pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
     .lr = undefined,
 };
 
-pub var message_ring_valid = false;
 pub var uart_valid = false;
 pub var char_buffer_console_valid = false;
 pub var main_console_valid = false;
 
 extern fn _start() noreturn;
 
-const proc0 = if (std.mem.eql(u8, config.testname, ""))
+const thread1 = if (std.mem.eql(u8, config.testname, ""))
     startForty
 else
     @import("test/all.zig").locateTest(config.testname);
@@ -95,100 +95,102 @@ export fn kernelInit(core_id: usize) noreturn {
     // display, serial
     arch.cpu.init(core_id);
 
-    if (core_id == 0) {
-        if (debug.init()) {
-            debug.kernelMessage("init");
-            message_ring_valid = true;
-        } else |_| {
-            // not much we can do here
-        }
-
-        if (Heap.init()) {
-            debug.kernelMessage("heap init");
-        } else |err| {
-            debug.kernelError("heap init error", err);
-        }
-        kernel_allocator = os.heap.page_allocator;
-
-        if (HAL.init(kernel_allocator)) |h| {
-            debug.kernelMessage("hal init");
-            hal = h;
-            uart_valid = true;
-        } else |err| {
-            debug.kernelError("hal init error", err);
-        }
-
-        // State: one core, interrupts, MMU, heap Allocator, no
-        // display, serial
-
-        // State: one core, interrupts, MMU, heap Allocator, no display,
-        // serial
-        if (FrameBuffer.init(kernel_allocator, hal)) |buf| {
-            debug.kernelMessage("frame buffer init");
-            fb = buf;
-        } else |err| {
-            debug.kernelError("frame buffer init error", err);
-        }
-
-        if (CharBuffer.init(kernel_allocator, fb)) |cb| {
-            debug.kernelMessage("char buffer init");
-            char_buffer = cb;
-        } else |err| {
-            debug.kernelError("char buffer init error", err);
-        }
-
-        if (CharBufferConsole.init(kernel_allocator, char_buffer)) |cbc| {
-            debug.kernelMessage("fbcons init");
-            char_buffer_console = cbc;
-            char_buffer_console_valid = true;
-        } else |err| {
-            debug.kernelError("fbcons init error", err);
-        }
-
-        if (MainConsole.init(kernel_allocator, char_buffer_console)) |c| {
-            debug.kernelMessage("console init");
-            main_console = c;
-            main_console_valid = true;
-        } else |err| {
-            debug.kernelError("console init error", err);
-        }
-
-        // State: one core, interrupts, MMU, heap Allocator, display,
-        // serial
-        if (diagnostics.init(kernel_allocator)) {
-            debug.kernelMessage("diagnostics init");
-        } else |err| {
-            debug.kernelError("diagnostics init error", err);
-        }
-
-        // if (Usb.init(heap.allocator)) |_| {
-        //     debug.kernelMessage("USB core init");
-        // } else |err| {
-        //     debug.kernelError("USB core init error", err);
-        // }
-
-        // State: one core, interrupts, MMU, heap Allocator, display,
-        // serial, logging available, exception recovery available
-
-        // Allow other cores to start. They will begin at _start (from
-        // boot.S) which will take them from EL2 to EL1 back to the
-        // start of this function. This all has to happen _after_
-        // we've initialized page tables and zeroed bss
-        HAL.releaseSecondaryCores(@intFromPtr(&_start));
-
-        schedule2.init() catch {};
-
-        if (schedule2.create(@intFromPtr(&proc0), schedule2.INITIAL_STACK_SIZE, schedule2.DEFAULT_PRIORITY, "init", @intFromPtr(&.{}))) |tid0| {
-            // _ = printf("tid0 = %d\n", tid0);
-            time.init();
-            schedule2.ready(tid0, true) catch {};
-        } else |err| {
-            debug.kernelError("thread create error", err);
-        }
-    } else {
-        secondaryCore(core_id);
+    if (core_id != 0) {
+        secondaryCore(core_id); // noreturn
     }
-    unreachable;
+
+    debug.init();
+
+    schedule2.init() catch |err| {
+        debug.kernelError("scheduler init error", err);
+        arch.cpu.park();
+    };
+
+    heap.init();
+
+    kernel_allocator = os.heap.page_allocator;
+
+    // configure this as thread 0
+    schedule2.becomeThread0(0x20000, 0x20000);
+
+    if (HAL.init(kernel_allocator)) |h| {
+        debug.kernelMessage("hal init");
+        hal = h;
+        uart_valid = true;
+    } else |err| {
+        debug.kernelError("hal init error", err);
+    }
+
+    // State: one core, interrupts, MMU, heap Allocator, no
+    // display, serial
+
+    // State: one core, interrupts, MMU, heap Allocator, no display,
+    // serial
+    if (FrameBuffer.init(kernel_allocator, hal)) |buf| {
+        debug.kernelMessage("frame buffer init");
+        fb = buf;
+    } else |err| {
+        debug.kernelError("frame buffer init error", err);
+    }
+
+    if (CharBuffer.init(kernel_allocator, fb)) |cb| {
+        debug.kernelMessage("char buffer init");
+        char_buffer = cb;
+    } else |err| {
+        debug.kernelError("char buffer init error", err);
+    }
+
+    if (CharBufferConsole.init(kernel_allocator, char_buffer)) |cbc| {
+        debug.kernelMessage("fbcons init");
+        char_buffer_console = cbc;
+        char_buffer_console_valid = true;
+    } else |err| {
+        debug.kernelError("fbcons init error", err);
+    }
+
+    if (MainConsole.init(kernel_allocator, char_buffer_console)) |c| {
+        debug.kernelMessage("console init");
+        main_console = c;
+        main_console_valid = true;
+    } else |err| {
+        debug.kernelError("console init error", err);
+    }
+
+    // State: one core, interrupts, MMU, heap Allocator, display,
+    // serial
+    if (diagnostics.init(kernel_allocator)) {
+        debug.kernelMessage("diagnostics init");
+    } else |err| {
+        debug.kernelError("diagnostics init error", err);
+    }
+
+    // if (Usb.init(heap.allocator)) |_| {
+    //     debug.kernelMessage("USB core init");
+    // } else |err| {
+    //     debug.kernelError("USB core init error", err);
+    // }
+
+    // State: one core, interrupts, MMU, heap Allocator, display,
+    // serial, logging available, exception recovery available
+
+    // Allow other cores to start. They will begin at _start (from
+    // boot.S) which will take them from EL2 to EL1 back to the
+    // start of this function. This all has to happen _after_
+    // we've initialized page tables and zeroed bss
+    HAL.releaseSecondaryCores(@intFromPtr(&_start));
+
+    time.init();
+
+    // start main thread
+    _ = schedule2.spawn(thread1, "init", &.{}) catch |err| {
+        debug.kernelError("thread create error", err);
+    };
+
+    // from here, other threads do the work. this one is invoked only
+    // when all other threads are sleeping or waiting.
+    while (true) {
+        arch.cpu.wfi();
+    }
 }
 
 fn startForty() void {
@@ -230,11 +232,11 @@ fn startForty() void {
         debug.kernelError("Main console define module", err);
     };
 
-    Event.defineModule(&interpreter) catch |err| {
+    event.defineModule(&interpreter) catch |err| {
         debug.kernelError("Event queue define module", err);
     };
 
-    Disassemble.defineModule(&interpreter) catch |err| {
+    disassemble.defineModule(&interpreter) catch |err| {
         debug.kernelError("Disassembler define module", err);
     };
 
@@ -255,17 +257,16 @@ fn repl() callconv(.C) noreturn {
 extern fn spinDelay(ticks: u64) void;
 
 export fn secondaryCore(core_id: u64) noreturn {
+    arch.cpu.enable(); // interrupts on
     while (true) {
         spinDelay(100_000_000 * (core_id + 1));
-        Event.enqueue(.{ .type = Event.EventType.Core, .subtype = @truncate(core_id & 0xf) });
+        event.enqueue(.{ .type = event.EventType.Core, .subtype = @truncate(core_id & 0xf) });
     }
 }
 
-pub fn powerDown() noreturn {
+pub fn powerDown() void {
     // last thread has exited. we need to power down.
     // eventually, we can use power control registers.
     // for now, loop infintely
-    while (true) {
-        arch.cpu.wfe();
-    }
+    arch.cpu.park();
 }

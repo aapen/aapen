@@ -72,8 +72,13 @@ pub fn init(core_id: usize) void {
         mmu.pageTablesCreate();
     }
     mmu.enable();
-    fiqEnable();
     exceptions.init();
+}
+
+pub fn park() void {
+    while (true) {
+        wfe();
+    }
 }
 
 // ----------------------------------------------------------------------

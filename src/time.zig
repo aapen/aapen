@@ -11,7 +11,7 @@ const schedule = @import("schedule2.zig");
 
 pub const TICKS_PER_SECOND = root.HAL.timer_frequency_hz;
 pub const QUANTA_PER_SECOND = 1000;
-pub const TICKS_PER_MILLI = TICKS_PER_SECOND / 1000;
+pub const QUANTA_PER_MILLI = 1;
 
 pub var quanta_since_boot: u64 = 0;
 pub var seconds_since_boot: u64 = 0;
@@ -57,7 +57,7 @@ pub fn ticks() u64 {
 // ----------------------------------------------------------------------
 
 pub fn deadlineMillis(millis: u32) u64 {
-    return ticks() + (millis * TICKS_PER_MILLI);
+    return ticks() + (millis * QUANTA_PER_MILLI);
 }
 
 pub fn delayMillis(millis: u32) void {
