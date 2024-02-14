@@ -91,8 +91,6 @@ else
     @import("test/all.zig").exitSuccess;
 
 export fn kernelInit(core_id: usize) noreturn {
-    // State: one core, no interrupts, no MMU, no heap Allocator, no
-    // display, serial
     arch.cpu.init(core_id);
 
     if (core_id != 0) {
@@ -113,65 +111,17 @@ export fn kernelInit(core_id: usize) noreturn {
     // configure this as thread 0
     schedule2.becomeThread0(0x20000, 0x20000);
 
-    if (HAL.init(kernel_allocator)) |h| {
-        debug.kernelMessage("hal init");
-        hal = h;
-        uart_valid = true;
-    } else |err| {
-        debug.kernelError("hal init error", err);
-    }
+    hardwareInit() catch |err| {
+        debug.kernelError("hardware init error", err);
+    };
 
-    // State: one core, interrupts, MMU, heap Allocator, no
-    // display, serial
+    displayInit() catch |err| {
+        debug.kernelError("display init error", err);
+    };
 
-    // State: one core, interrupts, MMU, heap Allocator, no display,
-    // serial
-    if (FrameBuffer.init(kernel_allocator, hal)) |buf| {
-        debug.kernelMessage("frame buffer init");
-        fb = buf;
-    } else |err| {
-        debug.kernelError("frame buffer init error", err);
-    }
-
-    if (CharBuffer.init(kernel_allocator, fb)) |cb| {
-        debug.kernelMessage("char buffer init");
-        char_buffer = cb;
-    } else |err| {
-        debug.kernelError("char buffer init error", err);
-    }
-
-    if (CharBufferConsole.init(kernel_allocator, char_buffer)) |cbc| {
-        debug.kernelMessage("fbcons init");
-        char_buffer_console = cbc;
-        char_buffer_console_valid = true;
-    } else |err| {
-        debug.kernelError("fbcons init error", err);
-    }
-
-    if (MainConsole.init(kernel_allocator, char_buffer_console)) |c| {
-        debug.kernelMessage("console init");
-        main_console = c;
-        main_console_valid = true;
-    } else |err| {
-        debug.kernelError("console init error", err);
-    }
-
-    // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial
-    if (diagnostics.init(kernel_allocator)) {
-        debug.kernelMessage("diagnostics init");
-    } else |err| {
+    diagnosticsInit() catch |err| {
         debug.kernelError("diagnostics init error", err);
-    }
-
-    // if (Usb.init(heap.allocator)) |_| {
-    //     debug.kernelMessage("USB core init");
-    // } else |err| {
-    //     debug.kernelError("USB core init error", err);
-    // }
-
-    // State: one core, interrupts, MMU, heap Allocator, display,
-    // serial, logging available, exception recovery available
+    };
 
     // Allow other cores to start. They will begin at _start (from
     // boot.S) which will take them from EL2 to EL1 back to the
@@ -193,7 +143,7 @@ export fn kernelInit(core_id: usize) noreturn {
     }
 }
 
-fn startForty() void {
+fn startForty(_: *anyopaque) void {
     if (interpreter.init(kernel_allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
     } else |err| {
@@ -269,4 +219,33 @@ pub fn powerDown() void {
     // eventually, we can use power control registers.
     // for now, loop infintely
     arch.cpu.park();
+}
+
+fn hardwareInit() !void {
+    hal = try HAL.init(kernel_allocator);
+    uart_valid = true;
+}
+
+fn displayInit() !void {
+    fb = try FrameBuffer.init(kernel_allocator, hal);
+
+    char_buffer = try CharBuffer.init(kernel_allocator, fb);
+
+    char_buffer_console = try CharBufferConsole.init(kernel_allocator, char_buffer);
+    char_buffer_console_valid = true;
+
+    main_console = try MainConsole.init(kernel_allocator, char_buffer_console);
+    main_console_valid = true;
+}
+
+fn diagnosticsInit() !void {
+    try diagnostics.init(kernel_allocator);
+}
+
+fn usbInit() !void {
+    // if (Usb.init(heap.allocator)) |_| {
+    //     debug.kernelMessage("USB core init");
+    // } else |err| {
+    //     debug.kernelError("USB core init error", err);
+    // }
 }

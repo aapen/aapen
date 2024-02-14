@@ -135,5 +135,8 @@ pub fn kernelMessage(msg: []const u8) void {
 pub fn kernelError(msg: []const u8, err: anyerror) void {
     kernelMessage(msg);
     kernelMessage(@errorName(err));
-    _ = printf("%s: %s\n", msg.ptr, @errorName(err).ptr);
+
+    if (root.main_console_valid) {
+        _ = printf("%s: %s\n", msg.ptr, @errorName(err).ptr);
+    }
 }
