@@ -25,7 +25,6 @@ const IrqHandler = *const fn (context: *const ExceptionContext) void;
 
 pub fn init() void {
     cpu.exceptionHandlerTableWrite(__exception_handler_table);
-    cpu.irqEnable();
 }
 
 /// Context passed in to every exception handler.

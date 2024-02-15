@@ -11,6 +11,8 @@ const root = @import("root");
 const delayMillis = root.HAL.delayMillis;
 
 const synchronize = @import("../synchronize.zig");
+const TicketLock = synchronize.TicketLock;
+
 const time = @import("../time.zig");
 
 const descriptor = @import("descriptor.zig");
@@ -419,6 +421,7 @@ fn handleStatusChange(xfer: *Transfer) void {
 }
 
 var hubs: [MAX_HUBS]Hub = undefined;
+var hubs_lock: TicketLock = undefined;
 
 var allocator: Allocator = undefined;
 
@@ -428,11 +431,13 @@ pub fn initialize(alloc: Allocator) void {
     for (0..MAX_HUBS) |i| {
         hubs[i].init();
     }
+
+    hubs_lock = TicketLock.initWithTargetLevel("usb hubs", true, .FIQ);
 }
 
 pub fn hubDriverDeviceBind(dev: *Device) Error!void {
-    synchronize.criticalEnter(.FIQ);
-    defer synchronize.criticalLeave();
+    hubs_lock.acquire();
+    defer hubs_lock.release();
 
     for (0..MAX_HUBS) |i| {
         if (!hubs[i].in_use) {

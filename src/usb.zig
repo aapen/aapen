@@ -123,14 +123,17 @@ const MAX_DEVICES = 16;
 pub var allocator: Allocator = undefined;
 var devices: [MAX_DEVICES]Device = undefined;
 var drivers: Drivers = undefined;
+var drivers_lock: TicketLock = undefined;
 var root_hub: ?*Device = undefined;
 var bus_lock: TicketLock = undefined;
 
 pub fn init() !void {
     allocator = root.os.heap.page_allocator;
     drivers = Drivers.init(allocator);
-    bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
 
+    drivers_lock = TicketLock.initWithTargetLevel("usb drivers", true, .FIQ);
+
+    bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
     bus_lock.acquire();
     defer bus_lock.release();
 
@@ -139,8 +142,14 @@ pub fn init() !void {
     }
 
     hub.initialize(allocator);
-    try registerDriver(&usb_hub_driver);
-    log.debug("registered hub driver", .{});
+
+    {
+        drivers_lock.acquire();
+        defer drivers_lock.release();
+
+        try registerDriver(&usb_hub_driver);
+        log.debug("registered hub driver", .{});
+    }
 
     try root.hal.usb_hci.initialize();
     log.debug("started host controller", .{});
@@ -160,8 +169,8 @@ pub fn init() !void {
 }
 
 pub fn registerDriver(device_driver: *const DeviceDriver) !void {
-    synchronize.criticalEnter(.FIQ);
-    defer synchronize.criticalLeave();
+    drivers_lock.acquire();
+    defer drivers_lock.release();
 
     var already_registered = false;
     for (drivers.items) |drv| {
@@ -178,8 +187,8 @@ pub fn registerDriver(device_driver: *const DeviceDriver) !void {
 }
 
 pub fn allocateDevice(parent: ?*Device) !DeviceAddress {
-    synchronize.criticalEnter(.FIQ);
-    defer synchronize.criticalLeave();
+    bus_lock.acquire();
+    defer bus_lock.release();
 
     for (0..MAX_DEVICES) |i| {
         const addr: DeviceAddress = @truncate(i);
@@ -200,8 +209,8 @@ pub fn allocateDevice(parent: ?*Device) !DeviceAddress {
 }
 
 pub fn freeDevice(devid: DeviceAddress) void {
-    synchronize.criticalEnter(.FIQ);
-    defer synchronize.criticalLeave();
+    bus_lock.acquire();
+    defer bus_lock.release();
 
     var dev = &devices[devid - 1];
     dev.state = .detaching;
@@ -279,9 +288,6 @@ pub fn transferSubmit(xfer: *Transfer) !void {
     // TODO check if the device is being detached
 
     // TODO track how many requests are pending for a device
-
-    synchronize.criticalEnter(.FIQ);
-    defer synchronize.criticalLeave();
 
     //    xfer.completion = transferNotify;
 

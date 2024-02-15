@@ -7,9 +7,6 @@ const arch = @import("../../architecture.zig");
 const cpu = arch.cpu;
 
 const synchronize = @import("../../synchronize.zig");
-const criticalEnter = synchronize.criticalEnter;
-const criticalLeave = synchronize.criticalLeave;
-
 const time = @import("../../time.zig");
 
 const usb = @import("../../usb.zig");
@@ -116,8 +113,8 @@ pub fn init(self: *Self, id: ChannelId, registers: *volatile ChannelRegisters) v
 }
 
 pub fn claim(self: *Self) !void {
-    criticalEnter(.FIQ);
-    defer criticalLeave();
+    const im = cpu.disable();
+    defer cpu.restore(im);
 
     if (self.state != .Idle) {
         return Error.ChannelBusy;
@@ -203,8 +200,9 @@ pub fn transactionBegin(
     }
 
     // Don't allow IRQs while we're configuring the channel
-    criticalEnter(.IRQ);
-    defer criticalLeave();
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
     self.state = .Configuring;
 
     self.completion_handler = completion_handler;
@@ -272,8 +270,8 @@ pub fn transactionBegin(
 }
 
 pub fn channelInterrupt(self: *Self) void {
-    criticalEnter(.FIQ);
-    defer criticalLeave();
+    const im = cpu.disable();
+    defer cpu.restore(im);
 
     const int_status: ChannelInterrupt = self.registers.channel_int;
     const int_mask: ChannelInterrupt = self.registers.channel_int_mask;
@@ -366,8 +364,8 @@ pub fn channelAbort(self: *Self) void {
         return;
     }
 
-    criticalEnter(.FIQ);
-    defer criticalLeave();
+    const im = cpu.disable();
+    defer cpu.restore(im);
 
     log.debug("channel {d} abort requested", .{self.id});
 

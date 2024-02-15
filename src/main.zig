@@ -130,6 +130,7 @@ export fn kernelInit(core_id: usize) noreturn {
     HAL.releaseSecondaryCores(@intFromPtr(&_start));
 
     time.init();
+    arch.cpu.enable();
 
     // start main thread
     _ = schedule2.spawn(thread1, "init", &.{}) catch |err| {
