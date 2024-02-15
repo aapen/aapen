@@ -142,7 +142,7 @@ interrupt_status: *volatile u32,
 transfer_enabled: *volatile u32,
 intc: *InterruptController,
 channels: DmaChannels,
-channel_control_blocks: [max_channel_id]BroadcomDMAControlBlock,
+channel_control_blocks: [max_channel_id]BroadcomDMAControlBlock align(32),
 
 pub fn init(
     allocator: Allocator,
