@@ -40,3 +40,35 @@ defer lock.release();
 
 TicketLocks are _not_ reentrant. Deadlock will result if code tries to acquire a lock that it already holds.
 
+
+## Semaphores
+
+### Construction
+
+`semaphore.create(initial_count: SemaphoreCount) !SID`
+
+Claims and initializes a semaphore. Returns the semaphore ID (SID). Can return error if no more semaphores are available.
+
+### Free
+
+`semaphore.free(sid: SID) !void`
+
+Releases a semaphore. If any threads are waiting on it, they will be marked ready. (Note that the thread may be surprised to learn it's been woken on a semaphore that no longer exists.) Can return error if the semaphore ID is illegal or the semaphore is not currently in use. (I.e., use after free.)
+
+### Wait
+
+`semaphore.wait(sid: SID) !void`
+
+Attempts to "take" a resource by decrementing the semaphore's count. If that would go negative, the thread will block until the semaphore is signalled by some other thread. Can return error if the semaphore ID is illegal or the semaphore is not currently in use.
+
+### Signal
+
+`semaphore.signal(sid: SID) !void`
+
+Releases a resource by incrementing the semaphore's count. If there are any threads waiting on the semaphore, this will wake one of them to run. It will be scheduled immediately and a context switch might result. Can return error if the semaphore ID is illegal or the semaphore is not currently in use.
+
+### Signal N
+
+`semaphore.signal(sid: SID, count: SemaphoreCount) !void`
+
+Releases `count` resources by incrementing the semaphore's count. If there are threads waiting on the semaphore, `count` of them will be woken. A reschedule will be done after all the threads are woken and a context switch might result. Can return error if the semaphore ID is illegal or the semaphore is not currently in use.

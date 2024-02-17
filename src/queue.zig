@@ -15,10 +15,17 @@
 /// as the identifier of the first item in the queue.
 const std = @import("std");
 
+const root = @import("root");
+const printf = root.printf;
+
 const schedule2 = @import("schedule2.zig");
-const TID = schedule2.TID;
-const NO_TID = schedule2.NO_TID;
 const isBadTid = schedule2.isBadTid;
+const NO_TID = schedule2.NO_TID;
+const NUM_THREADS = schedule2.NUM_THREADS;
+const TID = schedule2.TID;
+
+const semaphore = @import("semaphore.zig");
+const NUM_SEMAPHORES = semaphore.NUM_SEMAPHORES;
 
 // TODO move this to a common "definitions" module
 pub const Error = error{
@@ -28,18 +35,12 @@ pub const Error = error{
     QueueEmpty,
 };
 
-// TODO move this to a common "definitions" module
-pub const NUM_THREADS = 128;
-
-// TODO move this to a common "definitions" module
-pub const NUM_SEMAPHORES = 128;
-
 /// Number of queue entries allowed in the entire system, across all queues.
-const NUM_QUEUE_ENTRIES = NUM_THREADS + 4 + (2 * NUM_SEMAPHORES);
+const NUM_QUEUES = NUM_THREADS + 6 + (2 * NUM_SEMAPHORES);
 
 /// "Pointer" to a queue entry. Must be big enough to hold QEMPTY..NUM_QUEUE_ENTRIES
 pub const QID = i16;
-pub const QEMPTY = -1; // Placeholder for a "pointer" to null
+pub const QEMPTY: QID = -1; // Placeholder for a "pointer" to null
 
 /// Value of a queue entry's priority key.
 pub const Key = u32;
@@ -60,24 +61,24 @@ const QueueEntry = packed struct {
     }
 };
 
-var queue_table: [NUM_QUEUE_ENTRIES]QueueEntry = init: {
-    var initial_value: [NUM_QUEUE_ENTRIES]QueueEntry = undefined;
+var queue_table: [NUM_QUEUES]QueueEntry = init: {
+    var initial_value: [NUM_QUEUES]QueueEntry = undefined;
     for (&initial_value) |*q| {
         q.* = QueueEntry.init();
     }
     break :init initial_value;
 };
 
+/// Next available queue_table entry
+var nextQid: QID = NUM_THREADS;
+
 // ----------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------
 
-/// Next available queue_table entry
-var nextQid: QID = NUM_THREADS;
-
 /// Allocate a queue
 pub fn allocate() !QID {
-    if (nextQid > NUM_QUEUE_ENTRIES) {
+    if (nextQid >= NUM_QUEUES) {
         return Error.NoMoreQueues;
     }
 
@@ -209,7 +210,7 @@ pub fn getItem(tid: TID) TID {
 // ----------------------------------------------------------------------
 
 pub inline fn isBadQid(q: QID) bool {
-    return (quehead(q) < 0 or quehead(q) != quetail(q) - 1 or quetail(q) >= NUM_QUEUE_ENTRIES);
+    return (quehead(q) < 0 or quehead(q) != quetail(q) - 1 or quetail(q) >= NUM_QUEUES);
 }
 
 pub inline fn quehead(q: QID) QID {
@@ -259,9 +260,6 @@ pub fn reinit() void {
 }
 
 pub fn dumpQ(qid: QID) void {
-    const root = @import("root");
-    const printf = root.printf;
-
     if (isBadQid(qid)) {
         _ = printf("bad queue id: %d\n", qid);
         return;

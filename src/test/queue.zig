@@ -38,7 +38,7 @@ fn setupThreads() void {
 fn allocate() !void {
     const qid = try queue.allocate();
 
-    expect(qid >= schedule2.NUM_THREAD_ENTRIES);
+    expect(qid >= schedule2.NUM_THREADS);
 
     const qhead = quehead(qid);
     const qtail = quetail(qid);
@@ -61,7 +61,7 @@ fn allocate() !void {
 }
 
 fn enqueueAndDequeue() !void {
-    //    setupQueue();
+    setupQueue();
     setupThreads();
 
     const qid = try queue.allocate();
@@ -83,7 +83,7 @@ fn enqueueAndDequeue() !void {
 }
 
 fn priorityQueueing() !void {
-    //    setupQueue();
+    setupQueue();
     setupThreads();
 
     const readyq = try queue.allocate();

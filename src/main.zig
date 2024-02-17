@@ -27,6 +27,7 @@ const Serial = @import("serial.zig"); //TBD
 
 pub const schedule = @import("schedule.zig");
 pub const schedule2 = @import("schedule2.zig");
+pub const semaphore = @import("semaphore.zig");
 const heartbeat = @import("heartbeat.zig");
 
 const Usb = @import("usb.zig");
@@ -101,6 +102,11 @@ export fn kernelInit(core_id: usize) noreturn {
 
     schedule2.init() catch |err| {
         debug.kernelError("scheduler init error", err);
+        arch.cpu.park();
+    };
+
+    semaphore.init() catch |err| {
+        debug.kernelError("semaphore init error", err);
         arch.cpu.park();
     };
 

@@ -11,6 +11,9 @@ const queue = @import("queue.zig");
 const Key = queue.Key;
 const QID = queue.QID;
 
+const semaphore = @import("semaphore.zig");
+const SID = semaphore.SID;
+
 const time = @import("time.zig");
 
 pub const Error = error{
@@ -27,7 +30,7 @@ pub const THREAD_WAIT: u8 = 6; // waiting on a semaphore
 pub const THREAD_TIMEOUT: u8 = 7; // timed out waiting for event
 
 // TODO move this to a common "definitions" module
-pub const NUM_THREAD_ENTRIES = 128;
+pub const NUM_THREADS = 128;
 
 // TODO move this to a common "definitions" module
 pub const INITIAL_STACK_SIZE: u64 = 0x20000;
@@ -42,7 +45,7 @@ pub const NO_TID: TID = -1;
 pub const NAME_LEN = 16;
 
 /// currently executing thread
-var current: TID = 0;
+pub var current: TID = 0;
 
 /// number of live threads
 var thread_count: u16 = 0;
@@ -64,6 +67,7 @@ pub const ThreadEntry = struct {
     stack_base: u64,
     stack_length: usize,
     name: [NAME_LEN]u8,
+    semaphore: SID,
     irq_mask: InterruptMask,
 
     pub fn init() ThreadEntry {
@@ -74,13 +78,14 @@ pub const ThreadEntry = struct {
             .stack_base = undefined,
             .stack_length = undefined,
             .name = undefined,
+            .semaphore = undefined,
             .irq_mask = 0,
         };
     }
 };
 
-pub var thread_table: [NUM_THREAD_ENTRIES]ThreadEntry = init: {
-    var initial_value: [NUM_THREAD_ENTRIES]ThreadEntry = undefined;
+pub var thread_table: [NUM_THREADS]ThreadEntry = init: {
+    var initial_value: [NUM_THREADS]ThreadEntry = undefined;
     for (&initial_value) |*t| {
         t.* = ThreadEntry.init();
     }
@@ -220,13 +225,11 @@ fn kill(tid: TID) void {
             reschedule();
         },
         THREAD_WAIT => {
-            // TODO update semaphores, reduce waiter count
-            _ = queue.getItem(tid);
+            semaphore.sement(thr.semaphore).count += 1;
+            _ = queue.getItem(tid); // remove thread from all queues
         },
         THREAD_READY => {
-            // remove thread from readylist or any other queue it
-            // might be in
-            _ = queue.getItem(tid);
+            _ = queue.getItem(tid); // remove thread from all queues
         },
         else => {},
     }
@@ -256,7 +259,7 @@ pub fn unsleep(tid: TID) !void {
         return error.NotSleeping;
     }
     const next = queue.quetab(tid).next;
-    if (next < NUM_THREAD_ENTRIES) {
+    if (next < NUM_THREADS) {
         queue.quetab(next).key += queue.quetab(tid).key;
     }
     _ = queue.getItem(tid); // removes thread from its queue
@@ -341,9 +344,9 @@ fn threadExit() void {
 var nexttid: TID = 0;
 
 pub fn allocate() !TID {
-    for (0..NUM_THREAD_ENTRIES) |t| {
+    for (0..NUM_THREADS) |t| {
         _ = t;
-        nexttid = @mod((nexttid + 1), NUM_THREAD_ENTRIES);
+        nexttid = @mod((nexttid + 1), NUM_THREADS);
         if (THREAD_FREE == thrent(nexttid).state) {
             return nexttid;
         }
@@ -369,7 +372,7 @@ pub inline fn thrent(x: TID) *ThreadEntry {
 }
 
 pub inline fn isBadTid(tid: TID) bool {
-    return (tid >= NUM_THREAD_ENTRIES or tid < 0 or THREAD_FREE == thrent(tid).state);
+    return (tid >= NUM_THREADS or tid < 0 or THREAD_FREE == thrent(tid).state);
 }
 
 // ----------------------------------------------------------------------
@@ -456,7 +459,7 @@ pub fn reinit() !void {
 }
 
 pub fn dumpThread(tid: TID) void {
-    if (tid >= NUM_THREAD_ENTRIES or tid < 0) {
+    if (tid >= NUM_THREADS or tid < 0) {
         _ = printf("bad thread id: %d\n", tid);
         return;
     }
