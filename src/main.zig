@@ -25,8 +25,7 @@ pub const Forth = forty.Forth;
 
 const Serial = @import("serial.zig"); //TBD
 
-pub const schedule = @import("schedule.zig");
-pub const schedule2 = @import("schedule2.zig");
+pub const schedule = @import("schedule2.zig");
 pub const semaphore = @import("semaphore.zig");
 const heartbeat = @import("heartbeat.zig");
 
@@ -47,7 +46,6 @@ pub const std_options = struct {
         .{ .scope = .dwc_otg_usb_channel, .level = .info },
         .{ .scope = .usb, .level = .info },
         .{ .scope = .forty, .level = .debug },
-        .{ .scope = .schedule, .level = .debug },
     };
 };
 
@@ -100,7 +98,7 @@ export fn kernelInit(core_id: usize) noreturn {
 
     debug.init();
 
-    schedule2.init() catch |err| {
+    schedule.init() catch |err| {
         debug.kernelError("scheduler init error", err);
         arch.cpu.park();
     };
@@ -115,7 +113,7 @@ export fn kernelInit(core_id: usize) noreturn {
     kernel_allocator = os.heap.page_allocator;
 
     // configure this as thread 0
-    schedule2.becomeThread0(0x20000, 0x20000);
+    schedule.becomeThread0(0x20000, 0x20000);
 
     hardwareInit() catch |err| {
         debug.kernelError("hardware init error", err);
@@ -139,7 +137,7 @@ export fn kernelInit(core_id: usize) noreturn {
     arch.cpu.enable();
 
     // start main thread
-    _ = schedule2.spawn(thread1, "init", &.{}) catch |err| {
+    _ = schedule.spawn(thread1, "init", &.{}) catch |err| {
         debug.kernelError("thread create error", err);
     };
 
