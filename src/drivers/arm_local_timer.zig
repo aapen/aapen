@@ -114,11 +114,7 @@ pub const Timer = struct {
             .next_callback = nullHandler,
             .clock = clock,
             .intc = intc,
-            .schedule_lock = blk: {
-                var lock = TicketLock.init("scheduler", true);
-                lock.target_level = .IRQ;
-                break :blk lock;
-            },
+            .schedule_lock = TicketLock.initWithTargetLevel("scheduler", true, .FIQ),
         };
 
         intc.connect(self.irq, &self.irq_handler);
