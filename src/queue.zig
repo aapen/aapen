@@ -18,11 +18,11 @@ const std = @import("std");
 const root = @import("root");
 const printf = root.printf;
 
-const schedule2 = @import("schedule2.zig");
-const isBadTid = schedule2.isBadTid;
-const NO_TID = schedule2.NO_TID;
-const NUM_THREADS = schedule2.NUM_THREADS;
-const TID = schedule2.TID;
+const schedule = @import("schedule.zig");
+const isBadTid = schedule.isBadTid;
+const NO_TID = schedule.NO_TID;
+const NUM_THREADS = schedule.NUM_THREADS;
+const TID = schedule.TID;
 
 const semaphore = @import("semaphore.zig");
 const NUM_SEMAPHORES = semaphore.NUM_SEMAPHORES;

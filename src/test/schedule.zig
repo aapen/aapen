@@ -8,7 +8,7 @@ const expectError = helpers.expectError;
 
 const atomic = @import("../atomic.zig");
 const queue = @import("../queue.zig");
-const schedule = @import("../schedule2.zig");
+const schedule = @import("../schedule.zig");
 const time = @import("../time.zig");
 
 pub fn testBody() !void {

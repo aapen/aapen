@@ -15,8 +15,8 @@ const quetab = queue.quetab;
 const quehead = queue.quehead;
 const quetail = queue.quetail;
 
-const schedule2 = @import("../schedule2.zig");
-const TID = schedule2.TID;
+const schedule = @import("../schedule.zig");
+const TID = schedule.TID;
 
 pub fn testBody() !void {
     try allocate();
@@ -30,15 +30,15 @@ fn setupQueue() void {
 
 fn setupThreads() void {
     for (0..10) |i| {
-        schedule2.thread_table[i].state = schedule2.THREAD_READY;
+        schedule.thread_table[i].state = schedule.THREAD_READY;
     }
-    schedule2.thread_table[0].state = schedule2.THREAD_RUNNING;
+    schedule.thread_table[0].state = schedule.THREAD_RUNNING;
 }
 
 fn allocate() !void {
     const qid = try queue.allocate();
 
-    expect(qid >= schedule2.NUM_THREADS);
+    expect(qid >= schedule.NUM_THREADS);
 
     const qhead = quehead(qid);
     const qtail = quetail(qid);
@@ -79,7 +79,7 @@ fn enqueueAndDequeue() !void {
     }
 
     // queue is empty, so next dequeue should return -1
-    expectEqual(@as(TID, schedule2.NO_TID), try queue.dequeue(qid));
+    expectEqual(@as(TID, schedule.NO_TID), try queue.dequeue(qid));
 }
 
 fn priorityQueueing() !void {

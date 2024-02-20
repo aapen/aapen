@@ -7,7 +7,7 @@ const Forth = @import("forty/forth.zig").Forth;
 
 const atomic = @import("atomic.zig");
 const queue = @import("queue.zig");
-const schedule = @import("schedule2.zig");
+const schedule = @import("schedule.zig");
 
 pub const TICKS_PER_SECOND = root.HAL.timer_frequency_hz;
 pub const QUANTA_PER_SECOND = 1000;

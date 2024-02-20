@@ -25,7 +25,7 @@ pub const Forth = forty.Forth;
 
 const Serial = @import("serial.zig"); //TBD
 
-pub const schedule = @import("schedule2.zig");
+pub const schedule = @import("schedule.zig");
 pub const semaphore = @import("semaphore.zig");
 const heartbeat = @import("heartbeat.zig");
 

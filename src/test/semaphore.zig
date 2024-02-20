@@ -6,7 +6,7 @@ const expectError = helpers.expectError;
 const root = @import("root");
 const printf = root.printf;
 
-const schedule = @import("../schedule2.zig");
+const schedule = @import("../schedule.zig");
 
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;

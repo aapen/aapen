@@ -10,7 +10,7 @@ const queue = @import("queue.zig");
 const Key = queue.Key;
 const QID = queue.QID;
 
-const schedule = @import("schedule2.zig");
+const schedule = @import("schedule.zig");
 
 pub const Error = error{
     NoMoreSemaphores,
