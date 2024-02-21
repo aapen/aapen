@@ -33,7 +33,8 @@ pub fn init() void {
     quanta_since_boot = 0;
     seconds_since_boot = 0;
 
-    root.hal.system_timer.schedule(quantum, clockHandle);
+    root.hal.system_timer.setCallback(clockHandle);
+    root.hal.system_timer.reset(quantum);
 }
 
 pub fn secondsSinceBoot() u64 {
@@ -69,7 +70,9 @@ pub fn delayMillis(millis: u32) void {
 // ----------------------------------------------------------------------
 const quantum: u32 = TICKS_PER_SECOND / QUANTA_PER_SECOND;
 
-fn clockHandle(_: *HAL.Timer) u32 {
+fn clockHandle(timer: *HAL.Timer) void {
+    timer.reset(quantum);
+
     const now = atomic.atomicInc(&quanta_since_boot);
 
     if (now == QUANTA_PER_SECOND) {
@@ -83,6 +86,4 @@ fn clockHandle(_: *HAL.Timer) u32 {
     } else {
         schedule.reschedule();
     }
-
-    return quantum;
 }

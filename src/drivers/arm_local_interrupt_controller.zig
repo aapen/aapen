@@ -18,7 +18,28 @@ const TicketLock = synchronize.TicketLock;
 const Self = @This();
 
 pub fn defineModule(forth: *Forth) !void {
-    _ = forth;
+    try forth.defineNamespace(@This(), .{
+        .{ "irqEnabled1", "irq-enabled-1" },
+        .{ "irqEnabled2", "irq-enabled-2" },
+        .{ "irqEnabledBasic", "irq-enabled-basic" },
+        .{ "irqFlags", "irq-flags" },
+    });
+}
+
+pub fn irqEnabled1() u64 {
+    return root.hal.interrupt_controller.registers.enable_irqs_1;
+}
+
+pub fn irqEnabled2() u64 {
+    return root.hal.interrupt_controller.registers.enable_irqs_2;
+}
+
+pub fn irqEnabledBasic() u64 {
+    return root.hal.interrupt_controller.registers.enable_basic_irqs;
+}
+
+pub fn irqFlags() u64 {
+    return arch.cpu.irqFlagsRead();
 }
 
 // ----------------------------------------------------------------------

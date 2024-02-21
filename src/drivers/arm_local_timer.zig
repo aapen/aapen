@@ -9,9 +9,6 @@ const IrqHandler = InterruptController.IrqHandler;
 
 const Forth = @import("../forty/forth.zig").Forth;
 
-const synchronize = @import("../synchronize.zig");
-const TicketLock = synchronize.TicketLock;
-
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
         .{ "systemTicks", "ticks", "system clock ticks since boot" },
@@ -74,11 +71,7 @@ pub const Clock = struct {
     }
 };
 
-pub const TimerHandler = fn (*Timer) u32;
-
-fn nullHandler(_: *Timer) u32 {
-    return 0;
-}
+pub const TimerHandler = fn (*Timer) void;
 
 pub const Timer = struct {
     const TimerControlStatus = packed struct {
@@ -93,9 +86,9 @@ pub const Timer = struct {
     control: *volatile TimerControlStatus,
     compare: *volatile u32,
     match_reset: u4 = 0,
-    schedule_lock: TicketLock,
-    next_callback: *const TimerHandler,
-    irq_handler: IrqHandler = .{
+    next_callback: ?*const TimerHandler,
+    repeat_cycles: u32 = 0,
+    irq_handle: IrqHandler = .{
         .callback = irqHandle,
     },
 
@@ -111,13 +104,12 @@ pub const Timer = struct {
             .match_reset = @as(u4, 1) << timer_id,
             .control = @ptrFromInt(base),
             .compare = @ptrFromInt(base + 0x0c + (@as(u64, timer_id) * 4)),
-            .next_callback = nullHandler,
+            .next_callback = null,
             .clock = clock,
             .intc = intc,
-            .schedule_lock = TicketLock.initWithTargetLevel("scheduler", true, .FIQ),
         };
 
-        intc.connect(self.irq, &self.irq_handler);
+        intc.connect(self.irq, &self.irq_handle);
 
         return self;
     }
@@ -126,46 +118,29 @@ pub const Timer = struct {
         self.intc.disconnect(self.intc, self.irq);
     }
 
-    fn clearDetectedFlag(self: *Timer) void {
+    pub fn reset(self: *Timer, interval: u32) void {
         // writing to this register clears the detected flag where
         // there is a 1 bit. bit 0 -> timer 0, bit 1 -> timer 1, etc.
         self.control.match |= self.match_reset;
-    }
 
-    fn setNextTrigger(self: *Timer, in_ticks: u32) void {
         const tick = self.clock.ticksReadLow();
         // we ignore overflow because the counter will wrap around the
         // same way the compare value does.
-        const next_tick = @addWithOverflow(tick, in_ticks)[0];
+        const next_tick = @addWithOverflow(tick, interval)[0];
         self.compare.* = next_tick;
     }
 
-    pub fn schedule(self: *Timer, in_ticks: u32, handler: *const TimerHandler) void {
-        self.schedule_lock.acquire();
-        defer self.schedule_lock.release();
-
-        self.clearDetectedFlag();
-        self.setNextTrigger(in_ticks);
+    pub fn setCallback(self: *Timer, handler: *const TimerHandler) void {
         self.next_callback = handler;
         self.intc.enable(self.irq);
     }
 };
 
 pub fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
-    const timer: *Timer = @fieldParentPtr(Timer, "irq_handler", this);
+    const timer: *Timer = @fieldParentPtr(Timer, "irq_handle", this);
 
     // invoke callback
-    const next_delta = timer.next_callback(timer);
-    timer.clearDetectedFlag();
-
-    if (next_delta > 0) {
-        // repeating, reset the schedule
-        const tick = timer.clock.ticksReadLow();
-        const next_tick = @addWithOverflow(tick, next_delta)[0];
-        timer.compare.* = next_tick;
-    } else {
-        // else clear the callback and disable
-        timer.next_callback = nullHandler;
-        timer.intc.disable(timer.irq);
+    if (timer.next_callback) |cb| {
+        cb(timer);
     }
 }

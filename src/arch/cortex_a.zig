@@ -94,14 +94,16 @@ pub fn exceptionHandlerTableWrite(table_base: *anyopaque) void {
 // ----------------------------------------------------------------------
 
 pub fn enable() void {
-    fiqEnable();
-    irqEnable();
+    asm volatile (
+        \\ msr DAIFClr, #0b0011
+    );
 }
 
 pub fn disable() u32 {
     const ret = irqFlagsRead();
-    irqDisable();
-    fiqDisable();
+    asm volatile (
+        \\ msr DAIFSet, #0b0011
+    );
     return ret;
 }
 
@@ -116,41 +118,11 @@ pub fn irqFlagsRead() u32 {
     );
 }
 
-pub fn irqFlagsWrite(flags: u32) void {
+fn irqFlagsWrite(flags: u32) void {
     asm volatile (
         \\ msr daif, %[flags]
         :
         : [flags] "r" (flags),
-    );
-}
-
-pub fn fiqEnable() void {
-    asm volatile (
-        \\ msr DAIFClr, #0b0001
-    );
-}
-
-pub fn fiqDisable() void {
-    asm volatile (
-        \\ msr DAIFSet, #0b0001
-    );
-}
-
-pub fn irqEnable() void {
-    asm volatile (
-        \\ msr DAIFClr, #0b0010
-    );
-}
-
-pub fn irqDisable() void {
-    asm volatile (
-        \\ msr DAIFSet, #0b0010
-    );
-}
-
-pub fn irqAndFiqDisable() void {
-    asm volatile (
-        \\ msr DAIFSet, #0b0011
     );
 }
 
