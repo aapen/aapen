@@ -23,7 +23,7 @@ CORE_COUNT      = 4
 QEMU_EXEC       = qemu-system-aarch64 -semihosting -smp $(CORE_COUNT)
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
 #QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2711-rpi-400.dtb
-QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd 
+QEMU_DEBUG_ARGS = -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd
 QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd
 QEMU_UNIT_TEST_ARGS = -nographic
 
