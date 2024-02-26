@@ -113,8 +113,13 @@ fn pin(physical_id: u8, broadcom_id: u8) Pin {
     };
 }
 
-pins: [28]Pin = init: {
-    var initial_value: [28]Pin = undefined;
+pins: [64]Pin = init: {
+    var initial_value: [64]Pin = undefined;
+
+    for (0..64) |i| {
+        initial_value[i] = pin(255, @intCast(i));
+    }
+
     initial_value[2] = pin(3, 2);
     initial_value[3] = pin(5, 3);
     initial_value[4] = pin(7, 4);

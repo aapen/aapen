@@ -25,6 +25,7 @@ const pl011 = @import("../drivers/pl011.zig");
 const bcm_dma = @import("../drivers/bcm_dma.zig");
 const bcm_gpio = @import("../drivers/bcm_gpio.zig");
 const bcm_i2c = @import("../drivers/bcm_i2c.zig");
+const bcm_emmc = @import("../drivers/bcm_emmc.zig");
 const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
 const bcm_board_info = @import("../drivers/bcm_board_info.zig");
 const bcm_peripheral_clocks = @import("../drivers/bcm_peripheral_clocks.zig");
@@ -41,6 +42,7 @@ pub const DMA = bcm_dma;
 pub const InterruptController = arm_local_interrupt;
 pub const GPIO = bcm_gpio;
 pub const I2C = bcm_i2c;
+pub const EMMC = bcm_emmc;
 pub const Mailbox = bcm_mailbox;
 pub const PeripheralClockController = bcm_peripheral_clocks.PeripheralClockController;
 pub const PowerController = bcm_power;
@@ -52,6 +54,7 @@ pub const USBHCI = dwc_otg_usb;
 pub const VideoController = bcm_video_controller;
 
 pub const delayMillis = arm_local_timer.delayMillis;
+pub const delayMicros = arm_local_timer.delayMicros;
 
 const Self = @This();
 
@@ -61,6 +64,7 @@ dma: DMA,
 interrupt_controller: *InterruptController,
 gpio: *GPIO,
 i2c: *I2C,
+emmc: *EMMC,
 mailbox: Mailbox,
 peripheral_clock_controller: PeripheralClockController,
 power_controller: PowerController,
@@ -112,8 +116,10 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.system_timer = self.timer[1];
 
-    //self.i2c = try I2C.init(allocator, peripheral_base + 0x205000, self.gpio, self.interrupt_controller);
     self.i2c = try I2C.init(allocator, peripheral_base + 0x804000, self.gpio, self.interrupt_controller);
+    //self.emmc = try EMMC.init(allocator, 0x3f202000, self.gpio, self.interrupt_controller, &self.peripheral_clock_controller);
+    self.emmc = try EMMC.init(allocator, peripheral_base + 0x00300000, self.gpio, self.interrupt_controller, &self.peripheral_clock_controller);
+    //self.emmc = try EMMC.init(allocator, peripheral_base + 0x00202000, self.gpio, self.interrupt_controller, &self.peripheral_clock_controller);
     self.uart.initializeUart();
 
     return self;
@@ -131,6 +137,7 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
     try bcm_dma.defineModule(forth);
     try bcm_gpio.defineModule(forth);
     try bcm_i2c.defineModule(forth);
+    try bcm_emmc.defineModule(forth);
     try bcm_mailbox.defineModule(forth);
     try bcm_peripheral_clocks.defineModule(forth);
     try bcm_power.defineModule(forth);
@@ -149,7 +156,7 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
 /// itself, from Broadcom, or from ARM. (It seems to be in the
 /// bootcode.bin blob though, so maybe it's from Raspberry Pi.)
 pub fn releaseSecondaryCores(vector: u64) void {
-    for(1..4) |i| {
+    for (1..4) |i| {
         coreVectorWrite(i, vector);
     }
     arch.cpu.barriers.barrierMemoryWrite();

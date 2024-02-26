@@ -665,5 +665,8 @@ mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 "READY" s. cr
 cr cr
 
+
+: doit hal hal.emmc + @ emmc-enable ;
+
 "Forty REPL" s. cr cr
 repl

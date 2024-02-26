@@ -70,6 +70,8 @@ const Registers = extern struct {
     clock_stretch: u32,
 };
 
+const DEFAULT_FREQ = 100_000;
+
 registers: *volatile Registers,
 interrupt_controller: *InterruptController,
 gpio: *GPIO,
@@ -99,15 +101,14 @@ pub fn enable(self: *Self, i2c_freq: u64) void {
     self.gpio.selectFunction(2, GPIO.FunctionSelect.Alt0);
     self.gpio.selectFunction(3, GPIO.FunctionSelect.Alt0);
 
-    //self.registers.div = time.frequency() / DefaultSpeed;
-    //self.registers.div = 15000;
-    //self.registers.div = 380 * 5; // Works! =  1900
-    const divisor: u64 = time.frequency() / i2c_freq * 10;
+    var desired_freq = i2c_freq;
+    if (i2c_freq == 0) {
+        desired_freq = DEFAULT_FREQ;
+    }
+
+    const divisor: u64 = time.frequency() / desired_freq * 10;
     self.registers.div = @truncate(divisor);
-    //self.registers.div = @truncate(divisor);
-    _ = root.printf("div reg %d\n", self.registers.div);
-    _ = root.printf("speed feq %d def speed %d div %d\n", time.frequency(), DefaultSpeed, time.frequency() / DefaultSpeed);
-    _ = root.printf("registers address %x\n", self.registers);
+    _ = root.printf("speed time.freq %d desired freq %d div %d\n", time.frequency(), desired_freq, divisor);
 }
 
 pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
