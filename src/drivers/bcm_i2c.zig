@@ -11,8 +11,6 @@ const InterruptController = root.HAL.InterruptController;
 const IrqHandler = InterruptController.IrqHandler;
 const IrqId = InterruptController.IrqId;
 
-const DefaultSpeed: u32 = 100_000;
-
 const Self = @This();
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineStruct("i2c.status", Status, .{
@@ -70,7 +68,7 @@ const Registers = extern struct {
     clock_stretch: u32,
 };
 
-const DEFAULT_FREQ = 100_000;
+const DefaultFrequency: u32 = 100_000;
 
 registers: *volatile Registers,
 interrupt_controller: *InterruptController,
@@ -101,19 +99,13 @@ pub fn enable(self: *Self, i2c_freq: u64) void {
     self.gpio.selectFunction(2, GPIO.FunctionSelect.Alt0);
     self.gpio.selectFunction(3, GPIO.FunctionSelect.Alt0);
 
-    var desired_freq = i2c_freq;
-    if (i2c_freq == 0) {
-        desired_freq = DEFAULT_FREQ;
-    }
-
+    const desired_freq = if (i2c_freq == 0) DefaultFrequency else i2c_freq;
     const divisor: u64 = time.frequency() / desired_freq * 10;
     self.registers.div = @truncate(divisor);
-    _ = root.printf("speed time.freq %d desired freq %d div %d\n", time.frequency(), desired_freq, divisor);
 }
 
 pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
     // Start the transfer.
-    _ = root.printf("send target addr %x %d count %d\n", target_address, target_address, count);
 
     self.registers.target_address = target_address;
     self.registers.control = Control.Clear;
@@ -124,30 +116,25 @@ pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
 
     var i: u32 = 0;
 
-    //_ = root.printf("filling up buffer i: %d count %d\n", i, count);
-
     while ((i < count) and (i < 16)) {
-        //_ = root.printf("inside fill loop i: %d count %d\n", i, count);
         self.registers.fifo = buffer[i];
         i += 1;
     }
-    //_ = root.printf("after filling up buffer i: %d count %d\n", i, count);
 
     // Start the xfer.
 
     self.registers.control = Control.Enable | Control.StartXfer;
 
-    while ((self.registers.status & StatusBits.Done) != 0) {
+    while ((self.registers.status & StatusBits.Done) == 0) {
         while ((i < count) and (self.registers.status & StatusBits.FifoCanAccept) != 0) {
-            _ = root.printf("doing the rest of the xfer i: %d count %d\n", i, count);
             self.registers.fifo = buffer[i];
             i += 1;
         }
+        spinDelay(10);
     }
 
     // Interpret final status.
     const status = self.registers.status;
-    _ = root.printf("send status %x\n", status);
 
     self.registers.status = StatusBits.Done;
 
@@ -156,7 +143,6 @@ pub fn send(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
     } else if (status & StatusBits.ClockTimeout != 0) {
         return Status.TimeOut;
     } else if (i < count) {
-        //_ = root.printf("Data loss %d %d\n", i, count);
         return Status.DataLoss;
     }
     return Status.Success;
@@ -173,21 +159,15 @@ pub fn receive(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
 
     var i: u64 = 0;
 
-    while ((self.registers.status & StatusBits.Done) != 0) {
+    while ((i < count) and (self.registers.status & StatusBits.Done) == 0) {
         while ((self.registers.status & StatusBits.FifoNotEmpty) != 0) {
             buffer[i] = @truncate(self.registers.fifo);
             i += 1;
         }
     }
 
-    while ((i < count) and ((self.registers.status & StatusBits.FifoNotEmpty) != 0)) {
-        buffer[i] = @truncate(self.registers.fifo);
-        i += 1;
-    }
-
     // Interpret final status.
     const status = self.registers.status;
-    _ = root.printf("recv status %x\n", status);
     self.registers.status = StatusBits.Done;
 
     if (status & StatusBits.AckError != 0) {

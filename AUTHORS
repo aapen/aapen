@@ -1,7 +1,7 @@
 Porting to Raspberry Pi 3 and converting to a Zig kernel + high level Forth:
 
 Michael Nygard <mtnygard@gmail.com>
-Russ Olsen
+Russ Olsen <russ@russolsen.com>
 
 Bare-metal Raspberry Pi port by:
 
