@@ -409,7 +409,7 @@ const CONTEXT_WORDS: usize = 24;
 const FIQ_MASKED: u64 = 1 << 6;
 const IRQ_MASKED: u64 = 1 << 7;
 const NEW_THREAD_FRAME_POINTER: u64 = 0;
-const NEW_THREAD_DAIF: u64 = FIQ_MASKED | IRQ_MASKED;
+const NEW_THREAD_DAIF: u64 = FIQ_MASKED;
 const NEW_THREAD_NZCV: u64 = 0;
 
 const null_thread_dummy_context: [CONTEXT_WORDS]u64 = undefined;
