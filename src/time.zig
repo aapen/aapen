@@ -23,7 +23,7 @@ pub var seconds_since_boot: u64 = 0;
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
         .{ "uptime", "uptime", "seconds since boot" },
-        .{ "quantaSinceBoot", "quptime", "interrupt quanta since boot" },
+        .{ "quantaInSecond", "quptime", "interrupt quanta, range is 0 to 999" },
     });
 }
 
@@ -42,7 +42,7 @@ pub fn secondsSinceBoot() u64 {
     return atomic.atomicFetch(&seconds_since_boot);
 }
 
-pub fn quantaSinceBoot() u64 {
+pub fn quantaInSecond() u64 {
     return atomic.atomicFetch(&quanta_since_boot);
 }
 
