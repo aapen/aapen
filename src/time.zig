@@ -12,6 +12,7 @@ const schedule = @import("schedule.zig");
 pub const TICKS_PER_SECOND = root.HAL.timer_frequency_hz;
 pub const TICKS_PER_MILLI = TICKS_PER_SECOND / 1_000_000;
 pub const QUANTA_PER_SECOND = 1000;
+pub const QUANTA_PER_MILLI = 1;
 
 pub var quanta_since_boot: u64 = 0;
 pub var seconds_since_boot: u64 = 0;

@@ -149,6 +149,10 @@ export fn kernelInit(core_id: usize) noreturn {
 }
 
 fn startForty(_: *anyopaque) void {
+    _ = schedule.spawn(heartbeat.heartbeat, "hb", &.{}) catch |err| {
+        debug.kernelError("heartbeat init error", err);
+    };
+
     if (interpreter.init(kernel_allocator, main_console, char_buffer)) {
         debug.kernelMessage("Forth init");
     } else |err| {
