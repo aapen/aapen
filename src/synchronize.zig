@@ -54,8 +54,9 @@ pub const TicketLock = struct {
         while (atomic.atomicFetch(&lock.now_serving) != my_ticket) {
             cpu.restore(im);
             cpu.wfe();
-            im = cpu.disable();
+            _ = cpu.disable();
         }
+        cpu.restore(im);
     }
 
     pub fn release(lock: *TicketLock) void {
