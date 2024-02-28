@@ -497,14 +497,15 @@ pub fn enable(self: *Self) bool {
     //const CMD_SEND_CID: u32 = 0x02010000;
     //const CMD_SEND_CID: u32 = 0x01000000;
     //const CMD_SEND_CID: u32 = 0x02010000;
-    _ = printf("\nsending if cond!\n");
-    if (!self.sd_cmd(CMD_SEND_IF_COND, 0x000001AA)) {
-        _ = printf("if cond failed resetting!\n");
-        _ = self.card_reset();
-        _ = printf("done with reset!\n");
-    } else {
-        self.dump_response();
-    }
+
+    //    _ = printf("\nsending if cond!\n");
+    //    if (!self.sd_cmd(CMD_SEND_IF_COND, 0x000001AA)) {
+    //        _ = printf("if cond failed resetting!\n");
+    //        _ = self.card_reset();
+    //        _ = printf("done with reset!\n");
+    //    } else {
+    //        self.dump_response();
+    //    }
 
     const CMD_SEND_OP_COND = 0x29020000;
     const ACMD41_ARG_HC: u32 = 0x51ff8000;
@@ -512,6 +513,7 @@ pub fn enable(self: *Self) bool {
     const CMD_APP_CMD: u32 = 0x37000000;
 
     for (0..6) |_| {
+        _ = printf("\n\n");
         time.delayMillis(1);
         _ = self.sd_cmd(CMD_APP_CMD, 0);
         _ = self.sd_cmd(CMD_SEND_OP_COND, ACMD41_ARG_HC);
@@ -592,6 +594,7 @@ fn wait_for_ready(self: *Self) bool {
     const SR_CMD_INHIBIT: u32 = 0x00000001;
     //const SR_APP_CMD          :u32 = 0x00000020;
 
+    _ = printf("emmc: waiting for ready\n");
     var count: u32 = 100000;
     while (count > 0) {
         if (self.registers.status & (SR_CMD_INHIBIT | SR_DAT_INHIBIT) == 0) {
@@ -691,11 +694,7 @@ fn dump_response(self: *Self) void {
 }
 
 fn sd_cmd(self: *Self, code: u32, arg: u32) bool {
-    const CMD_NEED_APP: u32 = 0x80000000;
-
-    if ((code & CMD_NEED_APP) != 0) {
-        _ = printf("emmc: WARNING CMD NEED APP\n");
-    }
+    _ = printf("sd_cmd: code %x arg %x\n", code, arg);
 
     //var r: u32 =0;
 
