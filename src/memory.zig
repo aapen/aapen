@@ -1,5 +1,8 @@
 const printf = @import("root").printf;
 
+const arch = @import("architecture.zig");
+const cpu = arch.cpu;
+
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
@@ -31,6 +34,9 @@ pub fn get(bytes: usize) !u64 {
     }
 
     const alloc_size = roundmb(bytes);
+
+    const im = cpu.disable();
+    defer cpu.restore(im);
 
     freelist_lock.acquire();
     defer freelist_lock.release();
@@ -80,6 +86,9 @@ pub fn free(memptr: u64, bytes: usize) !void {
 
     var block: *Memblock = @ptrFromInt(memptr);
     const free_size = roundmb(bytes);
+
+    const im = cpu.disable();
+    defer cpu.restore(im);
 
     freelist_lock.acquire();
     defer freelist_lock.release();
@@ -139,6 +148,9 @@ var freelist_lock: TicketLock = TicketLock.initWithTargetLevel("memory", true, .
 
 /// initialize freelist
 pub fn init(start_addr: u64, end_addr: u64) void {
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
     freelist_lock.acquire();
     defer freelist_lock.release();
 
