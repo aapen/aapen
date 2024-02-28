@@ -61,14 +61,15 @@ pub const IrqId = enum(u6) {
 };
 
 const IrqRouting = struct {
-    enable_mask_basic: u32 = 0,
-    enable_mask_extended: u64 = 0,
-    handler: *IrqHandler = undefined,
+    enable_mask_basic: u32,
+    enable_mask_extended: u64,
+    handler: ?*IrqHandler,
 
     fn mk(en: u32, enx: u64) IrqRouting {
         return .{
             .enable_mask_basic = en,
             .enable_mask_extended = enx,
+            .handler = null,
         };
     }
 };
@@ -106,21 +107,13 @@ routing_lock: TicketLock = TicketLock.initWithTargetLevel("irq routing", true, .
 routing: [max_irq_id]IrqRouting = undefined,
 registers: *volatile Registers,
 
-fn routeAdd(self: *Self, id: IrqId, en: u32, enx: u64) void {
-    self.routing_lock.acquire();
-    defer self.routing_lock.release();
-
-    const index = @intFromEnum(id);
-    self.routing[index] = IrqRouting.mk(en, enx);
-}
-
 fn routeAddFromId(self: *Self, id: IrqId) void {
     self.routing_lock.acquire();
     defer self.routing_lock.release();
 
     const index = @intFromEnum(id);
     const enable_extended = @as(u64, 1) << index;
-    self.routeAdd(id, 0, enable_extended);
+    self.routing[index] = IrqRouting.mk(0, enable_extended);
 }
 
 pub fn init(allocator: Allocator, register_base: u64) !*Self {
@@ -128,20 +121,20 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
 
     self.registers = @ptrFromInt(register_base);
 
-    self.routing_lock.acquire();
-    defer self.routing_lock.release();
+    for (0..max_irq_id) |id| {
+        self.routing[id] = IrqRouting.mk(0, id);
+    }
 
     self.routeAddFromId(.TIMER_0);
     self.routeAddFromId(.TIMER_1);
     self.routeAddFromId(.TIMER_2);
     self.routeAddFromId(.TIMER_3);
     self.routeAddFromId(.USB_HCI);
-    self.routeAddFromId(.UART);
-
     self.routeAddFromId(.GPIO_0);
     self.routeAddFromId(.GPIO_1);
     self.routeAddFromId(.GPIO_2);
     self.routeAddFromId(.GPIO_3);
+    self.routeAddFromId(.UART);
 
     return self;
 }
@@ -204,10 +197,10 @@ fn invokeHandler(self: *Self, id: IrqId) void {
     const index = @intFromEnum(id);
 
     self.routing_lock.acquire();
-    const h = self.routing[index].handler;
+    const route = &self.routing[index];
     self.routing_lock.release();
 
-    if (h != undefined) {
+    if (route.handler) |h| {
         h.invoke(self, id);
     }
 }
