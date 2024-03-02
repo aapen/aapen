@@ -123,6 +123,7 @@ pub const SpawnOptions = struct {
     stack_size: u64 = INITIAL_STACK_SIZE,
     priority: Key = DEFAULT_PRIORITY,
     name: []const u8,
+    schedule: bool = true,
 };
 
 pub const ThreadFunction = *const fn (*anyopaque) void;
@@ -140,7 +141,7 @@ pub fn spawnWithOptions(proc: ThreadFunction, args: *anyopaque, options: *const 
         options.name,
         @intFromPtr(args),
     );
-    try ready(tid, true);
+    try ready(tid, options.schedule);
     return tid;
 }
 
