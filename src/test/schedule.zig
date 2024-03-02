@@ -72,5 +72,5 @@ fn threadSleep() !void {
 
     _ = printf("threadSleep: start = %d, end = %d (slept for %d)", start_sleep, end_sleep, (end_sleep - start_sleep));
 
-    expect(end_sleep >= (start_sleep + 1000));
+    expect(end_sleep >= (start_sleep + 995) and end_sleep <= (start_sleep + 1005));
 }
