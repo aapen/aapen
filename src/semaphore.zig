@@ -136,7 +136,7 @@ pub fn signalN(sid: SID, cnt: SemaphoreCount) !void {
     for (0..cnt) |_| {
         sem.count += 1;
         if (sem.count <= 0) {
-            schedule.read(queue.dequeue(sem.queue), false);
+            schedule.ready(queue.dequeue(sem.queue), false);
         }
     }
 

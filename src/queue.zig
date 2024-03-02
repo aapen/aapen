@@ -250,14 +250,6 @@ pub inline fn firstId(q: QID) QID {
 // ----------------------------------------------------------------------
 // Test and debug support
 // ----------------------------------------------------------------------
-pub fn reinit() void {
-    // reinitialize between test cases
-    for (&queue_table) |*qe| {
-        qe.* = QueueEntry.init();
-    }
-
-    nextQid = NUM_THREADS;
-}
 
 pub fn dumpQ(qid: QID) void {
     if (isBadQid(qid)) {
