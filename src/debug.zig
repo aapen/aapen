@@ -18,7 +18,8 @@ const string = @import("forty/string.zig");
 
 const StackTrace = std.builtin.StackTrace;
 
-pub fn panic(msg: []const u8, _: ?*StackTrace, return_addr: ?usize) noreturn {
+pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?usize) noreturn {
+    _ = error_return_trace;
     @setCold(true);
 
     if (return_addr) |ret| {
