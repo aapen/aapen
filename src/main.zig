@@ -87,7 +87,7 @@ else
 pub const kernelExit = if (std.mem.eql(u8, config.testname, ""))
     powerDown
 else
-    @import("test/all.zig").exitSuccess;
+    @import("test/all.zig").exit;
 
 export fn kernelInit(core_id: usize) noreturn {
     arch.cpu.init(core_id);

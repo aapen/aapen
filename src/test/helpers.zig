@@ -20,7 +20,11 @@ pub fn printTestResult() void {
 
 pub fn exitWithTestResult() noreturn {
     printTestResult();
-    exit(if (any_test_error) 255 else 0);
+    if (any_test_error) {
+        exit(255);
+    } else {
+        exit(0);
+    }
     unreachable;
 }
 

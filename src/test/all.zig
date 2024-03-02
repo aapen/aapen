@@ -2,9 +2,8 @@ const root = @import("root");
 const printf = root.printf;
 
 const qemu = @import("qemu.zig");
-pub const exitSuccess = qemu.exitSuccess;
-
 const helpers = @import("helpers.zig");
+pub const exit = helpers.exitWithTestResult;
 
 pub const atomic = @import("atomic.zig").testBody;
 pub const bcd = @import("bcd.zig").testBody;
@@ -30,10 +29,9 @@ pub fn locateTest(comptime testname: []const u8) fn (*anyopaque) void {
             _ = printf("=== %s\n", testname.ptr);
 
             test_fn() catch |err| {
+                helpers.expect(false);
                 _ = printf("%s\n", @errorName(err).ptr);
             };
-
-            helpers.printTestResult();
         }
     };
     return Runner.execute;
