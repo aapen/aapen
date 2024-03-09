@@ -111,6 +111,15 @@ fn unhandledExceptionDisplay(from_addr: ?u64, entry_type: u64, esr: u64, ec: u6)
     } else {
         _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: unknown\n  EC: 0b%06b (%s)\n", entry_type, esr, @as(u8, ec), reg_esr.errorCodeName(ec).ptr);
     }
+
+    // If we are in a test, exit on the first unhandled exception
+    const config = @import("config");
+
+    if (!(comptime std.mem.eql(u8, config.testname, ""))) {
+        const helpers = @import("../../test/helpers.zig");
+        helpers.expect(false);
+        helpers.exitWithTestResult();
+    }
 }
 
 fn stackTraceDisplay(from_addr: u64) void {
