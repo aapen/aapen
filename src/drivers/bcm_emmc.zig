@@ -44,31 +44,12 @@ const Device = struct {
 };
 
 const RespType = struct {
-    const RTInvalid: u32 = 0xbeef;
+    const RTInvalid: u32 = 0xface;
 
     const RTNone: u32 = 0;
     const RT136: u32 = 1;
     const RT48: u32 = 2;
     const RT48Busy: u32 = 3;
-};
-
-const CmdType = struct {
-    const CTGoIdle: u32 = 0;
-    const CTSendCide: u32 = 2;
-    const CTSendRelativeAddr: u32 = 3;
-    const CTIOSetOpCond: u32 = 5;
-    const CTSelectCard: u32 = 7;
-    const CTSendIfCond: u32 = 8;
-    const CTSetBlockLen: u32 = 16;
-    const CTReadBlock: u32 = 17;
-    const CTReadMultiple: u32 = 18;
-    const CTWriteBlock: u32 = 24;
-    const CTWriteMultiple: u32 = 25;
-    const CTOcrCheck: u32 = 41;
-    const CTSendSCR: u32 = 51;
-    const CTApp: u32 = 55;
-
-    const CTInvalid: u32 = 255;
 };
 
 // TODO should some of these be bools?
@@ -123,72 +104,32 @@ const Cmd = struct {
             .code = code,
         };
     }
+
+    pub inline fn get_index(self: *const Cmd) u32 {
+        return @as(u32, self.code);
+    }
 };
 
 const ReservedCmd = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, 1, 1, 1, 3, 0xF);
 
 const InvalidCmd = ReservedCmd;
 
-const Commands: [56]Cmd = .{
-    Cmd.init(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-    ReservedCmd,
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT136, 0, 1, 0, 0, 0, 2),
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 3),
-    Cmd.init(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4),
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT136, 0, 0, 0, 0, 0, 5),
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 6),
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48Busy, 0, 1, 0, 0, 0, 7),
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 8),
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT136, 0, 1, 0, 0, 0, 9),
+const CTGoIdle = Cmd.init(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+const CTSendCide = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT136, 0, 1, 0, 0, 0, 2);
+const CTSendRelativeAddr = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 3);
+const CTIOSetOpCond = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT136, 0, 0, 0, 0, 0, 5);
+const CTSelectCard = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48Busy, 0, 1, 0, 0, 0, 7);
+const CTSendIfCond = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 8);
+const CTSetBlockLen = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 16);
+const CTReadBlock = Cmd.init(0, 0, 0, 1, 0, 0, RespType.RT48, 0, 1, 0, 1, 0, 17);
+const CTReadMultiple = Cmd.init(0, 1, 1, 1, 1, 0, RespType.RT48, 0, 1, 0, 1, 0, 18);
+const CTOcrCheck = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 0, 0, 0, 0, 41);
+const CTSendSCR = Cmd.init(0, 0, 0, 1, 0, 0, RespType.RT48, 0, 1, 0, 1, 0, 51);
+const CTApp = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 55);
 
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 16),
-    Cmd.init(0, 0, 0, 1, 0, 0, RespType.RT48, 0, 1, 0, 1, 0, 17),
-    Cmd.init(0, 1, 1, 1, 1, 0, RespType.RT48, 0, 1, 0, 1, 0, 18),
-    ReservedCmd,
-    ReservedCmd,
-
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 0, 0, 0, 0, 41),
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    Cmd.init(0, 0, 0, 1, 0, 0, RespType.RT48, 0, 1, 0, 1, 0, 51),
-    ReservedCmd,
-    ReservedCmd,
-    ReservedCmd,
-    Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 55),
-};
+// TBD This seems unlikely.
+const CTWriteBlock = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, 1, 1, 1, 3, 24);
+const CTWriteMultiple = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, 1, 1, 1, 3, 25);
 
 const Error = struct {
     const SDECommandTimeout: u32 = 0;
@@ -248,6 +189,7 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(Self, .{
         .{ "enable", "emmc-enable" },
         .{ "set_scr", "emmc-set-scr" },
+        .{ "emmc_read", "read" },
     });
 }
 
@@ -282,10 +224,12 @@ inline fn is_zero(value: u32) bool {
 fn wait_reg_mask(r: *volatile u32, mask: u32, set: bool, timeout: u32) bool {
     for (0..timeout) |_| {
         if (is_not_zero(r.* & mask) == set) {
+            _ = printf("wait reg mask returns true!\n");
             return true;
         }
         delayMillis(1);
     }
+    _ = printf("wait reg mask returns FALSE!\n");
     return false;
 }
 
@@ -300,52 +244,53 @@ fn set_last_error(self: *Self, intr_val: u32) void {
     self.device.last_interrupt = intr_val;
 }
 
-//fn do_data_transfer(self: *Self, cmd: Cmd) bool {
-//    var wrIrpt:u32 = 0;
-//    var write = false;
-//
-//    if (cmd.direction) {
-//        wrIrpt = 1 << 5;
-//    } else {
-//        wrIrpt = 1 << 4;
-//        write = true;
-//    }
-//
-//    //u32 *data = (u32 *)device.buffer;
-//    var data = self.device.buffer;
-//
-//    var block: u32 = 0;
-//    while(block < self.device.transfer_blocks) {
-//        self.wait_reg_mask(&self.registers->int_flags, wrIrpt | 0x8000, true, 2000);
-//        intr_val = self.registers.int_flags;
-//        self.registers.int_flags = wrIrpt | 0x8000;
-//
-//        if ((intr_val & (0xffff0000 | wrIrpt)) != wrIrpt) {
-//            set_last_error(intr_val);
-//            return false;
-//        }
-//
-//
-//        var length: u32 = device.block_size;
-//
-//        if (write) {
-//            while(length > 0) {
-//                self.registers.data = *data++;
-//                length -= 4;
-//            }
-//            for (; length > 0; length -= 4) {
-//                self.registers->data = *data++;
-//            }
-//        } else {
-//            for (; length > 0; length -= 4) {
-//                *data++ = self.registers->data;
-//            }
-//        }
-//        block += 1;
-//    }
-//
-//    return true;
-//}
+fn do_data_transfer(self: *Self, cmd: Cmd) bool {
+    var wrIrpt: u32 = 0;
+    var write = false;
+
+    if (is_not_zero(cmd.direction)) {
+        wrIrpt = 1 << 5;
+    } else {
+        wrIrpt = 1 << 4;
+        write = true;
+    }
+
+    //u32 *data = (u32 *)device.buffer;
+    var data: [*]u32 = self.device.buffer;
+
+    var block: u32 = 0;
+    while (block < self.device.transfer_blocks) {
+        _ = wait_reg_mask(&self.registers.int_flags, wrIrpt | 0x8000, true, 2000);
+        var intr_val = self.registers.int_flags;
+        self.registers.int_flags = wrIrpt | 0x8000;
+
+        if ((intr_val & (0xffff0000 | wrIrpt)) != wrIrpt) {
+            self.set_last_error(intr_val);
+            return false;
+        }
+
+        var length: u32 = self.device.block_size;
+
+        if (write) {
+            while (length > 0) {
+                _ = printf("set scr, writing data %x!\n", data[0]);
+                self.registers.data = data[0];
+                data += 1;
+                length -= 4;
+            }
+        } else {
+            while (length > 0) {
+                data[0] = self.registers.data;
+                _ = printf("set scr, read data %x!\n", data[0]);
+                data += 1;
+                length -= 4;
+            }
+        }
+        block += 1;
+    }
+
+    return true;
+}
 
 fn emmc_issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
     self.device.last_command_value = cmd.code;
@@ -409,7 +354,8 @@ fn emmc_issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
 
     if (cmd.is_data == 1) {
         _ = printf("*** cmd %d is a data command!\n", cmd.code);
-        //    self.do_data_transfer(cmd);
+        const xfer_result = self.do_data_transfer(cmd);
+        _ = printf("xfer result: %d\n", xfer_result);
     }
 
     if ((cmd.response_type == RespType.RT48Busy) or (cmd.is_data == 1)) {
@@ -441,20 +387,20 @@ fn get_cmd_id(_: *Self, code: u32) u32 {
     return code >> 24;
 }
 
-fn emmc_command(self: *Self, cmd_index: u32, arg: u32, timeout: u32) bool {
+fn emmc_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
     //if (is_not_zero(cmd_code & 0x80000000)) {
     //    //The app command flag is set, shoudl use emmc_app_command instead.
     //    _ = printf("EMMC_ERR: COMMAND ERROR NOT APP\n");
     //    return false;
     //}
 
-    self.device.last_command = Commands[cmd_index];
-    _ = printf("*** emmc_command, sending command index %d %x\n", cmd_index, self.device.last_command.code);
+    self.device.last_command = cmd;
+    _ = printf("*** emmc_command, sending command index %d %x\n", cmd.get_index(), self.device.last_command.code);
     _ = printf("*** emmc_command, code %x\n", self.get_cmd_id(self.device.last_command.code));
 
     _ = printf("Response code: %d\n", self.get_resp_flag(self.device.last_command.code));
 
-    //if (self.device.last_command.cmd_type == CmdType.Invalid) {
+    //if (self.device.last_command.cmd_type == Invalid) {
     //    _ = printf("EMMC_ERR: INVALID COMMAND!\n");
     //    return false;
     //}
@@ -482,14 +428,14 @@ fn reset_command(self: *Self) bool {
     return false;
 }
 
-fn app_command(self: *Self, cmd_index: u32, arg: u32, timeout: u32) bool {
-    _ = printf("app_command: %x\n", cmd_index);
-    if (Commands[cmd_index].index >= 60) {
+fn app_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
+    _ = printf("app_command: %x\n", cmd.get_index());
+    if (cmd.index >= 60) {
         _ = printf("EMMC_ERR: INVALID APP COMMAND\n");
         return false;
     }
 
-    self.device.last_command = Commands[CmdType.CTApp];
+    self.device.last_command = CTApp;
 
     var rca: u32 = 0;
 
@@ -498,7 +444,7 @@ fn app_command(self: *Self, cmd_index: u32, arg: u32, timeout: u32) bool {
     }
 
     if (self.emmc_issue_command(self.device.last_command, rca, 2000)) {
-        self.device.last_command = Commands[cmd_index];
+        self.device.last_command = cmd;
         return self.emmc_issue_command(self.device.last_command, arg, timeout);
     }
 
@@ -510,7 +456,7 @@ fn check_v2_card(self: *Self) bool {
     var v2Card: bool = false;
 
     _ = printf("**sending ifcond cmd\n");
-    if (!self.emmc_command(CmdType.CTSendIfCond, 0x1AA, 200)) {
+    if (!self.emmc_command(CTSendIfCond, 0x1AA, 200)) {
         _ = printf("ifcond cmd did not work\n");
         if (self.device.last_error == 0) {
             //timeout.
@@ -543,7 +489,7 @@ fn check_v2_card(self: *Self) bool {
 fn check_usable_card(self: *Self) bool {
     _ = printf("checking usable card\n");
     _ = printf("sending OPCOND\n");
-    if (!self.emmc_command(CmdType.CTIOSetOpCond, 0, 1000)) {
+    if (!self.emmc_command(CTIOSetOpCond, 0, 1000)) {
         if (self.device.last_error == 0) {
             //timeout.
             _ = printf("EMMC_ERR: CTIOSetOpCond Timeout\n");
@@ -574,7 +520,7 @@ fn check_sdhc_support(self: *Self, v2_card: bool) bool {
             v2_flags |= (1 << 30); //SDHC Support
         }
 
-        if (!self.app_command(CmdType.CTOcrCheck, 0x00FF8000 | v2_flags, 2000)) {
+        if (!self.app_command(CTOcrCheck, 0x00FF8000 | v2_flags, 2000)) {
             _ = printf("EMMC_ERR: APP CMD 41 FAILED 2nd\n");
             return false;
         }
@@ -597,7 +543,7 @@ fn check_ocr(self: *Self) bool {
 
     for (0..5) |i| {
         _ = printf("\n checkin ocr, loop %d\n", i);
-        if (!self.app_command(CmdType.CTOcrCheck, 0, 2000)) {
+        if (!self.app_command(CTOcrCheck, 0, 2000)) {
             _ = printf("EMMC_WARN: APP CMD OCR CHECK TRY %d FAILED\n", i + 1);
             passed = false;
         } else {
@@ -624,14 +570,14 @@ fn check_ocr(self: *Self) bool {
 }
 
 fn check_rca(self: *Self) bool {
-    if (!self.emmc_command(CmdType.CTSendCide, 0, 2000)) {
+    if (!self.emmc_command(CTSendCide, 0, 2000)) {
         _ = printf("EMMC_ERR: Failed to send CID\n");
         return false;
     }
 
     _ = printf("EMMC_DEBUG: CARD ID: %X.%X.%X.%X\n", self.device.last_response[0], self.device.last_response[1], self.device.last_response[2], self.device.last_response[3]);
 
-    if (!self.emmc_command(CmdType.CTSendRelativeAddr, 0, 2000)) {
+    if (!self.emmc_command(CTSendRelativeAddr, 0, 2000)) {
         _ = printf("EMMC_ERR: Failed to send Relative Addr\n");
         return false;
     }
@@ -657,7 +603,7 @@ fn check_rca(self: *Self) bool {
 fn select_card(
     self: *Self,
 ) bool {
-    if (!self.emmc_command(CmdType.CTSelectCard, self.device.rca << 16, 2000)) {
+    if (!self.emmc_command(CTSelectCard, self.device.rca << 16, 2000)) {
         _ = printf("EMMC_ERR: Failed to select card\n");
         return false;
     }
@@ -679,7 +625,7 @@ fn select_card(
 pub fn set_scr(self: *Self) bool {
     _ = printf("** setting scr\n");
     if (!self.device.sdhc) {
-        if (!self.emmc_command(CmdType.CTSetBlockLen, 512, 2000)) {
+        if (!self.emmc_command(CTSetBlockLen, 512, 2000)) {
             _ = printf("EMMC_ERR: *** Failed to set block len\n");
             return false;
         }
@@ -694,7 +640,7 @@ pub fn set_scr(self: *Self) bool {
     self.device.block_size = 8;
     self.device.transfer_blocks = 1;
 
-    if (!self.app_command(CmdType.CTSendSCR, 0, 30000)) {
+    if (!self.app_command(CTSendSCR, 0, 30000)) {
         _ = printf("EMMC_ERR: ***Failed to send SCR\n");
         return false;
     }
@@ -757,7 +703,7 @@ fn emmc_card_reset(self: *Self) bool {
     self.device.last_success = false;
     self.device.block_size = 0;
 
-    if (!self.emmc_command(CmdType.CTGoIdle, 0, 2000)) {
+    if (!self.emmc_command(CTGoIdle, 0, 2000)) {
         _ = printf("EMMC_ERR: NO GO_IDLE RESPONSE\n");
         return false;
     }
@@ -824,89 +770,95 @@ fn emmc_card_reset(self: *Self) bool {
 //    return emmc_seek(offset);
 //}
 
-//bool do_data_command(bool write, u8 *b, u32 bsize, u32 block_no) {
-//    if (!self.device.sdhc) {
-//        block_no *= 512;
-//    }
+// TBD u32? for buffer
 //
-//    if (bsize < self.device.block_size) {
-//        _ = printf("EMMC_ERR: INVALID BLOCK SIZE: \n", bsize, self.device.block_size);
-//        return false;
-//    }
-//
-//    self.device.transfer_blocks = bsize / self.device.block_size;
-//
-//    if (bsize % self.device.block_size) {
-//        _ = printf("EMMC_ERR: BAD BLOCK SIZE\n");
-//        return false;
-//    }
-//
-//    self.device.buffer = b;
-//
-//    cmd_type command = CTReadBlock;
-//
-//    if (write && self.device.transfer_blocks > 1) {
-//        command = CTWriteMultiple;
-//    } else if (write) {
-//        command = CTWriteBlock;
-//    } else if (!write && self.device.transfer_blocks > 1) {
-//        command = CTReadMultiple;
-//    }
-//
-//    int retry_count = 0;
-//    int max_retries = 3;
-//
-//    if (EMMC_DEBUG) _ = printf("EMMC_DEBUG: Sending command: %d\n", command);
-//
-//    while(retry_count < max_retries) {
-//        if (emmc_command( command, block_no, 5000)) {
-//            break;
-//        }
-//
-//        if (++retry_count < max_retries) {
-//            _ = printf("EMMC_WARN: Retrying data command\n");
-//        } else {
-//            _ = printf("EMMC_ERR: Giving up data command\n");
-//            return false;
-//        }
-//    }
-//
-//    return true;
-//}
+fn do_data_command(self: *Self, write: bool, b: [*]u32, bsize: u32, bn: u32) bool {
+    var block_no = bn;
+    if (!self.device.sdhc) {
+        block_no *= 512;
+    }
 
-//int do_read(u8 *b, u32 bsize, u32 block_no) {
-//    //TODO ENSURE DATA MODE...
-//
-//    if (!do_data_command( false, b, bsize, block_no)) {
-//        _ = printf("EMMC_ERR: do_data_command failed\n");
-//        return -1;
-//    }
-//
-//    return bsize;
-//}
-//
-//
-//int emmc_read(u8 *buffer, u32 size) {
-//    if (self.device.offset % 512 != 0) {
-//        _ = printf("EMMC_ERR: INVALID OFFSET: %d\n", self.device.offset);
-//        return -1;
-//    }
-//
-//    u32 block = self.device.offset / 512;
-//
-//    int r = do_read( buffer, size, block);
-//
-//    if (r != size) {
-//        _ = printf("EMMC_ERR: READ FAILED: %d\n", r);
-//        return -1;
-//    }
-//
-//    return size;
-//}
-//
-//void emmc_seek(u64 _offset) {
-//    self.device.offset = _offset;
-//}
+    if (bsize < self.device.block_size) {
+        _ = printf("EMMC_ERR: INVALID BLOCK SIZE: %d %d\n", bsize, self.device.block_size);
+        return false;
+    }
+
+    self.device.transfer_blocks = bsize / self.device.block_size;
+
+    if ((bsize % self.device.block_size) != 0) {
+        _ = printf("EMMC_ERR: BAD BLOCK SIZE\n");
+        return false;
+    }
+
+    self.device.buffer = b;
+
+    var command = CTReadBlock;
+
+    if (write and (self.device.transfer_blocks > 1)) {
+        command = CTWriteMultiple;
+    } else if (write) {
+        command = CTWriteBlock;
+    } else if ((!write) and (self.device.transfer_blocks > 1)) {
+        command = CTReadMultiple;
+    }
+
+    var retry_count: u32 = 0;
+    var max_retries: u32 = 3;
+
+    _ = printf("EMMC_DEBUG: Sending command: %d\n", @as(u32, command.index));
+
+    while (retry_count < max_retries) {
+        if (self.emmc_command(command, block_no, 5000)) {
+            break;
+        }
+
+        retry_count += 1;
+        if (retry_count < max_retries) {
+            _ = printf("EMMC_WARN: Retrying data command %d\n", retry_count);
+        } else {
+            _ = printf("EMMC_ERR: Giving up data command\n");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// tbd u32?
+fn do_read(self: *Self, b: [*]u32, bsize: u32, block_no: u32) i64 {
+    //TODO ENSURE DATA MODE...
+
+    if (!self.do_data_command(false, b, bsize, block_no)) {
+        _ = printf("EMMC_ERR: do_data_command failed\n");
+        return -1;
+    }
+
+    return bsize;
+}
+
+// rbd u32?
+pub fn emmc_read(self: *Self, buffer: [*]u32, size: u32) i64 {
+    _ = printf("** emmc read buf %x size: %d\n", buffer, size);
+    if (self.device.offset % 512 != 0) {
+        _ = printf("EMMC_ERR: INVALID OFFSET: %d\n", self.device.offset);
+        return -1;
+    }
+
+    const block: u32 = @intCast(self.device.offset / 512);
+
+    const r = self.do_read(buffer, size, block);
+
+    if (r != size) {
+        _ = printf("EMMC_ERR: READ FAILED: %d\n", r);
+        return -1;
+    }
+
+    return size;
+}
+
+pub fn emmc_seek(self: *Self, offset: u32) void {
+    self.device.offset = offset;
+}
 
 pub fn enable(self: *Self) bool {
     self.gpio.selectFunction(34, GPIO.FunctionSelect.Input);

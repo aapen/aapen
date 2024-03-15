@@ -103,7 +103,7 @@ finish
 
 ( Handy all purpose buffer )
 
-:buffer create 64 allot finish
+:buffer create 512 allot finish
 
 (Character)
 
@@ -667,6 +667,8 @@ cr cr
 
 
 : doit hal hal.emmc + @ emmc-enable ;
+: scr hal hal.emmc + @ emmc-set-scr ;
+: rd hal hal.emmc + @ read ;
 
 "Forty REPL" s. cr cr
 repl
