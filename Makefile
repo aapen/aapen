@@ -21,14 +21,21 @@ KERNEL_UNIT_TEST_TARGETS = $(addprefix kernel_test_, $(KERNEL_UNIT_TESTS))
 
 CORE_COUNT      = 4
 QEMU_EXEC       = qemu-system-aarch64 -semihosting -smp $(CORE_COUNT)
-QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb
+
+ifdef SDIMAGE
+  SD_ARGS=-drive if=sd,format=raw,file=$(SDIMAGE)
+else
+  SD_ARGS=
+endif
+
+QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb $(SD_ARGS)
 #QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2711-rpi-400.dtb
 QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd 
 QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd
 QEMU_UNIT_TEST_ARGS = -nographic
 
 # Use this to get USB tracing from the emulator.
-#QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -trace 'events=trace_events.txt'
+QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -trace 'events=trace_events.txt'
 
 OS              = $(shell uname)
 ifeq ($(OS), Darwin)
