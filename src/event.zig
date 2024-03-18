@@ -5,6 +5,8 @@ const root = @import("root");
 
 const arch = @import("architecture.zig");
 
+const schedule = @import("schedule.zig");
+
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
@@ -163,5 +165,5 @@ fn readSlice(dest: []u8) void {
 
 pub fn timerSignal() !void {
     enqueue(.{ .type = EventType.Timer });
-    root.schedule.sleep(3000);
+    schedule.sleep(3000);
 }

@@ -48,7 +48,7 @@ pub const TicketLock = struct {
     pub fn acquire(lock: *TicketLock) void {
         if (!lock.enabled) return;
 
-        var im = cpu.disable();
+        const im = cpu.disable();
 
         const my_ticket = atomic.atomicInc(&lock.next_ticket);
         while (atomic.atomicFetch(&lock.now_serving) != my_ticket) {
@@ -65,6 +65,24 @@ pub const TicketLock = struct {
 
         _ = atomic.atomicInc(&lock.now_serving);
         cpu.sev();
+    }
+};
+
+// ----------------------------------------------------------------------
+// One shot signals
+// ----------------------------------------------------------------------
+pub const OneShot = struct {
+    const Self = @This();
+
+    value: u64 = 0,
+
+    pub fn signal(self: *Self) void {
+        return atomic.atomicInc(&self.value);
+    }
+
+    pub fn isSignalled(self: *Self) bool {
+        const v = atomic.atomicFetch(&self.value);
+        return v != 0;
     }
 };
 

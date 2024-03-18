@@ -1,4 +1,6 @@
 const root = @import("root");
+const printf = root.printf;
+
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const assert = std.debug.assert;
@@ -34,9 +36,9 @@ pub const Region = struct {
 
     pub fn print(self: *const Region) !void {
         if (self.name) |n| {
-            _ = root.printf("%15s: 0x%08x .. 0x%08x\n", n.ptr, self.base, self.end);
+            _ = printf("%15s: 0x%08x .. 0x%08x\n", n.ptr, self.base, self.end);
         } else {
-            _ = root.printf("unnamed region: 0x%08x .. 0x%08x\n", self.base, self.end);
+            _ = printf("unnamed region: 0x%08x .. 0x%08x\n", self.base, self.end);
         }
     }
 };

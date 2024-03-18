@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const RingBuffer = std.RingBuffer;
+const ScopeLevel = std.log.ScopeLevel;
 
 const root = @import("root");
 const printf = root.printf;
@@ -32,6 +33,18 @@ pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?us
 
     unreachable;
 }
+
+pub const options = struct {
+    pub const logFn = log;
+    pub const log_level = .warn;
+    pub const log_scope_levels = &[_]ScopeLevel{
+        .{ .scope = .dwc_otg_usb, .level = .info },
+        .{ .scope = .dwc_otg_usb_channel, .level = .debug },
+        .{ .scope = .usb, .level = .debug },
+        .{ .scope = .usb_hub, .level = .debug },
+        .{ .scope = .forty, .level = .info },
+    };
+};
 
 pub fn log(
     comptime level: std.log.Level,
@@ -81,7 +94,7 @@ pub fn sliceDump(buf: []const u8) void {
                 _ = printf("  ");
             }
         }
-        printf("  |");
+        _ = printf("  |");
         for (0..16) |iByte| {
             if (offset + iByte < len) {
                 _ = printf("%c", string.toPrintable(buf[offset + iByte]));
@@ -89,7 +102,7 @@ pub fn sliceDump(buf: []const u8) void {
                 _ = printf(" ");
             }
         }
-        printf("|\n");
+        _ = printf("|\n");
         offset += 16;
     }
 }

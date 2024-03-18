@@ -1,30 +1,30 @@
-pub const RequestTypeRecipient = enum(u5) {
-    device = 0b00000,
-    interface = 0b00001,
-    endpoint = 0b00010,
-    other = 0b00011,
+pub const RequestTypeRecipient = struct {
+    pub const device: u5 = 0b00000;
+    pub const interface: u5 = 0b00001;
+    pub const endpoint: u5 = 0b00010;
+    pub const other: u5 = 0b00011;
     // all other bit patterns are reserved
 };
 
-pub const RequestTypeType = enum(u2) {
-    standard = 0b00,
-    class = 0b01,
-    vendor = 0b10,
-    reserved = 0b11,
+pub const RequestTypeType = struct {
+    pub const standard: u2 = 0b00;
+    pub const class: u2 = 0b01;
+    pub const vendor: u2 = 0b10;
+    pub const reserved: u2 = 0b11;
 };
 
-pub const RequestTypeDirection = enum(u1) {
-    host_to_device = 0b0,
-    device_to_host = 0b1,
+pub const RequestTypeDirection = struct {
+    pub const host_to_device: u1 = 0b0;
+    pub const device_to_host: u1 = 0b1;
 };
 
 pub const RequestType = packed struct {
-    recipient: RequestTypeRecipient, // 0 .. 4
-    type: RequestTypeType, // 5..6
-    transfer_direction: RequestTypeDirection, // 7
+    recipient: u5, // 0 .. 4
+    type: u2, // 5..6
+    transfer_direction: u1, // 7
 };
 
-pub fn RT(r: RequestTypeRecipient, t: RequestTypeType, d: RequestTypeDirection) RequestType {
+pub fn RT(r: u5, t: u2, d: u1) RequestType {
     return .{ .recipient = r, .type = t, .transfer_direction = d };
 }
 

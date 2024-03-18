@@ -7,13 +7,10 @@ const TransferType = usb.TransferType;
 pub const ChannelCharacteristics = packed struct {
     max_packet_size: u11, // 0..10
     endpoint_number: u4, // 11..14
-    endpoint_direction: enum(u1) {
-        out = 0,
-        in = 1,
-    }, // 15
+    endpoint_direction: u1, // 15
     _reserved_16: u1, // 16
     low_speed_device: u1, // 17
-    endpoint_type: TransferType, // 18..19
+    endpoint_type: u2, // 18..19
     packets_per_frame: u2, // 20..21
     device_address: u7, // 22..28
     odd_frame: u1, // 29
@@ -21,15 +18,17 @@ pub const ChannelCharacteristics = packed struct {
     enable: u1, // 31
 };
 
+pub const TransactionPosition = struct {
+    pub const middle: u2 = 0b00;
+    pub const end: u2 = 0b01;
+    pub const begin: u2 = 0b10;
+    pub const all: u2 = 0b11;
+};
+
 pub const ChannelSplitControl = packed struct {
     port_address: u7, // 0 .. 6
     hub_address: u7, // 7..13
-    transaction_position: enum(u2) { // applies only to split transactions
-        middle = 0,
-        end = 1,
-        begin = 2,
-        all = 3,
-    }, // 14..15
+    transaction_position: u2, // 14..15
     complete_split: u1, // 16
     _reserved_17_30: u14, // 17..30
     split_enable: u1, // 31

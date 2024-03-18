@@ -181,10 +181,10 @@ pub fn transactionBegin(
     device: DeviceAddress,
     device_speed: UsbSpeed,
     endpoint_number: EndpointNumber,
-    endpoint_type: TransferType,
-    endpoint_direction: EndpointDirection,
+    endpoint_type: u2,
+    endpoint_direction: u1,
     max_packet_size: PacketSize,
-    initial_pid: usb.PID2,
+    initial_pid: u4,
     buffer: []u8,
     completion_handler: ?*CompletionHandler,
 ) !void {
@@ -192,11 +192,11 @@ pub fn transactionBegin(
         return Error.ChannelBusy;
     }
 
-    if (endpoint_direction == .out) {
-        log.debug("channel {d} sending {d} bytes starting at 0x{x:0>8}", .{ self.id, buffer.len, @intFromPtr(buffer.ptr) });
+    if (endpoint_direction == EndpointDirection.out) {
+        log.debug("channel {d} request type {d} device {d} sending {d} bytes starting at 0x{x:0>8}", .{ self.id, endpoint_type, device, buffer.len, @intFromPtr(buffer.ptr) });
         root.debug.sliceDump(buffer);
     } else {
-        log.debug("channel {d} receiving {d} bytes into 0x{x:0>8}", .{ self.id, buffer.len, @intFromPtr(buffer.ptr) });
+        log.debug("channel {d} request type {d} device {d} receiving {d} bytes into 0x{x:0>8}", .{ self.id, endpoint_type, device, buffer.len, @intFromPtr(buffer.ptr) });
     }
 
     // Don't allow IRQs while we're configuring the channel
@@ -212,10 +212,10 @@ pub fn transactionBegin(
     self.active_transfer.prepare(buffer, max_packet_size);
 
     const dwc_pid: DwcTransferSizePid = switch (initial_pid) {
-        .token_setup => .Setup,
-        .data_data0 => .Data0,
-        .data_data1 => .Data1,
-        .data_data2 => .Data2,
+        PID.token_setup => .Setup,
+        PID.data_data0 => .Data0,
+        PID.data_data1 => .Data1,
+        PID.data_data2 => .Data2,
         else => .Data0, // TODO what should we really put here?
     };
 
@@ -242,10 +242,7 @@ pub fn transactionBegin(
 
     // TODO - Is this really 1?
     channel_characteristics.packets_per_frame = 1;
-    channel_characteristics.endpoint_direction = switch (endpoint_direction) {
-        .out => .out,
-        .in => .in,
-    };
+    channel_characteristics.endpoint_direction = endpoint_direction;
     channel_characteristics.low_speed_device = switch (device_speed) {
         .Low => 1,
         else => 0,

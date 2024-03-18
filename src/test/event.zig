@@ -26,7 +26,7 @@ fn assertEventTypePosition() void {
     expectEqual(2, ev2.type);
     expectEqual(1, ev2.subtype);
 
-    var evbytes = std.mem.asBytes(&ev2);
+    const evbytes = std.mem.asBytes(&ev2);
     expectEqual(@as(u8, 2), evbytes[0]);
     expectEqual(@as(u8, 1), evbytes[1]);
 }

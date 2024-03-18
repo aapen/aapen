@@ -10,9 +10,10 @@ const log = std.log.scoped(.usb);
 const root = @import("root");
 const HCI = root.HAL.USBHCI;
 
-const time = @import("time.zig");
+const forty = @import("forty/forth.zig");
+const Forth = forty.Forth;
 
-const Forth = root.Forth;
+const time = @import("time.zig");
 
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
@@ -52,7 +53,6 @@ pub const UsbSpeed = device.UsbSpeed;
 const endpoint = @import("usb/endpoint.zig");
 pub const EndpointDirection = endpoint.EndpointDirection;
 pub const EndpointNumber = endpoint.EndpointNumber;
-pub const StandardEndpointRequests = endpoint.StandardEndpointRequests;
 
 const function = @import("usb/function.zig");
 pub const MAX_FUNCTIONS = function.MAX_FUNCTIONS;
@@ -62,11 +62,12 @@ pub const Characteristics = hub.Characteristics;
 pub const ChangeStatusP = hub.ChangeStatusP;
 pub const OvercurrentStatusP = hub.OvercurrentStatusP;
 pub const Hub = hub.Hub;
+pub const HubFeature = hub.HubFeature;
 pub const HubStatus = hub.HubStatus;
 pub const PortFeature = hub.PortFeature;
 pub const PortStatus = hub.PortStatus;
 pub const HubDescriptor = hub.HubDescriptor;
-pub const ClassRequestCode = hub.ClassRequest;
+pub const ClassRequest = hub.ClassRequest;
 //pub const FeatureSelector = hub.FeatureSelector;
 pub const TTDirection = hub.TTDirection;
 const usb_hub_driver = hub.usb_hub_driver;
@@ -80,6 +81,7 @@ pub const LangID = language.LangID;
 
 const request = @import("usb/request.zig");
 pub const RequestType = request.RequestType;
+pub const RequestTypeDirection = request.RequestTypeDirection;
 pub const RequestTypeType = request.RequestTypeType;
 pub const RequestTypeRecipient = request.RequestTypeRecipient;
 pub const request_type_in = request.standard_device_in;
@@ -91,7 +93,6 @@ pub const Error = status.Error;
 const transfer = @import("usb/transfer.zig");
 pub const DEFAULT_MAX_PACKET_SIZE = transfer.DEFAULT_MAX_PACKET_SIZE;
 pub const PacketSize = transfer.PacketSize;
-pub const PID = transfer.PID;
 pub const PID2 = transfer.PID2;
 pub const SetupPacket = transfer.SetupPacket;
 pub const Transfer = transfer.Transfer;
@@ -108,10 +109,20 @@ const Self = @This();
 // ----------------------------------------------------------------------
 
 pub fn defineModule(forth: *Forth) !void {
-    try forth.defineNamespace(Self, .{.{ "init", "usb-init" }});
-
-    try HCI.defineModule(forth);
+    try forth.defineNamespace(Self, .{
+        .{ "init", "usb-init" },
+        .{ "getDevice", "usb-device" },
+    });
     try forth.defineConstant("usbhci", @intFromPtr(&root.hal.usb_hci));
+    try forth.defineStruct("Device", Device, .{});
+}
+
+pub fn getDevice(id: u64) ?*Device {
+    if (id < MAX_DEVICES and devices[id].state != .unconfigured) {
+        return &devices[id];
+    } else {
+        return null;
+    }
 }
 
 // ----------------------------------------------------------------------
@@ -121,7 +132,7 @@ const Drivers = std.ArrayList(*const DeviceDriver);
 const MAX_DEVICES = 16;
 
 pub var allocator: Allocator = undefined;
-var devices: [MAX_DEVICES]Device = undefined;
+pub var devices: [MAX_DEVICES]Device = undefined;
 var drivers: Drivers = undefined;
 var drivers_lock: TicketLock = undefined;
 var root_hub: ?*Device = undefined;
@@ -132,24 +143,16 @@ pub fn init() !void {
     drivers = Drivers.init(allocator);
 
     drivers_lock = TicketLock.initWithTargetLevel("usb drivers", true, .FIQ);
-
     bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
-    bus_lock.acquire();
-    defer bus_lock.release();
 
     for (0..MAX_DEVICES) |i| {
         devices[i].init();
     }
 
-    hub.initialize(allocator);
+    try hub.initialize(allocator);
 
-    {
-        drivers_lock.acquire();
-        defer drivers_lock.release();
-
-        try registerDriver(&usb_hub_driver);
-        log.debug("registered hub driver", .{});
-    }
+    try registerDriver(&usb_hub_driver);
+    log.debug("registered hub driver", .{});
 
     try root.hal.usb_hci.initialize();
     log.debug("started host controller", .{});
@@ -182,6 +185,7 @@ pub fn registerDriver(device_driver: *const DeviceDriver) !void {
     }
 
     if (!already_registered) {
+        log.info("registering {s}", .{device_driver.name});
         try drivers.append(device_driver);
     }
 }
@@ -220,6 +224,7 @@ pub fn freeDevice(devid: DeviceAddress) void {
     }
 
     dev.deinit();
+    dev.state = .unconfigured;
     dev.in_use = false;
 }
 
@@ -253,6 +258,7 @@ pub fn attachDevice(devid: DeviceAddress) !void {
 
 fn bindDriver(dev: *Device) !void {
     if (dev.driver != null) {
+        // device already has a driver
         return;
     }
 
@@ -283,20 +289,20 @@ fn bindDriver(dev: *Device) !void {
 
 // submit a transfer for asynchronous processing
 pub fn transferSubmit(xfer: *Transfer) !void {
-    // TODO check if the request is already in flight
-
-    // TODO check if the device is being detached
+    // check if the device is being detached or has not been configured
+    if (xfer.device) |dev| {
+        switch (dev.state) {
+            .detaching => return Error.DeviceDetaching,
+            .unconfigured => return Error.DeviceUnconfigured,
+            inline else => {},
+        }
+    } else {
+        return Error.NoDevice;
+    }
 
     // TODO track how many requests are pending for a device
 
-    //    xfer.completion = transferNotify;
-
     try root.hal.usb_hci.perform(xfer);
-}
-
-// callback from the HCD when the transfer has finished
-fn transferNotify(xfer: *Transfer) void {
-    _ = xfer;
 }
 
 pub fn transferAwait(xfer: *Transfer, timeout: u32) !void {
@@ -367,8 +373,8 @@ pub fn deviceSetConfiguration(dev: *Device, use_config: u8) !void {
     try transferAwait(&xfer, 100);
 }
 
-pub fn deviceGetStringDescriptor(dev: *Device, index: StringIndex, lang: LangID, buffer: []u8) !void {
-    var xfer = TransferFactory.initStringDescriptorTransfer(index, lang, buffer);
+pub fn deviceGetStringDescriptor(dev: *Device, index: StringIndex, lang_id: u16, buffer: []u8) !void {
+    var xfer = TransferFactory.initStringDescriptorTransfer(index, lang_id, buffer);
     xfer.addressTo(dev);
 
     try transferSubmit(&xfer);

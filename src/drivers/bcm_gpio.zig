@@ -7,6 +7,7 @@ const root = @import("root");
 const InterruptController = root.HAL.InterruptController;
 const IrqHandler = InterruptController.IrqHandler;
 const IrqId = InterruptController.IrqId;
+const printf = root.printf;
 
 const GPIO_0 = InterruptController.IrqId.GPIO_0;
 const GPIO_1 = InterruptController.IrqId.GPIO_1;
@@ -224,7 +225,7 @@ pub fn eventListen(self: *Self, bc_id: u64, edge: u32) void {
             self.registers.event_detect_status[p.data_register_index] = @as(u32, 1) << p.data_register_shift;
         },
         else => {
-            _ = root.printf("Bad event enable type %d\n", edge);
+            _ = printf("Bad event enable type %d\n", edge);
         },
     }
 }

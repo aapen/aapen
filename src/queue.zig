@@ -85,7 +85,7 @@ pub fn allocate() !QID {
     // we allocate pairs of entries, one for the head of the dlist one
     // for the tail
 
-    var q = nextQid;
+    const q = nextQid;
     nextQid += 2;
 
     const head = quetab(quehead(q));

@@ -1,21 +1,27 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const DoublyLinkedList = std.DoublyLinkedList;
+const PendingTransfers = DoublyLinkedList(*Transfer);
 
 const log = std.log.scoped(.dwc_otg_usb);
 
 const root = @import("root");
-const InterruptController = root.HAL.InterruptController;
+const HAL = root.HAL;
+const InterruptController = HAL.InterruptController;
 const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
-const POWER_DEVICE_USB_HCD = root.HAL.PowerController.POWER_DEVICE_USB_HCD;
+const memory_map = HAL.memory_map;
+const PowerController = HAL.PowerController;
+const POWER_DEVICE_USB_HCD = PowerController.POWER_DEVICE_USB_HCD;
 
+const atomic = @import("../atomic.zig");
+
+const ChannelSet = @import("../channel_set.zig");
 const Forth = @import("../forty/forth.zig").Forth;
 
-const time = @import("../time.zig");
-
-const PowerController = root.HAL.PowerController;
+const mailbox = @import("../mailbox.zig");
+const Mailbox = mailbox.Mailbox;
 
 const memory = @import("../memory.zig");
 const AddressTranslation = memory.AddressTranslation;
@@ -23,12 +29,15 @@ const AddressTranslations = memory.AddressTranslations;
 const toChild = memory.toChild;
 const toParent = memory.toParent;
 
-const memory_map = root.HAL.memory_map;
+const schedule = @import("../schedule.zig");
+
+const semaphore = @import("../semaphore.zig");
 
 const synchronize = @import("../synchronize.zig");
+const OneShot = synchronize.OneShot;
 const TicketLock = synchronize.TicketLock;
 
-const ChannelSet = @import("../channel_set.zig");
+const time = @import("../time.zig");
 
 const usb = @import("../usb.zig");
 const Bus = usb.Bus;
@@ -44,6 +53,9 @@ const InterfaceDescriptor = usb.InterfaceDescriptor;
 const LangID = usb.LangID;
 const PacketSize = usb.PacketSize;
 const PID = usb.PID2;
+const RequestTypeDirection = usb.RequestTypeDirection;
+const RequestTypeRecipient = usb.RequestTypeRecipient;
+const RequestTypeType = usb.RequestTypeType;
 const SetupPacket = usb.SetupPacket;
 const StringDescriptor = usb.StringDescriptor;
 const StringIndex = usb.StringIndex;
@@ -55,14 +67,11 @@ const UsbSpeed = usb.UsbSpeed;
 
 const reg = @import("dwc/registers.zig");
 const Channel = @import("dwc/channel.zig");
-
 const RootHub = @import("dwc/root_hub.zig");
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
 
 const dwc_max_channels = 16;
-
-const PendingTransfers = DoublyLinkedList(*Transfer);
 
 const Self = @This();
 
@@ -124,10 +133,12 @@ pub const PowerAndClock = reg.PowerAndClock;
 // ----------------------------------------------------------------------
 // HCD state
 // ----------------------------------------------------------------------
+pub const DEFAULT_TRANSFER_TIMEOUT = 1000;
 pub const DEFAULT_INTERVAL = 1;
 pub const DMA_ALIGNMENT = 64;
 
 const HcdChannels = ChannelSet.init("dwc_otg_usb channels", u5, dwc_max_channels);
+const UsbTransferMailbox = Mailbox(*Transfer);
 
 allocator: Allocator,
 core_registers: *volatile CoreRegisters,
@@ -144,23 +155,14 @@ power_controller: *PowerController,
 num_host_channels: u4,
 channel_assignments: HcdChannels = .{},
 channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
-pending_transfers: PendingTransfers = undefined,
-pending_transfers_lock: TicketLock,
 root_hub: RootHub = .{},
+transfer_mailbox: UsbTransferMailbox,
+driver_thread: schedule.TID,
+shutdown_signal: OneShot = .{},
 
 // Ideas for improving this:
 // - reserve an aligned buffer for each channel to use. that avoids
 //   dynamic allocation in the inner loop
-
-// ----------------------------------------------------------------------
-// Forty interop
-// ----------------------------------------------------------------------
-
-pub fn defineModule(forth: *Forth) !void {
-    try forth.defineNamespace(Self, .{
-        .{ "initialize", "usb-init-hcd" },
-    });
-}
 
 // ----------------------------------------------------------------------
 // Core interface layer: Initialization
@@ -186,8 +188,9 @@ pub fn init(
         .translations = translations,
         .power_controller = power,
         .num_host_channels = 0,
-        .pending_transfers = .{},
-        .pending_transfers_lock = TicketLock.init("pending transfers", false),
+        .transfer_mailbox = undefined,
+        .driver_thread = schedule.NO_TID,
+        .shutdown_signal = .{},
     };
 
     self.root_hub.init(self.host_registers);
@@ -201,13 +204,24 @@ pub fn init(
 }
 
 pub fn initialize(self: *Self) !void {
+    // higher priority so it gets scheduled ahead of the application
+    // thread
+    const DRIVER_THREAD_PRIO = 200;
+    self.driver_thread = try schedule.spawnWithOptions(dwcDriverLoop, self, &.{
+        .name = "dwc driver",
+        .priority = DRIVER_THREAD_PRIO,
+        .schedule = false,
+    });
+
+    try self.transfer_mailbox.init(1024);
+
     try self.powerOn();
     try self.verifyHostControllerDevice();
     try self.resetSoft();
     try self.initializeControllerCore();
     try self.initializeInterrupts();
 
-    self.pending_transfers_lock.enabled = true;
+    //    self.pending_transfers_lock.enabled = true;
 }
 
 fn powerOn(self: *Self) !void {
@@ -498,14 +512,13 @@ fn channelInterruptDisable(self: *Self, channel: Channel.ChannelId) void {
 
 fn transactionOnChannel(
     self: *Self,
-    channel: *Channel,
     device: DeviceAddress,
     device_speed: UsbSpeed,
     endpoint_number: EndpointNumber,
-    endpoint_type: TransferType,
-    endpoint_direction: EndpointDirection,
+    endpoint_type: u2,
+    endpoint_direction: u1,
     max_packet_size: PacketSize,
-    initial_pid: usb.PID2,
+    initial_pid: u4,
     buffer: []u8,
     timeout: u32,
 ) !TransferBytes {
@@ -514,12 +527,12 @@ fn transactionOnChannel(
         .actual_length = 0,
     };
 
-    // log.debug("Acquiring channel", .{});
+    log.debug("Acquiring channel", .{});
 
-    // var channel = try self.channelAllocate();
-    // defer self.channelFree(channel);
+    var channel = try self.channelAllocate();
+    defer self.channelFree(channel);
 
-    // log.debug("Received channel {d}", .{channel.id});
+    log.debug("Received channel {d}", .{channel.id});
 
     self.channelInterruptEnable(channel.id);
     defer self.channelInterruptDisable(channel.id);
@@ -554,26 +567,14 @@ fn transactionOnChannel(
 // Transfer interface - high level
 // ----------------------------------------------------------------------
 
-fn pendingTransferAdd(self: *Self, xfer: *Transfer) !*PendingTransfers.Node {
-    const node: *PendingTransfers.Node = try self.allocator.create(PendingTransfers.Node);
-    node.data = xfer;
-    return node;
-}
-
-fn pendingTransferRemove(self: *Self, xfer: *Transfer) void {
-    const node: *PendingTransfers.Node = @fieldParentPtr(PendingTransfers.Node, "data", xfer);
-    if (node != null) {
-        self.allocator.destroy(node);
-    }
-}
-
+// this is called from application threads
 pub fn perform(self: *Self, xfer: *Transfer) !void {
     // put the transfer in the pending_transfers list.
-    const node = try self.pendingTransferAdd(xfer);
-    self.pending_transfers_lock.acquire();
-    self.pending_transfers.append(node);
-    self.pending_transfers_lock.release();
+    try self.transfer_mailbox.send(xfer);
+}
 
+// This is called from the polling thread.
+fn processTransfer(self: *Self, xfer: *Transfer) !void {
     // This driver-level routine assumes that a higher-level caller
     // has already checked the Transfer's consistency against USB
     // specifications
@@ -584,108 +585,126 @@ pub fn perform(self: *Self, xfer: *Transfer) !void {
     // channels as when they are available.
 
     // old implementation below here.
-    // while (xfer.state != .complete) {
-    //     switch (xfer.transfer_type) {
-    //         .control => {
-    //             switch (xfer.state) {
-    //                 .token => {
-    //                     const aligned_buffer = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(SetupPacket));
-    //                     defer self.allocator.free(aligned_buffer);
+    while (xfer.state != .complete) {
+        switch (xfer.endpoint_type) {
+            TransferType.control => {
+                switch (xfer.state) {
+                    .token => {
+                        const aligned_buffer = try self.allocator.alignedAlloc(u8, DMA_ALIGNMENT, @sizeOf(SetupPacket));
+                        defer self.allocator.free(aligned_buffer);
 
-    //                     @memcpy(aligned_buffer, std.mem.asBytes(&xfer.setup));
+                        @memcpy(aligned_buffer, std.mem.asBytes(&xfer.setup));
 
-    //                     log.debug("perform: performing 'setup' transaction with rt = {b}, rq = {d}, mps = {d}", .{ @as(u8, @bitCast(xfer.setup.request_type)), xfer.setup.request, xfer.max_packet_size });
+                        log.debug("perform: performing 'setup' transaction with rt = {b}, rq = {d}, mps = {d}", .{ @as(u8, @bitCast(xfer.setup.request_type)), xfer.setup.request, xfer.max_packet_size });
 
-    //                     const maybe_setup_response = self.transactionOnChannel(
-    //                         xfer.device_address,
-    //                         xfer.device_speed,
-    //                         xfer.endpoint_number,
-    //                         xfer.endpoint_type,
-    //                         .out,
-    //                         xfer.max_packet_size,
-    //                         xfer.getTransactionPid(),
-    //                         aligned_buffer,
-    //                         100,
-    //                     );
+                        const maybe_setup_response = self.transactionOnChannel(
+                            xfer.device_address,
+                            xfer.device_speed,
+                            xfer.endpoint_number,
+                            xfer.endpoint_type,
+                            EndpointDirection.out,
+                            xfer.max_packet_size,
+                            xfer.getTransactionPid(),
+                            aligned_buffer,
+                            DEFAULT_TRANSFER_TIMEOUT,
+                        );
 
-    //                     if (maybe_setup_response) |bytes| {
-    //                         if (bytes == @sizeOf(SetupPacket)) {
-    //                             xfer.transferCompleteTransaction(.ok);
-    //                         } else {
-    //                             xfer.transferCompleteTransaction(.data_length_mismatch);
-    //                         }
-    //                     } else |_| {
-    //                         xfer.transferCompleteTransaction(.failed);
-    //                     }
-    //                 },
-    //                 .data => {
-    //                     log.debug("perform: performing 'data' transaction with {any}", .{xfer.setup.request_type.transfer_direction});
+                        if (maybe_setup_response) |bytes| {
+                            if (bytes == @sizeOf(SetupPacket)) {
+                                xfer.transferCompleteTransaction(.ok);
+                            } else {
+                                xfer.transferCompleteTransaction(.data_length_mismatch);
+                            }
+                        } else |_| {
+                            xfer.transferCompleteTransaction(.failed);
+                        }
+                    },
+                    .data => {
+                        log.debug("perform: performing 'data' transaction with {any}", .{xfer.setup.request_type.transfer_direction});
 
-    //                     const data_direction = switch (xfer.setup.request_type.transfer_direction) {
-    //                         .host_to_device => EndpointDirection.out,
-    //                         .device_to_host => EndpointDirection.in,
-    //                     };
+                        const data_direction = switch (xfer.setup.request_type.transfer_direction) {
+                            RequestTypeDirection.host_to_device => EndpointDirection.out,
+                            RequestTypeDirection.device_to_host => EndpointDirection.in,
+                        };
 
-    //                     const maybe_in_data_response = self.transactionOnChannel(
-    //                         xfer.device_address,
-    //                         xfer.device_speed,
-    //                         xfer.endpoint_number,
-    //                         xfer.endpoint_type,
-    //                         data_direction,
-    //                         xfer.max_packet_size,
-    //                         xfer.getTransactionPid(),
-    //                         xfer.data_buffer,
-    //                         100,
-    //                     );
+                        const maybe_in_data_response = self.transactionOnChannel(
+                            xfer.device_address,
+                            xfer.device_speed,
+                            xfer.endpoint_number,
+                            xfer.endpoint_type,
+                            data_direction,
+                            xfer.max_packet_size,
+                            xfer.getTransactionPid(),
+                            xfer.data_buffer,
+                            DEFAULT_TRANSFER_TIMEOUT,
+                        );
 
-    //                     log.debug("perform: 'data' transaction returned {any}", .{maybe_in_data_response});
+                        log.debug("perform: 'data' transaction returned {any}", .{maybe_in_data_response});
 
-    //                     // this should probably report the error through
-    //                     // the Transfer
-    //                     var in_data_response = try maybe_in_data_response;
+                        // this should probably report the error through
+                        // the Transfer
+                        const in_data_response = try maybe_in_data_response;
 
-    //                     if (in_data_response != xfer.data_buffer.len) {
-    //                         xfer.transferCompleteTransaction(.data_length_mismatch);
-    //                     }
+                        if (in_data_response != xfer.data_buffer.len) {
+                            xfer.transferCompleteTransaction(.data_length_mismatch);
+                        }
 
-    //                     xfer.actual_size = in_data_response;
+                        xfer.actual_size = in_data_response;
 
-    //                     xfer.transferCompleteTransaction(.ok);
-    //                 },
-    //                 .handshake => {
-    //                     log.debug("perform: performing 'status' transaction", .{});
+                        xfer.transferCompleteTransaction(.ok);
+                    },
+                    .handshake => {
+                        log.debug("perform: performing 'status' transaction", .{});
 
-    //                     const maybe_status_response = self.transactionOnChannel(
-    //                         xfer.device_address,
-    //                         xfer.device_speed,
-    //                         xfer.endpoint_number,
-    //                         xfer.endpoint_type,
-    //                         .in,
-    //                         xfer.max_packet_size,
-    //                         xfer.getTransactionPid(),
-    //                         &.{},
-    //                         100,
-    //                     );
+                        const maybe_status_response = self.transactionOnChannel(
+                            xfer.device_address,
+                            xfer.device_speed,
+                            xfer.endpoint_number,
+                            xfer.endpoint_type,
+                            EndpointDirection.in,
+                            xfer.max_packet_size,
+                            xfer.getTransactionPid(),
+                            &.{},
+                            DEFAULT_TRANSFER_TIMEOUT,
+                        );
 
-    //                     log.debug("perform: 'status' transaction returned {any}", .{maybe_status_response});
-    //                     xfer.transferCompleteTransaction(.ok);
-    //                 },
-    //                 .complete => {},
-    //             }
-    //         },
-    //         else => {
-    //             // immediately fail the transfer
-    //             xfer.complete(.unsupported_request);
-    //         },
-    //     }
-    // }
+                        log.debug("perform: 'status' transaction returned {any}", .{maybe_status_response});
+                        xfer.transferCompleteTransaction(.ok);
+                    },
+                    .complete => {},
+                }
+            },
+            TransferType.interrupt => {
+                // TODO - consider that this might be restarting a
+                // partially completed transfer
+                const maybe_response = self.transactionOnChannel(
+                    xfer.device_address,
+                    xfer.device_speed,
+                    xfer.endpoint_number,
+                    xfer.endpoint_type,
+                    EndpointDirection.in,
+                    xfer.max_packet_size,
+                    xfer.getTransactionPid(),
+                    xfer.data_buffer,
+                    DEFAULT_TRANSFER_TIMEOUT,
+                );
+
+                log.debug("perform: 'interrupt' transaction returned {any}", .{maybe_response});
+                xfer.transferCompleteTransaction(.ok);
+            },
+            else => {
+                // immediately fail the transfer
+                xfer.complete(.unsupported_request);
+            },
+        }
+    }
 }
 
-fn alignedCopy(allocator: Allocator, comptime T: type, v: *const T) !*align(DMA_ALIGNMENT) T {
-    const buffer_size = @sizeOf(T);
-    const aligned_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, buffer_size);
-    @memcpy(aligned_buffer, std.mem.asBytes(v)[0..buffer_size]);
-}
+// fn alignedCopy(allocator: Allocator, comptime T: type, v: *const T) !*align(DMA_ALIGNMENT) T {
+//     const buffer_size = @sizeOf(T);
+//     const aligned_buffer = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, buffer_size);
+//     @memcpy(aligned_buffer, std.mem.asBytes(v)[0..buffer_size]);
+// }
 
 // This is internal bookkeeping for the host driver. It should not be
 // exposed directly to callers.
@@ -721,67 +740,33 @@ const Transaction = struct {
     }
 };
 
-/// Invoked on a timer interrupt. Must return as quickly as possible.
-pub fn poll() !void {
-    const self: *Self = root.hal.usb_hci;
+fn signalShutdown(self: *Self) void {
+    self.shutdown_signal.signal();
+}
 
-    root.debug.kernelMessage("p");
+fn isShuttingDown(self: *Self) bool {
+    return self.shutdown_signal.isSignalled();
+}
 
-    // The scheduler is running before all initialization
-    // completes. Don't go any farther unless init is finished
-    if (!self.pending_transfers_lock.enabled) {
-        return;
-    }
+/// Driver thread proc
+pub fn dwcDriverLoop(args: *anyopaque) void {
+    const self: *Self = @alignCast(@ptrCast(args));
 
-    self.pending_transfers_lock.acquire();
-    const maybe_xfernode = self.pending_transfers.popFirst();
-    self.pending_transfers_lock.release();
-
-    root.debug.kernelMessage("P");
-
-    if (maybe_xfernode) |xfernode| {
-        const xfer = xfernode.data;
-
-        if (xfer.device) |dev| {
-            if (dev.isRootHub()) {
-                self.root_hub.hubHandleTransfer(xfer);
+    while (!self.isShuttingDown()) {
+        if (self.transfer_mailbox.receive()) |xfer| {
+            if (xfer.device) |dev| {
+                if (dev.isRootHub()) {
+                    self.root_hub.hubHandleTransfer(xfer);
+                } else {
+                    self.processTransfer(xfer) catch |err| {
+                        log.err("process transfer error: {any}", .{err});
+                    };
+                }
             } else {
-                log.debug("this is where we do a transfer to external devices", .{});
+                log.err("malformed transfer: no device", .{});
             }
-        } else {
-            log.err("Malformed transfer: no device", .{});
+        } else |err| {
+            log.err("transfer_mailbox receive error: {any}", .{err});
         }
     }
-
-    // // check for any pending transfer and see if
-    // // there's a channel available.
-    // // hand the transfer off to the channel.
-    // if (self.pending_transfers.popFirst()) |xfer| {
-    //     // there's a transfer. we need a channel
-    //     if (self.channelAllocate()) |channel| {
-    //         log.debug("Received channel {d}", .{channel.id});
-
-    //         // we have a transfer and a channel
-    //         self.transactionOnChannel(
-    //             channel,
-    //             xfer.device_address,
-    //             xfer.device_speed,
-    //             xfer.endpoint_number,
-    //             xfer.endpoint_type,
-    //             xfer.direction,
-    //             xfer.max_packet_size,
-    //             xfer.getTransactionPid(),
-    //             xfer.data_buffer,
-    //             xfer.timeout,
-    //         );
-    //     } else |err| {
-    //         switch (err) {
-    //             error.NoAvailableChannel => {
-    //                 // there might be a channel in the future.
-    //                 // put the transfer back so it'll be tried again
-    //                 self.pending_transfers.prepend(xfer);
-    //             },
-    //         }
-    //     }
-    // }
 }

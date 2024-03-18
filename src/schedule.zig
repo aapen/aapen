@@ -2,7 +2,7 @@ const std = @import("std");
 
 const root = @import("root");
 const printf = root.printf;
-const kernelExit = root.kernelExit;
+const kernelExit = root.kernel_hooks.kernel_exit;
 
 const arch = @import("architecture.zig");
 const cpu = arch.cpu;

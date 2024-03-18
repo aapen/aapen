@@ -15,15 +15,18 @@ const DeviceConfiguration = usb.DeviceConfiguration;
 const DeviceDescriptor = usb.DeviceDescriptor;
 const EndpointDescriptor = usb.EndpointDescriptor;
 const HubDescriptor = usb.HubDescriptor;
+const HubFeature = usb.HubFeature;
 const InterfaceClass = usb.InterfaceClass;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
 const LangID = usb.LangID;
 const PortStatus = usb.PortStatus;
+const PortFeature = usb.PortFeature;
 const StringDescriptor = usb.StringDescriptor;
 const Transfer = usb.Transfer;
 const TransferBytes = usb.TransferBytes;
-const TransferFactory = usb.TransferFactory;
 const TransferCompletionStatus = usb.TransferCompletionStatus;
+const TransferFactory = usb.TransferFactory;
+const TransferType = usb.TransferType;
 
 const reg = @import("../drivers/dwc/registers.zig");
 const HostPortStatusAndControl = reg.HostPortStatusAndControl;
@@ -76,13 +79,13 @@ fn expectTransferCompletionStatus(expected_status: TransferCompletionStatus, xfe
 
 fn supportedTransferTypes() !void {
     var iso: Transfer = .{
-        .endpoint_type = .isochronous,
+        .endpoint_type = TransferType.isochronous,
         .setup = undefined,
         .data_buffer = &.{},
     };
 
     var bulk: Transfer = .{
-        .endpoint_type = .bulk,
+        .endpoint_type = TransferType.bulk,
         .setup = undefined,
         .data_buffer = &.{},
     };
@@ -95,7 +98,7 @@ fn getDeviceDescriptor() !void {
     const buffer_size = @sizeOf(DeviceDescriptor);
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initDescriptorTransfer(.device, 0, 0, &buffer);
+    var xfer = TransferFactory.initDescriptorTransfer(DescriptorType.device, 0, 0, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
@@ -104,7 +107,7 @@ fn getDeviceDescriptor() !void {
     const device_descriptor = std.mem.bytesAsValue(DeviceDescriptor, xfer.data_buffer[0..@sizeOf(DeviceDescriptor)]);
 
     expectEqual(DescriptorType.device, device_descriptor.header.descriptor_type);
-    expectEqual(@as(u8, @intFromEnum(DeviceClass.hub)), device_descriptor.device_class);
+    expectEqual(DeviceClass.hub, device_descriptor.device_class);
     expectEqual(@as(u8, 0), device_descriptor.device_subclass);
     expectEqual(@as(u8, 0), device_descriptor.device_protocol);
     expect(device_descriptor.configuration_count >= 1);
@@ -115,7 +118,7 @@ fn getDeviceDescriptorShortBuffer() !void {
     const short_buffer_len: u16 = @as(u16, @sizeOf(DeviceDescriptor)) / 2;
     var buffer: [short_buffer_len]u8 = undefined;
 
-    var xfer = TransferFactory.initDescriptorTransfer(.device, 0, 0, &buffer);
+    var xfer = TransferFactory.initDescriptorTransfer(DescriptorType.device, 0, 0, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
@@ -281,7 +284,7 @@ fn getPortPowerStatus() !bool {
 fn setPortFeature() !void {
     const buffer_size = 0;
 
-    var xfer = TransferFactory.initHubSetPortFeatureTransfer(.port_power, 1, 0);
+    var xfer = TransferFactory.initHubSetPortFeatureTransfer(PortFeature.port_power, 1, 0);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
@@ -291,7 +294,7 @@ fn setPortFeature() !void {
 fn setPortFeatureReset() !void {
     const buffer_size = 0;
 
-    var xfer = TransferFactory.initHubSetPortFeatureTransfer(.port_reset, 1, 0);
+    var xfer = TransferFactory.initHubSetPortFeatureTransfer(PortFeature.port_reset, 1, 0);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
@@ -301,7 +304,7 @@ fn setPortFeatureReset() !void {
 fn setAddress() !void {
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
-    var xfer = TransferFactory.initDescriptorTransfer(.device, 0, 0, &buffer);
+    var xfer = TransferFactory.initDescriptorTransfer(DescriptorType.device, 0, 0, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
@@ -309,12 +312,12 @@ fn setAddress() !void {
 }
 
 fn setHubFeature() !void {
-    var xfer = TransferFactory.initHubSetHubFeatureTransfer(.c_hub_local_power);
+    var xfer = TransferFactory.initHubSetHubFeatureTransfer(HubFeature.c_hub_local_power);
     expectTransferCompletionStatus(.unsupported_request, &xfer);
 }
 
 fn clearHubFeature() !void {
-    var xfer = TransferFactory.initHubClearHubFeatureTransfer(.c_hub_local_power);
+    var xfer = TransferFactory.initHubClearHubFeatureTransfer(HubFeature.c_hub_local_power);
     expectTransferCompletionStatus(.unsupported_request, &xfer);
 }
 

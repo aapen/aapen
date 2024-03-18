@@ -2,7 +2,6 @@ const std = @import("std");
 const log = std.log.scoped(.usb);
 
 const descriptor = @import("descriptor.zig");
-const DescriptorType = descriptor.DescriptorType;
 
 const device = @import("device.zig");
 const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
@@ -58,8 +57,8 @@ pub const Transfer = struct {
     device_address: DeviceAddress = DEFAULT_ADDRESS,
     device_speed: UsbSpeed = .Full,
     endpoint_number: EndpointNumber = 0,
-    endpoint_type: TransferType = .control,
-    direction: EndpointDirection = .in,
+    endpoint_type: u2 = TransferType.control,
+    direction: u1 = EndpointDirection.in,
     max_packet_size: PacketSize = DEFAULT_MAX_PACKET_SIZE,
     setup: SetupPacket, // only used when transfer_type == .control,
     data_buffer: []u8,
@@ -73,7 +72,7 @@ pub const Transfer = struct {
         return .{
             .device = null,
             .endpoint_number = 0,
-            .endpoint_type = .control,
+            .endpoint_type = TransferType.control,
             .state = .token,
             .setup = setup_packet,
             .data_buffer = data_buffer,
@@ -84,9 +83,9 @@ pub const Transfer = struct {
         return .{
             .device = null,
             .endpoint_number = 0,
-            .endpoint_type = .interrupt,
+            .endpoint_type = TransferType.interrupt,
             // only the data size on the setup packet matters.
-            .setup = SetupPacket.init(.device, .standard, .device_to_host, 0, 0, 0, @truncate(data_buffer.len)),
+            .setup = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, 0, 0, 0, @truncate(data_buffer.len)),
             .data_buffer = data_buffer,
         };
     }
@@ -108,10 +107,10 @@ pub const Transfer = struct {
     pub fn transferCompleteTransaction(self: *Transfer, txn_status: TransactionStatus) void {
         // The Transfer's state machine goes in here.
         switch (self.endpoint_type) {
-            .control => self.transferCompleteControlTransaction(txn_status),
-            .interrupt => self.complete(.ok),
+            TransferType.control => self.transferCompleteControlTransaction(txn_status),
+            TransferType.interrupt => self.complete(.ok),
             else => {
-                log.warn("transferCompleteTransaction: unsupported transfer type {s}", .{@tagName(self.endpoint_type)});
+                log.warn("transferCompleteTransaction: unsupported transfer type 0x{x}", .{self.endpoint_type});
             },
         }
     }
@@ -149,47 +148,41 @@ pub const Transfer = struct {
         }
     }
 
-    pub fn getTransactionPid(self: *Transfer) PID2 {
+    pub fn getTransactionPid(self: *Transfer) u4 {
         // this probably needs to be extended to account for the
         // transfer type
         return switch (self.state) {
-            .token => .token_setup,
-            .data => .data_data1,
-            .handshake => .handshake_ack,
-            .complete => .handshake_nak,
+            .token => PID2.token_setup,
+            .data => PID2.data_data1,
+            .handshake => PID2.handshake_ack,
+            .complete => PID2.handshake_nak,
         };
     }
 };
 
-pub const PID = enum(u8) {
-    Setup,
-    Data0,
-    Data1,
+pub const PID2 = struct {
+    pub const token_out: u4 = 0b0001;
+    pub const token_in: u4 = 0b1001;
+    pub const token_sof: u4 = 0b0101;
+    pub const token_setup: u4 = 0b1101;
+    pub const data_data0: u4 = 0b0011;
+    pub const data_data1: u4 = 0b1011;
+    pub const data_data2: u4 = 0b0111;
+    pub const data_mdata: u4 = 0b1111;
+    pub const handshake_ack: u4 = 0b0010;
+    pub const handshake_nak: u4 = 0b1010;
+    pub const handshake_stall: u4 = 0b1110;
+    pub const handshake_nyet: u4 = 0b0110;
+    pub const special_preamble_or_err: u4 = 0b1100;
+    pub const special_split: u4 = 0b1000;
+    pub const special_ping: u4 = 0b0100;
 };
 
-pub const PID2 = enum(u4) {
-    token_out = 0b0001,
-    token_in = 0b1001,
-    token_sof = 0b0101,
-    token_setup = 0b1101,
-    data_data0 = 0b0011,
-    data_data1 = 0b1011,
-    data_data2 = 0b0111,
-    data_mdata = 0b1111,
-    handshake_ack = 0b0010,
-    handshake_nak = 0b1010,
-    handshake_stall = 0b1110,
-    handshake_nyet = 0b0110,
-    special_preamble_or_err = 0b1100,
-    special_split = 0b1000,
-    special_ping = 0b0100,
-};
-
-pub const TransferType = enum(u2) {
-    control = 0b00,
-    isochronous = 0b01,
-    bulk = 0b10,
-    interrupt = 0b11,
+pub const TransferType = struct {
+    pub const control: u2 = 0b00;
+    pub const isochronous: u2 = 0b01;
+    pub const bulk: u2 = 0b10;
+    pub const interrupt: u2 = 0b11;
 };
 
 pub const SetupPacket = extern struct {
@@ -200,16 +193,16 @@ pub const SetupPacket = extern struct {
     data_size: u16,
 
     pub fn init(
-        recip: RequestTypeRecipient,
-        rtt: RequestTypeType,
-        dir: RequestTypeDirection,
+        recip: u5,
+        rtt: u2,
+        dir: u1,
         rq: u8,
         value: u16,
         index: u16,
         data_size: u16,
     ) SetupPacket {
         return .{
-            .request_type = .{ .recipient = recip, .type = rtt, .transfer_direction = dir },
+            .request_type = request.RT(recip, rtt, dir),
             .request = rq,
             .value = value,
             .index = index,

@@ -81,8 +81,8 @@ pub fn free(sid: SID) !void {
 
     const sem = sement(sid);
     while (queue.nonEmpty(sem.queue)) {
-        const tid = queue.dequeue(sem.queue);
-        schedule.ready(tid, false);
+        const tid = try queue.dequeue(sem.queue);
+        try schedule.ready(tid, false);
     }
     sem.count = 0;
     sem.state = SEMAPHORE_FREE;
@@ -118,8 +118,9 @@ pub fn signal(sid: SID) !void {
 
     const sem = sement(sid);
 
+    const old = sem.count;
     sem.count += 1;
-    if (sem.count <= 0) {
+    if (old < 0) {
         const waiting_tid = try queue.dequeue(sem.queue);
         try schedule.ready(waiting_tid, true);
     }

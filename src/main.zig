@@ -1,10 +1,11 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const FixedBufferAllocator = std.heap.FixedBufferAllocator;
-const ScopeLevel = std.log.ScopeLevel;
 
 const atomic = @import("atomic.zig");
 const arch = @import("architecture.zig");
+
+pub const debug = @import("debug.zig");
+pub const printf = MainConsole.printf;
+pub const panic = debug.panic;
 
 const disassemble = @import("disassemble.zig");
 const event = @import("event.zig");
@@ -16,19 +17,12 @@ const CharBuffer = @import("char_buffer.zig");
 const CharBufferConsole = @import("char_buffer_console.zig");
 const MainConsole = @import("main_console.zig");
 
-pub const debug = @import("debug.zig");
-pub const printf = MainConsole.printf;
-pub const panic = debug.panic;
-
 const forty = @import("forty/forth.zig");
-pub const Forth = forty.Forth;
+const Forth = forty.Forth;
 
 const Serial = @import("serial.zig"); //TBD
-
-pub const schedule = @import("schedule.zig");
-pub const semaphore = @import("semaphore.zig");
-const heartbeat = @import("heartbeat.zig");
-
+const schedule = @import("schedule.zig");
+const semaphore = @import("semaphore.zig");
 const Usb = @import("usb.zig");
 
 const config = @import("config");
@@ -38,32 +32,18 @@ pub const HAL = switch (config.board) {
 };
 const diagnostics = @import("hal/diagnostics.zig");
 
-pub const std_options = struct {
-    pub const logFn = debug.log;
-    pub const log_level = .warn;
-    pub const log_scope_levels = &[_]ScopeLevel{
-        .{ .scope = .dwc_otg_usb, .level = .info },
-        .{ .scope = .dwc_otg_usb_channel, .level = .info },
-        .{ .scope = .usb, .level = .info },
-        .{ .scope = .forty, .level = .debug },
-    };
-};
+// Supply debug options to Zig's stdlib.
+pub const std_options = debug.options;
 
-/// Present an "operating system" interface layer to Zig's stdlib.
-const kheap = heap;
-const Freestanding = struct {
-    pub const system = struct {};
-    pub const heap = kheap;
-};
-
-pub const os = Freestanding;
+// Present an "operating system" interface layer to Zig's stdlib.
+pub const os = @import("os.zig");
 
 pub var hal: *HAL = undefined;
 pub var fb: *FrameBuffer = undefined;
 pub var char_buffer_console: *CharBufferConsole = undefined;
 pub var char_buffer: *CharBuffer = undefined;
 pub var main_console: *MainConsole = undefined;
-pub var kernel_allocator: Allocator = undefined;
+pub var kernel_allocator: std.mem.Allocator = undefined;
 
 pub var interpreter: Forth = Forth{};
 pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
@@ -79,15 +59,23 @@ pub var main_console_valid = false;
 
 extern fn _start() noreturn;
 
-const thread1 = if (std.mem.eql(u8, config.testname, ""))
-    startForty
-else
-    @import("test/all.zig").locateTest(config.testname);
+const KernelHooks = struct {
+    thread1: schedule.ThreadFunction,
+    kernel_exit: *const fn () void,
+};
 
-pub const kernelExit = if (std.mem.eql(u8, config.testname, ""))
-    powerDown
-else
-    @import("test/all.zig").exit;
+const test_mode = if (std.mem.eql(u8, config.testname, "")) false else true;
+
+pub const kernel_hooks = switch (test_mode) {
+    false => .{
+        .thread1 = startForty,
+        .kernel_exit = powerDown,
+    },
+    true => .{
+        .thread1 = @import("test/all.zig").locateTest(config.testname),
+        .kernel_exit = @import("test/all.zig").exit,
+    },
+};
 
 export fn kernelInit(core_id: usize) noreturn {
     arch.cpu.init(core_id);
@@ -137,7 +125,7 @@ export fn kernelInit(core_id: usize) noreturn {
     arch.cpu.enable();
 
     // start main thread
-    _ = schedule.spawn(thread1, "init", &.{}) catch |err| {
+    _ = schedule.spawn(kernel_hooks.thread1, "init", &.{}) catch |err| {
         debug.kernelError("thread create error", err);
     };
 
@@ -149,6 +137,8 @@ export fn kernelInit(core_id: usize) noreturn {
 }
 
 fn startForty(_: *anyopaque) void {
+    const heartbeat = @import("heartbeat.zig");
+
     _ = schedule.spawn(heartbeat.heartbeat, "hb", &.{}) catch |err| {
         debug.kernelError("heartbeat init error", err);
     };
