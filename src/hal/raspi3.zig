@@ -42,6 +42,7 @@ pub const BoardInfoController = bcm_board_info;
 pub const Clock = arm_local_timer.Clock;
 pub const DMA = bcm_dma;
 pub const InterruptController = arm_local_interrupt;
+pub const Irq = InterruptController.Irq;
 pub const GPIO = bcm_gpio;
 pub const I2C = bcm_i2c;
 pub const Mailbox = bcm_mailbox;
@@ -107,7 +108,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
-    self.usb_hci = try USBHCI.init(allocator, peripheral_base + 0x980000, self.interrupt_controller, .USB_HCI, &self.soc.bus_ranges, &self.power_controller);
+    self.usb_hci = try USBHCI.init(allocator, peripheral_base + 0x980000, self.interrupt_controller, Irq.USB_HCI, &self.soc.bus_ranges, &self.power_controller);
 
     for (0..3) |timer_id| {
         self.timer[timer_id] = try Timer.init(allocator, timer_id, peripheral_base + 0x3000, self.clock, self.interrupt_controller);

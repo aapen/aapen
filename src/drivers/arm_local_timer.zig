@@ -96,7 +96,7 @@ pub const Timer = struct {
         var self = try allocator.create(Timer);
 
         const timer_id: u2 = @truncate(id);
-        const irq_id: IrqId = @enumFromInt(id);
+        const irq_id: IrqId = @as(IrqId, @truncate(id));
 
         self.* = Timer{
             .timer_id = timer_id,
