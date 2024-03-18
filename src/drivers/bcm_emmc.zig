@@ -91,7 +91,7 @@ const Cmd = struct {
             @as(u32, bool_to_u1(isd)) << 21 |
             @as(u32, bool_to_u1(ie)) << 20 |
             @as(u32, bool_to_u1(ce)) << 19 |
-            @as(u32, r0) << 18 |
+            //@as(u32, r0) << 18 |
             @as(u32, rt) << 16 |
             @as(u32, rb) << 6 |
             @as(u32, mb) << 5 |
