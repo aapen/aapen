@@ -180,6 +180,26 @@ enable_jtag_gpio=1
 Note that this will make the RPi wait for a JTAG connection at boot
 time. It will not boot normally without the debugger.
 
+### Stub kernel for easy testing
+
+If we just run with the regular SD card, then by the time we start up
+OpenOCD on the host (more about that shortly) all the interesting
+kernel startup work has already finished. We need a way to buy some
+time to set up all the connections.
+
+The solution is to boot from a tiny image that puts the RPi core into
+a spinloop. The image consists of a single branch instruction,
+PC-relative, with an offset of zero. The CPU will spin on this
+instruction, while we run OpenOCD and get everything connected.
+
+To create this image, run `make sdfiles/infloop.bin`.
+
+To use this image, copy it to your boot SD card as `kernel8.img`.
+
+Then, after connecting with `make openocd_gdb` as described in the
+next section, load the real kernel by running `load` at the GDB
+prompt.
+
 ### Host-end software
 
 Another rats' nest of connections, I'm afraid:
@@ -187,7 +207,7 @@ Another rats' nest of connections, I'm afraid:
 - GDB for control of debugging. It connects to OpenOCD
 - OpenOCD using the USB-to-JTAG connection to talk to the chip.
 - tio as a modem emulator, using the serial device from the to the USB-to-TTL connection. (On Linux this is /dev/ttyUSB0).
-- If capturing video, a display program on the host. On Linux, guvcview or OBS both work
+- If capturing video, a display program on the host. On Linux, guvcview or OBS both work. OBS is known to work on macOS hosts.
 
 ```
  ┌────────────────────────────────────┐              ┌────────────┐
