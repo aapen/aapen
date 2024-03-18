@@ -43,13 +43,22 @@ const Device = struct {
     scr: ScrRegister = undefined,
 };
 
-const RespType = struct {
+const Resp = struct {
     const RTInvalid: u32 = 0xface;
 
     const RTNone: u32 = 0;
     const RT136: u32 = 1;
     const RT48: u32 = 2;
     const RT48Busy: u32 = 3;
+};
+
+// The docs call these values the cmd type, but really
+// they tell us how the command affects data transfer.
+const CmdType = struct {
+    const Normal: u2 = 0;
+    const Suspend: u2 = 1;
+    const Resume: u2 = 2;
+    const Abort: u2 = 3;
 };
 
 // TODO should some of these be bools?
@@ -63,21 +72,25 @@ const Cmd = struct {
     resp_b: u10,
     response_type: u2,
     res0: u1,
-    crc_enable: u1,
-    idx_enable: u1,
-    is_data: u1,
+    crc_enable: bool,
+    idx_enable: bool,
+    is_data: bool,
     cmd_type: u2,
     index: u6,
 
     code: u32,
 
-    pub fn init(ra: u1, bc: u1, ac: u2, dir: u1, mb: u1, rb: u10, rt: u2, r0: u1, ce: u1, ie: u1, isd: u1, ct: u2, idx: u6) Cmd {
+    inline fn bool_to_u1(b: bool) u1 {
+        return if (b) 1 else 0;
+    }
+
+    pub fn init(ra: u1, bc: u1, ac: u2, dir: u1, mb: u1, rb: u10, rt: u2, r0: u1, ce: bool, ie: bool, isd: bool, ct: u2, idx: u6) Cmd {
         const code =
             @as(u32, idx) << 24 |
             @as(u32, ct) << 22 |
-            @as(u32, isd) << 21 |
-            @as(u32, ie) << 20 |
-            @as(u32, ce) << 19 |
+            @as(u32, bool_to_u1(isd)) << 21 |
+            @as(u32, bool_to_u1(ie)) << 20 |
+            @as(u32, bool_to_u1(ce)) << 19 |
             @as(u32, r0) << 18 |
             @as(u32, rt) << 16 |
             @as(u32, rb) << 6 |
@@ -110,26 +123,26 @@ const Cmd = struct {
     }
 };
 
-const ReservedCmd = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, 1, 1, 1, 3, 0xF);
+const ReservedCmd = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, true, true, true, CmdType.Abort, 0xF);
 
 const InvalidCmd = ReservedCmd;
 
-const CTGoIdle = Cmd.init(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-const CTSendCide = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT136, 0, 1, 0, 0, 0, 2);
-const CTSendRelativeAddr = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 3);
-const CTIOSetOpCond = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT136, 0, 0, 0, 0, 0, 5);
-const CTSelectCard = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48Busy, 0, 1, 0, 0, 0, 7);
-const CTSendIfCond = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 8);
-const CTSetBlockLen = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 16);
-const CTReadBlock = Cmd.init(0, 0, 0, 1, 0, 0, RespType.RT48, 0, 1, 0, 1, 0, 17);
-const CTReadMultiple = Cmd.init(0, 1, 1, 1, 1, 0, RespType.RT48, 0, 1, 0, 1, 0, 18);
-const CTOcrCheck = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 0, 0, 0, 0, 41);
-const CTSendSCR = Cmd.init(0, 0, 0, 1, 0, 0, RespType.RT48, 0, 1, 0, 1, 0, 51);
-const CTApp = Cmd.init(0, 0, 0, 0, 0, 0, RespType.RT48, 0, 1, 0, 0, 0, 55);
+const CTGoIdle = Cmd.init(0, 0, 0, 0, 0, 0, 0, 0, false, false, false, CmdType.Normal, 0);
+const CTSendCide = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT136, 0, true, false, false, CmdType.Normal, 2);
+const CTSendRelativeAddr = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, true, false, false, CmdType.Normal, 3);
+const CTIOSetOpCond = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT136, 0, false, false, false, CmdType.Normal, 5);
+const CTSelectCard = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48Busy, 0, true, false, false, CmdType.Normal, 7);
+const CTSendIfCond = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, true, false, false, CmdType.Normal, 8);
+const CTSetBlockLen = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, true, false, false, CmdType.Normal, 16);
+const CTReadBlock = Cmd.init(0, 0, 0, 1, 0, 0, Resp.RT48, 0, true, false, true, CmdType.Normal, 17);
+const CTReadMultiple = Cmd.init(0, 1, 1, 1, 1, 0, Resp.RT48, 0, true, false, true, CmdType.Normal, 18);
+const CTOcrCheck = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, false, false, false, CmdType.Normal, 41);
+const CTSendSCR = Cmd.init(0, 0, 0, 1, 0, 0, Resp.RT48, 0, true, false, true, CmdType.Normal, 51);
+const CTApp = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, true, false, false, CmdType.Normal, 55);
 
 // TBD This seems unlikely.
-const CTWriteBlock = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, 1, 1, 1, 3, 24);
-const CTWriteMultiple = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, 1, 1, 1, 3, 25);
+const CTWriteBlock = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, true, true, true, CmdType.Abort, 24);
+const CTWriteMultiple = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, true, true, true, CmdType.Abort, 25);
 
 const Error = struct {
     const SDECommandTimeout: u32 = 0;
@@ -341,9 +354,9 @@ fn emmc_issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
     }
 
     switch (cmd.response_type) {
-        RespType.RT48, RespType.RT48Busy => self.device.last_response[0] = self.registers.response[0],
+        Resp.RT48, Resp.RT48Busy => self.device.last_response[0] = self.registers.response[0],
 
-        RespType.RT136 => {
+        Resp.RT136 => {
             self.device.last_response[0] = self.registers.response[0];
             self.device.last_response[1] = self.registers.response[1];
             self.device.last_response[2] = self.registers.response[2];
@@ -352,13 +365,13 @@ fn emmc_issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
         else => {},
     }
 
-    if (cmd.is_data == 1) {
+    if (cmd.is_data) {
         _ = printf("*** cmd %d is a data command!\n", cmd.code);
         const xfer_result = self.do_data_transfer(cmd);
         _ = printf("xfer result: %d\n", xfer_result);
     }
 
-    if ((cmd.response_type == RespType.RT48Busy) or (cmd.is_data == 1)) {
+    if ((cmd.response_type == Resp.RT48Busy) or cmd.is_data) {
         _ = wait_reg_mask(&self.registers.int_flags, 0x8002, true, 2000);
         intr_val = self.registers.int_flags;
 
