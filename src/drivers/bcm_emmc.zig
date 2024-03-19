@@ -71,7 +71,7 @@ const Cmd = struct {
     multiblock: u1,
     resp_b: u10,
     response_type: u2,
-    res0: u1,
+    //res0: u1,
     crc_enable: bool,
     idx_enable: bool,
     is_data: bool,
@@ -84,7 +84,7 @@ const Cmd = struct {
         return if (b) 1 else 0;
     }
 
-    pub fn init(ra: u1, bc: u1, ac: u2, dir: u1, mb: u1, rb: u10, rt: u2, r0: u1, ce: bool, ie: bool, isd: bool, ct: u2, idx: u6) Cmd {
+    pub fn init(ra: u1, bc: u1, ac: u2, dir: u1, mb: u1, rb: u10, rt: u2, ce: bool, ie: bool, isd: bool, ct: u2, idx: u6) Cmd {
         const code =
             @as(u32, idx) << 24 |
             @as(u32, ct) << 22 |
@@ -108,7 +108,7 @@ const Cmd = struct {
             .multiblock = mb,
             .resp_b = rb,
             .response_type = rt,
-            .res0 = r0,
+            //.res0 = r0,
             .crc_enable = ce,
             .idx_enable = ie,
             .is_data = isd,
@@ -123,26 +123,26 @@ const Cmd = struct {
     }
 };
 
-const ReservedCmd = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, true, true, true, CmdType.Abort, 0xF);
+const ReservedCmd = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, true, true, true, CmdType.Abort, 0xF);
 
 const InvalidCmd = ReservedCmd;
 
-const CTGoIdle = Cmd.init(0, 0, 0, 0, 0, 0, 0, 0, false, false, false, CmdType.Normal, 0);
-const CTSendCide = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT136, 0, true, false, false, CmdType.Normal, 2);
-const CTSendRelativeAddr = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, true, false, false, CmdType.Normal, 3);
-const CTIOSetOpCond = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT136, 0, false, false, false, CmdType.Normal, 5);
-const CTSelectCard = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48Busy, 0, true, false, false, CmdType.Normal, 7);
-const CTSendIfCond = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, true, false, false, CmdType.Normal, 8);
-const CTSetBlockLen = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, true, false, false, CmdType.Normal, 16);
-const CTReadBlock = Cmd.init(0, 0, 0, 1, 0, 0, Resp.RT48, 0, true, false, true, CmdType.Normal, 17);
-const CTReadMultiple = Cmd.init(0, 1, 1, 1, 1, 0, Resp.RT48, 0, true, false, true, CmdType.Normal, 18);
-const CTOcrCheck = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, false, false, false, CmdType.Normal, 41);
-const CTSendSCR = Cmd.init(0, 0, 0, 1, 0, 0, Resp.RT48, 0, true, false, true, CmdType.Normal, 51);
-const CTApp = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, 0, true, false, false, CmdType.Normal, 55);
+const CTGoIdle = Cmd.init(0, 0, 0, 0, 0, 0, 0, false, false, false, CmdType.Normal, 0);
+const CTSendCide = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT136, true, false, false, CmdType.Normal, 2);
+const CTSendRelativeAddr = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, true, false, false, CmdType.Normal, 3);
+const CTIOSetOpCond = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT136, false, false, false, CmdType.Normal, 5);
+const CTSelectCard = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48Busy, true, false, false, CmdType.Normal, 7);
+const CTSendIfCond = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, true, false, false, CmdType.Normal, 8);
+const CTSetBlockLen = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, true, false, false, CmdType.Normal, 16);
+const CTReadBlock = Cmd.init(0, 0, 0, 1, 0, 0, Resp.RT48, true, false, true, CmdType.Normal, 17);
+const CTReadMultiple = Cmd.init(0, 1, 1, 1, 1, 0, Resp.RT48, true, false, true, CmdType.Normal, 18);
+const CTOcrCheck = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, false, false, false, CmdType.Normal, 41);
+const CTSendSCR = Cmd.init(0, 0, 0, 1, 0, 0, Resp.RT48, true, false, true, CmdType.Normal, 51);
+const CTApp = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, true, false, false, CmdType.Normal, 55);
 
 // TBD This seems unlikely.
-const CTWriteBlock = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, true, true, true, CmdType.Abort, 24);
-const CTWriteMultiple = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, 1, true, true, true, CmdType.Abort, 25);
+const CTWriteBlock = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, true, true, true, CmdType.Abort, 24);
+const CTWriteMultiple = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, true, true, true, CmdType.Abort, 25);
 
 const Error = struct {
     const SDECommandTimeout: u32 = 0;
