@@ -192,13 +192,18 @@ pub const EndpointDescriptor = packed struct {
     header: Header,
     endpoint_address: u8,
     attributes: packed struct {
-        transfer_type: u2, // 0..1
+        endpoint_type: u2, // 0..1
         iso_synch_type: u2, // 2..3
         usage_type: u2, // 4..5
         _reserved_0: u2 = 0,
     },
     max_packet_size: u16,
     interval: u8, // polling interval in frames
+
+    /// Return the direction (in == 1, out == 0) of this endpoint
+    pub fn direction(self: *const EndpointDescriptor) u1 {
+        return @truncate((self.endpoint_address >> 7) & 0x1);
+    }
 
     pub fn dump(self: *const EndpointDescriptor) void {
         log.debug("EndpointDescriptor [", .{});

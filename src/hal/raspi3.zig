@@ -16,6 +16,8 @@ pub const heap_end: usize = device_start - 1;
 
 pub const data_cache_line_length: usize = 64;
 
+pub const DMA_ALIGNMENT: u29 = 64;
+
 // Clock
 pub const timer_frequency_hz = 1_000_000;
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.schedule);
 
 const root = @import("root");
 const printf = root.printf;
@@ -193,7 +194,7 @@ pub fn ready(tid: TID, resched: bool) !void {
     }
 }
 
-fn kill(tid: TID) void {
+pub fn kill(tid: TID) void {
     // _ = printf("kill tid %d, current is %d\n", tid, current);
 
     const im = cpu.disable();
@@ -369,6 +370,7 @@ fn strncpy(dst: []u8, src: []const u8) void {
 /// Convenience for indexing into the table with an i16
 /// Caller MUST verify the value is non-negative
 pub inline fn thrent(x: TID) *ThreadEntry {
+    if (x < 0) log.debug("thrent will panic, tid passed in is negative", .{});
     return &thread_table[@intCast(x)];
 }
 
@@ -505,5 +507,27 @@ pub fn dumpContextRecord(stack_bottom: u64) void {
     const stack_ptr: [*]u64 = @ptrFromInt(stack_bottom);
     for (0..CONTEXT_WORDS) |i| {
         _ = printf("[0x%08x] (%02d): 0x%08x    %s\n", @intFromPtr(&stack_ptr[i]), i, stack_ptr[i], context_record_field_names[i].ptr);
+    }
+}
+
+// ----------------------------------------------------------------------
+// Forty interop
+// ----------------------------------------------------------------------
+
+const Forth = @import("forty/forth.zig").Forth;
+
+pub fn defineModule(forth: *Forth) !void {
+    try forth.defineNamespace(@This(), .{
+        .{ "processTable", "ps" },
+    });
+}
+
+pub fn processTable() void {
+    _ = printf("\nTID\t%016s\tstate\tstack\n", "name");
+
+    for (&thread_table, 0..) |thr, tid| {
+        if (thr.state != THREAD_FREE) {
+            _ = printf("%04d\t%016s\t%d\t0x%08x\n", tid, &thr.name, thr.state, thr.stack_pointer);
+        }
     }
 }

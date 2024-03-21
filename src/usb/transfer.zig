@@ -2,6 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.usb);
 
 const descriptor = @import("descriptor.zig");
+const EndpointDescriptor = descriptor.EndpointDescriptor;
 
 const device = @import("device.zig");
 const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
@@ -20,10 +21,16 @@ const RequestTypeDirection = request.RequestTypeDirection;
 const RequestTypeRecipient = request.RequestTypeRecipient;
 const RequestTypeType = request.RequestTypeType;
 
+const schedule = @import("../schedule.zig");
+const TID = schedule.TID;
+const semaphore = @import("../semaphore.zig");
+const SID = semaphore.SID;
+
 const status = @import("status.zig");
 const TransactionStatus = status.TransactionStatus;
 
 pub const TransferBytes = u19;
+pub const TransferPackets = u10;
 pub const PacketSize = u11;
 pub const DEFAULT_MAX_PACKET_SIZE = 8;
 
@@ -44,6 +51,7 @@ pub const Transfer = struct {
         unsupported_request,
         timeout,
         protocol_error,
+        hardware_error,
     };
 
     pub const State = enum {
@@ -53,20 +61,56 @@ pub const Transfer = struct {
         complete,
     };
 
+    pub const ControlPhase = struct {
+        pub const setup: u8 = 0;
+        pub const data: u8 = 1;
+        pub const status: u8 = 2;
+    };
+
+    actual_size: TransferBytes = 0,
+    attempted_bytes_remaining: TransferBytes = 0,
+    attempted_packets_remaining: TransferPackets = 0,
+    attempted_size: TransferBytes = 0,
+    bytes_transferred: TransferBytes = 0,
+    completion: ?Completion = null,
+    control_phase: u8 = 0,
+    data_buffer: []u8,
     device: ?*Device = undefined,
     device_address: DeviceAddress = DEFAULT_ADDRESS,
     device_speed: UsbSpeed = .Full,
+    direction: u1 = EndpointDirection.in,
+    deferrer_thread_sem: ?SID = null,
+    deferrer_thread: ?TID = null,
+    endpoint_descriptor: ?*EndpointDescriptor = null,
     endpoint_number: EndpointNumber = 0,
     endpoint_type: u2 = TransferType.control,
-    direction: u1 = EndpointDirection.in,
     max_packet_size: PacketSize = DEFAULT_MAX_PACKET_SIZE,
+    next_data_pid: u2 = 0,
     setup: SetupPacket, // only used when transfer_type == .control,
-    data_buffer: []u8,
-    actual_size: TransferBytes = 0,
+    semaphore: ?SID = null,
+    short_attempt: bool = false,
     status: CompletionStatus = .incomplete,
-    completion: ?Completion = null,
     state: State = undefined,
     timeout: usize = 100,
+
+    pub fn initControlAllocated(xfer: *Transfer, dev: *Device, setup: SetupPacket, buffer: []u8) void {
+        xfer.* = .{
+            .actual_size = 0,
+            .attempted_bytes_remaining = 0,
+            .attempted_packets_remaining = 0,
+            .attempted_size = 0,
+            .bytes_transferred = 0,
+            .control_phase = 0,
+            .device = dev,
+            .device_address = dev.address,
+            .device_speed = dev.speed,
+            .data_buffer = buffer,
+            .endpoint_number = 0,
+            .endpoint_type = TransferType.control,
+            .setup = setup,
+            .state = .token, // used?
+        };
+    }
 
     pub fn initControl(setup_packet: SetupPacket, data_buffer: []u8) Transfer {
         return .{
@@ -88,6 +132,19 @@ pub const Transfer = struct {
             .setup = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, 0, 0, 0, @truncate(data_buffer.len)),
             .data_buffer = data_buffer,
         };
+    }
+
+    pub fn deinit(self: *Transfer) void {
+        if (self.deferrer_thread) |tid| {
+            schedule.kill(tid);
+        }
+
+        if (self.deferrer_thread_sem) |sid| {
+            semaphore.free(sid) catch {
+                // TODO something
+            };
+            self.deferrer_thread_sem = null;
+        }
     }
 
     pub fn addressTo(self: *Transfer, dev: *Device) void {
@@ -201,8 +258,18 @@ pub const SetupPacket = extern struct {
         index: u16,
         data_size: u16,
     ) SetupPacket {
+        return init2(request.RT(recip, rtt, dir), rq, value, index, data_size);
+    }
+
+    pub fn init2(
+        rt: RequestType,
+        rq: u8,
+        value: u16,
+        index: u16,
+        data_size: u16,
+    ) SetupPacket {
         return .{
-            .request_type = request.RT(recip, rtt, dir),
+            .request_type = rt,
             .request = rq,
             .value = value,
             .index = index,

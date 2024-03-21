@@ -1,5 +1,8 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.usb);
+
+const root = @import("root");
 
 const descriptor = @import("descriptor.zig");
 const DescriptorType = descriptor.DescriptorType;

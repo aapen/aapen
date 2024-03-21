@@ -85,6 +85,13 @@ export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) v
         }
     } else {
         unhandledExceptionDisplay(context.elr, entry_type, @as(u64, @bitCast(context.esr)), context.esr.ec);
+
+        // const unwind = unwindPointLocate(context);
+        // if (unwind.sp != undefined) {
+        //     context.elr = unwind.pc;
+        //     context.force_sp = unwind.sp;
+        //     context.gpr[29] = unwind.fp;
+        // }
     }
 }
 

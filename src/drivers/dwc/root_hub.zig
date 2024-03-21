@@ -134,7 +134,7 @@ const root_hub_configuration: RootHubConfiguration = .{
         },
         .endpoint_address = (1 << 7) | 1,
         .attributes = .{
-            .transfer_type = TransferType.interrupt,
+            .endpoint_type = TransferType.interrupt,
             .iso_synch_type = IsoSynchronizationType.none,
             .usage_type = IsoUsageType.data,
         },

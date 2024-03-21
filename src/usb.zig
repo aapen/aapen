@@ -34,7 +34,6 @@ pub const IsoUsageType = descriptor.IsoUsageType;
 pub const EndpointDescriptor = descriptor.EndpointDescriptor;
 pub const StringDescriptor = descriptor.StringDescriptor;
 pub const StringIndex = descriptor.StringIndex;
-//pub const setupDescriptorQuery = descriptor.setupDescriptorQuery;
 
 const device = @import("usb/device.zig");
 pub const Device = device.Device;
@@ -49,6 +48,8 @@ pub const MAX_ADDRESS = device.MAX_ADDRESS;
 pub const StandardDeviceRequests = device.StandardDeviceRequests;
 pub const STATUS_SELF_POWERED = device.STATUS_SELF_POWERED;
 pub const UsbSpeed = device.UsbSpeed;
+pub const FRAMES_PER_MS = device.FRAMES_PER_MS;
+pub const UFRAMES_PER_MS = device.UFRAMES_PER_MS;
 
 const endpoint = @import("usb/endpoint.zig");
 pub const EndpointDirection = endpoint.EndpointDirection;
@@ -80,12 +81,16 @@ const language = @import("usb/language.zig");
 pub const LangID = language.LangID;
 
 const request = @import("usb/request.zig");
+pub const Request = request.Request;
 pub const RequestType = request.RequestType;
 pub const RequestTypeDirection = request.RequestTypeDirection;
 pub const RequestTypeType = request.RequestTypeType;
 pub const RequestTypeRecipient = request.RequestTypeRecipient;
-pub const request_type_in = request.standard_device_in;
-pub const request_type_out = request.standard_device_out;
+pub const request_device_standard_in = request.standard_device_in;
+pub const request_device_standard_out = request.standard_device_out;
+
+const semaphore = @import("semaphore.zig");
+const SID = semaphore.SID;
 
 const status = @import("usb/status.zig");
 pub const Error = status.Error;
@@ -230,9 +235,14 @@ pub fn freeDevice(devid: DeviceAddress) void {
 
 pub fn attachDevice(devid: DeviceAddress) !void {
     var dev = &devices[devid - 1];
+
+    // default to max packet size of 8 until we can read the device
+    // descriptor to find the real max packet size.
+    dev.device_descriptor.max_packet_size = 8;
+
     // when attaching a device, it will be in the default state:
     // responding to address 0, endpoint 0
-    try deviceDescriptorRead(dev);
+    try deviceDescriptorRead(dev, 8);
 
     dev.device_descriptor.dump();
 
@@ -240,6 +250,9 @@ pub fn attachDevice(devid: DeviceAddress) !void {
 
     log.debug("assigning address {d}", .{devid});
     try deviceSetAddress(dev, devid);
+
+    // now read the real descriptor
+    try deviceDescriptorRead(dev, @sizeOf(DeviceDescriptor));
 
     log.debug("reading configuration descriptor", .{});
     try deviceConfigurationDescriptorRead(dev);
@@ -319,15 +332,61 @@ pub fn transferAwait(xfer: *Transfer, timeout: u32) !void {
     }
 }
 
+fn controlMessageDone(xfer: *Transfer) void {
+    semaphore.signal(xfer.semaphore.?) catch {
+        log.err("failed to signal semaphore {?d} on completion of control msg", .{xfer.semaphore});
+    };
+}
+
 // ----------------------------------------------------------------------
 // Specific transfers
 // ----------------------------------------------------------------------
-pub fn deviceDescriptorRead(dev: *Device) !void {
-    var xfer = TransferFactory.initDeviceDescriptorTransfer(0, 0, std.mem.asBytes(&dev.device_descriptor));
-    xfer.addressTo(dev);
+pub fn controlMessage(dev: *Device, endp: ?*EndpointDescriptor, req: Request, req_type: RequestType, val: u16, index: u16, data: []u8) !Transfer.CompletionStatus {
+    const sem: SID = try semaphore.create(0);
+    defer {
+        semaphore.free(sem) catch |err| {
+            log.err("semaphore {d} free error: {any}", .{ sem, err });
+        };
+    }
 
-    try transferSubmit(&xfer);
-    try transferAwait(&xfer, 100);
+    const setup: SetupPacket = SetupPacket.init2(req_type, req, val, index, @truncate(data.len));
+    var xfer: *Transfer = try allocator.create(Transfer);
+    xfer.initControlAllocated(dev, setup, data);
+
+    xfer.endpoint_descriptor = endp;
+    xfer.completion = controlMessageDone;
+    xfer.semaphore = sem;
+    try transferSubmit(xfer);
+    semaphore.wait(sem) catch |err| {
+        log.err("semaphore {d} wait error: {any}", .{ sem, err });
+    };
+    var st = xfer.status;
+    if (st == .ok and xfer.actual_size != data.len) {
+        st = .incomplete;
+    }
+    xfer.deinit();
+    allocator.destroy(xfer);
+    return st;
+}
+
+pub fn deviceDescriptorRead(dev: *Device, maxlen: TransferBytes) !void {
+    const buffer: []u8 = std.mem.asBytes(&dev.device_descriptor);
+    const readlen = @min(maxlen, buffer.len);
+    _ = try controlMessage(
+        dev,
+        null,
+        StandardDeviceRequests.get_descriptor, //req
+        request_device_standard_in, // req type
+        @as(u16, DescriptorType.device) << 8, // value
+        LangID.none, // index
+        buffer[0..readlen], // data
+    );
+
+    // var xfer = TransferFactory.initDeviceDescriptorTransfer(0, 0, std.mem.asBytes(&dev.device_descriptor));
+    // xfer.addressTo(dev);
+
+    // try transferSubmit(&xfer);
+    // try transferAwait(&xfer, 100);
 }
 
 pub fn deviceSetAddress(dev: *Device, address: DeviceAddress) !void {

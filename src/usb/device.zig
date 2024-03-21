@@ -33,6 +33,8 @@ pub const FIRST_DEDICATED_ADDRESS = 1;
 pub const MAX_ADDRESS: DeviceAddress = 63;
 pub const MAX_INTERFACES: usize = 8;
 pub const MAX_ENDPOINTS: usize = 8;
+pub const FRAMES_PER_MS: u32 = 8;
+pub const UFRAMES_PER_MS: u32 = 8;
 
 pub const DeviceStatus = u16;
 pub const STATUS_SELF_POWERED: u32 = 0b01;

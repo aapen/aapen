@@ -63,12 +63,12 @@ pub const ChannelInterrupt = packed struct {
     pub fn isStatusError(self: *const ChannelInterrupt) bool {
         const st: u32 = @bitCast(self.*);
         const error_mask: u32 = @bitCast(ChannelInterrupt{
-            .ahb_error = 1,
             .stall = 1,
+            .ahb_error = 1,
             .transaction_error = 1,
             .babble_error = 1,
-            .frame_overrun = 1,
-            .data_toggle_error = 1,
+            .excessive_transmission = 1,
+            .frame_list_rollover = 1,
         });
 
         return (st & error_mask) != 0;
@@ -108,18 +108,18 @@ pub const ChannelInterrupt = packed struct {
     }
 };
 
-pub const DwcTransferSizePid = enum(u2) {
+pub const DwcTransferSizePid = struct {
     // These are defined by the DWC2 chip itself
-    Data0 = 0,
-    Data1 = 2,
-    Data2 = 1,
-    Setup = 3,
+    pub const data0: u2 = 0;
+    pub const data1: u2 = 2;
+    pub const data2: u2 = 1;
+    pub const setup: u2 = 3;
 };
 
 pub const TransferSize = packed struct {
     transfer_size_bytes: u19, // 0..18
     transfer_size_packets: u10, // 19..28
-    pid: DwcTransferSizePid, // 29..30
+    pid: u2, // 29..30 (DwcTransferSizePid)
     do_ping: u1, // 31
 };
 

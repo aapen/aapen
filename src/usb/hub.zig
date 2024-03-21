@@ -281,7 +281,7 @@ pub const Hub = struct {
         if (dev.device_descriptor.device_class != DeviceClass.hub or
             dev.configuration.configuration_descriptor.interface_count != 1 or
             dev.configuration.interfaces[0].?.endpoint_count != 1 or
-            dev.configuration.endpoints[0][0].?.attributes.transfer_type != TransferType.interrupt)
+            dev.configuration.endpoints[0][0].?.attributes.endpoint_type != TransferType.interrupt)
         {
             return Error.DeviceUnsupported;
         }
@@ -548,6 +548,9 @@ fn hubThread(_: *anyopaque) void {
             if (req.status == .ok) {
                 log.debug("processing hub {d} status change: 0x{x}", .{ hub_id, req.data_buffer[0] });
 
+                if (req.actual_size != req.data_buffer.len) {
+                    log.debug("hub {d} req.actual_size = {d}, data_buffer.len = {d}", .{ hub_id, req.actual_size, req.data_buffer.len });
+                }
                 // find which ports have changes to report
                 // the request buffer has a bitmask
                 var portmask: u32 = 0;

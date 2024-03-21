@@ -38,8 +38,9 @@ pub const options = struct {
     pub const logFn = log;
     pub const log_level = .warn;
     pub const log_scope_levels = &[_]ScopeLevel{
-        .{ .scope = .dwc_otg_usb, .level = .info },
+        .{ .scope = .dwc_otg_usb, .level = .debug },
         .{ .scope = .dwc_otg_usb_channel, .level = .debug },
+        .{ .scope = .schedule, .level = .debug },
         .{ .scope = .usb, .level = .debug },
         .{ .scope = .usb_hub, .level = .debug },
         .{ .scope = .forty, .level = .info },

@@ -161,6 +161,10 @@ fn startForty(_: *anyopaque) void {
         debug.kernelError("time define module", err);
     };
 
+    schedule.defineModule(&interpreter) catch |err| {
+        debug.kernelError("schedule define module", err);
+    };
+
     diagnostics.defineModule(&interpreter) catch |err| {
         debug.kernelError("diagnostics define module", err);
     };
