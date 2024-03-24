@@ -12,15 +12,6 @@ const ErrorCodes = reg_esr.ErrorCodes;
 
 const __exception_handler_table = @extern([*]u8, .{ .name = "__exception_handler_table" });
 
-pub const UnwindPoint = struct {
-    sp: u64 = undefined,
-    pc: u64 = undefined,
-    fp: u64 = undefined,
-    lr: u64 = undefined,
-};
-
-pub extern fn markUnwindPoint(point: *UnwindPoint) void;
-
 const IrqHandler = *const fn (context: *const ExceptionContext) void;
 
 pub fn init() void {
@@ -48,10 +39,6 @@ pub const ExceptionContext = struct {
     force_sp: u64,
 };
 
-fn unwindPointLocate(_: *ExceptionContext) *UnwindPoint {
-    return &root.global_unwind_point;
-}
-
 export fn irqCurrentElx(context: *const ExceptionContext) void {
     root.hal.interrupt_controller.irqHandle(context);
 }
@@ -59,65 +46,74 @@ export fn irqCurrentElx(context: *const ExceptionContext) void {
 // ----------------------------------------------------------------------
 // Exception display
 // ----------------------------------------------------------------------
+const ZIG_PANIC_BREAKPOINT: u16 = 0xf000;
 
-export fn invalidEntryMessageShow(context: *ExceptionContext, entry_type: u64) void {
-    // Check if this was a breakpoint due to std.builtin.default_panic
-    if (context.esr.ec == ErrorCodes.brk) {
-        // Breakpoint number is the lower 16 bits of ESR's ISS
-        const breakpoint_number: u16 = @truncate(context.esr.iss & 0xffff);
+inline fn isBreakpoint(context: *ExceptionContext) bool {
+    return context.esr.ec == ErrorCodes.brk;
+}
 
-        // Zig uses 0xf000 to indicate a panic
-        if (breakpoint_number == 0xf000) {
-            // Could we get the panic string and arguments from the
-            // stack?
-            panicDisplay(context.elr);
-            const unwind = unwindPointLocate(context);
-            if (unwind.sp != undefined) {
-                context.elr = unwind.pc;
-                context.force_sp = unwind.sp;
-                context.gpr[29] = unwind.fp;
-            }
-        } else {
-            unknownBreakpointDisplay(context.elr, breakpoint_number);
+inline fn exceptionIss(context: *ExceptionContext) u16 {
+    return @truncate(context.esr.iss & 0xffff);
+}
 
-            // Adjust ELR to resume execution _after_ the breakpoint instruction
-            context.elr += 4;
-        }
+inline fn isPanic(context: *ExceptionContext) bool {
+    return isBreakpoint(context) and ZIG_PANIC_BREAKPOINT == exceptionIss(context);
+}
+
+export fn synchronousExceptionElx(context: *ExceptionContext) void {
+    if (isPanic(context)) {
+        panicDisplay(context);
+    } else if (isBreakpoint(context)) {
+        unknownBreakpointDisplay(context);
     } else {
-        unhandledExceptionDisplay(context.elr, entry_type, @as(u64, @bitCast(context.esr)), context.esr.ec);
-
-        // const unwind = unwindPointLocate(context);
-        // if (unwind.sp != undefined) {
-        //     context.elr = unwind.pc;
-        //     context.force_sp = unwind.sp;
-        //     context.gpr[29] = unwind.fp;
-        // }
+        unhandledExceptionDisplay(context, 0);
+        context.elr += 4;
     }
 }
 
-fn panicDisplay(elr: ?u64) void {
-    if (elr) |addr| {
-        _ = printf("Panic!\nELR: 0x%08x\n", addr);
-        stackTraceDisplay(addr);
-    } else {
-        _ = printf("Panic!\nSource unknown.\n");
-    }
+export fn unhandledException(context: *ExceptionContext, entry_type: u64) void {
+    unhandledExceptionDisplay(context, entry_type);
+    context.elr += 4;
 }
 
-fn unknownBreakpointDisplay(from_addr: ?u64, bkpt_number: u16) void {
-    if (from_addr) |addr| {
-        _ = printf("Breakpoint\nComment: 0x%08x\n ELR: 0x%08x\n", bkpt_number, addr);
-    } else {
-        _ = printf("Breakpoint\nComment: 0x%08x\n ELR: unknown\n", bkpt_number);
+fn panicDisplay(context: *ExceptionContext) void {
+    _ = printf("[panic]: ELR 0x%08x\n", context.elr);
+
+    var it = std.debug.StackIterator.init(null, null);
+    defer it.deinit();
+
+    _ = printf("\nStack trace\n");
+    _ = printf("Frame PC\n");
+    for (0..40) |i| {
+        const addr = it.next() orelse {
+            _ = printf(".\n");
+            return;
+        };
+        _ = printf("%02d    0x%08x\n", i, addr);
     }
+    _ = printf("--stack trace truncated--\n");
 }
 
-fn unhandledExceptionDisplay(from_addr: ?u64, entry_type: u64, esr: u64, ec: u6) void {
-    if (from_addr) |addr| {
-        _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: 0x%08x\n  EC: 0b%06b (%s)\n", entry_type, esr, addr, @as(u8, ec), reg_esr.errorCodeName(ec).ptr);
-    } else {
-        _ = printf("Unhandled exception!\nType: 0x%08x\n ESR: 0x%08x\n ELR: unknown\n  EC: 0b%06b (%s)\n", entry_type, esr, @as(u8, ec), reg_esr.errorCodeName(ec).ptr);
-    }
+fn unknownBreakpointDisplay(context: *ExceptionContext) void {
+    const elr = context.elr;
+    const bkpt_number: u16 = @truncate(context.esr.iss & 0xffff);
+
+    _ = printf("[breakpoint]: ELR 0x%08x, Type 0x%08x\n", elr, bkpt_number);
+}
+
+fn unhandledExceptionDisplay(context: *ExceptionContext, entry_type: u64) void {
+    const elr = context.elr;
+    const esr = context.esr;
+    const ec = esr.ec;
+
+    _ = printf(
+        "[exception]: ELR: 0x%08x, Type 0x%08x, ESR 0x%08x, EC 0b%06b (%s)\n",
+        elr,
+        entry_type,
+        @as(u64, @bitCast(esr)),
+        @as(u8, ec),
+        reg_esr.errorCodeName(ec).ptr,
+    );
 
     // If we are in a test, exit on the first unhandled exception
     const config = @import("config");
@@ -127,25 +123,4 @@ fn unhandledExceptionDisplay(from_addr: ?u64, entry_type: u64, esr: u64, ec: u6)
         helpers.expect(false);
         helpers.exitWithTestResult();
     }
-}
-
-fn stackTraceDisplay(from_addr: u64) void {
-    _ = from_addr;
-    var it = std.debug.StackIterator.init(null, null);
-    defer it.deinit();
-
-    _ = printf("\nStack trace\n");
-    _ = printf("Frame\tPC\n");
-    for (0..40) |i| {
-        const addr = it.next() orelse {
-            _ = printf(".\n");
-            return;
-        };
-        stackFrameDisplay(i, addr);
-    }
-    _ = printf("--stack trace truncated--\n");
-}
-
-fn stackFrameDisplay(frame_number: usize, frame_pointer: usize) void {
-    _ = printf("%d\t0x%08x\n", frame_number, frame_pointer);
 }

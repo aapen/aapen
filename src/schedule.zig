@@ -21,14 +21,22 @@ pub const Error = error{
     NoMoreThreads,
 };
 
-pub const THREAD_FREE: u8 = 0; // thread table entry unused
-pub const THREAD_RUNNING: u8 = 1; // thread currently running
-pub const THREAD_READY: u8 = 2; // thread runnable
-pub const THREAD_RECEIVING: u8 = 3; // thread waiting for message
-pub const THREAD_SLEEP: u8 = 4; // thread sleeping
-pub const THREAD_SUSPEND: u8 = 5; // thread suspended
-pub const THREAD_WAIT: u8 = 6; // waiting on a semaphore
-pub const THREAD_TIMEOUT: u8 = 7; // timed out waiting for event
+// thread table entry unused
+pub const THREAD_FREE: u8 = 0;
+// thread currently executing
+pub const THREAD_RUNNING: u8 = 1;
+// thread could execute but isn't
+pub const THREAD_READY: u8 = 2;
+// waiting for message
+pub const THREAD_RECEIVING: u8 = 3;
+// waiting for message, but with timeout
+pub const THREAD_RECEIVING_TIMEOUT: u8 = 4;
+// thread sleeping
+pub const THREAD_SLEEP: u8 = 5;
+// thread suspended, cannot run
+pub const THREAD_SUSPEND: u8 = 6;
+// waiting on a semaphore
+pub const THREAD_WAIT: u8 = 7;
 
 // TODO move this to a common "definitions" module
 pub const NUM_THREADS = 128;
@@ -70,6 +78,9 @@ pub const ThreadEntry = struct {
     name: [NAME_LEN]u8,
     semaphore: SID,
     irq_mask: InterruptMask,
+    has_message: bool,
+    message: u64,
+    parent: TID,
 
     pub fn init() ThreadEntry {
         return .{
@@ -81,6 +92,9 @@ pub const ThreadEntry = struct {
             .name = undefined,
             .semaphore = undefined,
             .irq_mask = 0,
+            .has_message = false,
+            .message = 0,
+            .parent = NO_TID,
         };
     }
 };
@@ -106,6 +120,7 @@ pub fn init() !void {
 pub fn becomeThread0(kernel_stack_top: u64, kernel_stack_size: u64) void {
     const thr0 = thrent(0);
     strncpy(thr0.name[0..NAME_LEN], "null");
+    thr0.parent = NO_TID;
     thr0.state = THREAD_RUNNING;
     thr0.priority = queue.MINKEY + 1;
     thr0.stack_base = kernel_stack_top - kernel_stack_size;
@@ -164,6 +179,7 @@ pub fn create(proc: u64, ssize: u64, priority: Key, name: []const u8, args_ptr: 
 
     const thr = thrent(tid);
 
+    thr.parent = current;
     thr.state = THREAD_SUSPEND;
     thr.priority = priority;
     thr.stack_base = stack_addr;
@@ -214,6 +230,12 @@ pub fn kill(tid: TID) void {
     }
 
     // signal parent thread? do we need a concept of parent thread?
+    if (thr.parent != NO_TID) {
+        send(thr.parent, childExited(tid)) catch {
+            // TODO complain
+        };
+    }
+
     stackFree(thr.stack_base, thr.stack_length);
 
     // depending on the thread's state, we have some bookkeeping to do
@@ -257,7 +279,7 @@ pub fn unsleep(tid: TID) !void {
     defer cpu.restore(im);
 
     const thr = thrent(tid);
-    if (thr.state != THREAD_SLEEP and thr.state != THREAD_TIMEOUT) {
+    if (thr.state != THREAD_SLEEP and thr.state != THREAD_RECEIVING_TIMEOUT) {
         return error.NotSleeping;
     }
     const next = queue.quetab(tid).next;
@@ -279,9 +301,85 @@ pub fn wakeup() void {
     reschedule();
 }
 
+/// Deliver a message to a thread. If the thread already has a pending
+/// message, the new message will be dropped.
+///
+/// This is meant for low-level kernel signalling. For
+/// application-level communication, use a Mailbox.
+pub fn send(tid: TID, msg: u64) !void {
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
+    if (isBadTid(tid)) return error.BadThreadId;
+
+    const thr = thrent(tid);
+
+    if (thr.state == THREAD_FREE or thr.has_message) return;
+
+    thr.has_message = true;
+    thr.message = msg;
+
+    switch (thr.state) {
+        THREAD_RECEIVING => ready(tid, false) catch {},
+        THREAD_RECEIVING_TIMEOUT => {
+            unsleep(tid) catch {};
+            ready(tid, false) catch {};
+        },
+        else => {},
+    }
+}
+
+/// Receive a message. If a message is pending, returns immediately
+/// without context change. If no message is pending, sleeps until a
+/// message arrives.
+pub fn receive() !u64 {
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
+    const thr = thrent(current);
+    if (!thr.has_message) {
+        thr.state = THREAD_RECEIVING;
+        reschedule();
+    }
+
+    thr.has_message = false;
+    return thr.message;
+}
+
+pub fn receiveTimeout(maxwait: u32) !u64 {
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
+    const thr = thrent(current);
+    if (!thr.has_message) {
+        try queue.insertDelta(current, maxwait, sleepq);
+        thrent(current).state = THREAD_RECEIVING_TIMEOUT;
+        reschedule();
+    }
+
+    if (thr.has_message) {
+        thr.has_message = false;
+        return thr.message;
+    } else {
+        return error.TimedOut;
+    }
+}
+
 // ----------------------------------------------------------------------
 // Internals
 // ----------------------------------------------------------------------
+
+const ThreadSignal = packed struct {
+    tid: TID,
+    reserved: u40 = 0,
+    event_type: u8,
+};
+
+const SIGNAL_CHILD_EXIT = 17; // for tradition's sake
+
+fn childExited(tid: TID) u64 {
+    return @bitCast(ThreadSignal{ .tid = tid, .event_type = SIGNAL_CHILD_EXIT });
+}
 
 pub fn reschedule() void {
     const old: *ThreadEntry = thrent(current);

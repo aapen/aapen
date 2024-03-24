@@ -46,12 +46,6 @@ pub var main_console: *MainConsole = undefined;
 pub var kernel_allocator: std.mem.Allocator = undefined;
 
 pub var interpreter: Forth = Forth{};
-pub var global_unwind_point = arch.cpu.exceptions.UnwindPoint{
-    .sp = undefined,
-    .pc = undefined,
-    .fp = undefined,
-    .lr = undefined,
-};
 
 pub var uart_valid = false;
 pub var char_buffer_console_valid = false;
@@ -68,7 +62,7 @@ const test_mode = if (std.mem.eql(u8, config.testname, "")) false else true;
 
 pub const kernel_hooks = switch (test_mode) {
     false => .{
-        .thread1 = startForty,
+        .thread1 = supervisor,
         .kernel_exit = powerDown,
     },
     true => .{
@@ -136,73 +130,97 @@ export fn kernelInit(core_id: usize) noreturn {
     }
 }
 
-fn startForty(_: *anyopaque) void {
-    const heartbeat = @import("heartbeat.zig");
-
-    _ = schedule.spawn(heartbeat.heartbeat, "hb", &.{}) catch |err| {
-        debug.kernelError("heartbeat init error", err);
+// Supervisor is notified if the Forty thread dies due to a panic. It
+// starts a new thread, using the same interpreter state.
+fn supervisor(_: *anyopaque) void {
+    startHeartbeat() catch |err| {
+        debug.kernelError("heartbeat error", err);
     };
 
-    if (interpreter.init(kernel_allocator, main_console, char_buffer)) {
-        debug.kernelMessage("Forth init");
-    } else |err| {
-        debug.kernelError("Forth init error", err);
+    var forty_tid: schedule.TID = -1;
+    while (true) {
+        forty_tid = schedule.spawn(startForty, "forty", &interpreter) catch |err| {
+            debug.kernelError("spawn forty error", err);
+            return;
+        };
+        // wait for child thread to exit
+        const msg = schedule.receive() catch 0;
+        _ = printf("[supervisor]: child thread %d exited\n", @as(u16, @truncate(msg & 0xffff)));
+        _ = printf("[supervisor]: recovering to repl\n");
     }
-
-    debug.defineModule(&interpreter) catch |err| {
-        debug.kernelError("Debug ring define module", err);
-    };
-
-    HAL.defineModule(&interpreter, hal) catch |err| {
-        debug.kernelError("HAL define module", err);
-    };
-
-    time.defineModule(&interpreter) catch |err| {
-        debug.kernelError("time define module", err);
-    };
-
-    schedule.defineModule(&interpreter) catch |err| {
-        debug.kernelError("schedule define module", err);
-    };
-
-    diagnostics.defineModule(&interpreter) catch |err| {
-        debug.kernelError("diagnostics define module", err);
-    };
-
-    Usb.defineModule(&interpreter) catch |err| {
-        debug.kernelError("USB define module", err);
-    };
-
-    FrameBuffer.defineModule(&interpreter, fb) catch |err| {
-        debug.kernelError("Frame buffer define module", err);
-    };
-
-    CharBuffer.defineModule(&interpreter, char_buffer) catch |err| {
-        debug.kernelError("Char buffer define module", err);
-    };
-
-    MainConsole.defineModule(&interpreter, main_console) catch |err| {
-        debug.kernelError("Main console define module", err);
-    };
-
-    event.defineModule(&interpreter) catch |err| {
-        debug.kernelError("Event queue define module", err);
-    };
-
-    disassemble.defineModule(&interpreter) catch |err| {
-        debug.kernelError("Disassembler define module", err);
-    };
-
-    arch.cpu.exceptions.markUnwindPoint(&global_unwind_point);
-    global_unwind_point.pc = @as(u64, @intFromPtr(&repl));
-
-    repl();
 }
 
-fn repl() callconv(.C) noreturn {
+fn startHeartbeat() !void {
+    const heartbeat = @import("heartbeat.zig");
+    _ = try schedule.spawn(heartbeat.heartbeat, "hb", &.{});
+}
+
+fn startForty(_: *anyopaque) void {
+    const Initializer = struct {
+        var completed: bool = false;
+
+        pub fn runOnce(interp: *Forth) void {
+            if (completed) return;
+
+            if (interp.init(kernel_allocator, main_console, char_buffer)) {
+                debug.kernelMessage("Forth init");
+            } else |err| {
+                debug.kernelError("Forth init error", err);
+            }
+
+            debug.defineModule(interp) catch |err| {
+                debug.kernelError("Debug ring define module", err);
+            };
+
+            HAL.defineModule(interp, hal) catch |err| {
+                debug.kernelError("HAL define module", err);
+            };
+
+            time.defineModule(interp) catch |err| {
+                debug.kernelError("time define module", err);
+            };
+
+            schedule.defineModule(interp) catch |err| {
+                debug.kernelError("schedule define module", err);
+            };
+
+            diagnostics.defineModule(interp) catch |err| {
+                debug.kernelError("diagnostics define module", err);
+            };
+
+            Usb.defineModule(interp) catch |err| {
+                debug.kernelError("USB define module", err);
+            };
+
+            FrameBuffer.defineModule(interp, fb) catch |err| {
+                debug.kernelError("Frame buffer define module", err);
+            };
+
+            CharBuffer.defineModule(interp, char_buffer) catch |err| {
+                debug.kernelError("Char buffer define module", err);
+            };
+
+            MainConsole.defineModule(interp, main_console) catch |err| {
+                debug.kernelError("Main console define module", err);
+            };
+
+            event.defineModule(interp) catch |err| {
+                debug.kernelError("Event queue define module", err);
+            };
+
+            disassemble.defineModule(interp) catch |err| {
+                debug.kernelError("Disassembler define module", err);
+            };
+
+            completed = true;
+        }
+    };
+
+    Initializer.runOnce(&interpreter);
+
     while (true) {
         interpreter.repl() catch |err| {
-            std.log.err("REPL error: {any}\n\nABORT.\n", .{err});
+            _ = printf("[interpreter] Aborting due to repl error '%s'\n", @errorName(err).ptr);
         };
     }
 }

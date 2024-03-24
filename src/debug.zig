@@ -10,6 +10,7 @@ const printf = root.printf;
 const Forth = @import("forty/forth.zig").Forth;
 const auto = @import("forty/auto.zig");
 
+const schedule = @import("schedule.zig");
 const serial = @import("serial.zig");
 
 const synchronize = @import("synchronize.zig");
@@ -24,12 +25,12 @@ pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?us
     @setCold(true);
 
     if (return_addr) |ret| {
-        _ = printf("panic from [0x%08x]: '%s'\n", ret, msg.ptr);
+        _ = printf("[panic]: '%s' at [0x%08x]\n", ret, msg.ptr);
     } else {
-        _ = printf("panic from [unknown]: '%s'\n", msg.ptr);
+        _ = printf("[panic]: '%s' from unknown location\n", msg.ptr);
     }
 
-    @breakpoint();
+    schedule.kill(schedule.current);
 
     unreachable;
 }
