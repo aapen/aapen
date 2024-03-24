@@ -30,6 +30,21 @@ pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?us
         _ = printf("[panic]: '%s' from unknown location\n", msg.ptr);
     }
 
+    const first_trace_addr = return_addr orelse @returnAddress();
+    var stack = std.debug.StackIterator.init(first_trace_addr, null);
+    defer stack.deinit();
+
+    for (0..40) |i| {
+        if (stack.next()) |addr| {
+            _ = printf("%02d    0x%08x\n", i, addr);
+        } else {
+            _ = printf(".\n");
+            break;
+        }
+    } else {
+        _ = printf("--stack trace truncated--\n");
+    }
+
     schedule.kill(schedule.current);
 
     unreachable;

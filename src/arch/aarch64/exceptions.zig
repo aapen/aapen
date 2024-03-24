@@ -46,8 +46,6 @@ export fn irqCurrentElx(context: *const ExceptionContext) void {
 // ----------------------------------------------------------------------
 // Exception display
 // ----------------------------------------------------------------------
-const ZIG_PANIC_BREAKPOINT: u16 = 0xf000;
-
 inline fn isBreakpoint(context: *ExceptionContext) bool {
     return context.esr.ec == ErrorCodes.brk;
 }
@@ -56,14 +54,8 @@ inline fn exceptionIss(context: *ExceptionContext) u16 {
     return @truncate(context.esr.iss & 0xffff);
 }
 
-inline fn isPanic(context: *ExceptionContext) bool {
-    return isBreakpoint(context) and ZIG_PANIC_BREAKPOINT == exceptionIss(context);
-}
-
 export fn synchronousExceptionElx(context: *ExceptionContext) void {
-    if (isPanic(context)) {
-        panicDisplay(context);
-    } else if (isBreakpoint(context)) {
+    if (isBreakpoint(context)) {
         unknownBreakpointDisplay(context);
     } else {
         unhandledExceptionDisplay(context, 0);
@@ -74,24 +66,6 @@ export fn synchronousExceptionElx(context: *ExceptionContext) void {
 export fn unhandledException(context: *ExceptionContext, entry_type: u64) void {
     unhandledExceptionDisplay(context, entry_type);
     context.elr += 4;
-}
-
-fn panicDisplay(context: *ExceptionContext) void {
-    _ = printf("[panic]: ELR 0x%08x\n", context.elr);
-
-    var it = std.debug.StackIterator.init(null, null);
-    defer it.deinit();
-
-    _ = printf("\nStack trace\n");
-    _ = printf("Frame PC\n");
-    for (0..40) |i| {
-        const addr = it.next() orelse {
-            _ = printf(".\n");
-            return;
-        };
-        _ = printf("%02d    0x%08x\n", i, addr);
-    }
-    _ = printf("--stack trace truncated--\n");
 }
 
 fn unknownBreakpointDisplay(context: *ExceptionContext) void {
