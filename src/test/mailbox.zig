@@ -1,3 +1,6 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const root = @import("root");
 const printf = root.printf;
 
@@ -15,7 +18,9 @@ const IntBox = mailbox.Mailbox(u32);
 var mbox: IntBox = undefined;
 
 pub fn testBody() !void {
-    try createIntBox();
+    const allocator = root.kernel_allocator;
+
+    try createIntBox(allocator);
     try expectCount(0);
 
     try sendBasicMessages();
@@ -30,8 +35,8 @@ pub fn testBody() !void {
     try destroyIntBox();
 }
 
-fn createIntBox() !void {
-    try mbox.init(5);
+fn createIntBox(allocator: Allocator) !void {
+    try mbox.init(allocator, 5);
 }
 
 fn expectCount(ex: IntBox.MailboxCapacity) !void {

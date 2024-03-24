@@ -213,7 +213,7 @@ pub fn init(
     return self;
 }
 
-pub fn initialize(self: *Self) !void {
+pub fn initialize(self: *Self, allocator: Allocator) !void {
     // higher priority so it gets scheduled ahead of the application
     // thread
     const DRIVER_THREAD_PRIO = 200;
@@ -223,7 +223,7 @@ pub fn initialize(self: *Self) !void {
         .schedule = false,
     });
 
-    try self.transfer_mailbox.init(1024);
+    try self.transfer_mailbox.init(allocator, 1024);
 
     try self.powerOn();
     try self.verifyHostControllerDevice();

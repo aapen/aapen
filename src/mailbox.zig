@@ -5,6 +5,7 @@
 ///
 /// All messages in a given mailbox must have the same type.
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const arch = @import("architecture.zig");
 const cpu = arch.cpu;
@@ -29,12 +30,11 @@ pub fn Mailbox(comptime T: type) type {
         start: MailboxCapacity,
         items: []T,
 
-        /// Caller is responsible for providing the memory.
-        pub fn init(self: *Self, capacity: MailboxCapacity) !void {
-            const bytes = capacity * @sizeOf(T);
-            const space: u64 = try memory.get(bytes);
-            const space_ptr: [*]u8 = @ptrFromInt(space);
-            const items: []T = @as([*]T, @alignCast(@ptrCast(space_ptr)))[0..capacity];
+        pub fn init(self: *Self, allocator: Allocator, capacity: MailboxCapacity) !void {
+            // const bytes = capacity * @sizeOf(T);
+            // const space: u64 = try allocator.alloc(bytes);
+            // const space_ptr: [*]u8 = @ptrFromInt(space);
+            // const items: []T = @as([*]T, @alignCast(@ptrCast(space_ptr)))[0..capacity];
 
             self.* = .{
                 .sender = try semaphore.create(capacity),
@@ -42,7 +42,7 @@ pub fn Mailbox(comptime T: type) type {
                 .max = capacity,
                 .count = 0,
                 .start = 0,
-                .items = items,
+                .items = try allocator.alloc(T, capacity),
             };
         }
 

@@ -144,7 +144,7 @@ var root_hub: ?*Device = undefined;
 var bus_lock: TicketLock = undefined;
 
 pub fn init() !void {
-    allocator = root.os.heap.page_allocator;
+    allocator = root.kernel_allocator;
     drivers = Drivers.init(allocator);
 
     drivers_lock = TicketLock.initWithTargetLevel("usb drivers", true, .FIQ);
@@ -159,7 +159,7 @@ pub fn init() !void {
     try registerDriver(&usb_hub_driver);
     log.debug("registered hub driver", .{});
 
-    try root.hal.usb_hci.initialize();
+    try root.hal.usb_hci.initialize(allocator);
     log.debug("started host controller", .{});
 
     const dev0 = try allocateDevice(null);
