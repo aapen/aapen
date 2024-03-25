@@ -3,6 +3,9 @@ const HAL = root.HAL;
 
 const cortex_a = @import("../cortex_a.zig");
 
+const memory = @import("../../memory.zig");
+const Sections = memory.Sections;
+
 const mmu_h = @cImport({
     @cInclude("asm/mmu.h");
 });
@@ -151,7 +154,7 @@ pub fn pageTablesCreate() void {
     const table_size_dwords = PG_DIR_SIZE / 8;
     const page_size_dwords = PAGE_SIZE / 8;
 
-    const tables_start: [*]u64 = @alignCast(@ptrCast(&cortex_a.Sections.__page_tables_start));
+    const tables_start: [*]u64 = @alignCast(@ptrCast(&Sections.__page_tables_start));
     @memset(tables_start[0..table_size_dwords], 0);
 
     var map_base: u64 = 0;
