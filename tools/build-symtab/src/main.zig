@@ -14,7 +14,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 3) {
-        std.debug.print("Usage: build-symtab in.elf out.symtab\n", .{});
+        std.debug.print("Usage: build-symtab in.elf out.img\n", .{});
         std.process.exit(255);
     }
 
@@ -67,42 +67,44 @@ pub fn main() !void {
     // try dump.printCompileUnits(stdout);
 
     // Open the output file
-    const symbtab_out: []u8 = args[2];
-    const symbtab_out_f = try std.fs.cwd().createFile(symbtab_out, .{ .truncate = true });
-    defer symbtab_out_f.close();
+    const image_out: []u8 = args[2];
+    const image_out_f = try std.fs.cwd().openFile(image_out, .{ .mode = .read_write });
+    defer image_out_f.close();
 
-    const symbtab_out_writer = symbtab_out_f.writer();
+    // move to end of file
+    try image_out_f.seekFromEnd(0);
+    const image_out_writer = image_out_f.writer();
 
     // format of the symbol table file
     //
     //   magic: u32 - marker to detect proper format 0x00abacab
     const magic: u32 = 0x00abacab;
-    try symbtab_out_writer.writeInt(u32, magic, le);
+    try image_out_writer.writeInt(u32, magic, le);
 
     //   strtab_offset: u32 - byte offset from zero where the string table appears
     const strtab_offset: u32 = @truncate(12 + addrtable.length());
-    try symbtab_out_writer.writeInt(u32, strtab_offset, le);
+    try image_out_writer.writeInt(u32, strtab_offset, le);
 
     // symbol_table:
     //   symbol_entries: u32 - count of entries in the symbol table
     const symbol_entries: u32 = @truncate(idx);
-    try symbtab_out_writer.writeInt(u32, symbol_entries, le);
+    try image_out_writer.writeInt(u32, symbol_entries, le);
 
     //   repeated 'symbol_entries' times:
     //     low_pc: u64 - first byte (within the loaded image) within the symbol
     //     high_pc: u64 - last byte (within the loaded image) within the symbol
     //     symbol_name: u64 - index into the string table with the symbol's name
-    try symbtab_out_writer.writeAll(addrtable.asBytes());
+    try image_out_writer.writeAll(addrtable.asBytes());
 
     // string_table:
     //   repeated 'string_entries' times:
     //     string_offset: u32 - byte offset from the start of the string table
     //     string_length: u32 - byte count of the string, does not include null
-    try symbtab_out_writer.writeAll(strindex.asBytes());
+    try image_out_writer.writeAll(strindex.asBytes());
 
     // string_bulk:
     //   bytes
-    try symbtab_out_writer.writeAll(strtable.asBytes());
+    try image_out_writer.writeAll(strtable.asBytes());
 }
 
 pub const DynamicString = struct {

@@ -52,7 +52,7 @@ pub fn wordDump(forth: *Forth, _: *Header) ForthError!void {
     while (offset < len) {
         try forth.print("{x:16}  ", .{iAddr + offset});
         for (0..16) |iByte| {
-            try forth.print("{x:2} ", .{addr[offset + iByte]});
+            try forth.print("{x:0>2} ", .{addr[offset + iByte]});
             if (iByte == 7) {
                 try forth.print("  ", .{});
             }

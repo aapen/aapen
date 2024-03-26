@@ -58,12 +58,32 @@ SECTIONS
                 *(.rodata*)
         } :segment_data
 
-        . = ALIGN(512K);
+        . = ALIGN(PAGE_SIZE);
         __code_end_exclusive = .;
 
         /***********************************************************************
         * Data + BSS
         ***********************************************************************/
+        __data_start = .;
+        .data :
+        {
+                *(.data*)
+                /* fill remaining space with a pattern */
+                =0x77889900;
+                . = ALIGN(PAGE_SIZE);
+        } :segment_data
+        __data_end_exclusive = .;
+
+        /* Reserve 512K of address space for debug info. This does not
+        hold DWARF sections. It will be a binary blob attached after
+        the kernel is built. */
+
+        __debug_info_start = .;
+        . += 512 * 1024;
+        __debug_info_end = .;
+
+        . = ALIGN(PAGE_SIZE);
+
         .page_tables(NOLOAD) : ALIGN(16)
         {
                 __page_tables_start = .;
@@ -79,18 +99,10 @@ SECTIONS
                 __bss_end_exclusive = .;
         } :segment_data
 
-        __data_start = .;
-        .data :
-        {
-                *(.data*)
-        } :segment_data
-
-        . = ALIGN(PAGE_SIZE);
-        __data_end_exclusive = .;
-
         /***********************************************************************
         * Heap
         ***********************************************************************/
+        . = ALIGN(PAGE_SIZE);
         __heap_start = .;
         .heap (NOLOAD) :
         {
@@ -99,11 +111,6 @@ SECTIONS
         __heap_end_exclusive = .;
 
         ASSERT((. & PAGE_MASK) == 0, "Heap is not page aligned")
-
-        /***********************************************************************
-        * Guard page
-        ***********************************************************************/
-        . += PAGE_SIZE;
 
         /***********************************************************************
         * Junk and gunk

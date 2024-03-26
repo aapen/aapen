@@ -10,6 +10,9 @@ const printf = root.printf;
 const Forth = @import("forty/forth.zig").Forth;
 const auto = @import("forty/auto.zig");
 
+const memory = @import("memory.zig");
+const Sections = memory.Sections;
+
 const schedule = @import("schedule.zig");
 const serial = @import("serial.zig");
 

@@ -9,6 +9,7 @@ pub const panic = debug.panic;
 
 const disassemble = @import("disassemble.zig");
 const event = @import("event.zig");
+const memory = @import("memory.zig");
 const heap = @import("heap.zig");
 const time = @import("time.zig");
 
@@ -169,11 +170,15 @@ fn startForty(_: *anyopaque) void {
             }
 
             debug.defineModule(interp) catch |err| {
-                debug.kernelError("Debug ring define module", err);
+                debug.kernelError("Debug define module", err);
             };
 
             HAL.defineModule(interp, hal) catch |err| {
                 debug.kernelError("HAL define module", err);
+            };
+
+            memory.defineModule(interp) catch |err| {
+                debug.kernelError("memory define module", err);
             };
 
             time.defineModule(interp) catch |err| {

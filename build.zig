@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const fmt = std.fmt;
 
 const Build = std.Build;
@@ -34,12 +35,17 @@ pub fn build(b: *std.Build) !void {
 
     const optimize = b.standardOptimizeOption(.{});
     const bin_basename = b.option([]const u8, "image", "Base name for the kernel binaries (both elf and img)") orelse "kernel8";
+
     const elf_name = try fmt.allocPrint(allocator, "{s}.elf", .{bin_basename});
     defer allocator.free(elf_name);
+
     const img_name = try fmt.allocPrint(allocator, "{s}.img", .{bin_basename});
     defer allocator.free(img_name);
 
-    const kernel = b.addExecutable(.{
+    const symtab_name = try fmt.allocPrint(allocator, "{s}-symtab.img", .{bin_basename});
+    defer allocator.free(symtab_name);
+
+    const compile_kernel = b.addExecutable(.{
         .name = elf_name,
         .target = target,
         .root_source_file = .{ .path = "src/main.zig" },
@@ -47,34 +53,45 @@ pub fn build(b: *std.Build) !void {
         .link_libc = false,
     });
 
-    kernel.addOptions("config", options);
-    kernel.addIncludePath(.{ .path = "include" });
-    kernel.addCSourceFile(.{ .file = .{ .path = "src/printf.c" }, .flags = &[_][]const u8{} });
-    kernel.addCSourceFile(.{ .file = .{ .path = "src/disassemble.c" }, .flags = &[_][]const u8{} });
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/atomic.S" });
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/boot.S" });
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/context_switch.S" });
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/exceptions.S" });
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/mmu.S" });
-    kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/util.S" });
-    kernel.setLinkerScriptPath(.{ .path = "src/arch/aarch64/kernel.ld" });
+    compile_kernel.addOptions("config", options);
+    compile_kernel.addIncludePath(.{ .path = "include" });
+    compile_kernel.addCSourceFile(.{ .file = .{ .path = "src/printf.c" }, .flags = &[_][]const u8{} });
+    compile_kernel.addCSourceFile(.{ .file = .{ .path = "src/disassemble.c" }, .flags = &[_][]const u8{} });
+    compile_kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/atomic.S" });
+    compile_kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/boot.S" });
+    compile_kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/context_switch.S" });
+    compile_kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/exceptions.S" });
+    compile_kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/mmu.S" });
+    compile_kernel.addAssemblyFile(.{ .path = "src/arch/aarch64/util.S" });
+    compile_kernel.setLinkerScriptPath(.{ .path = "src/arch/aarch64/kernel.ld" });
 
-    b.installArtifact(kernel);
+    b.installArtifact(compile_kernel);
 
-    const objcopy = b.addObjCopy(kernel.getOutputSource(), .{
+    const extract_image = b.addObjCopy(compile_kernel.getOutputSource(), .{
         .format = std.Build.Step.ObjCopy.RawFormat.bin,
     });
 
-    objcopy.step.dependOn(&kernel.step);
+    extract_image.step.dependOn(&compile_kernel.step);
 
-    const install_elf = b.addInstallFile(kernel.getOutputSource(), elf_name);
+    const install_elf = b.addInstallFile(compile_kernel.getOutputSource(), elf_name);
     b.getInstallStep().dependOn(&install_elf.step);
 
-    const install_obj = b.addInstallFile(objcopy.getOutputSource(), img_name);
-    b.getInstallStep().dependOn(&install_obj.step);
+    const build_symbols = buildSymbolTable(b, compile_kernel, extract_image);
+    b.getInstallStep().dependOn(&build_symbols.step);
+
+    const install_image = b.addInstallFile(extract_image.getOutputSource(), img_name);
+    install_image.step.dependOn(&build_symbols.step);
+    b.getInstallStep().dependOn(&install_image.step);
 }
 
-fn addModule(cs: *Build.CompileStep, name: []const u8, source: []const u8) void {
-    const b = cs.step.owner;
-    cs.addModule(name, b.addModule(name, .{ .source_file = .{ .path = source } }));
+fn buildSymbolTable(b: *std.Build, compile_kernel: *std.Build.CompileStep, extract_image: *std.Build.Step.ObjCopy) *std.Build.Step.Run {
+    const tool = b.addExecutable(.{
+        .name = "build-symbtab",
+        .root_source_file = .{ .path = "tools/build-symtab/src/main.zig" },
+    });
+
+    const run_tool = b.addRunArtifact(tool);
+    run_tool.addFileArg(compile_kernel.getOutputSource());
+    run_tool.addFileArg(extract_image.getOutput());
+    return run_tool;
 }
