@@ -351,10 +351,9 @@ fn walkCompileUnit(
                 _ = subprograms.pop();
             }
 
-            // if the low_pc is zero, and the subprogram is marked as
-            // 'external'.. well, I don't quite know what it
-            // means. it's not useful for our debugging
-            if (subprogram.external and subprogram.low_pc == 0) {
+            // if the low_pc is zero it's not useful for our debugging
+            // (might be an external function or an inlined block)
+            if (subprogram.low_pc == 0) {
                 _ = subprograms.pop();
             }
         },

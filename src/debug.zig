@@ -1,6 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const RingBuffer = std.RingBuffer;
 const ScopeLevel = std.log.ScopeLevel;
 
@@ -28,6 +27,12 @@ const StackTrace = std.builtin.StackTrace;
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineConstant("mring", @intFromPtr(&mring_storage));
     try forth.defineConstant("debug-info-valid", @intFromPtr(&debug_info_valid));
+    try forth.defineNamespace(@This(), .{
+        .{ "lookupSymbol", "symbol-at" },
+    });
+
+    _ = printf("Debug info:\n\tSymbols: %d at 0x%08x\n\tStrings:        0x%08x\n", debug_symbols.len, debug_symbols.ptr, debug_strings.?);
+    _ = printf("Sanity check: alignOf(Symbol) = %d\tsizeOf(Symbol) = %d\n", @as(usize, @alignOf(Symbol)), @as(usize, @sizeOf(Symbol)));
 }
 
 // ----------------------------------------------------------------------
@@ -35,21 +40,89 @@ pub fn defineModule(forth: *Forth) !void {
 // ----------------------------------------------------------------------
 const DEBUG_INFO_MAGIC_NUMBER: u32 = 0x00abacab;
 
-var debug_info_valid = false;
-
 pub fn init() void {
     const maybe_debug_info_magic: *u32 = @ptrCast(@alignCast(&Sections.__debug_info_start));
     if (maybe_debug_info_magic.* == DEBUG_INFO_MAGIC_NUMBER) {
-        debug_info_valid = true;
+        initDebugInfo();
     }
 
-    mring_fba = FixedBufferAllocator.init(&mring_storage);
-    mring_allocator = mring_fba.allocator();
-    ring = RingBuffer{
-        .data = &mring_storage,
-        .write_index = 0,
-        .read_index = 0,
-    };
+    initMring();
+}
+
+// ----------------------------------------------------------------------
+// Debug info lookup
+// ----------------------------------------------------------------------
+var debug_info_valid: bool = false;
+var debug_symbols: []Symbol = undefined;
+var debug_strings: ?[*]u8 = null;
+
+const DebugInfoHeader = extern struct {
+    magic: u32,
+    strings_offset: u32,
+    symbol_entries: u32,
+    padding: u32,
+};
+
+pub fn initDebugInfo() void {
+    debug_info_valid = true;
+
+    const debug_loc = @intFromPtr(&Sections.__debug_info_start);
+    const header: *DebugInfoHeader = @ptrFromInt(debug_loc);
+
+    debug_symbols.ptr = @ptrFromInt(debug_loc + @sizeOf(DebugInfoHeader));
+    debug_symbols.len = header.symbol_entries;
+
+    const string_locations = debug_loc + header.strings_offset;
+    debug_strings = @ptrFromInt(string_locations);
+}
+
+const Symbol = struct {
+    low_pc: u64,
+    high_pc: u64,
+    symbol_offset: u64,
+
+    const none: Symbol = .{ .low_pc = 0, .high_pc = std.math.maxInt(u64), .symbol_offset = 0 };
+
+    pub fn contains(symbol: *const Symbol, addr: u64) bool {
+        return symbol.low_pc <= addr and addr <= symbol.high_pc;
+    }
+
+    pub fn span(symbol: *const Symbol) usize {
+        if (symbol.high_pc > symbol.low_pc) {
+            return symbol.high_pc - symbol.low_pc;
+        } else {
+            return std.math.maxInt(usize);
+        }
+    }
+
+    pub fn isWider(this: *const Symbol, that: *const Symbol) bool {
+        return this.span() > that.span();
+    }
+};
+
+pub fn lookupSymbol(addr: u64) ?[*:0]const u8 {
+    if (!debug_info_valid) {
+        _ = printf("debug info not available\n");
+        return null;
+    }
+
+    var best_match = &Symbol.none;
+    for (debug_symbols) |*symb| {
+        if (symb.contains(addr)) {
+            // _ = printf("Comparing new symbol {%08x, %08x, %d} against current best {%08x, %08x, %d}\n", symb.low_pc, symb.high_pc, symb.symbol_offset, best_match.low_pc, best_match.high_pc, best_match.symbol_offset);
+            if (best_match.isWider(symb)) {
+                best_match = symb;
+            }
+        }
+    }
+
+    if (best_match == &Symbol.none) {
+        _ = printf("not found\n");
+        return null;
+    } else {
+        // _ = printf("found 0x%08x within 0x%08x and 0x%08x. symbol name is at offset 0x%x\n", addr, best_match.low_pc, best_match.high_pc, best_match.symbol_offset);
+        return @ptrCast(debug_strings.? + best_match.symbol_offset);
+    }
 }
 
 // ----------------------------------------------------------------------
@@ -171,9 +244,13 @@ pub var mring_storage: [mring_space_bytes]u8 = undefined;
 var mring_spinlock: TicketLock = TicketLock.init("kernel_message_ring", true);
 var ring: RingBuffer = undefined;
 
-// implementation variables... not for use outside of init()
-var mring_fba: FixedBufferAllocator = undefined;
-var mring_allocator: Allocator = undefined;
+fn initMring() void {
+    ring = RingBuffer{
+        .data = &mring_storage,
+        .write_index = 0,
+        .read_index = 0,
+    };
+}
 
 /// Use this to report low-level errors. It bypasses the serial
 /// interface, the frame buffer, and even Zig's formatting. (This does

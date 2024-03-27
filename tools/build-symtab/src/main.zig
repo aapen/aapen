@@ -31,8 +31,6 @@ pub fn main() !void {
     var dump = try Parser.parse(allocator, elf_data);
     defer dump.deinit();
 
-    const stdout = std.io.getStdOut().writer();
-
     var subprograms = try dump.accumulateSubprograms(allocator);
     defer subprograms.deinit(allocator);
 
@@ -41,27 +39,29 @@ pub fn main() !void {
     var addrtable = try DynamicString.init(allocator);
     defer addrtable.deinit();
 
-    var strindex = try DynamicString.init(allocator);
-    defer strindex.deinit();
-
     var strtable = try DynamicString.init(allocator);
     defer strtable.deinit();
 
-    try stdout.print("found {d} subprograms\n", .{subprograms.items.len});
+    var strings = try DynamicString.init(allocator);
+    defer strings.deinit();
+
+    // const stdout = std.io.getStdOut().writer();
+    // try stdout.print("found {d} subprograms\n", .{subprograms.items.len});
+
+    // for (subprograms.items, 0..) |*it, i| {
+    //     std.debug.print("[{d}]: low = 0x{x:0>16}, high = 0x{x:0>16}, name = {s}\n", .{ i, it.low_pc, it.high_pc, it.getName() });
+    // }
 
     var idx: u64 = 0;
     for (subprograms.items) |*sub| {
+        const currlen: u64 = strings.length();
+
         try addrtable.append(std.mem.asBytes(&sub.low_pc));
         try addrtable.append(std.mem.asBytes(&sub.high_pc));
-        try addrtable.append(std.mem.asBytes(&idx));
+        try addrtable.append(std.mem.asBytes(&currlen));
 
-        const currlen = strtable.length();
-        try strtable.append(sub.getName());
-        const newlen = strtable.length();
-        const namelen = newlen - currlen;
-
-        try strindex.append(std.mem.asBytes(&currlen));
-        try strindex.append(std.mem.asBytes(&namelen));
+        try strings.append(sub.getName());
+        try strings.appendByte(0);
 
         idx += 1;
     }
@@ -83,14 +83,21 @@ pub fn main() !void {
     const magic: u32 = 0x00abacab;
     try image_out_writer.writeInt(u32, magic, le);
 
-    //   strtab_offset: u32 - byte offset from zero where the string table appears
-    const strtab_offset: u32 = @truncate(12 + addrtable.length());
-    try image_out_writer.writeInt(u32, strtab_offset, le);
+    //   strings_offset: u32 - byte offset from zero where the strings appear
+    //     note: strings_offset must be padded to 64-bit alignment
+    const header_size = 16;
+    const strings_offset: u32 = @truncate(header_size + addrtable.length());
+    const alignment: u32 = 8;
+    const aligned_strings_offset = (strings_offset + alignment - 1) & ~(alignment - 1);
+    const strings_padding = aligned_strings_offset - strings_offset;
+    try image_out_writer.writeInt(u32, aligned_strings_offset, le);
 
-    // symbol_table:
     //   symbol_entries: u32 - count of entries in the symbol table
     const symbol_entries: u32 = @truncate(idx);
     try image_out_writer.writeInt(u32, symbol_entries, le);
+
+    // 4 bytes of padding to make the header square
+    try image_out_writer.writeInt(u32, @as(u8, 0), le);
 
     //   repeated 'symbol_entries' times:
     //     low_pc: u64 - first byte (within the loaded image) within the symbol
@@ -98,15 +105,20 @@ pub fn main() !void {
     //     symbol_name: u64 - index into the string table with the symbol's name
     try image_out_writer.writeAll(addrtable.asBytes());
 
+    // align to 128-bit boundary so we can bitcast the memory as structs later
+    for (0..strings_padding) |_| {
+        try image_out_writer.writeByte(0);
+    }
+
     // string_table:
     //   repeated 'string_entries' times:
     //     string_offset: u32 - byte offset from the start of the string table
     //     string_length: u32 - byte count of the string, does not include null
-    try image_out_writer.writeAll(strindex.asBytes());
+    try image_out_writer.writeAll(strtable.asBytes());
 
     // string_bulk:
     //   bytes
-    try image_out_writer.writeAll(strtable.asBytes());
+    try image_out_writer.writeAll(strings.asBytes());
 }
 
 pub const DynamicString = struct {
@@ -122,6 +134,10 @@ pub const DynamicString = struct {
         self.buffer.deinit();
     }
 
+    pub fn appendByte(self: *DynamicString, b: u8) !void {
+        try self.buffer.append(b);
+    }
+
     pub fn append(self: *DynamicString, str: []const u8) !void {
         try self.buffer.appendSlice(std.mem.sliceAsBytes(str));
     }
@@ -130,7 +146,7 @@ pub const DynamicString = struct {
         return self.buffer.items;
     }
 
-    pub fn length(self: *DynamicString) usize {
-        return self.buffer.items.len;
+    pub fn length(self: *DynamicString) u32 {
+        return @truncate(self.buffer.items.len);
     }
 };
