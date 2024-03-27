@@ -52,9 +52,9 @@ pub fn main() !void {
     //     std.debug.print("[{d}]: low = 0x{x:0>16}, high = 0x{x:0>16}, name = {s}\n", .{ i, it.low_pc, it.high_pc, it.getName() });
     // }
 
-    var idx: u64 = 0;
+    var symbol_count: u64 = 0;
     for (subprograms.items) |*sub| {
-        const currlen: u64 = strings.length();
+        const currlen: u32 = strings.length();
 
         try addrtable.append(std.mem.asBytes(&sub.low_pc));
         try addrtable.append(std.mem.asBytes(&sub.high_pc));
@@ -63,7 +63,7 @@ pub fn main() !void {
         try strings.append(sub.getName());
         try strings.appendByte(0);
 
-        idx += 1;
+        symbol_count += 1;
     }
 
     // try dump.printCompileUnits(stdout);
@@ -92,12 +92,12 @@ pub fn main() !void {
     const strings_padding = aligned_strings_offset - strings_offset;
     try image_out_writer.writeInt(u32, aligned_strings_offset, le);
 
-    //   symbol_entries: u32 - count of entries in the symbol table
-    const symbol_entries: u32 = @truncate(idx);
-    try image_out_writer.writeInt(u32, symbol_entries, le);
+    //   strings_length: u32 - number of bytes in the strings bulk
+    try image_out_writer.writeInt(u32, strings.length(), le);
 
-    // 4 bytes of padding to make the header square
-    try image_out_writer.writeInt(u32, @as(u8, 0), le);
+    //   symbol_entries: u32 - count of entries in the symbol table
+    const symbol_entries: u32 = @truncate(symbol_count);
+    try image_out_writer.writeInt(u32, symbol_entries, le);
 
     //   repeated 'symbol_entries' times:
     //     low_pc: u64 - first byte (within the loaded image) within the symbol
