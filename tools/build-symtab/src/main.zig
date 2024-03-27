@@ -36,6 +36,8 @@ pub fn main() !void {
     var subprograms = try dump.accumulateSubprograms(allocator);
     defer subprograms.deinit(allocator);
 
+    Subprogram.sort(subprograms);
+
     var addrtable = try DynamicString.init(allocator);
     defer addrtable.deinit();
 

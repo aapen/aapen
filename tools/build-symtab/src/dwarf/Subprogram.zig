@@ -1,3 +1,4 @@
+const std = @import("std");
 const Subprogram = @This();
 
 low_pc: u64 = 0,
@@ -14,4 +15,12 @@ pub fn getName(subprogram: *Subprogram) []const u8 {
     } else {
         return "";
     }
+}
+
+pub fn sort(subprograms: std.ArrayListUnmanaged(Subprogram)) void {
+    std.mem.sort(Subprogram, subprograms.items, {}, compareByLowPc);
+}
+
+fn compareByLowPc(context: void, a: Subprogram, b: Subprogram) bool {
+    return std.sort.asc(u64)(context, a.low_pc, b.low_pc);
 }
