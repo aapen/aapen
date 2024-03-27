@@ -621,11 +621,11 @@ pub fn defineModule(forth: *Forth) !void {
 }
 
 pub fn processTable() void {
-    _ = printf("\nTID\t%016s\tstate\tstack\n", "name");
+    _ = printf("\nTID\t%016s\tstate\twaitsem\tstack\n", "name");
 
     for (&thread_table, 0..) |thr, tid| {
         if (thr.state != THREAD_FREE) {
-            _ = printf("%04d\t%016s\t%d\t0x%08x\n", tid, &thr.name, thr.state, thr.stack_pointer);
+            _ = printf("%04d\t%016s\t%d\t%d\t0x%08x\n", tid, &thr.name, thr.state, thr.semaphore, thr.stack_pointer);
         }
     }
 }
