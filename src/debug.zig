@@ -30,9 +30,6 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
         .{ "lookupSymbol", "symbol-at" },
     });
-
-    _ = printf("Debug info:\n\tSymbols: %d at 0x%08x\n\tStrings:        0x%08x\n", debug_symbols.len, debug_symbols.ptr, debug_strings.ptr);
-    _ = printf("Sanity check: alignOf(Symbol) = %d\tsizeOf(Symbol) = %d\n", @as(usize, @alignOf(Symbol)), @as(usize, @sizeOf(Symbol)));
 }
 
 // ----------------------------------------------------------------------
@@ -151,7 +148,11 @@ pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?us
 
     for (0..40) |i| {
         if (stack.next()) |addr| {
-            _ = printf("%02d    0x%08x\n", i, addr);
+            if (lookupSymbol(addr)) |sym| {
+                _ = printf("%02d    0x%08x  %s\n", i, addr, sym);
+            } else {
+                _ = printf("%02d    0x%08x\n", i, addr);
+            }
         } else {
             _ = printf(".\n");
             break;
