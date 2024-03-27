@@ -8,7 +8,6 @@ const root = @import("root");
 const printf = root.printf;
 
 const Forth = @import("forty/forth.zig").Forth;
-const auto = @import("forty/auto.zig");
 
 const memory = @import("memory.zig");
 const Sections = memory.Sections;
@@ -23,6 +22,39 @@ const string = @import("forty/string.zig");
 
 const StackTrace = std.builtin.StackTrace;
 
+// ----------------------------------------------------------------------
+// Forty interop
+// ----------------------------------------------------------------------
+pub fn defineModule(forth: *Forth) !void {
+    try forth.defineConstant("mring", @intFromPtr(&mring_storage));
+    try forth.defineConstant("debug-info-valid", @intFromPtr(&debug_info_valid));
+}
+
+// ----------------------------------------------------------------------
+// Initialization
+// ----------------------------------------------------------------------
+const DEBUG_INFO_MAGIC_NUMBER: u32 = 0x00abacab;
+
+var debug_info_valid = false;
+
+pub fn init() void {
+    const maybe_debug_info_magic: *u32 = @ptrCast(@alignCast(&Sections.__debug_info_start));
+    if (maybe_debug_info_magic.* == DEBUG_INFO_MAGIC_NUMBER) {
+        debug_info_valid = true;
+    }
+
+    mring_fba = FixedBufferAllocator.init(&mring_storage);
+    mring_allocator = mring_fba.allocator();
+    ring = RingBuffer{
+        .data = &mring_storage,
+        .write_index = 0,
+        .read_index = 0,
+    };
+}
+
+// ----------------------------------------------------------------------
+// Panic support
+// ----------------------------------------------------------------------
 pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?usize) noreturn {
     _ = error_return_trace;
     @setCold(true);
@@ -53,6 +85,9 @@ pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?us
     unreachable;
 }
 
+// ----------------------------------------------------------------------
+// Logging support
+// ----------------------------------------------------------------------
 pub const options = struct {
     pub const logFn = log;
     pub const log_level = .warn;
@@ -131,28 +166,14 @@ pub fn sliceDump(buf: []const u8) void {
 // Kernel message buffer
 // ------------------------------------------------------------------------------
 
-pub fn defineModule(forth: *Forth) !void {
-    try forth.defineConstant("mring", @intFromPtr(&mring_storage));
-}
-
 const mring_space_bytes = 1024 * 1024;
 pub var mring_storage: [mring_space_bytes]u8 = undefined;
 var mring_spinlock: TicketLock = TicketLock.init("kernel_message_ring", true);
 var ring: RingBuffer = undefined;
 
 // implementation variables... not for use outside of init()
-var fba: FixedBufferAllocator = undefined;
-var allocator: Allocator = undefined;
-
-pub fn init() void {
-    fba = FixedBufferAllocator.init(&mring_storage);
-    allocator = fba.allocator();
-    ring = RingBuffer{
-        .data = &mring_storage,
-        .write_index = 0,
-        .read_index = 0,
-    };
-}
+var mring_fba: FixedBufferAllocator = undefined;
+var mring_allocator: Allocator = undefined;
 
 /// Use this to report low-level errors. It bypasses the serial
 /// interface, the frame buffer, and even Zig's formatting. (This does
