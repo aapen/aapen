@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const debug = @import("../debug.zig");
+
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
@@ -142,7 +144,12 @@ pub fn wordDumpWord(forth: *Forth, _: *Header) ForthError!void {
     if (header.func != &inner) {
         const h: u64 = @intFromPtr(header);
         const p: u64 = @intFromPtr(header.func);
-        try forth.print("Word name: {s} len: {} header: {x} func: {x}\n", .{ header.name, header.len, h, p });
+
+        if (debug.lookupSymbol(p)) |fname| {
+            try forth.print("Word name: {s} len: {} header: {x} func: {x} ({s})\n", .{ header.name, header.len, h, p, fname });
+        } else {
+            try forth.print("Word name: {s} len: {} header: {x} func: {x}\n", .{ header.name, header.len, h, p });
+        }
 
         try forth.print("Description: {s}\n", .{header.desc});
         return;
