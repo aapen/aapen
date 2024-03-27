@@ -51,13 +51,13 @@ pub fn init() void {
 // ----------------------------------------------------------------------
 var debug_info_valid: bool = false;
 var debug_symbols: []Symbol = undefined;
-var debug_strings: []u8 = undefined;
+var debug_strings: ?[*]u8 = null;
 
 const DebugInfoHeader = extern struct {
     magic: u32,
     strings_offset: u32,
-    strings_length: u32,
     symbol_entries: u32,
+    padding: u32,
 };
 
 pub fn initDebugInfo() void {
@@ -70,14 +70,13 @@ pub fn initDebugInfo() void {
     debug_symbols.len = header.symbol_entries;
 
     const string_locations = debug_loc + header.strings_offset;
-    debug_strings.ptr = @ptrFromInt(string_locations);
-    debug_strings.len = header.strings_length;
+    debug_strings = @ptrFromInt(string_locations);
 }
 
 const Symbol = struct {
     low_pc: u64,
     high_pc: u64,
-    symbol_offset: u32,
+    symbol_offset: u64,
 
     const none: Symbol = .{ .low_pc = 0, .high_pc = std.math.maxInt(u64), .symbol_offset = 0 };
 
@@ -98,7 +97,7 @@ const Symbol = struct {
     }
 };
 
-pub fn lookupSymbol(addr: u64) ?[]const u8 {
+pub fn lookupSymbol(addr: u64) ?[*:0]const u8 {
     if (!debug_info_valid) {
         _ = printf("debug info not available\n");
         return null;
@@ -107,6 +106,7 @@ pub fn lookupSymbol(addr: u64) ?[]const u8 {
     var best_match = &Symbol.none;
     for (debug_symbols) |*symb| {
         if (symb.contains(addr)) {
+            // _ = printf("Comparing new symbol {%08x, %08x, %d} against current best {%08x, %08x, %d}\n", symb.low_pc, symb.high_pc, symb.symbol_offset, best_match.low_pc, best_match.high_pc, best_match.symbol_offset);
             if (best_match.isWider(symb)) {
                 best_match = symb;
             }
@@ -117,16 +117,9 @@ pub fn lookupSymbol(addr: u64) ?[]const u8 {
         _ = printf("not found\n");
         return null;
     } else {
-        return sliceToNull(debug_strings, best_match.symbol_offset);
+        // _ = printf("found 0x%08x within 0x%08x and 0x%08x. symbol name is at offset 0x%x\n", addr, best_match.low_pc, best_match.high_pc, best_match.symbol_offset);
+        return @ptrCast(debug_strings.? + best_match.symbol_offset);
     }
-}
-
-fn sliceToNull(bulk: []const u8, offset: u32) ?[]const u8 {
-    if (offset >= bulk.len) return null;
-
-    var end = offset;
-    while (end < bulk.len and bulk[end] != 0) : (end += 1) {}
-    return bulk[offset..end];
 }
 
 // ----------------------------------------------------------------------
