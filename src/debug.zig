@@ -81,7 +81,7 @@ const Symbol = struct {
     const none: Symbol = .{ .low_pc = 0, .high_pc = std.math.maxInt(u64), .symbol_offset = 0 };
 
     pub fn contains(symbol: *const Symbol, addr: u64) bool {
-        return symbol.low_pc <= addr and addr <= symbol.high_pc;
+        return symbol.low_pc <= addr and addr < symbol.high_pc;
     }
 
     pub fn span(symbol: *const Symbol) usize {
@@ -106,7 +106,10 @@ pub fn lookupSymbol(addr: u64) ?[*:0]const u8 {
     var best_match = &Symbol.none;
     for (debug_symbols) |*symb| {
         if (symb.contains(addr)) {
-            // _ = printf("Comparing new symbol {%08x, %08x, %d} against current best {%08x, %08x, %d}\n", symb.low_pc, symb.high_pc, symb.symbol_offset, best_match.low_pc, best_match.high_pc, best_match.symbol_offset);
+            // const sname: [*:0]const u8 = @ptrCast(debug_strings.? + symb.symbol_offset);
+            // const bestname: [*:0]const u8 = @ptrCast(debug_strings.? + best_match.symbol_offset);
+            // _ = printf("Comparing new symbol {%08x, %08x, '%s'} against current best {%08x, %08x, '%s'}\n", symb.low_pc, symb.high_pc, sname, best_match.low_pc, best_match.high_pc, bestname);
+
             if (best_match.isWider(symb)) {
                 best_match = symb;
             }
