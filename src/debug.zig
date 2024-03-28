@@ -106,10 +106,6 @@ pub fn lookupSymbol(addr: u64) ?[*:0]const u8 {
     var best_match = &Symbol.none;
     for (debug_symbols) |*symb| {
         if (symb.contains(addr)) {
-            // const sname: [*:0]const u8 = @ptrCast(debug_strings.? + symb.symbol_offset);
-            // const bestname: [*:0]const u8 = @ptrCast(debug_strings.? + best_match.symbol_offset);
-            // _ = printf("Comparing new symbol {%08x, %08x, '%s'} against current best {%08x, %08x, '%s'}\n", symb.low_pc, symb.high_pc, sname, best_match.low_pc, best_match.high_pc, bestname);
-
             if (best_match.isWider(symb)) {
                 best_match = symb;
             }
@@ -120,7 +116,6 @@ pub fn lookupSymbol(addr: u64) ?[*:0]const u8 {
         _ = printf("not found\n");
         return null;
     } else {
-        // _ = printf("found 0x%08x within 0x%08x and 0x%08x. symbol name is at offset 0x%x\n", addr, best_match.low_pc, best_match.high_pc, best_match.symbol_offset);
         return @ptrCast(debug_strings.? + best_match.symbol_offset);
     }
 }
