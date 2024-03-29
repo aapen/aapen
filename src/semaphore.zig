@@ -173,5 +173,5 @@ pub inline fn sement(x: SID) *SemaphoreEntry {
 }
 
 pub inline fn isBadSid(x: SID) bool {
-    return (x >= NUM_SEMAPHORES or SEMAPHORE_FREE == sement(x).state);
+    return (x < 0 or x >= NUM_SEMAPHORES or SEMAPHORE_FREE == sement(x).state);
 }
