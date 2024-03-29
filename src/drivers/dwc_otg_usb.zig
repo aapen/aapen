@@ -214,15 +214,6 @@ pub fn init(
 }
 
 pub fn initialize(self: *Self, allocator: Allocator) !void {
-    // higher priority so it gets scheduled ahead of the application
-    // thread
-    const DRIVER_THREAD_PRIO = 200;
-    self.driver_thread = try schedule.spawnWithOptions(dwcDriverLoop, self, &.{
-        .name = "dwc driver",
-        .priority = DRIVER_THREAD_PRIO,
-        .schedule = false,
-    });
-
     try self.transfer_mailbox.init(allocator, 1024);
 
     try self.powerOn();
@@ -231,7 +222,14 @@ pub fn initialize(self: *Self, allocator: Allocator) !void {
     try self.initializeControllerCore();
     try self.initializeInterrupts();
 
-    //    self.pending_transfers_lock.enabled = true;
+    // higher priority so it gets scheduled ahead of the application
+    // thread
+    const DRIVER_THREAD_PRIO = 200;
+    self.driver_thread = try schedule.spawnWithOptions(dwcDriverLoop, self, &.{
+        .name = "dwc driver",
+        .priority = DRIVER_THREAD_PRIO,
+        .schedule = false,
+    });
 }
 
 fn powerOn(self: *Self) !void {
