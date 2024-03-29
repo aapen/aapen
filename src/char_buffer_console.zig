@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const atomic = @import("atomic.zig");
 const FrameBuffer = @import("frame_buffer.zig");
 const CharBuffer = @import("char_buffer.zig");
 
@@ -32,16 +33,16 @@ pub fn init(allocator: Allocator, char_buffer: *CharBuffer) !*Self {
 /// Start a batch up updates. With the exception of scrolling
 /// this will prevent any output until end_update() is called.
 pub inline fn begin_update(self: *Self) void {
-    self.update_depth += 1;
+    _ = atomic.atomicInc(&self.update_depth);
 }
 
 /// End a batch of updates and, if this is the outter update,
 /// update the screen.
 pub inline fn end_update(self: *Self) void {
-    self.update_depth -= 1;
-    if (self.update_depth <= 0) {
+    const prior = atomic.atomicDec(&self.update_depth);
+
+    if (prior == 1) {
         self.char_buffer.sync();
-        self.update_depth = 0;
     }
 }
 
