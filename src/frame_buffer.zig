@@ -245,21 +245,15 @@ pub fn fill(fb: *Self, left: usize, top: usize, right: usize, bottom: usize, col
     const b = clamp(usize, 0, bottom, fb.yres);
 
     if (fb.dma_channel) |ch| {
-        if (fb.dma.createRequest()) |req| {
-            // DMA fill
-            defer fb.dma.destroyRequest(req);
-            fb.fillDMA(ch, req, l, t, r, b, color);
-            return;
-        } else |_| {
-            // will use fallback
-        }
+        // if we have DMA, use it
+        fb.fillDMA(ch, l, t, r, b, color);
+    } else {
+        // fallback to CPU driven fill
+        fb.fillPixels(l, t, r, b, color);
     }
-
-    // fallback to CPU driven fill
-    fb.fillPixels(l, t, r, b, color);
 }
 
-fn fillDMA(fb: *Self, ch: DMAChannel, req: *DMARequest, l: usize, t: usize, r: usize, b: usize, color: u8) void {
+fn fillDMA(fb: *Self, ch: DMAChannel, l: usize, t: usize, r: usize, b: usize, color: u8) void {
     var cvec: @Vector(16, u8) = @splat(color);
 
     const fb_base: usize = @intFromPtr(fb.base);
@@ -279,7 +273,7 @@ fn fillDMA(fb: *Self, ch: DMAChannel, req: *DMARequest, l: usize, t: usize, r: u
     else
         ((b - t) * fb.xres);
 
-    req.* = .{
+    var req = DMARequest{
         .source = @truncate(src),
         .source_increment = false,
         .destination = @truncate(dest),
@@ -287,7 +281,7 @@ fn fillDMA(fb: *Self, ch: DMAChannel, req: *DMARequest, l: usize, t: usize, r: u
         .length = xfer_count,
         .stride = (dest_stride << 16) | src_stride,
     };
-    fb.dma.initiate(ch, req) catch {};
+    fb.dma.initiate(ch, &req) catch {};
     _ = fb.dma.awaitChannel(ch);
 }
 

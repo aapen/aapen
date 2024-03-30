@@ -15,10 +15,17 @@
 /// as the identifier of the first item in the queue.
 const std = @import("std");
 
-const schedule2 = @import("schedule2.zig");
-const TID = schedule2.TID;
-const NO_TID = schedule2.NO_TID;
-const isBadTid = schedule2.isBadTid;
+const root = @import("root");
+const printf = root.printf;
+
+const schedule = @import("schedule.zig");
+const isBadTid = schedule.isBadTid;
+const NO_TID = schedule.NO_TID;
+const NUM_THREADS = schedule.NUM_THREADS;
+const TID = schedule.TID;
+
+const semaphore = @import("semaphore.zig");
+const NUM_SEMAPHORES = semaphore.NUM_SEMAPHORES;
 
 // TODO move this to a common "definitions" module
 pub const Error = error{
@@ -28,21 +35,15 @@ pub const Error = error{
     QueueEmpty,
 };
 
-// TODO move this to a common "definitions" module
-pub const NUM_THREADS = 128;
-
-// TODO move this to a common "definitions" module
-pub const NUM_SEMAPHORES = 0;
-
 /// Number of queue entries allowed in the entire system, across all queues.
-const NUM_QUEUE_ENTRIES = NUM_THREADS + 4 + (2 * NUM_SEMAPHORES);
+const NUM_QUEUES = NUM_THREADS + 6 + (2 * NUM_SEMAPHORES);
 
 /// "Pointer" to a queue entry. Must be big enough to hold QEMPTY..NUM_QUEUE_ENTRIES
 pub const QID = i16;
-pub const QEMPTY = -1; // Placeholder for a "pointer" to null
+pub const QEMPTY: QID = -1; // Placeholder for a "pointer" to null
 
 /// Value of a queue entry's priority key.
-pub const Key = i32;
+pub const Key = u32;
 pub const MINKEY: Key = std.math.minInt(Key);
 pub const MAXKEY: Key = std.math.maxInt(Key);
 
@@ -60,31 +61,31 @@ const QueueEntry = packed struct {
     }
 };
 
-var queue_table: [NUM_QUEUE_ENTRIES]QueueEntry = init: {
-    var initial_value: [NUM_QUEUE_ENTRIES]QueueEntry = undefined;
+var queue_table: [NUM_QUEUES]QueueEntry = init: {
+    var initial_value: [NUM_QUEUES]QueueEntry = undefined;
     for (&initial_value) |*q| {
         q.* = QueueEntry.init();
     }
     break :init initial_value;
 };
 
+/// Next available queue_table entry
+var nextQid: QID = NUM_THREADS;
+
 // ----------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------
 
-/// Next available queue_table entry
-var nextQid: QID = NUM_THREADS;
-
 /// Allocate a queue
 pub fn allocate() !QID {
-    if (nextQid > NUM_QUEUE_ENTRIES) {
+    if (nextQid >= NUM_QUEUES) {
         return Error.NoMoreQueues;
     }
 
     // we allocate pairs of entries, one for the head of the dlist one
     // for the tail
 
-    var q = nextQid;
+    const q = nextQid;
     nextQid += 2;
 
     const head = quetab(quehead(q));
@@ -125,7 +126,7 @@ pub fn dequeue(qid: QID) !TID {
 }
 
 /// Insert in the queue according to priority ordering (highest to lowest)
-pub fn insert(tid: TID, priority: Key, qid: QID) !TID {
+pub fn insert(tid: TID, priority: Key, qid: QID) !void {
     if (isBadTid(tid)) return Error.BadThreadId;
     if (isBadQid(qid)) return Error.BadQueueId;
 
@@ -140,8 +141,31 @@ pub fn insert(tid: TID, priority: Key, qid: QID) !TID {
     quetab(tid).key = priority;
     quetab(prev).next = tid;
     quetab(next).prev = tid;
+}
 
-    return tid;
+// Insert thread into a queue, sorted by ascending value, but once
+// inserted, record only the delta from the predecessor. (Useful for
+// tracking timeouts.)
+pub fn insertDelta(tid: TID, value: Key, qid: QID) !void {
+    if (isBadTid(tid)) return Error.BadThreadId;
+    if (isBadQid(qid)) return Error.BadQueueId;
+
+    var key = value;
+    var prev = quehead(qid);
+    var next = quetab(prev).next;
+    while (quetab(next).key <= key and next != quetail(qid)) {
+        key -= quetab(next).key;
+        prev = next;
+        next = quetab(next).next;
+    }
+    quetab(tid).next = next;
+    quetab(tid).prev = prev;
+    quetab(tid).key = key;
+    quetab(prev).next = tid;
+    quetab(next).prev = tid;
+    if (next != quetail(qid)) {
+        quetab(next).key -= key;
+    }
 }
 
 // ----------------------------------------------------------------------
@@ -186,7 +210,7 @@ pub fn getItem(tid: TID) TID {
 // ----------------------------------------------------------------------
 
 pub inline fn isBadQid(q: QID) bool {
-    return (quehead(q) < 0 or quehead(q) != quetail(q) - 1 or quetail(q) >= NUM_QUEUE_ENTRIES);
+    return (quehead(q) < 0 or quehead(q) != quetail(q) - 1 or quetail(q) >= NUM_QUEUES);
 }
 
 pub inline fn quehead(q: QID) QID {
@@ -209,6 +233,12 @@ pub inline fn firstKey(q: QID) Key {
     return quetab(quetab(quehead(q)).next).key;
 }
 
+pub inline fn decrementFirstKey(q: QID) Key {
+    const qent = quetab(quetab(quehead(q)).next);
+    qent.key -= 1;
+    return qent.key;
+}
+
 pub inline fn lastKey(q: QID) Key {
     return quetab(quetab(quetail(q)).prev).key;
 }
@@ -220,19 +250,8 @@ pub inline fn firstId(q: QID) QID {
 // ----------------------------------------------------------------------
 // Test and debug support
 // ----------------------------------------------------------------------
-pub fn reinit() void {
-    // reinitialize between test cases
-    for (&queue_table) |*qe| {
-        qe.* = QueueEntry.init();
-    }
-
-    nextQid = NUM_THREADS;
-}
 
 pub fn dumpQ(qid: QID) void {
-    const root = @import("root");
-    const printf = root.printf;
-
     if (isBadQid(qid)) {
         _ = printf("bad queue id: %d\n", qid);
         return;

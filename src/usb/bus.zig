@@ -11,7 +11,6 @@ pub const HCI = root.HAL.USBHCI;
 pub const Device = HCI.Device;
 
 const descriptor = @import("descriptor.zig");
-const DescriptorType = descriptor.DescriptorType;
 
 const hub = @import("hub.zig");
 const Hub = hub.Hub;

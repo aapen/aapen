@@ -16,6 +16,11 @@ pub const heap_end: usize = device_start - 1;
 
 pub const data_cache_line_length: usize = 64;
 
+pub const DMA_ALIGNMENT: u29 = 64;
+
+// Clock
+pub const timer_frequency_hz = 1_000_000;
+
 // ARM devices
 const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
 const arm_local_timer = @import("../drivers/arm_local_timer.zig");
@@ -40,6 +45,7 @@ pub const BoardInfoController = bcm_board_info;
 pub const Clock = arm_local_timer.Clock;
 pub const DMA = bcm_dma;
 pub const InterruptController = arm_local_interrupt;
+pub const Irq = InterruptController.Irq;
 pub const GPIO = bcm_gpio;
 pub const I2C = bcm_i2c;
 pub const EMMC = bcm_emmc;
@@ -88,7 +94,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.interrupt_controller = try InterruptController.init(allocator, peripheral_base + 0xb200);
 
-    self.clock = try Clock.init(allocator, peripheral_base + 0x3000);
+    self.clock = try Clock.init(allocator, peripheral_base + 0x3000, timer_frequency_hz);
 
     self.dma = DMA.init(allocator, peripheral_base + 0x7000, self.interrupt_controller, &self.soc.dma_ranges);
 
@@ -108,7 +114,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
-    self.usb_hci = try USBHCI.init(allocator, peripheral_base + 0x980000, self.interrupt_controller, .USB_HCI, &self.soc.bus_ranges, &self.power_controller);
+    self.usb_hci = try USBHCI.init(allocator, peripheral_base + 0x980000, self.interrupt_controller, Irq.USB_HCI, &self.soc.bus_ranges, &self.power_controller);
 
     for (0..3) |timer_id| {
         self.timer[timer_id] = try Timer.init(allocator, timer_id, peripheral_base + 0x3000, self.clock, self.interrupt_controller);

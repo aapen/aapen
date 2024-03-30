@@ -10,35 +10,25 @@ const queue = @import("../queue.zig");
 const MAXKEY = queue.MAXKEY;
 const MINKEY = queue.MINKEY;
 const QEMPTY = queue.QEMPTY;
+const QID = queue.QID;
 const QNULL = @as(queue.QID, QEMPTY);
 const quetab = queue.quetab;
 const quehead = queue.quehead;
 const quetail = queue.quetail;
 
-const schedule2 = @import("../schedule2.zig");
-const TID = schedule2.TID;
+const schedule = @import("../schedule.zig");
+const TID = schedule.TID;
 
 pub fn testBody() !void {
-    try allocate();
-    try enqueueAndDequeue();
-    try priorityQueueing();
+    const qid = try allocate();
+    try enqueueAndDequeue(qid);
+    try priorityQueueing(qid);
 }
 
-fn setupQueue() void {
-    queue.reinit();
-}
-
-fn setupThreads() void {
-    for (0..10) |i| {
-        schedule2.threads[i].state = schedule2.THREAD_READY;
-    }
-    schedule2.threads[0].state = schedule2.THREAD_RUNNING;
-}
-
-fn allocate() !void {
+fn allocate() !QID {
     const qid = try queue.allocate();
 
-    expect(qid >= schedule2.NUM_THREADS);
+    expect(qid >= schedule.NUM_THREADS);
 
     const qhead = quehead(qid);
     const qtail = quetail(qid);
@@ -58,17 +48,15 @@ fn allocate() !void {
     expectEqual(qhead, quetab(qtail).prev);
     // - have no next
     expectEqual(QNULL, quetab(qtail).next);
+
+    return qid;
 }
 
-fn enqueueAndDequeue() !void {
-    setupQueue();
-    setupThreads();
-
-    const qid = try queue.allocate();
-
+fn enqueueAndDequeue(qid: QID) !void {
     // enqueue some threads, but not in numeric order
-    const threads_to_queue = [_]TID{ 2, 7, 9, 1, 3, 4, 5, 8, 6 };
+    const threads_to_queue = [_]TID{ 2, 7, 9, 11, 3, 4, 5, 8, 6 };
     for (threads_to_queue) |t| {
+        schedule.thrent(t).state = schedule.THREAD_SUSPEND;
         expectEqual(t, try queue.enqueue(t, qid));
     }
 
@@ -79,33 +67,29 @@ fn enqueueAndDequeue() !void {
     }
 
     // queue is empty, so next dequeue should return -1
-    expectEqual(@as(TID, schedule2.NO_TID), try queue.dequeue(qid));
+    expectEqual(@as(TID, schedule.NO_TID), try queue.dequeue(qid));
 }
 
-fn priorityQueueing() !void {
-    setupQueue();
-    setupThreads();
-
-    const readyq = try queue.allocate();
-
+fn priorityQueueing(qid: QID) !void {
     // enqueue some threads, but not in numeric order
     const ThreadPriority = struct { TID, queue.Key };
     const threads_with_priority = [_]ThreadPriority{
         .{ 7, 100 },
         .{ 8, 600 },
-        .{ 2, 400 },
+        .{ 11, 400 },
         .{ 5, 900 },
     };
     for (threads_with_priority) |tp| {
-        expectEqual(tp[0], try queue.insert(tp[0], tp[1], readyq));
+        schedule.thrent(tp[0]).state = schedule.THREAD_SUSPEND;
+        try queue.insert(tp[0], tp[1], qid);
     }
 
-    _ = printf("readyQ ");
-    queue.dumpQ(readyq);
+    // _ = printf("Q ");
+    // queue.dumpQ(qid);
 
     // dequeue order should be from highest priority to lowest
-    const threads_expected = [_]TID{ 5, 8, 2, 7 };
+    const threads_expected = [_]TID{ 5, 8, 11, 7 };
     for (threads_expected) |t| {
-        expectEqual(t, try queue.dequeue(readyq));
+        expectEqual(t, try queue.dequeue(qid));
     }
 }

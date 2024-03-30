@@ -1,0 +1,122 @@
+* Backtracing
+
+** Simple case, using lldb
+
+From a sample hello world program, I observe a backtrace like this:
+
+#+begin_src
+ thread #1, queue = 'com.apple.main-thread', stop reason = breakpoint 1.2
+  * frame #0: 0x0000000100001044 hello`main(c_argc=1, c_argv=0x000000016fdfea70, c_envp=0x000000016fdfea80) at start.zig:471:5
+    frame #1: 0x000000019e853f28 dyld`start + 2236
+#+end_src
+
+Frame 0 is determined from the program counter.
+
+X29 holds 0x000000016fdfe7e0 points to the _current_ frame (for main). The frame contains:
+
+#+begin_src 
+
+0x16fdfe7e0: 0x000000016fdfea50 0x000000019e853f28
+             ^                  ^
+             |                  +---- saved LR
+             +--- next frame
+
+#+end_src
+             
+X30 holds 0x000000019e853f28, same as the saved LR because we haven't made a deeper call
+
+The frame at 0x000000016fdfea50 is:
+
+#+begin_src 
+
+0x16fdfea50: 0x0000000000000000 0x694b000000000000
+             ^                  ^
+             |                  +---- nonsense
+             +---- no next frame
+
+#+end_src
+
+The null frame pointer is what indicates the end of the backtrace.
+
+** Slightly harder case, using lldb
+
+#+begin_src 
+ thread #1, queue = 'com.apple.main-thread', stop reason = step in
+  * frame #0: 0x0000000100000794 hello`io.buffered_writer.BufferedWriter(self=0x000000016fdfc558))).flush at buffered_writer.zig:18:13
+    frame #1: 0x0000000100000d6c hello`main.main at main.zig:16:17
+    frame #2: 0x0000000100001244 hello`main(c_argc=1, c_argv=0x000000016fdfea70, c_envp=0x000000016fdfea80) at start.zig:486:37
+    frame #3: 0x000000019e853f28 dyld`start + 2236  
+#+end_src
+
+PC is 0x0000000100000794
+
+X29 holds 0x000000016fdfc500, points to the _current_ frame. The frame holds:
+
+#+begin_src
+
+0x16fdfc500: 0x000000016fdfe590 0x0000000100000d6c
+             ^                  ^
+             |                  +---- saved LR (shown as frame #1 addr)
+             +--- next frame
+
+#+end_src
+
+
+X30 holds 0x0000000100000d6c, same as the saved LR
+
+The frame at 0x000000016fdfe590 holds:
+
+#+begin_src 
+
+0x16fdfe590: 0x000000016fdfe7e0 0x0000000100001244  
+             ^                  ^
+             |                  +---- saved LR (shown as frame #2 addr)
+             +--- next frame
+  
+#+end_src
+
+
+The frame at 0x000000016fdfe7e0 holds:
+
+#+begin_src 
+
+0x16fdfe7e0: 0x000000016fdfea50 0x000000019e853f28
+             ^                  ^
+             |                  +---- saved LR (shown as frame #3 addr)
+             +--- next frame
+  
+#+end_src
+
+The frame at 0x000000016fdfea50 holds:
+
+#+begin_src 
+
+0x16fdfea50: 0x0000000000000000 0x694b000000000000
+             ^                  ^
+             |                  +---- nonsense
+             +--- no next frame
+  
+#+end_src
+
+** Aapen, using GBD
+
+Backtrace looks like this:
+
+#+begin_src 
+#0  kernelInit (core_id=0) at main.zig:93
+#1  0x0000000000000000 in ?? ()  
+#+end_src
+
+PC is 0xe748c <kernelInit+64>
+
+X30 is 0
+
+x29 is 0x1ffe0, the frame holds:
+
+#+begin_src 
+
+0x1ffe0:        0x0000000000000000      0x0000000000000000
+ 
+#+end_src
+
+Hypothesis: FP should be NULL at this point.

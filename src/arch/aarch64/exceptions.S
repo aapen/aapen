@@ -13,12 +13,14 @@
         // new invocation frame
         KERNEL_ENTRY_FRAME_SIZE         = 18 * 2 * 8
 
+        // these are constants so we can display what kind of
+        // unhandled exception we received
         SYNCHRONOUS_INVALID_EL1T        = 0b0000
         IRQ_INVALID_EL1T                = 0b0001
         FIQ_INVALID_EL1T                = 0b0010
         ERROR_INVALID_EL1T              = 0b0011
-        SYNCHRONOUS_INVALID_EL1H        = 0b0100
-        // IRQ_EL1H
+        // SYNCHRONOUS_EL1H (not unhandled)
+        // IRQ_EL1H (not unhandled)
         FIQ_INVALID_EL1H                = 0b0110
         ERROR_INVALID_EL1H              = 0b0111
         SYNCHRONOUS_INVALID_EL0_64      = 0b1000
@@ -46,7 +48,7 @@
         .macro HANDLE_INVALID_ENTRY type
         KERNEL_ENTRY
         mov     x1, #\type
-        bl      invalidEntryMessageShow
+        bl      unhandledException
         b       err_hang
         .endm
 
@@ -166,16 +168,6 @@
         .endm
 
         // ----------------------------------------------------------------------
-        // Stack unwinding
-        // ----------------------------------------------------------------------
-        ENTRY(markUnwindPoint)
-        mov     x10, sp
-        str     x10, [x0]
-        stp     x29, x30, [x0, #16]
-        ret
-        END(markUnwindPoint)
-
-        // ----------------------------------------------------------------------
         // Vector table
         // ----------------------------------------------------------------------
 
@@ -217,7 +209,7 @@ __exception_handler_table:
         VENTRY          error_invalid_el1t
 
         // From ELx to ELx (x > 0)
-        VENTRY          synchronous_invalid_el1h
+        VENTRY          synchronous_el1h
         VENTRY          irq_el1h
         VENTRY          fiq_invalid_el1h
         VENTRY          error_invalid_el1h
@@ -236,11 +228,6 @@ __exception_handler_table:
         VENTRY          fiq_invalid_el0_32
         VENTRY          error_invalid_el0_32
 
-irq_el1h:
-        KERNEL_ENTRY
-        bl              irqCurrentElx
-        KERNEL_EXIT
-
 synchronous_invalid_el1t:
         HANDLE_INVALID_ENTRY    SYNCHRONOUS_INVALID_EL1T
 
@@ -253,9 +240,14 @@ fiq_invalid_el1t:
 error_invalid_el1t:
         HANDLE_INVALID_ENTRY    ERROR_INVALID_EL1T
 
-synchronous_invalid_el1h:
+synchronous_el1h:
         KERNEL_ENTRY
-        bl              invalidEntryMessageShow
+        bl              synchronousExceptionElx
+        KERNEL_EXIT
+
+irq_el1h:
+        KERNEL_ENTRY
+        bl              irqCurrentElx
         KERNEL_EXIT
 
 fiq_invalid_el1h:

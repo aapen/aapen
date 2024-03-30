@@ -10,12 +10,19 @@ pub fn exit(status: u8) noreturn {
     unreachable;
 }
 
-pub fn exitWithTestResult() noreturn {
+pub fn printTestResult() void {
     if (any_test_error) {
         _ = printf("... FAILED\n");
-        exit(255);
     } else {
         _ = printf("... OK\n");
+    }
+}
+
+pub fn exitWithTestResult() noreturn {
+    printTestResult();
+    if (any_test_error) {
+        exit(255);
+    } else {
         exit(0);
     }
     unreachable;

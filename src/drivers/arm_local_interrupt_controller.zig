@@ -12,10 +12,34 @@ const arch = @import("../architecture.zig");
 const exceptions = arch.cpu.exceptions;
 const ExceptionContext = exceptions.ExceptionContext;
 
+const synchronize = @import("../synchronize.zig");
+const TicketLock = synchronize.TicketLock;
+
 const Self = @This();
 
 pub fn defineModule(forth: *Forth) !void {
-    _ = forth;
+    try forth.defineNamespace(@This(), .{
+        .{ "irqEnabled1", "irq-enabled-1" },
+        .{ "irqEnabled2", "irq-enabled-2" },
+        .{ "irqEnabledBasic", "irq-enabled-basic" },
+        .{ "irqFlags", "irq-flags" },
+    });
+}
+
+pub fn irqEnabled1() u64 {
+    return root.hal.interrupt_controller.registers.enable_irqs_1;
+}
+
+pub fn irqEnabled2() u64 {
+    return root.hal.interrupt_controller.registers.enable_irqs_2;
+}
+
+pub fn irqEnabledBasic() u64 {
+    return root.hal.interrupt_controller.registers.enable_basic_irqs;
+}
+
+pub fn irqFlags() u64 {
+    return arch.cpu.irqFlagsRead();
 }
 
 // ----------------------------------------------------------------------
@@ -23,28 +47,31 @@ pub fn defineModule(forth: *Forth) !void {
 // ----------------------------------------------------------------------
 pub const max_irq_id = 64;
 
-pub const IrqId = enum(u6) {
-    TIMER_0 = 0,
-    TIMER_1 = 1,
-    TIMER_2 = 2,
-    TIMER_3 = 3,
-    USB_HCI = 9,
-    GPIO_0 = 49,
-    GPIO_1 = 50,
-    GPIO_2 = 51,
-    GPIO_3 = 52,
-    UART = 57,
+pub const IrqId = u6;
+
+pub const Irq = struct {
+    pub const TIMER_0: u6 = 0;
+    pub const TIMER_1: u6 = 1;
+    pub const TIMER_2: u6 = 2;
+    pub const TIMER_3: u6 = 3;
+    pub const USB_HCI: u6 = 9;
+    pub const GPIO_0: u6 = 49;
+    pub const GPIO_1: u6 = 50;
+    pub const GPIO_2: u6 = 51;
+    pub const GPIO_3: u6 = 52;
+    pub const UART: u6 = 57;
 };
 
 const IrqRouting = struct {
-    enable_mask_basic: u32 = 0,
-    enable_mask_extended: u64 = 0,
-    handler: *IrqHandler = undefined,
+    enable_mask_basic: u32,
+    enable_mask_extended: u64,
+    handler: ?*IrqHandler,
 
     fn mk(en: u32, enx: u64) IrqRouting {
         return .{
             .enable_mask_basic = en,
             .enable_mask_extended = enx,
+            .handler = null,
         };
     }
 };
@@ -78,18 +105,16 @@ const Registers = extern struct {
     disable_basic_irqs: u32,
 };
 
+routing_lock: TicketLock = TicketLock.initWithTargetLevel("irq routing", true, .FIQ),
 routing: [max_irq_id]IrqRouting = undefined,
 registers: *volatile Registers,
 
-fn routeAdd(self: *Self, id: IrqId, en: u32, enx: u64) void {
-    const index = @intFromEnum(id);
-    self.routing[index] = IrqRouting.mk(en, enx);
-}
-
 fn routeAddFromId(self: *Self, id: IrqId) void {
-    const index = @intFromEnum(id);
-    const enable_extended = @as(u64, 1) << index;
-    self.routeAdd(id, 0, enable_extended);
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
+    const enable_extended = @as(u64, 1) << id;
+    self.routing[id] = IrqRouting.mk(0, enable_extended);
 }
 
 pub fn init(allocator: Allocator, register_base: u64) !*Self {
@@ -97,33 +122,41 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
 
     self.registers = @ptrFromInt(register_base);
 
-    self.routeAddFromId(.TIMER_0);
-    self.routeAddFromId(.TIMER_1);
-    self.routeAddFromId(.TIMER_2);
-    self.routeAddFromId(.TIMER_3);
-    self.routeAddFromId(.USB_HCI);
-    self.routeAddFromId(.UART);
+    for (0..max_irq_id) |id| {
+        self.routing[id] = IrqRouting.mk(0, id);
+    }
 
-    self.routeAddFromId(.GPIO_0);
-    self.routeAddFromId(.GPIO_1);
-    self.routeAddFromId(.GPIO_2);
-    self.routeAddFromId(.GPIO_3);
+    self.routeAddFromId(Irq.TIMER_0);
+    self.routeAddFromId(Irq.TIMER_1);
+    self.routeAddFromId(Irq.TIMER_2);
+    self.routeAddFromId(Irq.TIMER_3);
+    self.routeAddFromId(Irq.USB_HCI);
+    self.routeAddFromId(Irq.GPIO_0);
+    self.routeAddFromId(Irq.GPIO_1);
+    self.routeAddFromId(Irq.GPIO_2);
+    self.routeAddFromId(Irq.GPIO_3);
+    self.routeAddFromId(Irq.UART);
 
     return self;
 }
 
 pub fn connect(self: *Self, id: IrqId, handler: *IrqHandler) void {
-    self.routing[@intFromEnum(id)].handler = handler;
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
+    self.routing[id].handler = handler;
 }
 
 pub fn disconnect(self: *Self, id: IrqId) void {
-    self.routing[@intFromEnum(id)].handler = &null_handler;
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
+    self.routing[id].handler = &null_handler;
 }
 
 pub fn enable(self: *Self, id: IrqId) void {
-    const index = @intFromEnum(id);
-    const basic = self.routing[index].enable_mask_basic;
-    const extended = self.routing[index].enable_mask_extended;
+    const basic = self.routing[id].enable_mask_basic;
+    const extended = self.routing[id].enable_mask_extended;
 
     if (basic != 0) {
         self.registers.enable_basic_irqs = basic;
@@ -139,20 +172,19 @@ pub fn enable(self: *Self, id: IrqId) void {
 }
 
 pub fn disable(self: *Self, id: IrqId) void {
-    const index = @intFromEnum(id);
-    const basic = self.routing[index].enable_mask_basic;
-    const extended = self.routing[index].enable_mask_extended;
+    const basic = self.routing[id].enable_mask_basic;
+    const extended = self.routing[id].enable_mask_extended;
 
     if (basic != 0) {
         self.registers.disable_basic_irqs = basic;
     }
 
     if (extended & 0xffff_ffff != 0) {
-        self.registers.disable_irqs_1 = @as(u32, extended & 0xffff_ffff);
+        self.registers.disable_irqs_1 = @as(u32, @truncate(extended & 0xffff_ffff));
     }
 
     if ((extended >> 32) & 0xffff_ffff != 0) {
-        self.registers.disable_irqs_2 = @as(u32, extended >> 32);
+        self.registers.disable_irqs_2 = @as(u32, @truncate(extended >> 32));
     }
 }
 
@@ -160,10 +192,12 @@ pub fn disable(self: *Self, id: IrqId) void {
 // Specific to interrupt routing on BCM2835 - 2837
 // ----------------------------------------------------------------------
 
-fn irqHandleBasic(self: *Self, id: IrqId) void {
-    const index = @intFromEnum(id);
-    const h = self.routing[index].handler;
-    if (h != undefined) {
+fn invokeHandler(self: *Self, id: IrqId) void {
+    self.routing_lock.acquire();
+    const route = &self.routing[id];
+    self.routing_lock.release();
+
+    if (route.handler) |h| {
         h.invoke(self, id);
     }
 }
@@ -189,10 +223,10 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
             },
             11 => {
                 // Basic IRQ bit 11 -> GPU IRQ 9 -> USB_HCI
-                self.irqHandleBasic(.USB_HCI);
+                self.invokeHandler(Irq.USB_HCI);
             },
             19 => {
-                self.irqHandleBasic(.UART);
+                self.invokeHandler(Irq.UART);
             },
             else => {
                 // do nothing
@@ -210,7 +244,7 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
             const next: u5 = @truncate(@ctz(pending_1));
             switch (next) {
                 0, 1, 2, 3 => {
-                    self.irqHandleBasic(@enumFromInt(next));
+                    self.invokeHandler(@as(IrqId, next));
                 },
                 7, 9, 10, 18, 19 => {
                     // already handled, these were presented on the basic register
@@ -227,7 +261,7 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
             const next: u5 = @truncate(@ctz(pending_2));
             switch (next) {
                 17, 18, 19, 20 => {
-                    self.irqHandleBasic(@enumFromInt(next + @as(u6, 32)));
+                    self.invokeHandler(@as(IrqId, next + @as(IrqId, 32)));
                 },
                 21, 22, 23, 24, 25, 30 => {
                     // already handled, these were presented on the basic register

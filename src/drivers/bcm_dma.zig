@@ -142,6 +142,7 @@ interrupt_status: *volatile u32,
 transfer_enabled: *volatile u32,
 intc: *InterruptController,
 channels: DmaChannels,
+channel_control_blocks: [max_channel_id]BroadcomDMAControlBlock align(32),
 
 pub fn init(
     allocator: Allocator,
@@ -157,6 +158,7 @@ pub fn init(
         .transfer_enabled = @ptrFromInt(register_base + 0xff0),
         .translations = translations,
         .channels = .{},
+        .channel_control_blocks = undefined,
     };
 }
 
@@ -190,27 +192,10 @@ pub fn reserveChannel(self: *Self) DMAError!Channel {
     };
 }
 
-pub fn createRequest(self: *Self) DMAError!*Request {
-    var request = try self.allocator.create(Request);
-    request.control_blocks = null;
-    return request;
-}
-
-pub fn destroyRequest(self: *Self, request: *Request) void {
-    if (request.control_blocks) |cb_slice| {
-        self.allocator.free(cb_slice);
-    }
-
-    self.allocator.destroy(request);
-}
-
 // TODO: after dma completes, free the control block
 pub fn initiate(self: *Self, channel: Channel, request: *Request) DMAError!void {
-    const cb_slice = try self.allocator.alignedAlloc(BroadcomDMAControlBlock, 32, 1);
-    request.control_blocks = cb_slice;
-
     const channel_registers = channel.registers;
-    const control_block = &cb_slice[0];
+    const control_block = &self.channel_control_blocks[channel.channel_id];
     const mode_2d: u1 = if (request.stride != 0) 1 else 0;
 
     control_block.* = .{

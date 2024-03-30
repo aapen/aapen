@@ -16,7 +16,7 @@ KERNEL_FILES = $(addprefix zig-out/kernel-,$(addsuffix .img,$(BOARD_FLAVORS)))
 TEST_KERNEL = zig-out/kernel-$(BOARD).img
 TEST_KERNEL_ELF = zig-out/kernel-$(BOARD).elf
 
-KERNEL_UNIT_TESTS = confirm_qemu console_output bcd atomic event queue root_hub stack string synchronize transfer_factory transfer
+KERNEL_UNIT_TESTS = atomic bcd confirm_qemu console_output event heap mailbox queue root_hub schedule semaphore stack string synchronize transfer transfer_factory
 KERNEL_UNIT_TEST_TARGETS = $(addprefix kernel_test_, $(KERNEL_UNIT_TESTS))
 
 CORE_COUNT      = 4
@@ -30,7 +30,7 @@ endif
 
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb $(SD_ARGS)
 #QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2711-rpi-400.dtb
-QEMU_DEBUG_ARGS = -s -S -serial pty -device usb-kbd 
+QEMU_DEBUG_ARGS = -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd
 QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd
 QEMU_UNIT_TEST_ARGS = -nographic
 
@@ -108,6 +108,9 @@ else
 	cp $(KERNEL_FILES) $(SDCARD_PATH)
 	cp sdfiles/config.txt $(SDCARD_PATH)
 endif
+
+sdfiles/infloop.bin:
+	echo "0000: 0000 0014" | xxd -r - sdfiles/infloop.bin
 
 clean:
 	rm -rf zig-cache

@@ -24,6 +24,7 @@ const TransferType = transfer.TransferType;
 const TransferFactory = @import("transfer_factory.zig");
 
 const usb = @import("../usb.zig");
+const InterfaceClass = usb.InterfaceClass;
 
 pub const DeviceAddress = u7;
 pub const DEFAULT_ADDRESS: DeviceAddress = 0;
@@ -32,6 +33,8 @@ pub const FIRST_DEDICATED_ADDRESS = 1;
 pub const MAX_ADDRESS: DeviceAddress = 63;
 pub const MAX_INTERFACES: usize = 8;
 pub const MAX_ENDPOINTS: usize = 8;
+pub const FRAMES_PER_MS: u32 = 8;
+pub const UFRAMES_PER_MS: u32 = 8;
 
 pub const DeviceStatus = u16;
 pub const STATUS_SELF_POWERED: u32 = 0b01;
@@ -44,58 +47,58 @@ pub const UsbSpeed = enum {
     Super,
 };
 
-pub const StandardDeviceRequests = enum(u8) {
-    get_status = 0x00,
-    clear_feature = 0x01,
-    set_feature = 0x03,
-    set_address = 0x05,
-    get_descriptor = 0x06,
-    set_descriptor = 0x07,
-    get_configuration = 0x08,
-    set_configuration = 0x09,
+pub const StandardDeviceRequests = struct {
+    pub const get_status: u8 = 0x00;
+    pub const clear_feature: u8 = 0x01;
+    pub const set_feature: u8 = 0x03;
+    pub const set_address: u8 = 0x05;
+    pub const get_descriptor: u8 = 0x06;
+    pub const set_descriptor: u8 = 0x07;
+    pub const get_configuration: u8 = 0x08;
+    pub const set_configuration: u8 = 0x09;
 };
 
 /// See https://www.usb.org/defined-class-codes
-pub const DeviceClass = enum(u8) {
-    interface_specific = 0x00,
-    audio = 0x01,
-    cdc_control = 0x02,
-    hid = 0x03,
-    physical = 0x05,
-    image = 0x06,
-    printer = 0x07,
-    mass_storage = 0x08,
-    hub = 0x09,
-    cdc_data = 0x0a,
-    smart_card = 0x0b,
-    content_security = 0x0d,
-    video = 0x0e,
-    personal_healthcare = 0x0f,
-    audio_video = 0x10,
-    billboard = 0x11,
-    type_c_bridge = 0x12,
-    bulk_display = 0x13,
-    mctp_over_usb = 0x14,
-    i3c = 0x3c,
-    diagnostic = 0xdc,
-    wireless_controller = 0xe0,
-    miscellaneous = 0xef,
-    application_specific = 0xfe,
-    vendor_specific = 0xff,
+pub const DeviceClass = struct {
+    pub const interface_specific: u8 = 0x00;
+    pub const audio: u8 = 0x01;
+    pub const cdc_control: u8 = 0x02;
+    pub const hid: u8 = 0x03;
+    pub const physical: u8 = 0x05;
+    pub const image: u8 = 0x06;
+    pub const printer: u8 = 0x07;
+    pub const mass_storage: u8 = 0x08;
+    pub const hub: u8 = 0x09;
+    pub const cdc_data: u8 = 0x0a;
+    pub const smart_card: u8 = 0x0b;
+    pub const content_security: u8 = 0x0d;
+    pub const video: u8 = 0x0e;
+    pub const personal_healthcare: u8 = 0x0f;
+    pub const audio_video: u8 = 0x10;
+    pub const billboard: u8 = 0x11;
+    pub const type_c_bridge: u8 = 0x12;
+    pub const bulk_display: u8 = 0x13;
+    pub const mctp_over_usb: u8 = 0x14;
+    pub const i3c: u8 = 0x3c;
+    pub const diagnostic: u8 = 0xdc;
+    pub const wireless_controller: u8 = 0xe0;
+    pub const miscellaneous: u8 = 0xef;
+    pub const application_specific: u8 = 0xfe;
+    pub const vendor_specific: u8 = 0xff;
 };
 
-pub const HubProtocol = enum(u8) {
-    full_speed_hub = 0x00,
-    high_speed_hub_single_tt = 0x01,
-    high_speed_hub_multiple_tt = 0x02,
+pub const HubProtocol = struct {
+    pub const full_speed_hub: u8 = 0x00;
+    pub const high_speed_hub_single_tt: u8 = 0x01;
+    pub const high_speed_hub_multiple_tt: u8 = 0x02;
 };
 
 /// See https://www.usb.org/sites/default/files/documents/hid1_11.pdf,
 /// page 9
-pub const HidProtocol = enum(u8) {
-    none = 0x00,
-    keyboard = 0x01,
-    mouse = 0x02,
+pub const HidProtocol = struct {
+    pub const none: u8 = 0x00;
+    pub const keyboard: u8 = 0x01;
+    pub const mouse: u8 = 0x02;
 };
 
 pub const DeviceState = enum {
@@ -199,8 +202,8 @@ pub const Device = struct {
         if (class == 0) {
             for (0..self.configuration.configuration_descriptor.interface_count) |i| {
                 if (self.configuration.interfaces[i]) |iface| {
-                    if (iface.interface_class != .reserved) {
-                        class = @intFromEnum(iface.interface_class);
+                    if (iface.interface_class != InterfaceClass.reserved) {
+                        class = iface.interface_class;
                     }
                 }
             }
@@ -208,17 +211,17 @@ pub const Device = struct {
 
         return switch (class) {
             0 => "Unspecified",
-            @intFromEnum(DeviceClass.audio) => "Audio",
-            @intFromEnum(DeviceClass.cdc_control) => "Communications and CDC control",
-            @intFromEnum(DeviceClass.hid) => "HID (Human interface device)",
-            @intFromEnum(DeviceClass.image) => "Image",
-            @intFromEnum(DeviceClass.printer) => "Printer",
-            @intFromEnum(DeviceClass.mass_storage) => "Mass storage",
-            @intFromEnum(DeviceClass.hub) => "Hub",
-            @intFromEnum(DeviceClass.video) => "Video",
-            @intFromEnum(DeviceClass.wireless_controller) => "Wireless controller",
-            @intFromEnum(DeviceClass.miscellaneous) => "Miscellaneous",
-            @intFromEnum(DeviceClass.vendor_specific) => "Vendor specific",
+            DeviceClass.audio => "Audio",
+            DeviceClass.cdc_control => "Communications and CDC control",
+            DeviceClass.hid => "HID (Human interface device)",
+            DeviceClass.image => "Image",
+            DeviceClass.printer => "Printer",
+            DeviceClass.mass_storage => "Mass storage",
+            DeviceClass.hub => "Hub",
+            DeviceClass.video => "Video",
+            DeviceClass.wireless_controller => "Wireless controller",
+            DeviceClass.miscellaneous => "Miscellaneous",
+            DeviceClass.vendor_specific => "Vendor specific",
             else => "Unknown",
         };
     }
@@ -271,7 +274,7 @@ pub const DeviceConfiguration = struct {
         const config_start = here;
         const config_length = configuration_tree[here];
 
-        if (configuration_tree[here + 1] != @intFromEnum(DescriptorType.configuration)) {
+        if (configuration_tree[here + 1] != DescriptorType.configuration) {
             return DeviceConfiguration.ParseError.BadData;
         }
 
@@ -287,7 +290,7 @@ pub const DeviceConfiguration = struct {
         for (0..expect_interfaces) |iface_num| {
             const iface_length = configuration_tree[here];
 
-            if (configuration_tree[here + 1] != @intFromEnum(DescriptorType.interface)) {
+            if (configuration_tree[here + 1] != DescriptorType.interface) {
                 return DeviceConfiguration.ParseError.BadData;
             }
 
@@ -304,7 +307,7 @@ pub const DeviceConfiguration = struct {
             for (0..expect_endpoints) |endpoint_num| {
                 const endpoint_length = configuration_tree[here];
 
-                if (configuration_tree[here + 1] != @intFromEnum(DescriptorType.endpoint)) {
+                if (configuration_tree[here + 1] != DescriptorType.endpoint) {
                     return DeviceConfiguration.ParseError.BadData;
                 }
 

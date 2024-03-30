@@ -1,5 +1,8 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.usb);
+
+const root = @import("root");
 
 const descriptor = @import("descriptor.zig");
 const DescriptorType = descriptor.DescriptorType;
@@ -10,8 +13,6 @@ const StandardDeviceRequests = device.StandardDeviceRequests;
 
 const hub = @import("hub.zig");
 const HubClassRequest = hub.ClassRequest;
-const HubFeature = hub.HubFeature;
-const PortFeature = hub.PortFeature;
 
 const language = @import("language.zig");
 const LangID = language.LangID;
@@ -35,90 +36,90 @@ pub fn initControlTransfer(setup_packet: SetupPacket, data_buffer: []u8) Transfe
     return Transfer.initControl(setup_packet, @constCast(data_buffer));
 }
 
-pub fn initDescriptorTransfer(descriptor_type: DescriptorType, descriptor_index: u8, lang_id: u16, data_buffer: []u8) Transfer {
+pub fn initDescriptorTransfer(descriptor_type: u8, descriptor_index: u8, lang_id: u16, data_buffer: []u8) Transfer {
     const length: u16 = @truncate(data_buffer.len);
-    const val: u16 = @as(u16, @intFromEnum(descriptor_type)) << 8 | @as(u8, descriptor_index);
-    const setup_packet = SetupPacket.init(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_descriptor), val, lang_id, length);
+    const val: u16 = @as(u16, descriptor_type) << 8 | @as(u8, descriptor_index);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, StandardDeviceRequests.get_descriptor, val, lang_id, length);
 
     return initControlTransfer(setup_packet, data_buffer);
 }
 
 pub fn initDeviceDescriptorTransfer(descriptor_index: u8, lang_id: u16, data_buffer: []u8) Transfer {
-    return initDescriptorTransfer(.device, descriptor_index, lang_id, data_buffer);
+    return initDescriptorTransfer(DescriptorType.device, descriptor_index, lang_id, data_buffer);
 }
 
 pub fn initConfigurationDescriptorTransfer(descriptor_index: u8, data_buffer: []u8) Transfer {
-    return initDescriptorTransfer(.configuration, descriptor_index, 0, data_buffer);
+    return initDescriptorTransfer(DescriptorType.configuration, descriptor_index, 0, data_buffer);
 }
 
-pub fn initStringDescriptorTransfer(descriptor_index: u8, lang_id: LangID, data_buffer: []u8) Transfer {
-    return initDescriptorTransfer(.string, descriptor_index, @intFromEnum(lang_id), data_buffer);
+pub fn initStringDescriptorTransfer(descriptor_index: u8, lang_id: u16, data_buffer: []u8) Transfer {
+    return initDescriptorTransfer(DescriptorType.string, descriptor_index, lang_id, data_buffer);
 }
 
 pub fn initInterfaceDescriptorTransfer(descriptor_index: u8, data_buffer: []u8) Transfer {
-    return initDescriptorTransfer(.interface, descriptor_index, 0, data_buffer);
+    return initDescriptorTransfer(DescriptorType.interface, descriptor_index, 0, data_buffer);
 }
 
 pub fn initEndpointDescriptorTransfer(descriptor_index: u8, data_buffer: []u8) Transfer {
-    return initDescriptorTransfer(.endpoint, descriptor_index, 0, data_buffer);
+    return initDescriptorTransfer(DescriptorType.endpoint, descriptor_index, 0, data_buffer);
 }
 
 pub fn initSetAddressTransfer(device_address: DeviceAddress) Transfer {
-    const setup_packet = SetupPacket.init(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_address), device_address, 0, 0);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device, StandardDeviceRequests.set_address, device_address, 0, 0);
     return initControlTransfer(setup_packet, &.{});
 }
 
 pub fn initGetStatusTransfer(data_buffer: []u8) Transfer {
     const length: u16 = @truncate(data_buffer.len);
-    const setup_packet = SetupPacket.init(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_status), 0, 0, length);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, StandardDeviceRequests.get_status, 0, 0, length);
     return initControlTransfer(setup_packet, data_buffer);
 }
 
 pub fn initSetConfigurationTransfer(config: u16) Transfer {
-    const setup_packet = SetupPacket.init(.device, .standard, .host_to_device, @intFromEnum(StandardDeviceRequests.set_configuration), config, 0, 0);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device, StandardDeviceRequests.set_configuration, config, 0, 0);
     return initControlTransfer(setup_packet, &.{});
 }
 
 pub fn initGetConfigurationTransfer(data_buffer: []u8) Transfer {
-    const setup_packet = SetupPacket.init(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_configuration), 0, 0, 1);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, StandardDeviceRequests.get_configuration, 0, 0, 1);
     return initControlTransfer(setup_packet, data_buffer);
 }
 
 pub fn initGetHubDescriptorTransfer(descriptor_index: u8, data_buffer: []u8) Transfer {
     const length: u16 = @truncate(data_buffer.len);
-    const val: u16 = @as(u16, @intFromEnum(DescriptorType.hub)) << 8 | @as(u8, descriptor_index);
-    const setup_packet = SetupPacket.init(.device, .class, .device_to_host, @intFromEnum(StandardDeviceRequests.get_descriptor), val, 0, length);
+    const val: u16 = @as(u16, DescriptorType.hub) << 8 | @as(u8, descriptor_index);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.class, RequestTypeDirection.device_to_host, StandardDeviceRequests.get_descriptor, val, 0, length);
     return initControlTransfer(setup_packet, data_buffer);
 }
 
 pub fn initGetHubStatusTransfer(data_buffer: []u8) Transfer {
-    const setup_packet = SetupPacket.init(.device, .class, .device_to_host, @intFromEnum(HubClassRequest.get_status), 0, 0, 4);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.class, RequestTypeDirection.device_to_host, HubClassRequest.get_status, 0, 0, 4);
     return initControlTransfer(setup_packet, data_buffer);
 }
 
-pub fn initHubSetHubFeatureTransfer(feature: HubFeature) Transfer {
-    const setup_packet = SetupPacket.init(.device, .class, .host_to_device, @intFromEnum(HubClassRequest.set_feature), @intFromEnum(feature), 0, 0);
+pub fn initHubSetHubFeatureTransfer(feature: u16) Transfer {
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.class, RequestTypeDirection.host_to_device, HubClassRequest.set_feature, feature, 0, 0);
     return initControlTransfer(setup_packet, &.{});
 }
 
-pub fn initHubClearHubFeatureTransfer(feature: HubFeature) Transfer {
-    const setup_packet = SetupPacket.init(.device, .class, .host_to_device, @intFromEnum(HubClassRequest.clear_feature), @intFromEnum(feature), 0, 0);
+pub fn initHubClearHubFeatureTransfer(feature: u16) Transfer {
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.class, RequestTypeDirection.host_to_device, HubClassRequest.clear_feature, feature, 0, 0);
     return initControlTransfer(setup_packet, &.{});
 }
 
 pub fn initHubGetPortStatusTransfer(port_number: u8, data_buffer: []u8) Transfer {
-    const setup_packet = SetupPacket.init(.other, .class, .device_to_host, @intFromEnum(HubClassRequest.get_status), 0, port_number, 4);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.other, RequestTypeType.class, RequestTypeDirection.device_to_host, HubClassRequest.get_status, 0, port_number, 4);
     return initControlTransfer(setup_packet, data_buffer);
 }
 
-pub fn initHubSetPortFeatureTransfer(feature: PortFeature, port_number: u8, port_indicator: u8) Transfer {
+pub fn initHubSetPortFeatureTransfer(feature: u16, port_number: u8, port_indicator: u8) Transfer {
     const index: u16 = @as(u16, port_indicator) | port_number;
-    const setup_packet = SetupPacket.init(.other, .class, .host_to_device, @intFromEnum(HubClassRequest.set_feature), @intFromEnum(feature), index, 0);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.other, RequestTypeType.class, RequestTypeDirection.host_to_device, HubClassRequest.set_feature, feature, index, 0);
     return initControlTransfer(setup_packet, &.{});
 }
 
-pub fn initHubClearPortFeatureTransfer(feature: PortFeature, port_number: u8) Transfer {
+pub fn initHubClearPortFeatureTransfer(feature: u16, port_number: u8) Transfer {
     const index: u16 = @as(u16, port_number);
-    const setup_packet = SetupPacket.init(.other, .class, .host_to_device, @intFromEnum(HubClassRequest.clear_feature), @intFromEnum(feature), index, 0);
+    const setup_packet = SetupPacket.init(RequestTypeRecipient.other, RequestTypeType.class, RequestTypeDirection.host_to_device, HubClassRequest.clear_feature, feature, index, 0);
     return initControlTransfer(setup_packet, &.{});
 }

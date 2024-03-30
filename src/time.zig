@@ -2,25 +2,89 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const root = @import("root");
+const HAL = root.HAL;
+const Forth = @import("forty/forth.zig").Forth;
 
-pub fn deadlineMillis(count: u32) u64 {
-    const TICKS_PER_MILLI = 1000;
-    return ticks() + (count * TICKS_PER_MILLI);
+const atomic = @import("atomic.zig");
+const queue = @import("queue.zig");
+const schedule = @import("schedule.zig");
+
+pub const TICKS_PER_SECOND = root.HAL.timer_frequency_hz;
+pub const TICKS_PER_MILLI = TICKS_PER_SECOND / 1_000;
+pub const QUANTA_PER_SECOND = 1000;
+pub const QUANTA_PER_MILLI = 1;
+
+pub var quanta_since_boot: u64 = 0;
+pub var seconds_since_boot: u64 = 0;
+
+// ----------------------------------------------------------------------
+// Define forty interface
+// ----------------------------------------------------------------------
+pub fn defineModule(forth: *Forth) !void {
+    try forth.defineNamespace(@This(), .{
+        .{ "uptime", "uptime", "seconds since boot" },
+        .{ "quantaInSecond", "quptime", "interrupt quanta, range is 0 to 999" },
+    });
 }
 
-pub fn delayMillis(count: u32) void {
-    const NANOS_PER_MILLI = 1000 * 1000;
-    if (builtin.is_test) {
-        std.time.sleep(count * NANOS_PER_MILLI);
-    } else {
-        root.hal.clock.delayMillis(count);
-    }
+// ----------------------------------------------------------------------
+// Public functions
+// ----------------------------------------------------------------------
+pub fn init() void {
+    quanta_since_boot = 0;
+    seconds_since_boot = 0;
+
+    root.hal.system_timer.setCallback(clockHandle);
+    root.hal.system_timer.reset(quantum);
+}
+
+pub fn secondsSinceBoot() u64 {
+    return atomic.atomicFetch(&seconds_since_boot);
+}
+
+pub fn quantaInSecond() u64 {
+    return atomic.atomicFetch(&quanta_since_boot);
+}
+
+pub fn uptime() u64 {
+    return atomic.atomicFetch(&seconds_since_boot);
 }
 
 pub fn ticks() u64 {
-    if (builtin.is_test) {
-        return std.time.microTimestamp();
+    return root.hal.clock.ticks();
+}
+
+// ----------------------------------------------------------------------
+// Time calculations
+// ----------------------------------------------------------------------
+
+pub fn deadlineMillis(millis: u32) u64 {
+    return ticks() + (millis * TICKS_PER_MILLI);
+}
+
+pub fn delayMillis(millis: u32) void {
+    root.hal.clock.delayMillis(millis);
+}
+
+// ----------------------------------------------------------------------
+// Timer interrupts
+// ----------------------------------------------------------------------
+const quantum: u32 = TICKS_PER_SECOND / QUANTA_PER_SECOND;
+
+fn clockHandle(timer: *HAL.Timer) void {
+    timer.reset(quantum);
+
+    const now = atomic.atomicInc(&quanta_since_boot);
+
+    if (now == QUANTA_PER_SECOND) {
+        _ = atomic.atomicInc(&seconds_since_boot);
+        _ = atomic.atomicReset(&quanta_since_boot, 0);
+    }
+
+    // Check for sleeping threads that have reached their wakeup time
+    if (queue.nonEmpty(schedule.sleepq) and queue.decrementFirstKey(schedule.sleepq) <= 0) {
+        schedule.wakeup();
     } else {
-        return root.hal.clock.ticks();
+        schedule.reschedule();
     }
 }

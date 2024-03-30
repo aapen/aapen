@@ -4,22 +4,6 @@ pub const mmu = @import("aarch64/mmu.zig");
 pub const registers = @import("aarch64/registers.zig");
 pub const time = @import("aarch64/time.zig");
 
-// The BSS symbols are provided by the linker script, which computes
-// them from the object files produced by the compiler.
-pub const Sections = struct {
-    pub extern var __bss_start: u8;
-    pub extern var __bss_end_exclusive: u8;
-    pub extern var __page_tables_start: u8;
-};
-
-export fn bssInit() void {
-    const bss_start: [*]u8 = @ptrCast(&Sections.__bss_start);
-    const bss_end: [*]u8 = @ptrCast(&Sections.__bss_end_exclusive);
-    const bss_len = @intFromPtr(bss_end) - @intFromPtr(bss_start);
-
-    @memset(bss_start[0..bss_len], 0);
-}
-
 // ----------------------------------------------------------------------
 // Primitive instructions
 // ----------------------------------------------------------------------
@@ -72,8 +56,13 @@ pub fn init(core_id: usize) void {
         mmu.pageTablesCreate();
     }
     mmu.enable();
-    fiqEnable();
     exceptions.init();
+}
+
+pub fn park() void {
+    while (true) {
+        wfe();
+    }
 }
 
 // ----------------------------------------------------------------------
@@ -89,14 +78,16 @@ pub fn exceptionHandlerTableWrite(table_base: *anyopaque) void {
 // ----------------------------------------------------------------------
 
 pub fn enable() void {
-    fiqEnable();
-    irqEnable();
+    asm volatile (
+        \\ msr DAIFClr, #0b0011
+    );
 }
 
 pub fn disable() u32 {
     const ret = irqFlagsRead();
-    irqDisable();
-    fiqDisable();
+    asm volatile (
+        \\ msr DAIFSet, #0b0011
+    );
     return ret;
 }
 
@@ -111,41 +102,11 @@ pub fn irqFlagsRead() u32 {
     );
 }
 
-pub fn irqFlagsWrite(flags: u32) void {
+fn irqFlagsWrite(flags: u32) void {
     asm volatile (
         \\ msr daif, %[flags]
         :
         : [flags] "r" (flags),
-    );
-}
-
-pub fn fiqEnable() void {
-    asm volatile (
-        \\ msr DAIFClr, #0b0001
-    );
-}
-
-pub fn fiqDisable() void {
-    asm volatile (
-        \\ msr DAIFSet, #0b0001
-    );
-}
-
-pub fn irqEnable() void {
-    asm volatile (
-        \\ msr DAIFClr, #0b0010
-    );
-}
-
-pub fn irqDisable() void {
-    asm volatile (
-        \\ msr DAIFSet, #0b0010
-    );
-}
-
-pub fn irqAndFiqDisable() void {
-    asm volatile (
-        \\ msr DAIFSet, #0b0011
     );
 }
 

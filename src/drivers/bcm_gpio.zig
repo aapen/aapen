@@ -6,12 +6,9 @@ const Forth = @import("../forty/forth.zig").Forth;
 const root = @import("root");
 const InterruptController = root.HAL.InterruptController;
 const IrqHandler = InterruptController.IrqHandler;
+const Irq = InterruptController.Irq;
 const IrqId = InterruptController.IrqId;
-
-const GPIO_0 = InterruptController.IrqId.GPIO_0;
-const GPIO_1 = InterruptController.IrqId.GPIO_1;
-const GPIO_2 = InterruptController.IrqId.GPIO_2;
-const GPIO_3 = InterruptController.IrqId.GPIO_3;
+const printf = root.printf;
 
 const Event = @import("../event.zig");
 
@@ -166,14 +163,14 @@ pub fn init(allocator: Allocator, register_base: u64, interrupt_controller: *Int
         .interrupts_enabled = false,
     };
 
-    self.interrupt_controller.connect(.GPIO_0, &self.irq_handler);
-    self.interrupt_controller.connect(.GPIO_1, &self.irq_handler);
-    self.interrupt_controller.connect(.GPIO_2, &self.irq_handler);
-    self.interrupt_controller.connect(.GPIO_3, &self.irq_handler);
-    self.interrupt_controller.enable(.GPIO_3);
-    self.interrupt_controller.enable(.GPIO_2);
-    self.interrupt_controller.enable(.GPIO_1);
-    self.interrupt_controller.enable(.GPIO_0);
+    self.interrupt_controller.connect(Irq.GPIO_0, &self.irq_handler);
+    self.interrupt_controller.connect(Irq.GPIO_1, &self.irq_handler);
+    self.interrupt_controller.connect(Irq.GPIO_2, &self.irq_handler);
+    self.interrupt_controller.connect(Irq.GPIO_3, &self.irq_handler);
+    self.interrupt_controller.enable(Irq.GPIO_3);
+    self.interrupt_controller.enable(Irq.GPIO_2);
+    self.interrupt_controller.enable(Irq.GPIO_1);
+    self.interrupt_controller.enable(Irq.GPIO_0);
     return self;
 }
 
@@ -229,7 +226,7 @@ pub fn eventListen(self: *Self, bc_id: u64, edge: u32) void {
             self.registers.event_detect_status[p.data_register_index] = @as(u32, 1) << p.data_register_shift;
         },
         else => {
-            _ = root.printf("Bad event enable type %d\n", edge);
+            _ = printf("Bad event enable type %d\n", edge);
         },
     }
 }

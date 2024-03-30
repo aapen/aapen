@@ -75,6 +75,23 @@ Stage 2 (the chainboot) downloaded automatically by minipush.rb
 Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 ** CANCELED Use Python and the Python binding to libfdt to parse .dtb files?                                :CANCELED:
 Not needed, we're parsing the real thing.
+** TODO Better in-kernel debugging
+Problem statement: we can print stack traces but cannot display the function names.
+Options considered:
+- Use Zig's built-in DwarfInfo functions: doesn't work because it relies on a complete filesystem implementation and the ability to memory-map files. Cannot be separated into "walk the binary" versus "load the binary" parts.
+- Include DWARF symbols in the kernel: RPi requires a raw binary, which cannot have sections. DWARF sits in its own section. I considered a hack to insert the DWARF section as raw bytes after stripping the binary, but could not find a useful way to parse the DWARF info anyway.
+Option selected:
+- Write an separate Zig utility to run at build time;
+  - Read the symbol table from an ELF binary. (Since we're running on the build host, we can use the stdlib DwarfInfo functions here)
+  - Emit a binary serialized form of a data structure we can use to look up function names.
+- Modify the linker script to supply a symbol for the last byte of the kernel text.
+- Make sure there is enough space for the symbol table before the BSS and data sections.
+- Modify build.zig to run the symbol table utility on the ELF file, then append it to the raw binary.
+- Make sure we can locate the symbol table after the last byte of the kernel test.
+- Write Zig function to look up an address in that binary symbol table and return the function which contains it.
+- Write a Forth word to do that same lookup.
+- Write a Forth word to disassemble the function an address is contained within.
+- Modify the panic handler to print function names along with the stack addresses
 * DONE Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware*
@@ -154,7 +171,7 @@ Memory:
 ** TODO Initialize video system on RPi 400
 ** TODO Clear screen on RPi 400
 * Milestone: USB keyboard working
-** TODO Write DWC OTG USB driver for RPi3
+** NEXT Write DWC OTG USB driver for RPi3
 ** TODO Read from USB keyboard input under QEMU
 ** TODO Read from USB on RPi3 hardware
 ** TODO Write PCI driver for RPi4
@@ -163,17 +180,19 @@ Memory:
 ** TODO Read from USB keyboard on RPi 400
 * Milestone: Better video performance
 ** DONE Enable DMA for video blitting
-** TODO Scroll the window instead of wrapping
+** DONE Scroll the window instead of wrapping
 * Milestone: Interact with the graphics
 ** TODO select-screen ( n — ) switch to the nth frame buffer screen
 ** DONE blit (sx sy xh hw dx dy --) copy a rectangle from one part of the screen to another
 ** DONE fill (l t r b color  --) fill a rectangle
 ** DONE line (x y x y color --) draw a line
-** TODO text (str x y —) draw text at the given location
+** DONE text (str x y —) draw text at the given location
 ** TODO some palette defining or selecting words?
 * Other references
 ** Understanding the ARM ecosystem
 https://www.youtube.com/watch?v=NNol7fRGo2E
+** Raspberry Pi bootcode
+- https://github.com/raspberrypi/tools/tree/master/armstubs
 ** Debugging in hardware
 *** All-in-one option
 Kicad files: https://github.com/chickadee-tech/pi-developer
@@ -211,6 +230,8 @@ https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifica
 ** Allocators
 - https://nega.tv/writing-your-own-vulkan-memory-allocator/
 - Simple [[https://github.com/yannik520/YakOS/blob/master/mm/slob.c][SLOB allocator]]
+- https://gist.github.com/silversquirl/c1e4840048fdf48e669b6eac76d80634
+- https://github.com/suirad/adma/tree/master
 ** Interrupt controllers
 *** RPi 3
 This has the integrated "local" interrupt controller. It maps pending
@@ -409,6 +430,9 @@ Approach:
 ** DONE Device tree load address from Broadcom firmware
 No idea why this is the address: 0x2eff7a00
 * Scratch Notes
+** USB debugging
+- [ ] status transfers end with 'halted, stall' interrupt. why the stall?
+- [ ] hub port power on sometimes doesn't power all ports. interrupt timing?
 ** bzt has a reset() routine that reboots the board
 https://github.com/bztsrc/raspi3-tutorial/blob/master/08_power/power.c#L75
 

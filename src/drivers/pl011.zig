@@ -53,9 +53,16 @@ const FractionalBaudRateRegister = packed struct {
     _unused_reserved: u26 = 0,
 };
 
-const EnableBitP = enum(u1) {
-    disable = 0,
-    enable = 1,
+const EnableBitP = struct {
+    pub const disable: u1 = 0;
+    pub const enable: u1 = 0;
+};
+
+const WordLength = struct {
+    pub const eight_bits: u2 = 0b11;
+    pub const seven_bits: u2 = 0b10;
+    pub const six_bits: u2 = 0b01;
+    pub const five_bits: u2 = 0b00;
 };
 
 const LineControlRegister = packed struct {
@@ -63,110 +70,105 @@ const LineControlRegister = packed struct {
     parity_enable: u1 = 0,
     even_parity_select: u1 = 0,
     two_stop_bit_select: u1 = 0,
-    fifo_enable: EnableBitP = .disable,
-    word_length: enum(u2) {
-        eight_bits = 0b11,
-        seven_bits = 0b10,
-        six_bits = 0b01,
-        five_bits = 0b00,
-    } = .eight_bits,
+    fifo_enable: u1 = EnableBitP.disable,
+    word_length: u2 = WordLength.eight_bits,
     stick_parity_select: u1 = 0,
     _unused_reserved: u24 = 0,
 };
 
 const ControlRegister = packed struct {
-    uart_enable: EnableBitP = .disable, // [0]
+    uart_enable: u1 = EnableBitP.disable, // [0]
     _unused_siren: u1 = 0, // [1]
     _unused_sirlp: u1 = 0, // [2]
     _unused_reserved: u4 = 0, // [6:3]
-    loopback_enable: EnableBitP = .disable, // [7]
-    transmit_enable: EnableBitP = .disable, // [8]
-    receive_enable: EnableBitP = .disable, // [9]
+    loopback_enable: u1 = EnableBitP.disable, // [7]
+    transmit_enable: u1 = EnableBitP.disable, // [8]
+    receive_enable: u1 = EnableBitP.disable, // [9]
     _unused_dtr: u1 = 0, // [10]
     request_to_send: u1 = 0, // [11]
     _unused_out1: u1 = 0, // [12]
     _unused_out2: u1 = 0, // [13]
-    request_to_send_flow_control_enable: EnableBitP = .disable, // [14]
-    clear_to_send_flow_control_enable: EnableBitP = .disable, // [15]
+    request_to_send_flow_control_enable: u1 = EnableBitP.disable, // [14]
+    clear_to_send_flow_control_enable: u1 = EnableBitP.disable, // [15]
     _unused_reserved_2: u16 = 0, // [16:31]
 };
 
-const FifoLevelSelect = enum(u3) {
-    one_eighth = 0b000,
-    one_quarter = 0b001,
-    one_half = 0b010,
-    three_quarters = 0b011,
-    seven_eighths = 0b100,
+const FifoLevelSelect = struct {
+    pub const one_eighth: u3 = 0b000;
+    pub const one_quarter: u3 = 0b001;
+    pub const one_half: u3 = 0b010;
+    pub const three_quarters: u3 = 0b011;
+    pub const seven_eighths: u3 = 0b100;
 };
 
 const InterruptFifoLevelSelectRegister = packed struct {
-    transmit_interrupt_fifo_level_select: FifoLevelSelect = .one_eighth,
-    receive_interrupt_fifo_level_select: FifoLevelSelect = .one_eighth,
+    transmit_interrupt_fifo_level_select: u3 = FifoLevelSelect.one_eighth,
+    receive_interrupt_fifo_level_select: u3 = FifoLevelSelect.one_eighth,
     _unused_reserved: u26 = 0,
 };
 
-const InterruptBit = enum(u1) {
-    not_raised = 0,
-    raised = 1,
+const InterruptBit = struct {
+    pub const not_raised: u1 = 0;
+    pub const raised: u1 = 1;
 };
 
 const InterruptMaskSetClearRegister = packed struct {
     _unused_rimm: u1 = 0,
-    clear_to_send_modem_interrupt_mask: InterruptBit = .not_raised,
+    clear_to_send_modem_interrupt_mask: u1 = InterruptBit.not_raised,
     _unused_dcdmim: u1 = 0,
     _unused_dsrmim: u1 = 0,
-    receive_interrupt_mask: InterruptBit = .not_raised,
-    transmit_interrupt_mask: InterruptBit = .not_raised,
-    receive_timeout_interrupt_mask: InterruptBit = .not_raised,
-    framing_error_interrupt_mask: InterruptBit = .not_raised,
-    parity_error_interrupt_mask: InterruptBit = .not_raised,
-    break_error_interrupt_mask: InterruptBit = .not_raised,
-    overrun_error_interrupt_mask: InterruptBit = .not_raised,
+    receive_interrupt_mask: u1 = InterruptBit.not_raised,
+    transmit_interrupt_mask: u1 = InterruptBit.not_raised,
+    receive_timeout_interrupt_mask: u1 = InterruptBit.not_raised,
+    framing_error_interrupt_mask: u1 = InterruptBit.not_raised,
+    parity_error_interrupt_mask: u1 = InterruptBit.not_raised,
+    break_error_interrupt_mask: u1 = InterruptBit.not_raised,
+    overrun_error_interrupt_mask: u1 = InterruptBit.not_raised,
     _unused_reserved: u21 = 0,
 };
 
 const RawInterruptStatusRegister = packed struct {
     _unused_rirmis: u1 = 0,
-    clear_to_send_modem_interrupt_status: InterruptBit = .not_raised,
+    clear_to_send_modem_interrupt_status: u1 = InterruptBit.not_raised,
     _unused_dcdrmis: u1 = 0,
     _unused_dsrrmis: u1 = 0,
-    receive_interrupt_status: InterruptBit = .not_raised,
-    transmit_interrupt_status: InterruptBit = .not_raised,
-    receive_timeout_interrupt_status: InterruptBit = .not_raised,
-    framing_error_interrupt_status: InterruptBit = .not_raised,
-    parity_error_interrupt_status: InterruptBit = .not_raised,
-    break_error_interrupt_status: InterruptBit = .not_raised,
-    overrun_error_interrupt_status: InterruptBit = .not_raised,
+    receive_interrupt_status: u1 = InterruptBit.not_raised,
+    transmit_interrupt_status: u1 = InterruptBit.not_raised,
+    receive_timeout_interrupt_status: u1 = InterruptBit.not_raised,
+    framing_error_interrupt_status: u1 = InterruptBit.not_raised,
+    parity_error_interrupt_status: u1 = InterruptBit.not_raised,
+    break_error_interrupt_status: u1 = InterruptBit.not_raised,
+    overrun_error_interrupt_status: u1 = InterruptBit.not_raised,
     _unused_reserved: u21 = 0,
 };
 
 const MaskedInterruptStatusRegister = packed struct {
     _unused_rimmis: u1 = 0, // [0]
-    clear_to_send_masked_interrupt_status: InterruptBit = .not_raised, // [1]
+    clear_to_send_masked_interrupt_status: u1 = InterruptBit.not_raised, // [1]
     _unused_dcdmmis: u1 = 0, // [2]
     _unused_dsrmmis: u1 = 0, // [3]
-    receive_masked_interrupt_status: InterruptBit = .not_raised, // [4]
-    transmit_masked_interrupt_status: InterruptBit = .not_raised, // [5]
-    receive_timeout_masked_interrupt_status: InterruptBit = .not_raised, // [6]
-    framing_error_masked_interrupt_status: InterruptBit = .not_raised, // [7]
-    parity_error_masked_interrupt_status: InterruptBit = .not_raised, // [8]
-    break_error_masked_interrupt_status: InterruptBit = .not_raised, // [9]
-    overrun_error_masked_interrupt_status: InterruptBit = .not_raised, // [10]
+    receive_masked_interrupt_status: u1 = InterruptBit.not_raised, // [4]
+    transmit_masked_interrupt_status: u1 = InterruptBit.not_raised, // [5]
+    receive_timeout_masked_interrupt_status: u1 = InterruptBit.not_raised, // [6]
+    framing_error_masked_interrupt_status: u1 = InterruptBit.not_raised, // [7]
+    parity_error_masked_interrupt_status: u1 = InterruptBit.not_raised, // [8]
+    break_error_masked_interrupt_status: u1 = InterruptBit.not_raised, // [9]
+    overrun_error_masked_interrupt_status: u1 = InterruptBit.not_raised, // [10]
     _unused_reserved: u21 = 0,
 };
 
 const InterruptClearRegister = packed struct {
     _unused_rimic: u1 = 0,
-    clear_to_send_interrupt_clear: InterruptBit = .not_raised,
+    clear_to_send_interrupt_clear: u1 = InterruptBit.not_raised,
     _unused_dcdmic: u1 = 0,
     _unused_dsrmic: u1 = 0,
-    receive_interrupt_clear: InterruptBit = .not_raised,
-    transmit_interrupt_clear: InterruptBit = .not_raised,
-    receive_timeout_interrupt_clear: InterruptBit = .not_raised,
-    framing_error_interrupt_clear: InterruptBit = .not_raised,
-    parity_error_interrupt_clear: InterruptBit = .not_raised,
-    break_error_interrupt_clear: InterruptBit = .not_raised,
-    overrun_error_interrupt_clear: InterruptBit = .not_raised,
+    receive_interrupt_clear: u1 = InterruptBit.not_raised,
+    transmit_interrupt_clear: u1 = InterruptBit.not_raised,
+    receive_timeout_interrupt_clear: u1 = InterruptBit.not_raised,
+    framing_error_interrupt_clear: u1 = InterruptBit.not_raised,
+    parity_error_interrupt_clear: u1 = InterruptBit.not_raised,
+    break_error_interrupt_clear: u1 = InterruptBit.not_raised,
+    overrun_error_interrupt_clear: u1 = InterruptBit.not_raised,
     _unused_reserved: u21 = 0,
 };
 
@@ -207,10 +209,10 @@ pub fn initializeUart(self: *Self) void {
     self.gpio.selectFunction(15, GPIO.FunctionSelect.Alt0);
 
     // Turn UART off while initializing
-    self.registers.control.uart_enable = .disable;
+    self.registers.control.uart_enable = EnableBitP.disable;
 
     // Flush the transmit FIFO
-    self.registers.line_control.fifo_enable = .disable;
+    self.registers.line_control.fifo_enable = EnableBitP.disable;
 
     // Clear all pending interrupts
     const clear_all: u32 = 0x00;
@@ -230,18 +232,21 @@ pub fn initializeUart(self: *Self) void {
     self.registers.ibaud_rate_divisor.integer_baud_rate_divisor = 0x1a;
     self.registers.fbaud_rate_divisor.fractional_baud_rate_divisor = 0x1b;
     self.registers.line_control = .{
-        .word_length = .eight_bits,
-        .fifo_enable = .disable,
+        .word_length = WordLength.eight_bits,
+        .fifo_enable = EnableBitP.disable,
     };
 
     self.registers.interrupt_mask_set_clear = .{
-        .receive_interrupt_mask = .not_raised,
-        .transmit_interrupt_mask = .not_raised,
+        .receive_interrupt_mask = InterruptBit.not_raised,
+        .transmit_interrupt_mask = InterruptBit.not_raised,
     };
-    self.registers.control = .{ .transmit_enable = .enable, .receive_enable = .enable };
+    self.registers.control = .{
+        .transmit_enable = EnableBitP.enable,
+        .receive_enable = EnableBitP.enable,
+    };
 
     // Turn the UART on
-    self.registers.control.uart_enable = .enable;
+    self.registers.control.uart_enable = EnableBitP.enable;
 }
 
 pub fn getc(self: *Self) u8 {

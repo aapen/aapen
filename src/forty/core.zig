@@ -553,6 +553,11 @@ pub fn wordTest2(forth: *Forth, _: *Header) ForthError!void {
     _ = forth;
 }
 
+pub fn wordDumpFreelist(_: *Forth, _: *Header) ForthError!void {
+    const memory = @import("../memory.zig");
+    memory.dumpFreelist();
+}
+
 pub fn defineCore(forth: *Forth) !void {
 
     // Expose internal values to forty.
@@ -630,4 +635,5 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("get-scr-text", "nline -- str : Get the text of the given line.", &wordGetScreenText, false);
     _ = try forth.definePrimitiveDesc("history-add", "str -- : Add a string to the command history.", &wordHistoryAdd, false);
     _ = try forth.definePrimitiveDesc("history", " -- : Print the command history.", &wordHistoryPrint, false);
+    _ = try forth.definePrimitiveDesc("dump-freelist", " -- : Print the memory manager's freelist", &wordDumpFreelist, false);
 }

@@ -1,14 +1,17 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const RingBuffer = std.RingBuffer;
+const ScopeLevel = std.log.ScopeLevel;
 
 const root = @import("root");
 const printf = root.printf;
 
 const Forth = @import("forty/forth.zig").Forth;
-const auto = @import("forty/auto.zig");
 
+const memory = @import("memory.zig");
+const Sections = memory.Sections;
+
+const schedule = @import("schedule.zig");
 const serial = @import("serial.zig");
 
 const synchronize = @import("synchronize.zig");
@@ -18,19 +21,201 @@ const string = @import("forty/string.zig");
 
 const StackTrace = std.builtin.StackTrace;
 
-pub fn panic(msg: []const u8, _: ?*StackTrace, return_addr: ?usize) noreturn {
+// ----------------------------------------------------------------------
+// Forty interop
+// ----------------------------------------------------------------------
+pub fn defineModule(forth: *Forth) !void {
+    try forth.defineConstant("mring", @intFromPtr(&mring_storage));
+    try forth.defineConstant("debug-info-valid", @intFromPtr(&debug_info_valid));
+    try forth.defineNamespace(@This(), .{
+        .{ "lookupSymbol", "symbol-at" },
+        .{ "addressOf", "address-of" },
+    });
+}
+
+// ----------------------------------------------------------------------
+// Initialization
+// ----------------------------------------------------------------------
+const DEBUG_INFO_MAGIC_NUMBER: u32 = 0x00abacab;
+
+pub fn init() void {
+    const maybe_debug_info_magic: *u32 = @ptrCast(@alignCast(&Sections.__debug_info_start));
+    if (maybe_debug_info_magic.* == DEBUG_INFO_MAGIC_NUMBER) {
+        initDebugInfo();
+    }
+
+    initMring();
+}
+
+// ----------------------------------------------------------------------
+// Debug info lookup
+// ----------------------------------------------------------------------
+var debug_info_valid: bool = false;
+var debug_symbols: []Symbol = undefined;
+var debug_strings: ?[*]u8 = null;
+
+const DebugInfoHeader = extern struct {
+    magic: u32,
+    strings_offset: u32,
+    symbol_entries: u32,
+    padding: u32,
+};
+
+const Symbol = struct {
+    low_pc: u64,
+    high_pc: u64,
+    symbol_offset: u64,
+
+    const none: Symbol = .{ .low_pc = 0, .high_pc = std.math.maxInt(u64), .symbol_offset = 0 };
+
+    pub fn lookupByAddr(addr: u64) ?*const Symbol {
+        if (!debug_info_valid) {
+            _ = printf("debug info not available\n");
+            return null;
+        }
+
+        var best_match = &Symbol.none;
+        for (debug_symbols) |*symb| {
+            if (symb.contains(addr)) {
+                if (best_match.isWider(symb)) {
+                    best_match = symb;
+                }
+            }
+        }
+
+        return if (best_match == &Symbol.none) null else best_match;
+    }
+
+    pub fn lookupByName(nm: [*:0]const u8) ?*const Symbol {
+        if (!debug_info_valid) {
+            _ = printf("debug info not available\n");
+            return null;
+        }
+
+        for (debug_symbols) |*symb| {
+            if (symb.nameMatches(nm)) {
+                return symb;
+            }
+        } else {
+            return null;
+        }
+    }
+
+    pub fn name(symbol: *const Symbol) [*:0]const u8 {
+        return @ptrCast(debug_strings.? + symbol.symbol_offset);
+    }
+
+    fn contains(symbol: *const Symbol, addr: u64) bool {
+        return symbol.low_pc <= addr and addr < symbol.high_pc;
+    }
+
+    fn nameMatches(symbol: *const Symbol, b: [*:0]const u8) bool {
+        const a: [*:0]const u8 = symbol.name();
+        var i: usize = 0;
+        while (true) {
+            if (a[i] == 0 and b[i] == 0) return true; // same length
+            if (a[i] != b[i]) return false; // different char
+            if (a[i] == 0 or b[i] == 0) return false; // different lengths
+            i += 1;
+        }
+    }
+
+    fn span(symbol: *const Symbol) usize {
+        if (symbol.high_pc > symbol.low_pc) {
+            return symbol.high_pc - symbol.low_pc;
+        } else {
+            return std.math.maxInt(usize);
+        }
+    }
+
+    fn isWider(this: *const Symbol, that: *const Symbol) bool {
+        return this.span() > that.span();
+    }
+};
+
+pub fn initDebugInfo() void {
+    debug_info_valid = true;
+
+    const debug_loc = @intFromPtr(&Sections.__debug_info_start);
+    const header: *DebugInfoHeader = @ptrFromInt(debug_loc);
+
+    debug_symbols.ptr = @ptrFromInt(debug_loc + @sizeOf(DebugInfoHeader));
+    debug_symbols.len = header.symbol_entries;
+
+    const string_locations = debug_loc + header.strings_offset;
+    debug_strings = @ptrFromInt(string_locations);
+}
+
+pub fn lookupSymbol(addr: u64) ?[*:0]const u8 {
+    if (Symbol.lookupByAddr(addr)) |found| {
+        return found.name();
+    } else {
+        _ = printf("not found\n");
+        return null;
+    }
+}
+
+pub fn addressOf(name: [*:0]const u8) u64 {
+    if (Symbol.lookupByName(name)) |found| {
+        return found.low_pc;
+    } else {
+        _ = printf("not found\n");
+        return 0;
+    }
+}
+
+// ----------------------------------------------------------------------
+// Panic support
+// ----------------------------------------------------------------------
+pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?usize) noreturn {
+    _ = error_return_trace;
     @setCold(true);
 
     if (return_addr) |ret| {
-        _ = printf("panic from [0x%08x]: '%s'\n", ret, msg.ptr);
+        _ = printf("[panic]: '%s' at [0x%08x]\n", ret, msg.ptr);
     } else {
-        _ = printf("panic from [unknown]: '%s'\n", msg.ptr);
+        _ = printf("[panic]: '%s' from unknown location\n", msg.ptr);
     }
 
-    @breakpoint();
+    const first_trace_addr = return_addr orelse @returnAddress();
+    var stack = std.debug.StackIterator.init(first_trace_addr, null);
+    defer stack.deinit();
+
+    for (0..40) |i| {
+        if (stack.next()) |addr| {
+            if (lookupSymbol(addr)) |sym| {
+                _ = printf("%02d    0x%08x  %s\n", i, addr, sym);
+            } else {
+                _ = printf("%02d    0x%08x\n", i, addr);
+            }
+        } else {
+            _ = printf(".\n");
+            break;
+        }
+    } else {
+        _ = printf("--stack trace truncated--\n");
+    }
+
+    schedule.kill(schedule.current);
 
     unreachable;
 }
+
+// ----------------------------------------------------------------------
+// Logging support
+// ----------------------------------------------------------------------
+pub const options = struct {
+    pub const logFn = log;
+    pub const log_level = .warn;
+    pub const log_scope_levels = &[_]ScopeLevel{
+        .{ .scope = .dwc_otg_usb, .level = .debug },
+        .{ .scope = .dwc_otg_usb_channel, .level = .debug },
+        .{ .scope = .schedule, .level = .debug },
+        .{ .scope = .usb, .level = .debug },
+        .{ .scope = .usb_hub, .level = .debug },
+        .{ .scope = .forty, .level = .info },
+    };
+};
 
 pub fn log(
     comptime level: std.log.Level,
@@ -80,7 +265,7 @@ pub fn sliceDump(buf: []const u8) void {
                 _ = printf("  ");
             }
         }
-        printf("  |");
+        _ = printf("  |");
         for (0..16) |iByte| {
             if (offset + iByte < len) {
                 _ = printf("%c", string.toPrintable(buf[offset + iByte]));
@@ -88,7 +273,7 @@ pub fn sliceDump(buf: []const u8) void {
                 _ = printf(" ");
             }
         }
-        printf("|\n");
+        _ = printf("|\n");
         offset += 16;
     }
 }
@@ -97,23 +282,17 @@ pub fn sliceDump(buf: []const u8) void {
 // Kernel message buffer
 // ------------------------------------------------------------------------------
 
-pub fn defineModule(forth: *Forth) !void {
-    try forth.defineConstant("mring", @intFromPtr(&mring_storage));
-}
-
 const mring_space_bytes = 1024 * 1024;
 pub var mring_storage: [mring_space_bytes]u8 = undefined;
 var mring_spinlock: TicketLock = TicketLock.init("kernel_message_ring", true);
 var ring: RingBuffer = undefined;
 
-// implementation variables... not for use outside of init()
-var fba: FixedBufferAllocator = undefined;
-var allocator: Allocator = undefined;
-
-pub fn init() !void {
-    fba = FixedBufferAllocator.init(&mring_storage);
-    allocator = fba.allocator();
-    ring = try RingBuffer.init(allocator, mring_storage.len);
+fn initMring() void {
+    ring = RingBuffer{
+        .data = &mring_storage,
+        .write_index = 0,
+        .read_index = 0,
+    };
 }
 
 /// Use this to report low-level errors. It bypasses the serial
@@ -131,5 +310,8 @@ pub fn kernelMessage(msg: []const u8) void {
 pub fn kernelError(msg: []const u8, err: anyerror) void {
     kernelMessage(msg);
     kernelMessage(@errorName(err));
-    _ = printf("%s: %s\n", msg.ptr, @errorName(err).ptr);
+
+    if (root.main_console_valid) {
+        _ = printf("%s: %s\n", msg.ptr, @errorName(err).ptr);
+    }
 }

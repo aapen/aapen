@@ -7,6 +7,11 @@ const transfer = @import("../usb/transfer.zig");
 const SetupPacket = transfer.SetupPacket;
 const Transfer = transfer.Transfer;
 
+const request = @import("../usb/request.zig");
+const RequestTypeRecipient = request.RequestTypeRecipient;
+const RequestTypeDirection = request.RequestTypeDirection;
+const RequestTypeType = request.RequestTypeType;
+
 pub fn testBody() !void {
     assertControlTransferStartsWithToken();
     assertControlTransferWithDataHasThreePhases();
@@ -18,7 +23,7 @@ pub fn testBody() !void {
 fn assertControlTransferStartsWithToken() void {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(.device, .standard, .device_to_host, 0x06, 0, 0, buffer_size);
+    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, 0x06, 0, 0, buffer_size);
     const xfer = Transfer.initControl(pkt, &buffer);
 
     expectEqual(Transfer.State.token, xfer.state);
@@ -27,7 +32,7 @@ fn assertControlTransferStartsWithToken() void {
 fn assertControlTransferWithDataHasThreePhases() void {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(.device, .standard, .device_to_host, 0x06, 0, 0, buffer_size);
+    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, 0x06, 0, 0, buffer_size);
     var xfer = Transfer.initControl(pkt, &buffer);
 
     expectEqual(Transfer.State.token, xfer.state);
@@ -49,7 +54,7 @@ fn assertControlTransferWithDataHasThreePhases() void {
 fn assertControlTransferWithoutDataHasTwoPhases() void {
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
+    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device, 0x05, 1, 0, buffer_size);
     var xfer = Transfer.initControl(pkt, &buffer);
 
     expectEqual(Transfer.State.token, xfer.state);
@@ -67,7 +72,7 @@ fn assertControlTransferWithoutDataHasTwoPhases() void {
 fn assertCompletionHandlerCalledWhenTransferSucceeds() void {
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
+    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device, 0x05, 1, 0, buffer_size);
     var xfer = Transfer.initControl(pkt, &buffer);
 
     const Callback = struct {
@@ -95,7 +100,7 @@ fn assertCompletionHandlerCalledWhenTransferSucceeds() void {
 fn assertCompletionHandlerCalledWhenTransferFails() void {
     const buffer_size = 0;
     var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(.device, .standard, .host_to_device, 0x05, 1, 0, buffer_size);
+    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device, 0x05, 1, 0, buffer_size);
     var xfer = Transfer.initControl(pkt, &buffer);
 
     const Callback = struct {

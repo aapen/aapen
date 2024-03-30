@@ -20,10 +20,10 @@ const TransferType = transfer.TransferType;
 pub const StringIndex = u8;
 
 pub const BCD = u16;
-pub const SpecRelease = enum(BCD) {
-    usb1_0 = 0x0100,
-    usb1_1 = 0x0110,
-    usb2_0 = 0x0200,
+pub const SpecRelease = struct {
+    pub const usb1_0: BCD = 0x0100;
+    pub const usb1_1: BCD = 0x0110;
+    pub const usb2_0: BCD = 0x0200;
 };
 
 /// Assigned ID number
@@ -34,28 +34,28 @@ pub const DescriptorIndex = u8;
 
 pub const DEFAULT_DESCRIPTOR_INDEX = 0;
 
-pub const DescriptorType = enum(u8) {
+pub const DescriptorType = struct {
     // not for use
-    unknown = 0,
+    pub const unknown: u8 = 0;
 
     // general
-    device = 1,
-    configuration = 2,
-    string = 3,
-    interface = 4,
-    endpoint = 5,
+    pub const device: u8 = 1;
+    pub const configuration: u8 = 2;
+    pub const string: u8 = 3;
+    pub const interface: u8 = 4;
+    pub const endpoint: u8 = 5;
 
-    // device classes
-    hub = 0x29, // descriptor layout is in hub.zig
+    // device
+    pub const hub: u8 = 0x29;
 
-    // class specific
-    class_interface = 36,
-    class_endpoint = 37,
+    //class
+    pub const class_interface: u8 = 36;
+    pub const class_endpoint: u8 = 37;
 };
 
 pub const Header = packed struct {
     length: u8,
-    descriptor_type: DescriptorType,
+    descriptor_type: u8,
 };
 
 pub const Descriptor = extern union {
@@ -93,7 +93,7 @@ pub const DeviceDescriptor = extern struct {
         log.debug("  vendor = 0x{x:0>4}", .{self.vendor});
         log.debug("  product = 0x{x:0>4}", .{self.product});
         log.debug("  max_packet_size = 0x{d}", .{self.max_packet_size});
-        log.debug("  usb_standard_compliance = {s}", .{@tagName(@as(SpecRelease, @enumFromInt(self.usb_standard_compliance)))});
+        log.debug("  usb_standard_compliance = 0x{x}", .{self.usb_standard_compliance});
         log.debug("  configuration_count = 0x{d}", .{self.configuration_count});
         log.debug("]", .{});
     }
@@ -108,10 +108,6 @@ pub const DeviceDescriptor = extern struct {
             return Descriptor.Error.UnexpectedType;
 
         return maybe_device_descriptor;
-    }
-
-    pub fn isHub(self: *const DeviceDescriptor) bool {
-        return self.device_class == @intFromEnum(DeviceClass.hub);
     }
 };
 
@@ -157,7 +153,7 @@ pub const InterfaceDescriptor = packed struct {
     interface_number: u8,
     alternate_setting: u8,
     endpoint_count: u8,
-    interface_class: InterfaceClass,
+    interface_class: u8,
     interface_subclass: u8,
     interface_protocol: u8,
     interface_string: StringIndex,
@@ -167,24 +163,24 @@ pub const InterfaceDescriptor = packed struct {
         log.debug("  interface number = {d}", .{self.interface_number});
         log.debug("  alternate_setting = {d}", .{self.alternate_setting});
         log.debug("  endpoint count = {d}", .{self.endpoint_count});
-        log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ @intFromEnum(self.interface_class), self.interface_subclass, self.interface_protocol });
+        log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ self.interface_class, self.interface_subclass, self.interface_protocol });
         log.debug("  interface string = {d}", .{self.interface_string});
         log.debug("]", .{});
     }
 };
 
-pub const IsoSynchronizationType = enum(u2) {
-    none = 0b00,
-    asynchronous = 0b01,
-    adaptive = 0b10,
-    synchronous = 0b11,
+pub const IsoSynchronizationType = struct {
+    pub const none: u2 = 0b00;
+    pub const asynchronous: u2 = 0b01;
+    pub const adaptive: u2 = 0b10;
+    pub const synchronous: u2 = 0b11;
 };
 
-pub const IsoUsageType = enum(u2) {
-    data = 0b00,
-    feedback = 0b01,
-    explicit_feedback = 0b10,
-    reserved = 0b11,
+pub const IsoUsageType = struct {
+    pub const data: u2 = 0b00;
+    pub const feedback: u2 = 0b01;
+    pub const explicit_feedback: u2 = 0b10;
+    pub const reserved: u2 = 0b11;
 };
 
 pub const EndpointDescriptor = packed struct {
@@ -196,18 +192,23 @@ pub const EndpointDescriptor = packed struct {
     header: Header,
     endpoint_address: u8,
     attributes: packed struct {
-        transfer_type: TransferType, // 0..1
-        iso_synch_type: IsoSynchronizationType, // 2..3
-        usage_type: IsoUsageType, // 4..5
+        endpoint_type: u2, // 0..1
+        iso_synch_type: u2, // 2..3
+        usage_type: u2, // 4..5
         _reserved_0: u2 = 0,
     },
     max_packet_size: u16,
     interval: u8, // polling interval in frames
 
+    /// Return the direction (in == 1, out == 0) of this endpoint
+    pub fn direction(self: *const EndpointDescriptor) u1 {
+        return @truncate((self.endpoint_address >> 7) & 0x1);
+    }
+
     pub fn dump(self: *const EndpointDescriptor) void {
         log.debug("EndpointDescriptor [", .{});
         log.debug("  endpoint_address = {d}", .{self.endpoint_address});
-        log.debug("  attributes = {d}", .{@as(u8, @bitCast(self.attributes))});
+        log.debug("  attributes = 0x{x}", .{@as(u8, @bitCast(self.attributes))});
         log.debug("  max_packet_size = {d}", .{self.max_packet_size});
         log.debug("  interval = {d}", .{self.interval});
         log.debug("]", .{});
@@ -245,8 +246,3 @@ pub const StringDescriptor = extern struct {
         return result;
     }
 };
-
-pub fn setupDescriptorQuery(descriptor_type: DescriptorType, descriptor_index: u8, lang_id: u16, length: u16) SetupPacket {
-    const val: u16 = @as(u16, @intFromEnum(descriptor_type)) << 8 | @as(u8, descriptor_index);
-    return setup(.device, .standard, .device_to_host, @intFromEnum(StandardDeviceRequests.get_descriptor), val, lang_id, length);
-}

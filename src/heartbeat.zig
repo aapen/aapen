@@ -2,31 +2,20 @@ const root = @import("root");
 
 const Rectangle = @import("rectangle.zig").Rectangle;
 
-pub fn heartbeat() !void {
-    var ch = root.char_buffer.charGet(0, 0);
-    if (ch >= 65) {
-        ch = ((ch - 64) % 26) + 65;
-    } else {
-        ch = 65;
+const schedule = @import("schedule.zig");
+
+const spin: [8]u8 = [_]u8{ '|', '/', '-', '\\', '|', '/', '-', '\\' };
+var spindex: u8 = 0;
+
+pub fn heartbeat(_: *anyopaque) void {
+    const cb = root.char_buffer;
+    const rows = cb.num_rows;
+    const cols = cb.num_cols;
+
+    while (true) {
+        spindex = (spindex + 1) & 0x7;
+        cb.charSet(cols - 1, rows - 1, spin[spindex]);
+        cb.syncText();
+        schedule.sleep(500) catch {};
     }
-    root.char_buffer.charSet(0, 0, ch);
-    root.char_buffer.syncText();
-    root.schedule.sleep(500);
 }
-
-// pub fn heartbeat2() !void {
-//     const now = root.hal.clock.ticks();
-
-//     if (now < 1_000_000) {
-//         root.schedule.sleep(1000);
-//         return;
-//     }
-
-//     spindex = (spindex + 1) & 0x7;
-//     root.char_buffer.charSet(1, 0, spin[spindex]);
-//     root.char_buffer.syncText();
-//     root.schedule.sleep(2500);
-// }
-
-// const spin: []const u8 = "|/-\\|/-\\";
-// var spindex: u8 = 0;
