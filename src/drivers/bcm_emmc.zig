@@ -19,6 +19,17 @@ extern fn spinDelay(cpu_cycles: u32) void;
 
 const Self = @This();
 
+pub fn defineModule(forth: *Forth) !void {
+    try forth.defineStruct("emmc.sdcard", Device, .{
+        .declarations = true,
+    });
+    try forth.defineNamespace(Self, .{
+        .{ "emmc_enable", "emmc-enable" },
+        .{ "emmc_read", "emmc-read" },
+        .{ "emmc_reset", "emmc-reset" },
+    });
+}
+
 const ScrRegister = extern struct {
     scr: [2]u32,
     bus_widths: u32,
@@ -35,7 +46,6 @@ const Device = struct {
     sdhc: bool = false,
     ocr: u16 = 0,
     rca: u32 = 0,
-    offset: u64 = 0,
     buffer: [*]u32 = undefined,
     base_clock: u32 = 0,
     last_error: u32 = 0,
@@ -44,38 +54,45 @@ const Device = struct {
 };
 
 const Resp = struct {
-    const RTInvalid: u32 = 0xface;
+    const RInvalid: u32 = 0xface;
 
-    const RTNone: u32 = 0;
-    const RT136: u32 = 1;
-    const RT48: u32 = 2;
-    const RT48Busy: u32 = 3;
+    const RNone: u32 = 0;
+    const R136: u32 = 1;
+    const R48: u32 = 2;
+    const R48Busy: u32 = 3;
 };
 
 // The docs call these values the cmd type, but really
 // they tell us how the command affects data transfer.
-const CmdType = struct {
-    const Normal: u2 = 0;
-    const Suspend: u2 = 1;
-    const Resume: u2 = 2;
-    const Abort: u2 = 3;
+const CmdType = enum(u32) {
+    Normal = 0,
+    Suspend = 1,
+    Resume = 2,
+    Abort = 3,
 };
 
-// TODO should some of these be bools?
+// Direction of data transfer in a command.
+const Dir = enum(i32) {
+    FromHost = 0,
+    FromCard = 1,
+};
 
+// Command that gets sent to emmc controller.
+// Only the code actually gets sent to the controller.
+// All the other data are just flags that go into building
+// the amazing complex bits of the command.
 const Cmd = struct {
     resp_a: u1,
     block_count: u1,
     auto_command: u2,
-    direction: u1,
+    direction: Dir,
     multiblock: u1,
     resp_b: u10,
     response_type: u2,
-    //res0: u1,
     crc_enable: bool,
     idx_enable: bool,
     is_data: bool,
-    cmd_type: u2,
+    cmd_type: CmdType,
     index: u6,
 
     code: u32,
@@ -84,18 +101,17 @@ const Cmd = struct {
         return if (b) 1 else 0;
     }
 
-    pub fn init(ra: u1, bc: u1, ac: u2, dir: u1, mb: u1, rb: u10, rt: u2, ce: bool, ie: bool, isd: bool, ct: u2, idx: u6) Cmd {
+    pub fn init(ra: u1, bc: u1, ac: u2, dir: Dir, mb: u1, rb: u10, rt: u2, ce: bool, ie: bool, isd: bool, ct: CmdType, idx: u6) Cmd {
         const code =
             @as(u32, idx) << 24 |
-            @as(u32, ct) << 22 |
+            @intFromEnum(ct) << 22 |
             @as(u32, bool_to_u1(isd)) << 21 |
             @as(u32, bool_to_u1(ie)) << 20 |
             @as(u32, bool_to_u1(ce)) << 19 |
-            //@as(u32, r0) << 18 |
             @as(u32, rt) << 16 |
             @as(u32, rb) << 6 |
             @as(u32, mb) << 5 |
-            @as(u32, dir) << 4 |
+            @intFromEnum(dir) << 4 |
             @as(u32, ac) << 2 |
             @as(u32, bc) << 1 |
             @as(u32, ra) << 0;
@@ -108,7 +124,6 @@ const Cmd = struct {
             .multiblock = mb,
             .resp_b = rb,
             .response_type = rt,
-            //.res0 = r0,
             .crc_enable = ce,
             .idx_enable = ie,
             .is_data = isd,
@@ -119,46 +134,57 @@ const Cmd = struct {
     }
 
     pub inline fn get_index(self: *const Cmd) u32 {
-        return @as(u32, self.code);
+        return @as(u32, self.index);
+    }
+
+    // Commands with an index >= 32 need to be preceeded
+    // by an App Cmd. This seems to be some kind of extension
+    // prefix.
+    pub fn needs_app_cmd(self: *const Cmd) bool {
+        return self.index >= 32;
     }
 };
 
-const ReservedCmd = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, true, true, true, CmdType.Abort, 0xF);
+// These are the predefined commands used to interact with the emmc controller
+// and eventually the SD card.
+const CmdGoIdle = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, 0, false, false, false, CmdType.Normal, 0);
+const CmdResetHost = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, 0, false, false, false, CmdType.Normal, 1);
+const CmdResetCmd = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, 0, false, false, false, CmdType.Normal, 2);
+const CmdSendCide = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, Resp.R136, true, false, false, CmdType.Normal, 2);
+const CmdSendRelativeAddr = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, Resp.R48, true, false, false, CmdType.Normal, 3);
+const CmdResetData = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, 0, false, false, false, CmdType.Normal, 4);
+const CmdIOSetOpCond = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, Resp.R136, false, false, false, CmdType.Normal, 5);
+const CmdSelectCard = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, Resp.R48Busy, true, false, false, CmdType.Normal, 7);
+const CmdResetAll = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, 0, false, false, false, CmdType.Normal, 7);
+const CmdSendIfCond = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, Resp.R48, true, false, false, CmdType.Normal, 8);
+const CmdSetBlockLen = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, Resp.R48, true, false, false, CmdType.Normal, 16);
+const CmdReadBlock = Cmd.init(0, 0, 0, Dir.FromCard, 0, 0, Resp.R48, true, false, true, CmdType.Normal, 17);
+const CmdReadMultiple = Cmd.init(0, 1, 1, Dir.FromCard, 1, 0, Resp.R48, true, false, true, CmdType.Normal, 18);
+const CmdOcrCheck = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, Resp.R48, false, false, false, CmdType.Normal, 41);
+const CmdSendSCR = Cmd.init(0, 0, 0, Dir.FromCard, 0, 0, Resp.R48, true, false, true, CmdType.Normal, 51);
+const CmdApp = Cmd.init(0, 0, 0, Dir.FromHost, 0, 0, Resp.R48, true, false, false, CmdType.Normal, 55);
 
-const InvalidCmd = ReservedCmd;
+const CmdWriteBlock = Cmd.init(1, 1, 3, Dir.FromCard, 1, 0xF, 3, true, true, true, CmdType.Abort, 24);
+const CmdWriteMultiple = Cmd.init(1, 1, 3, Dir.FromCard, 1, 0xF, 3, true, true, true, CmdType.Abort, 25);
 
-const CTGoIdle = Cmd.init(0, 0, 0, 0, 0, 0, 0, false, false, false, CmdType.Normal, 0);
-const CTSendCide = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT136, true, false, false, CmdType.Normal, 2);
-const CTSendRelativeAddr = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, true, false, false, CmdType.Normal, 3);
-const CTIOSetOpCond = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT136, false, false, false, CmdType.Normal, 5);
-const CTSelectCard = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48Busy, true, false, false, CmdType.Normal, 7);
-const CTSendIfCond = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, true, false, false, CmdType.Normal, 8);
-const CTSetBlockLen = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, true, false, false, CmdType.Normal, 16);
-const CTReadBlock = Cmd.init(0, 0, 0, 1, 0, 0, Resp.RT48, true, false, true, CmdType.Normal, 17);
-const CTReadMultiple = Cmd.init(0, 1, 1, 1, 1, 0, Resp.RT48, true, false, true, CmdType.Normal, 18);
-const CTOcrCheck = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, false, false, false, CmdType.Normal, 41);
-const CTSendSCR = Cmd.init(0, 0, 0, 1, 0, 0, Resp.RT48, true, false, true, CmdType.Normal, 51);
-const CTApp = Cmd.init(0, 0, 0, 0, 0, 0, Resp.RT48, true, false, false, CmdType.Normal, 55);
-
-// TBD This seems unlikely.
-const CTWriteBlock = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, true, true, true, CmdType.Abort, 24);
-const CTWriteMultiple = Cmd.init(1, 1, 3, 1, 1, 0xF, 3, true, true, true, CmdType.Abort, 25);
-
+// Errors that we get back from the emmc controller.
 const Error = struct {
-    const SDECommandTimeout: u32 = 0;
-    const SDECommandCrc: u32 = 1;
-    const SDECommandEndBit: u32 = 2;
-    const SDECommandIndex: u32 = 3;
-    const SDEDataTimeout: u32 = 4;
-    const SDEDataCrc: u32 = 5;
-    const SDEDataEndBit: u32 = 6;
-    const SDECurrentLimit: u32 = 7;
-    const SDEAutoCmd12: u32 = 8;
-    const SDEADma: u32 = 9;
-    const SDETuning: u32 = 10;
-    const SDERsvd: u32 = 11;
+    const Timeout: u32 = 0;
+    const Crc: u32 = 1;
+    const EndBit: u32 = 2;
+    const Index: u32 = 3;
+    const DataTimeout: u32 = 4;
+    const DataCrc: u32 = 5;
+    const DataEndBit: u32 = 6;
+    const CurrentLimit: u32 = 7;
+    const AutoCmd12: u32 = 8;
+    const ADma: u32 = 9;
+    const Tuning: u32 = 10;
+    const Rsvd: u32 = 11;
 };
 
+// These are the registers that we use to physically interact with
+// the controller.
 const Registers = extern struct {
     arg2: u32,
     block_size_count: u32,
@@ -191,21 +217,30 @@ const Registers = extern struct {
     slot_int_status: u32,
 };
 
+// Various sd card clock frequencies.
+
+const SDClock = struct {
+    const ID: u32 = 400000;
+    const NORMAL: u32 = 25000000;
+    const HIGH: u32 = 50000000;
+    const FRQ_100: u32 = 100000000;
+    const FRQ_208: u32 = 208000000;
+};
+
+registers: *volatile Registers,
+interrupt_controller: *InterruptController,
+gpio: *GPIO,
+emmc_clock_rate: u32 = 0,
+hostVersion: u32 = 0,
+device: Device,
+
+// TBD replace this with something more legitimate.
 fn delayMillis(millis: u32) void {
     spinDelay(10000 * millis);
 }
 
-pub fn defineModule(forth: *Forth) !void {
-    //try forth.defineStruct("emmc.sdcard", Device, .{
-    //        .declarations = true,
-    //});
-    try forth.defineNamespace(Self, .{
-        .{ "enable", "emmc-enable" },
-        .{ "set_scr", "emmc-set-scr" },
-        .{ "emmc_read", "read" },
-    });
-}
-
+// This is the boot time initialization, just sets up the data
+// structures but doesn't set up the hardware.
 pub fn init(allocator: Allocator, register_base: u64, gpio: *GPIO, interrupt_controller: *InterruptController, pclock_controller: *PeripheralClockController) !*Self {
     const self = try allocator.create(Self);
 
@@ -218,38 +253,138 @@ pub fn init(allocator: Allocator, register_base: u64, gpio: *GPIO, interrupt_con
         .emmc_clock_rate = emmc_clock_rate,
         .device = undefined,
     };
+
     return self;
 }
 
-inline fn swap_u32(x: u32) u32 {
-    return (((x << 24) & 0xff000000) | ((x << 8) & 0x00ff0000) |
-        ((x >> 8) & 0x0000ff00) | ((x >> 24) & 0x000000ff));
-}
+pub fn emmc_enable(self: *Self) bool {
+    self.gpio.selectFunction(34, GPIO.FunctionSelect.Input);
+    self.gpio.selectFunction(35, GPIO.FunctionSelect.Input);
+    self.gpio.selectFunction(36, GPIO.FunctionSelect.Input);
+    self.gpio.selectFunction(37, GPIO.FunctionSelect.Input);
+    self.gpio.selectFunction(38, GPIO.FunctionSelect.Input);
+    self.gpio.selectFunction(39, GPIO.FunctionSelect.Input);
 
-inline fn is_not_zero(value: u32) bool {
-    return value != 0;
-}
+    self.gpio.selectFunction(48, GPIO.FunctionSelect.Alt3);
+    self.gpio.selectFunction(49, GPIO.FunctionSelect.Alt3);
+    self.gpio.selectFunction(50, GPIO.FunctionSelect.Alt3);
+    self.gpio.selectFunction(51, GPIO.FunctionSelect.Alt3);
+    self.gpio.selectFunction(52, GPIO.FunctionSelect.Alt3);
 
-inline fn is_zero(value: u32) bool {
-    return value == 0;
-}
+    self.device.transfer_blocks = 0;
+    self.device.last_command_value = 0;
+    self.device.last_success = false;
+    self.device.block_size = 0;
+    self.device.sdhc = false;
+    self.device.ocr = 0;
+    self.device.rca = 0;
+    self.device.base_clock = 0;
 
-fn wait_reg_mask(r: *volatile u32, mask: u32, set: bool, timeout: u32) bool {
-    for (0..timeout) |_| {
-        if (is_not_zero(r.* & mask) == set) {
-            _ = printf("wait reg mask returns true!\n");
-            return true;
+    var success = false;
+    for (0..4) |_| {
+        success = self.emmc_reset();
+
+        if (success) {
+            break;
         }
-        delayMillis(1);
+
+        delayMillis(100);
+        _ = printf("emmc: Failed to reset card, trying again...\n");
     }
-    _ = printf("wait reg mask returns FALSE!\n");
-    return false;
+
+    if (!success) {
+        return false;
+    }
+
+    return true;
 }
 
-// Takes an Error value
-fn error_mask(err: u32) u32 {
-    const shift: u5 = @truncate(err + 16);
-    return @as(u32, 1) << shift;
+// Read a block of data from the card.
+pub fn emmc_read(self: *Self, buffer: [*]u32, size: u32, block: u32) i64 {
+    _ = printf("emmc: read block: %x, buf %x size: %d\n", block, buffer, size);
+
+    const r = self.do_read(buffer, size, block);
+
+    if (r != size) {
+        _ = printf("emmc: read failed: %d %d\n", r, size);
+        return -1;
+    }
+
+    return size;
+}
+
+// Reset the whole emmc controller.
+pub fn emmc_reset(self: *Self) bool {
+    self.registers.control[1] = CmdResetHost.code;
+
+    _ = printf("emmc: Reset\n");
+
+    if (!wait_register(&self.registers.control[1], CmdResetAll.code, false, 2000)) {
+        _ = printf("emmc: reset timeout!\n");
+        return false;
+    }
+
+    if (!self.setup_clock()) {
+        return false;
+    }
+
+    // Turn off interrupts.
+    self.registers.int_enable = 0;
+    self.registers.int_flags = 0xFFFFFFFF;
+    self.registers.int_mask = 0xFFFFFFFF;
+
+    delayMillis(203);
+
+    self.device.transfer_blocks = 0;
+    self.device.last_command_value = 0;
+    self.device.last_success = false;
+    self.device.block_size = 0;
+
+    if (!self.emmc_command(CmdGoIdle, 0, 2000)) {
+        return false;
+    }
+
+    delayMillis(100);
+    const v2_card = self.check_v2_card();
+
+    delayMillis(100);
+    if (!self.check_usable_card()) {
+        return false;
+    }
+
+    delayMillis(100);
+    if (!self.check_ocr()) {
+        return false;
+    }
+
+    delayMillis(100);
+    if (!self.check_sdhc_support(v2_card)) {
+        return false;
+    }
+
+    delayMillis(100);
+    _ = self.switch_clock_rate(self.device.base_clock, SDClock.NORMAL);
+
+    delayMillis(100);
+    if (!self.check_rca()) {
+        return false;
+    }
+
+    delayMillis(100);
+    if (!self.select_card()) {
+        return false;
+    }
+
+    delayMillis(100);
+    if (!self.set_scr()) {
+        return false;
+    }
+
+    self.registers.int_flags = 0xFFFFFFFF;
+
+    _ = printf("emmc: Reset complete.\n");
+
+    return true;
 }
 
 fn set_last_error(self: *Self, intr_val: u32) void {
@@ -257,23 +392,23 @@ fn set_last_error(self: *Self, intr_val: u32) void {
     self.device.last_interrupt = intr_val;
 }
 
+// Synchronously transfer data to/from sdcard.
 fn do_data_transfer(self: *Self, cmd: Cmd) bool {
     var wrIrpt: u32 = 0;
     var write = false;
 
-    if (is_not_zero(cmd.direction)) {
+    if (cmd.direction == Dir.FromCard) {
         wrIrpt = 1 << 5;
     } else {
         wrIrpt = 1 << 4;
         write = true;
     }
 
-    //u32 *data = (u32 *)device.buffer;
     var data: [*]u32 = self.device.buffer;
 
     var block: u32 = 0;
     while (block < self.device.transfer_blocks) {
-        _ = wait_reg_mask(&self.registers.int_flags, wrIrpt | 0x8000, true, 2000);
+        _ = wait_register(&self.registers.int_flags, wrIrpt | 0x8000, true, 2000);
         var intr_val = self.registers.int_flags;
         self.registers.int_flags = wrIrpt | 0x8000;
 
@@ -286,7 +421,7 @@ fn do_data_transfer(self: *Self, cmd: Cmd) bool {
 
         if (write) {
             while (length > 0) {
-                _ = printf("set scr, writing data %x!\n", data[0]);
+                _ = printf("emmc: set scr %x\n", data[0]);
                 self.registers.data = data[0];
                 data += 1;
                 length -= 4;
@@ -294,7 +429,6 @@ fn do_data_transfer(self: *Self, cmd: Cmd) bool {
         } else {
             while (length > 0) {
                 data[0] = self.registers.data;
-                _ = printf("set scr, read data %x!\n", data[0]);
                 data += 1;
                 length -= 4;
             }
@@ -305,11 +439,12 @@ fn do_data_transfer(self: *Self, cmd: Cmd) bool {
     return true;
 }
 
-fn emmc_issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
+// Issue a command exactly as specified, wait for the response.
+fn issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
     self.device.last_command_value = cmd.code;
 
     if (self.device.transfer_blocks > 0xFFFF) {
-        _ = printf("EMMC_ERR: transferBlocks too large: %d\n", self.device.transfer_blocks);
+        _ = printf("emmc: transferBlocks too large: %d\n", self.device.transfer_blocks);
         return false;
     }
 
@@ -334,7 +469,7 @@ fn emmc_issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
 
     if (times >= timeout) {
         //just doing a warn for this because sometimes it's ok.
-        _ = printf("EMMC_WARN: emmc_issue_command timed out\n");
+        _ = printf("emmc: command timed out.\n");
         self.device.last_success = false;
         return false;
     }
@@ -344,19 +479,16 @@ fn emmc_issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
     self.registers.int_flags = 0xFFFF0001;
 
     if ((intr_val & 0xFFFF0001) != 1) {
-        _ = printf("EMMC_DEBUG: Error waiting for command interrupt complete: %d\n", cmd.code);
+        _ = printf("emmc: timeout waiting for command interrupt complete: %d\n", cmd.code);
         self.set_last_error(intr_val);
-        _ = printf("EMMC_DEBUG: IRQFLAGS: %X - %X - %X\n", self.registers.int_flags, self.registers.status, intr_val);
-
         self.device.last_success = false;
-        _ = printf("Returning false\n");
         return false;
     }
 
     switch (cmd.response_type) {
-        Resp.RT48, Resp.RT48Busy => self.device.last_response[0] = self.registers.response[0],
+        Resp.R48, Resp.R48Busy => self.device.last_response[0] = self.registers.response[0],
 
-        Resp.RT136 => {
+        Resp.R136 => {
             self.device.last_response[0] = self.registers.response[0];
             self.device.last_response[1] = self.registers.response[1];
             self.device.last_response[2] = self.registers.response[2];
@@ -366,13 +498,15 @@ fn emmc_issue_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
     }
 
     if (cmd.is_data) {
-        _ = printf("*** cmd %d is a data command!\n", cmd.code);
         const xfer_result = self.do_data_transfer(cmd);
-        _ = printf("xfer result: %d\n", xfer_result);
+        if (!xfer_result) {
+            _ = printf("emmc: data transfer failed.\n");
+            return false;
+        }
     }
 
-    if ((cmd.response_type == Resp.RT48Busy) or cmd.is_data) {
-        _ = wait_reg_mask(&self.registers.int_flags, 0x8002, true, 2000);
+    if ((cmd.response_type == Resp.R48Busy) or cmd.is_data) {
+        _ = wait_register(&self.registers.int_flags, 0x8002, true, 2000);
         intr_val = self.registers.int_flags;
 
         self.registers.int_flags = 0xFFFF0002;
@@ -396,59 +530,30 @@ fn get_resp_flag(_: *Self, code: u32) u32 {
     return masked >> 16;
 }
 
-fn get_cmd_id(_: *Self, code: u32) u32 {
-    return code >> 24;
-}
-
+// Issue a command, handle the case where we need to send an APP command first.
 fn emmc_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
-    //if (is_not_zero(cmd_code & 0x80000000)) {
-    //    //The app command flag is set, shoudl use emmc_app_command instead.
-    //    _ = printf("EMMC_ERR: COMMAND ERROR NOT APP\n");
-    //    return false;
-    //}
+    _ = printf("emmc: sending command %d.\n", cmd.get_index());
+    var result = false;
+    if (cmd.needs_app_cmd()) {
+        result = self.issue_app_command(cmd, arg, timeout);
+    } else {
+        result = self.issue_normal_command(cmd, arg, timeout);
+    }
+    if (!result) {
+        _ = printf("emmc: command failed: %d => %d\n", cmd.get_index());
+    }
+    return result;
+}
 
+// Issue a command that does not require a APP command.
+fn issue_normal_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
     self.device.last_command = cmd;
-    _ = printf("*** emmc_command, sending command index %d %x\n", cmd.get_index(), self.device.last_command.code);
-    _ = printf("*** emmc_command, code %x\n", self.get_cmd_id(self.device.last_command.code));
-
-    _ = printf("Response code: %d\n", self.get_resp_flag(self.device.last_command.code));
-
-    //if (self.device.last_command.cmd_type == Invalid) {
-    //    _ = printf("EMMC_ERR: INVALID COMMAND!\n");
-    //    return false;
-    //}
-
-    return self.emmc_issue_command(self.device.last_command, arg, timeout);
+    return self.issue_command(self.device.last_command, arg, timeout);
 }
 
-const EMMC_CTRL1_RESET_DATA: u32 = (1 << 26);
-const EMMC_CTRL1_RESET_CMD: u32 = (1 << 25);
-const EMMC_CTRL1_RESET_HOST: u32 = (1 << 24);
-const EMMC_CTRL1_RESET_ALL: u32 = EMMC_CTRL1_RESET_DATA | EMMC_CTRL1_RESET_CMD | EMMC_CTRL1_RESET_HOST;
-
-fn reset_command(self: *Self) bool {
-    self.registers.control[1] |= EMMC_CTRL1_RESET_CMD;
-
-    for (0..10000) |_| {
-        if (is_zero(self.registers.control[1] & EMMC_CTRL1_RESET_CMD)) {
-            return true;
-        }
-        delayMillis(1);
-    }
-
-    _ = printf("EMMC_ERR: Command line failed to reset properly: %X\n", self.registers.control[1]);
-
-    return false;
-}
-
-fn app_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
-    _ = printf("app_command: %x\n", cmd.get_index());
-    if (cmd.index >= 60) {
-        _ = printf("EMMC_ERR: INVALID APP COMMAND\n");
-        return false;
-    }
-
-    self.device.last_command = CTApp;
+// Issue a command that requires an APP command to be sent first.
+fn issue_app_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
+    self.device.last_command = CmdApp;
 
     var rca: u32 = 0;
 
@@ -456,66 +561,75 @@ fn app_command(self: *Self, cmd: Cmd, arg: u32, timeout: u32) bool {
         rca = self.device.rca << 16;
     }
 
-    if (self.emmc_issue_command(self.device.last_command, rca, 2000)) {
+    if (self.issue_command(self.device.last_command, rca, 2000)) {
         self.device.last_command = cmd;
-        return self.emmc_issue_command(self.device.last_command, arg, timeout);
+        return self.issue_command(self.device.last_command, arg, timeout);
     }
 
     return false;
 }
 
+// Issue a reset command, a special, simpler case.
+fn issue_reset_command(self: *Self) bool {
+    _ = printf("emmc: issue reset command.\n");
+    self.registers.control[1] |= CmdResetCmd.code;
+
+    for (0..1000) |_| {
+        if (is_zero(self.registers.control[1] & CmdResetCmd.code)) {
+            _ = printf("emmc: reset complete.\n");
+            return true;
+        }
+        delayMillis(1);
+    }
+
+    _ = printf("sdcard: failed to reset\n");
+    return false;
+}
+
+// Determine if we have a version 2 card.
 fn check_v2_card(self: *Self) bool {
-    _ = printf("checking v2 card\n");
     var v2Card: bool = false;
 
-    _ = printf("**sending ifcond cmd\n");
-    if (!self.emmc_command(CTSendIfCond, 0x1AA, 200)) {
+    if (!self.emmc_command(CmdSendIfCond, 0x1AA, 200)) {
         _ = printf("ifcond cmd did not work\n");
         if (self.device.last_error == 0) {
-            //timeout.
-            _ = printf("EMMC_ERR: SEND_IF_COND Timeout\n");
+            _ = printf("emmc: send_if_cond timeout\n");
         } else if (is_not_zero(self.device.last_error & (1 << 16))) {
-            //timeout command error
-            if (!self.reset_command()) {
+            if (!self.issue_reset_command()) {
                 return false;
             }
 
-            self.registers.int_flags = error_mask(Error.SDECommandTimeout);
-            _ = printf("EMMC_ERR: SEND_IF_COND CMD TIMEOUT\n");
+            self.registers.int_flags = error_mask(Error.Timeout);
+            _ = printf("emmc: send_if_cond cmd timeout\n");
         } else {
-            _ = printf("EMMC_ERR: Failure sending SEND_IF_COND\n");
+            _ = printf("emmc: failure sending send_if_cond\n");
             return false;
         }
     } else {
         if ((self.device.last_response[0] & 0xFFF) != 0x1AA) {
-            _ = printf("EMMC_ERR: Unusable SD Card: %X\n", self.device.last_response[0]);
+            _ = printf("emmc: Unusable SD Card: %X\n", self.device.last_response[0]);
             return false;
         }
 
         v2Card = true;
     }
-    _ = printf("normal return from v2 card %d\n", v2Card);
 
     return v2Card;
 }
 
+// Determine if we have a usable card.
 fn check_usable_card(self: *Self) bool {
-    _ = printf("checking usable card\n");
-    _ = printf("sending OPCOND\n");
-    if (!self.emmc_command(CTIOSetOpCond, 0, 1000)) {
+    if (!self.emmc_command(CmdIOSetOpCond, 0, 1000)) {
         if (self.device.last_error == 0) {
-            //timeout.
-            _ = printf("EMMC_ERR: CTIOSetOpCond Timeout\n");
+            return false; // Timeout.
         } else if (is_not_zero(self.device.last_error & (1 << 16))) {
             //timeout command error
             //this is a normal expected error and calling the reset command will fix it.
-            if (!self.reset_command()) {
+            if (!self.issue_reset_command()) {
                 return false;
             }
-
-            self.registers.int_flags = error_mask(Error.SDECommandTimeout);
+            self.registers.int_flags = error_mask(Error.Timeout);
         } else {
-            _ = printf("EMMC_ERR: SDIO Card not supported\n");
             return false;
         }
     }
@@ -523,123 +637,83 @@ fn check_usable_card(self: *Self) bool {
     return true;
 }
 
+// Check if we support sdhc.
 fn check_sdhc_support(self: *Self, v2_card: bool) bool {
-    var card_busy = true;
+    const v2_flags: u32 = if (v2_card) (1 << 30) else 0;
 
-    while (card_busy) {
-        var v2_flags: u32 = 0;
-
-        if (v2_card) {
-            v2_flags |= (1 << 30); //SDHC Support
-        }
-
-        if (!self.app_command(CTOcrCheck, 0x00FF8000 | v2_flags, 2000)) {
-            _ = printf("EMMC_ERR: APP CMD 41 FAILED 2nd\n");
+    for (0..10) |_| {
+        if (!self.emmc_command(CmdOcrCheck, 0x00FF8000 | v2_flags, 2000)) {
+            _ = printf("emmc: CmdOcrCheck failed 2nd\n");
             return false;
         }
 
         if (is_not_zero(self.device.last_response[0] >> 31 & 1)) {
             self.device.ocr = @truncate(self.device.last_response[0] >> 8 & 0xFFFF);
             self.device.sdhc = ((self.device.last_response[0] >> 30) & 1) != 0;
-            card_busy = false;
+            return true;
         } else {
-            _ = printf("EMMC_DEBUG: SLEEPING: %X\n", self.device.last_response[0]);
             delayMillis(500);
         }
     }
 
-    return true;
+    // Timed out.
+    return false;
 }
 
+// Check OCR.
 fn check_ocr(self: *Self) bool {
-    var passed = false;
-
-    for (0..5) |i| {
-        _ = printf("\n checkin ocr, loop %d\n", i);
-        if (!self.app_command(CTOcrCheck, 0, 2000)) {
-            _ = printf("EMMC_WARN: APP CMD OCR CHECK TRY %d FAILED\n", i + 1);
-            passed = false;
-        } else {
-            passed = true;
-        }
-
-        if (passed) {
-            break;
-        }
-
-        return false;
-    }
-
-    if (!passed) {
-        _ = printf("EMMC_ERR: APP CMD 41 FAILED\n");
+    if (!self.emmc_command(CmdOcrCheck, 0, 2000)) {
+        _ = printf("emmc: App cmd ocr check failed\n");
         return false;
     }
 
     self.device.ocr = @truncate(self.device.last_response[0] >> 8 & 0xFFFF);
-
-    _ = printf("MEMORY OCR: %X\n", self.device.ocr);
-
     return true;
 }
 
+// Check RCA.
 fn check_rca(self: *Self) bool {
-    if (!self.emmc_command(CTSendCide, 0, 2000)) {
-        _ = printf("EMMC_ERR: Failed to send CID\n");
+    if (!self.emmc_command(CmdSendCide, 0, 2000)) {
+        _ = printf("emmc: Failed to send CID\n");
         return false;
     }
 
-    _ = printf("EMMC_DEBUG: CARD ID: %X.%X.%X.%X\n", self.device.last_response[0], self.device.last_response[1], self.device.last_response[2], self.device.last_response[3]);
-
-    if (!self.emmc_command(CTSendRelativeAddr, 0, 2000)) {
-        _ = printf("EMMC_ERR: Failed to send Relative Addr\n");
+    if (!self.emmc_command(CmdSendRelativeAddr, 0, 2000)) {
+        _ = printf("emmc: Failed to send Relative Addr\n");
         return false;
     }
 
     self.device.rca = (self.device.last_response[0] >> 16) & 0xFFFF;
 
-    _ = printf("EMMC_DEBUG: RCA: %X\n", self.device.rca);
-
-    _ = printf("EMMC_DEBUG: CRC_ERR: %d\n", (self.device.last_response[0] >> 15) & 1);
-    _ = printf("EMMC_DEBUG: CMD_ERR: %d\n", (self.device.last_response[0] >> 14) & 1);
-    _ = printf("EMMC_DEBUG: GEN_ERR: %d\n", (self.device.last_response[0] >> 13) & 1);
-    _ = printf("EMMC_DEBUG: STS_ERR: %d\n", (self.device.last_response[0] >> 9) & 1);
-    _ = printf("EMMC_DEBUG: READY  : %d\n", (self.device.last_response[0] >> 8) & 1);
-
     if (is_zero((self.device.last_response[0] >> 8) & 1)) {
-        _ = printf("EMMC_ERR: Failed to read RCA\n");
+        _ = printf("emmc: Failed to read RCA\n");
         return false;
     }
 
     return true;
 }
 
-fn select_card(
-    self: *Self,
-) bool {
-    if (!self.emmc_command(CTSelectCard, self.device.rca << 16, 2000)) {
-        _ = printf("EMMC_ERR: Failed to select card\n");
+// Select the card speficied by the RCA value.
+fn select_card(self: *Self) bool {
+    if (!self.emmc_command(CmdSelectCard, self.device.rca << 16, 2000)) {
+        _ = printf("emmc: Failed to select card\n");
         return false;
     }
-
-    _ = printf("EMMC_DEBUG: Selected Card\n");
 
     var status: u32 = (self.device.last_response[0] >> 9) & 0xF;
 
     if ((status != 3) and (status != 4)) {
-        _ = printf("EMMC_ERR: Invalid Status: %d\n", status);
+        _ = printf("emmc: Invalid status: %d\n", status);
         return false;
     }
-
-    _ = printf("EMMC_DEBUG: Status: %d\n", status);
 
     return true;
 }
 
-pub fn set_scr(self: *Self) bool {
-    _ = printf("** setting scr\n");
+fn set_scr(self: *Self) bool {
     if (!self.device.sdhc) {
-        if (!self.emmc_command(CTSetBlockLen, 512, 2000)) {
-            _ = printf("EMMC_ERR: *** Failed to set block len\n");
+        if (!self.emmc_command(CmdSetBlockLen, 512, 2000)) {
+            _ = printf("emmc: Failed to set block len\n");
             return false;
         }
     }
@@ -653,16 +727,22 @@ pub fn set_scr(self: *Self) bool {
     self.device.block_size = 8;
     self.device.transfer_blocks = 1;
 
-    if (!self.app_command(CTSendSCR, 0, 30000)) {
-        _ = printf("EMMC_ERR: ***Failed to send SCR\n");
+    if (!self.emmc_command(CmdSendSCR, 0, 30000)) {
+        _ = printf("emmc: Failed to send scr\n");
         return false;
     }
 
-    _ = printf("EMMC_DEBUG: GOT SRC: SCR0: %X SCR1: %X BWID: %X\n", self.device.scr.scr[0], self.device.scr.scr[1], self.device.scr.bus_widths);
+    _ = printf("emmc: scr0: %x scr1: %x bwid: %x\n", self.device.scr.scr[0], self.device.scr.scr[1], self.device.scr.bus_widths);
 
     self.device.block_size = 512;
 
-    var scr0: u32 = swap_u32(self.device.scr.scr[0]);
+    const scr_value = self.device.scr.scr[0];
+    var scr0 =
+        ((scr_value << 24) & 0xff000000) |
+        ((scr_value << 8) & 0x00ff0000) |
+        ((scr_value >> 8) & 0x0000ff00) |
+        ((scr_value >> 24) & 0x000000ff);
+
     self.device.scr.version = 0xFFFFFFFF;
     var spec: u32 = (scr0 >> (56 - 32)) & 0xf;
     var spec3: u32 = (scr0 >> (47 - 32)) & 0x1;
@@ -685,106 +765,11 @@ pub fn set_scr(self: *Self) bool {
         }
     }
 
-    _ = printf("EMMC_DEBUG: SCR Version: %d\n", self.device.scr.version);
+    _ = printf("emmc: scr version: %d\n", self.device.scr.version);
 
     return true;
 }
 
-fn emmc_card_reset(self: *Self) bool {
-    self.registers.control[1] = EMMC_CTRL1_RESET_HOST;
-
-    _ = printf("EMMC_DEBUG: Card resetting...\n");
-
-    if (!wait_reg_mask(&self.registers.control[1], EMMC_CTRL1_RESET_ALL, false, 2000)) {
-        _ = printf("EMMC_ERR: Card reset timeout!\n");
-        return false;
-    }
-
-    if (!self.emmc_setup_clock()) {
-        return false;
-    }
-
-    //All interrupts go to interrupt register.
-    self.registers.int_enable = 0;
-    self.registers.int_flags = 0xFFFFFFFF;
-    self.registers.int_mask = 0xFFFFFFFF;
-
-    delayMillis(203);
-
-    self.device.transfer_blocks = 0;
-    self.device.last_command_value = 0;
-    self.device.last_success = false;
-    self.device.block_size = 0;
-
-    if (!self.emmc_command(CTGoIdle, 0, 2000)) {
-        _ = printf("EMMC_ERR: NO GO_IDLE RESPONSE\n");
-        return false;
-    }
-
-    _ = printf("EMMC go idle done\n");
-
-    _ = printf("checking v2 card\n");
-    delayMillis(100);
-    const v2_card = self.check_v2_card();
-
-    _ = printf("checking usable card\n");
-    delayMillis(100);
-    if (!self.check_usable_card()) {
-        _ = printf("***card not usuable\n");
-        return false;
-    }
-
-    _ = printf("checking ocr\n");
-    delayMillis(100);
-    if (!self.check_ocr()) {
-        return false;
-    }
-
-    _ = printf("checking sdhc support\n");
-    delayMillis(100);
-    if (!self.check_sdhc_support(v2_card)) {
-        return false;
-    }
-
-    delayMillis(100);
-    _ = printf("changing clock rate\n");
-    _ = self.switch_clock_rate(self.device.base_clock, SD_CLOCK_NORMAL);
-
-    //delayMillis(10);
-
-    delayMillis(100);
-    if (!self.check_rca()) {
-        return false;
-    }
-
-    delayMillis(100);
-    if (!self.select_card()) {
-        return false;
-    }
-
-    //delayMillis(100);
-    //if (!self.set_scr()) {
-    //    return false;
-    //}
-
-    //enable all interrupts
-    self.registers.int_flags = 0xFFFFFFFF;
-
-    _ = printf("EMMC_DEBUG: Card reset!\n");
-
-    return true;
-}
-
-//int emmc_io_read(io_self.device *dev, void *b, u32 size) {
-//    return emmc_read((u8 *)b, size);
-//}
-//
-//void emmc_io_seek(io_self.device *dev, u64 offset) {
-//    return emmc_seek(offset);
-//}
-
-// TBD u32? for buffer
-//
 fn do_data_command(self: *Self, write: bool, b: [*]u32, bsize: u32, bn: u32) bool {
     var block_no = bn;
     if (!self.device.sdhc) {
@@ -792,33 +777,33 @@ fn do_data_command(self: *Self, write: bool, b: [*]u32, bsize: u32, bn: u32) boo
     }
 
     if (bsize < self.device.block_size) {
-        _ = printf("EMMC_ERR: INVALID BLOCK SIZE: %d %d\n", bsize, self.device.block_size);
+        _ = printf("emmc: INVALID BLOCK SIZE: %d %d\n", bsize, self.device.block_size);
         return false;
     }
 
     self.device.transfer_blocks = bsize / self.device.block_size;
 
     if ((bsize % self.device.block_size) != 0) {
-        _ = printf("EMMC_ERR: BAD BLOCK SIZE\n");
+        _ = printf("emmc: BAD BLOCK SIZE\n");
         return false;
     }
 
     self.device.buffer = b;
 
-    var command = CTReadBlock;
+    var command = CmdReadBlock;
 
     if (write and (self.device.transfer_blocks > 1)) {
-        command = CTWriteMultiple;
+        command = CmdWriteMultiple;
     } else if (write) {
-        command = CTWriteBlock;
+        command = CmdWriteBlock;
     } else if ((!write) and (self.device.transfer_blocks > 1)) {
-        command = CTReadMultiple;
+        command = CmdReadMultiple;
     }
 
     var retry_count: u32 = 0;
     var max_retries: u32 = 3;
 
-    _ = printf("EMMC_DEBUG: Sending command: %d\n", @as(u32, command.index));
+    _ = printf("emmc: Sending command: %d\n", @as(u32, command.index));
 
     while (retry_count < max_retries) {
         if (self.emmc_command(command, block_no, 5000)) {
@@ -827,9 +812,9 @@ fn do_data_command(self: *Self, write: bool, b: [*]u32, bsize: u32, bn: u32) boo
 
         retry_count += 1;
         if (retry_count < max_retries) {
-            _ = printf("EMMC_WARN: Retrying data command %d\n", retry_count);
+            _ = printf("emmc: Retrying data command %d\n", retry_count);
         } else {
-            _ = printf("EMMC_ERR: Giving up data command\n");
+            _ = printf("emmc: Giving up data command\n");
             return false;
         }
     }
@@ -837,83 +822,15 @@ fn do_data_command(self: *Self, write: bool, b: [*]u32, bsize: u32, bn: u32) boo
     return true;
 }
 
-// tbd u32?
 fn do_read(self: *Self, b: [*]u32, bsize: u32, block_no: u32) i64 {
     //TODO ENSURE DATA MODE...
 
     if (!self.do_data_command(false, b, bsize, block_no)) {
-        _ = printf("EMMC_ERR: do_data_command failed\n");
+        _ = printf("emmc: do_data_command failed\n");
         return -1;
     }
 
     return bsize;
-}
-
-// rbd u32?
-pub fn emmc_read(self: *Self, buffer: [*]u32, size: u32) i64 {
-    _ = printf("** emmc read buf %x size: %d\n", buffer, size);
-    if (self.device.offset % 512 != 0) {
-        _ = printf("EMMC_ERR: INVALID OFFSET: %d\n", self.device.offset);
-        return -1;
-    }
-
-    const block: u32 = @intCast(self.device.offset / 512);
-
-    const r = self.do_read(buffer, size, block);
-
-    if (r != size) {
-        _ = printf("EMMC_ERR: READ FAILED: %d\n", r);
-        return -1;
-    }
-
-    return size;
-}
-
-pub fn emmc_seek(self: *Self, offset: u32) void {
-    self.device.offset = offset;
-}
-
-pub fn enable(self: *Self) bool {
-    self.gpio.selectFunction(34, GPIO.FunctionSelect.Input);
-    self.gpio.selectFunction(35, GPIO.FunctionSelect.Input);
-    self.gpio.selectFunction(36, GPIO.FunctionSelect.Input);
-    self.gpio.selectFunction(37, GPIO.FunctionSelect.Input);
-    self.gpio.selectFunction(38, GPIO.FunctionSelect.Input);
-    self.gpio.selectFunction(39, GPIO.FunctionSelect.Input);
-
-    self.gpio.selectFunction(48, GPIO.FunctionSelect.Alt3);
-    self.gpio.selectFunction(49, GPIO.FunctionSelect.Alt3);
-    self.gpio.selectFunction(50, GPIO.FunctionSelect.Alt3);
-    self.gpio.selectFunction(51, GPIO.FunctionSelect.Alt3);
-    self.gpio.selectFunction(52, GPIO.FunctionSelect.Alt3);
-
-    self.device.transfer_blocks = 0;
-    self.device.last_command_value = 0;
-    self.device.last_success = false;
-    self.device.block_size = 0;
-    self.device.sdhc = false;
-    self.device.ocr = 0;
-    self.device.rca = 0;
-    self.device.offset = 0;
-    self.device.base_clock = 0;
-
-    var success = false;
-    for (0..10) |_| {
-        success = self.emmc_card_reset();
-
-        if (success) {
-            break;
-        }
-
-        delayMillis(100);
-        _ = printf("EMMC_WARN: Failed to reset card, trying again...\n");
-    }
-
-    if (!success) {
-        return false;
-    }
-
-    return true;
 }
 
 fn get_clock_divider(_: *Self, base_clock: u32, target_rate: u32) u32 {
@@ -973,10 +890,10 @@ fn get_clock_divider(_: *Self, base_clock: u32, target_rate: u32) u32 {
 const EMMC_STATUS_DAT_INHIBIT: u32 = (1 << 1);
 const EMMC_STATUS_CMD_INHIBIT: u32 = (1 << 0);
 
-const EMMC_CTRL1_CLK_GENSEL: u32 = (1 << 5);
-const EMMC_CTRL1_CLK_ENABLE: u32 = (1 << 2);
-const EMMC_CTRL1_CLK_STABLE: u32 = (1 << 1);
-const EMMC_CTRL1_CLK_INT_EN: u32 = (1 << 0);
+const EMMC_CmdRL1_CLK_GENSEL: u32 = (1 << 5);
+const EMMC_CmdRL1_CLK_ENABLE: u32 = (1 << 2);
+const EMMC_CmdRL1_CLK_STABLE: u32 = (1 << 1);
+const EMMC_CmdRL1_CLK_INT_EN: u32 = (1 << 0);
 
 fn switch_clock_rate(self: *Self, base_clock: u32, target_rate: u32) bool {
     const divider: u32 = self.get_clock_divider(base_clock, target_rate);
@@ -985,7 +902,7 @@ fn switch_clock_rate(self: *Self, base_clock: u32, target_rate: u32) bool {
         delayMillis(1);
     }
 
-    const c1: u32 = self.registers.control[1] & ~EMMC_CTRL1_CLK_ENABLE;
+    const c1: u32 = self.registers.control[1] & ~EMMC_CmdRL1_CLK_ENABLE;
 
     self.registers.control[1] = c1;
 
@@ -995,40 +912,34 @@ fn switch_clock_rate(self: *Self, base_clock: u32, target_rate: u32) bool {
 
     delayMillis(3);
 
-    self.registers.control[1] = c1 | EMMC_CTRL1_CLK_ENABLE;
+    self.registers.control[1] = c1 | EMMC_CmdRL1_CLK_ENABLE;
 
     delayMillis(3);
 
     return true;
 }
 
-const SD_CLOCK_ID: u32 = 400000;
-const SD_CLOCK_NORMAL: u32 = 25000000;
-const SD_CLOCK_HIGH: u32 = 50000000;
-const SD_CLOCK_100: u32 = 100000000;
-const SD_CLOCK_208: u32 = 208000000;
-
-fn emmc_setup_clock(self: *Self) bool {
+fn setup_clock(self: *Self) bool {
     self.registers.control2 = 0;
 
     const rate: u32 = self.emmc_clock_rate;
 
     var n = self.registers.control[1];
-    n |= EMMC_CTRL1_CLK_INT_EN;
-    n |= self.get_clock_divider(rate, SD_CLOCK_ID);
+    n |= EMMC_CmdRL1_CLK_INT_EN;
+    n |= self.get_clock_divider(rate, SDClock.ID);
     n &= ~(@as(u32, 0xf) << 16);
     n |= (11 << 16);
 
     self.registers.control[1] = n;
 
-    if (!wait_reg_mask(&self.registers.control[1], EMMC_CTRL1_CLK_STABLE, true, 2000)) {
-        _ = printf("EMMC_ERR: SD CLOCK NOT STABLE\n");
+    if (!wait_register(&self.registers.control[1], EMMC_CmdRL1_CLK_STABLE, true, 2000)) {
+        _ = printf("emmc: sd clock not stable\n");
         return false;
     }
 
     delayMillis(30);
 
-    //enabling the clock
+    // Enable the clock.
     self.registers.control[1] |= 4;
 
     delayMillis(30);
@@ -1036,9 +947,28 @@ fn emmc_setup_clock(self: *Self) bool {
     return true;
 }
 
-registers: *volatile Registers,
-interrupt_controller: *InterruptController,
-gpio: *GPIO,
-emmc_clock_rate: u32 = 0,
-hostVersion: u32 = 0,
-device: Device,
+// Utility functions.
+inline fn is_not_zero(value: u32) bool {
+    return value != 0;
+}
+
+inline fn is_zero(value: u32) bool {
+    return value == 0;
+}
+
+fn wait_register(r: *volatile u32, mask: u32, set: bool, timeout: u32) bool {
+    for (0..timeout) |_| {
+        if (is_not_zero(r.* & mask) == set) {
+            return true;
+        }
+        delayMillis(1);
+    }
+    _ = printf("sdcard: wait register timeout\n");
+    return false;
+}
+
+// Takes an Error value
+fn error_mask(err: u32) u32 {
+    const shift: u5 = @truncate(err + 16);
+    return @as(u32, 1) << shift;
+}

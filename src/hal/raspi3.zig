@@ -137,12 +137,12 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
     try bcm_dma.defineModule(forth);
     try bcm_gpio.defineModule(forth);
     try bcm_i2c.defineModule(forth);
-    try bcm_emmc.defineModule(forth);
     try bcm_mailbox.defineModule(forth);
     try bcm_peripheral_clocks.defineModule(forth);
     try bcm_power.defineModule(forth);
     try pl011.defineModule(forth);
     try simple_bus.defineModule(forth);
+    try bcm_emmc.defineModule(forth);
 }
 
 /// Provide an execution vector for non-boot cores to jump to.
