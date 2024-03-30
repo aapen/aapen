@@ -265,6 +265,15 @@ in another terminal, run:
 Use `stepi` (or `si` for short) to step by assembly instruction or
 `step` to step by source line.
 
+## SDCard support in the emulator.
+
+If you want to use the emmc-/sdcard- forth commands in
+the emulator then you need to specify a path to an
+ISO image when you run make. For example:
+
+    make SDIMAGE=../ros/2023-12-05-raspios-bookworm-armhf.img
+
+
 ## Where to go from here?
 
 If all has gone well, you should have a prompt that looks like:
