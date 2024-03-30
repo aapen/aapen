@@ -55,7 +55,7 @@ const FractionalBaudRateRegister = packed struct {
 
 const EnableBitP = struct {
     pub const disable: u1 = 0;
-    pub const enable: u1 = 0;
+    pub const enable: u1 = 1;
 };
 
 const WordLength = struct {
