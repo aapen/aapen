@@ -517,6 +517,14 @@ finish
   repeat
 ;
 
+( emmc / sdcard support )
+
+: sdcard-enable ( -- bool) hal hal.emmc + @ emmc-enable ;
+: sdcard-read-sector (sector len buffer -- bool) hal hal.emmc + @ emmc-read ;
+: sdcard-read (sector buffer -- bool) 512 swap sdcard-read-sector ;
+: sdcard-dump-sector (sector -- bool) buffer sdcard-read buffer 512 dump ;
+: sdcard-test sdcard-enable 0 sdcard-dump-sector ;
+
 
 ( Simple uptime testing words )
 
@@ -665,14 +673,6 @@ mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 "READY" s. cr
 cr cr
 
-
-: sdcard-enable ( -- bool) hal hal.emmc + @ emmc-enable ;
-: sdcard-read-sector (sector len buffer -- bool) hal hal.emmc + @ emmc-read ;
-: sdcard-read (sector buffer -- bool) 512 swap sdcard-read-sector ;
-: sdcard-dump-sector (sector -- bool) buffer sdcard-read buffer 512 dump ;
-: sdcard-test sdcard-enable 0 sdcard-dump-sector ;
-
-sdcard-enable p
 
 "Forty REPL" s. cr cr
 repl
