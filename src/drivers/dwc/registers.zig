@@ -25,7 +25,7 @@ pub const TransactionPosition = struct {
     pub const all: u2 = 0b11;
 };
 
-pub const ChannelSplitControl = packed struct {
+pub const SplitControl = packed struct {
     port_address: u7, // 0 .. 6
     hub_address: u7, // 7..13
     transaction_position: u2, // 14..15
@@ -74,37 +74,43 @@ pub const ChannelInterrupt = packed struct {
         return (st & error_mask) != 0;
     }
 
-    pub fn debugDecode(self: *const ChannelInterrupt) void {
+    pub fn debugDecode(self: *const ChannelInterrupt, buf: []u8) usize {
+        var builder = std.io.fixedBufferStream(buf);
+        // var fba = std.heap.FixedBufferAllocator.init(buf);
+        // var builder = std.ArrayList(u8).init(fba.allocator());
+        var written: usize = 0;
+
         if (self.transfer_complete == 1) {
-            log.debug("        xfer complete", .{});
+            written += builder.write(" complete") catch 0;
         }
         if (self.halt == 1) {
-            log.debug("        halted", .{});
+            written += builder.write(" halted") catch 0;
         }
         if (self.stall == 1) {
-            log.debug("        stall", .{});
+            written += builder.write(" stall") catch 0;
         }
         if (self.nak == 1) {
-            log.debug("        nak", .{});
+            written += builder.write(" nak") catch 0;
         }
         if (self.ack == 1) {
-            log.debug("        ack", .{});
+            written += builder.write(" ack") catch 0;
         }
         if (self.nyet == 1) {
-            log.debug("        nyet", .{});
+            written += builder.write(" nyet") catch 0;
         }
         if (self.transaction_error == 1) {
-            log.debug("        transaction error", .{});
+            written += builder.write(" txn_err") catch 0;
         }
         if (self.babble_error == 1) {
-            log.debug("        babble_error", .{});
+            written += builder.write(" babble_err") catch 0;
         }
         if (self.frame_overrun == 1) {
-            log.debug("        frame overrun", .{});
+            written += builder.write(" overrun") catch 0;
         }
         if (self.data_toggle_error == 1) {
-            log.debug("        data toggle error", .{});
+            written += builder.write(" d_toggle_err") catch 0;
         }
+        return written;
     }
 };
 
@@ -116,19 +122,19 @@ pub const DwcTransferSizePid = struct {
     pub const setup: u2 = 3;
 };
 
-pub const TransferSize = packed struct {
-    transfer_size_bytes: u19, // 0..18
-    transfer_size_packets: u10, // 19..28
-    pid: u2, // 29..30 (DwcTransferSizePid)
+pub const Transfer = packed struct {
+    size: u19, // 0..18
+    packet_count: u10, // 19..28
+    packet_id: u2, // 29..30 (DwcTransferSizePid)
     do_ping: u1, // 31
 };
 
 pub const ChannelRegisters = extern struct {
     channel_character: ChannelCharacteristics, // 0x00
-    channel_split_control: ChannelSplitControl, // 0x04
+    split_control: SplitControl, // 0x04
     channel_int: ChannelInterrupt, // 0x08
     channel_int_mask: ChannelInterrupt, // 0x0c
-    channel_transfer_size: TransferSize, // 0x10
+    transfer: Transfer, // 0x10
     channel_dma_addr: u32 = 0, // 0x14
     _reserved: u32 = 0, // 0x18
     channel_dma_buf: u32 = 0, // 0x1c
@@ -190,24 +196,24 @@ pub const PeriodicFifoStatus = packed struct {
 };
 
 pub const HostPortStatusAndControl = packed struct {
-    connect: u1, // 0
-    connect_changed: u1, // 1
+    connected: u1, // 0
+    connected_changed: u1, // 1
     enabled: u1, // 2
     enabled_changed: u1, // 3
     overcurrent: u1, // 4
     overcurrent_changed: u1, // 5
-    status_resume: u1, // 6
-    status_suspend: u1, // 7
+    @"resume": u1, // 6
+    suspended: u1, // 7
     reset: u1, // 8
     _reserved_9: u1, // 9
     line_status: u2, // 10..11
     power: u1, // 12
     test_control: u4, // 13..16
     speed: enum(u2) {
-        high = 0,
-        full = 1,
-        low = 2,
-        undefined = 3,
+        high = 0b00,
+        full = 0b01,
+        low = 0b10,
+        undefined = 0b11,
     }, // 17..18
     _reserved_19_32: u13, // 19..31
 };
@@ -235,27 +241,27 @@ const VendorId = packed struct {
 };
 
 pub const OtgControl = packed struct {
-    sesreqscs: u1 = 0, // 0
-    sesreq: u1 = 0, // 1
+    session_request_success: u1 = 0, // 0
+    session_request: u1 = 0, // 1
     vbvalidoven: u1 = 0, // 2
     vbvalidovval: u1 = 0, // 3
     avalidoven: u1 = 0, // 4
     avalidovval: u1 = 0, // 5
     bvalidoven: u1 = 0, // 6
     bvalidovval: u1 = 0, // 7
-    hstnegscs: u1 = 0, // 8
-    hnpreq: u1 = 0, // 9
+    host_negotiation_success: u1 = 0, // 8
+    hnp_request: u1 = 0, // 9
     hnp_enable: u1 = 0, // 10
     dev_hnp_enable: u1 = 0, // 11
     _reserved_12_15: u4 = 0, // 12..15
-    conidsts: u1 = 0, // 16
-    dbnctime: u1 = 0, // 17
+    connector_id_status: u1 = 0, // 16
+    debounce_time: u1 = 0, // 17
     a_session_valid: u1 = 0, // 18
     b_session_valid: u1 = 0, // 19
     otg_version: u1 = 0, // 20
     _reserved_21: u1 = 0, // 21
-    multvalidbc: u5 = 0, // 22..26
-    chirpen: u1 = 0, // 27
+    multivalued_id_pin: u5 = 0, // 22..26
+    chirp_on_enable: u1 = 0, // 27
     _reserved_28_31: u4 = 0, // 28..31
 };
 
@@ -268,7 +274,7 @@ pub const OtgInterrupt = packed struct {
     _reserved_10_16: u7 = 0, // 10..16
     host_negotiation_detected: u1 = 0, // 17
     a_device_timeout_change: u1 = 0, // 18
-    debouce_done: u1 = 0, // 19
+    debounce_done: u1 = 0, // 19
     _reserved_20_31: u12 = 0, // 20..31
 };
 
@@ -346,7 +352,7 @@ pub const InterruptStatus = packed struct {
     current_mode: u1, // 0
     mode_mismatch: u1, // 1
     otg_intr: u1, // 2
-    sof_intr: u1, // 3
+    sof: u1, // 3
     rx_fifo_level: u1, // 4
     non_periodic_tx_fifo_empty: u1, // 5
     global_in_non_periodic_effective: u1, // 6
@@ -488,7 +494,7 @@ pub const HwConfig2 = packed struct {
         utmi = 1,
         ulpi = 2,
         utmi_ulpi = 3,
-    }, // 6..8
+    }, // 6..7
     full_speed_physical_type: enum(u2) {
         physical_0 = 0,
         dedicated = 1,

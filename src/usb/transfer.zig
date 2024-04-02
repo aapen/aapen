@@ -42,8 +42,8 @@ pub const DEFAULT_MAX_PACKET_SIZE = 8;
 /// Transaction. On completion of a Transaction, the transfer may
 /// continue with the next stage or, if the transaction had a problem,
 /// may indicate a retry or may report failure.
-pub const Transfer = struct {
-    pub const Completion = *const fn (self: *Transfer) void;
+pub const TransferRequest = struct {
+    pub const Completion = *const fn (self: *TransferRequest) void;
 
     pub const CompletionStatus = enum {
         incomplete,
@@ -51,90 +51,95 @@ pub const Transfer = struct {
         unsupported_request,
         timeout,
         protocol_error,
-        hardware_error,
+        failed,
     };
 
-    pub const State = enum {
-        token,
-        data,
-        handshake,
-        complete,
-    };
+    pub const control_setup_phase: u8 = 0;
+    pub const control_data_phase: u8 = 1;
+    pub const control_status_phase: u8 = 2;
 
-    pub const ControlPhase = struct {
-        pub const setup: u8 = 0;
-        pub const data: u8 = 1;
-        pub const status: u8 = 2;
-    };
+    // USB device to send this to
+    device: ?*Device = null,
 
+    // Endpoint descriptor to communicate with on the device. This
+    // should come from one of the endpoints in the Device struct. A
+    // control transfer can leave this as null
+    endpoint_desc: ?*EndpointDescriptor = null,
+
+    // For IN endpoints, this will be filled in up to the length of
+    // the buffer. For OUT endpoints, this holds the exact bytes to
+    // transmit.
+    data: [*]u8,
+    size: TransferBytes = 0,
+
+    // Setup data for a USB control request. Only used when the
+    // endpoint descriptor refers to a control endpoint.
+    setup_data: SetupPacket,
+
+    // Callback function to be invoked when this transfer completes
+    // (or has failed in a terminal way)
+    completion: ?Completion = null,
+
+    // The next two fields are the results of this transfer
+    // attempt. They are filled in by the driver
+    status: CompletionStatus = .incomplete,
     actual_size: TransferBytes = 0,
+
+    // All members below this are internal bookkeeping.
+    cur_data_ptr: ?[*]u8 = null,
+
+    complete_split: bool = false,
+    short_attempt: bool = false,
+    // need_sof: bool = false,
+    control_phase: u8 = 0,
+    next_data_pid: u2 = 0,
+
+    attempted_size: TransferBytes = 0,
     attempted_bytes_remaining: TransferBytes = 0,
     attempted_packets_remaining: TransferPackets = 0,
-    attempted_size: TransferBytes = 0,
-    bytes_transferred: TransferBytes = 0,
-    completion: ?Completion = null,
-    control_phase: u8 = 0,
-    data_buffer: []u8,
-    device: ?*Device = undefined,
-    device_address: DeviceAddress = DEFAULT_ADDRESS,
-    device_speed: UsbSpeed = .Full,
-    direction: u1 = EndpointDirection.in,
+    csplit_retries: u16 = 0,
+
     deferrer_thread_sem: ?SID = null,
     deferrer_thread: ?TID = null,
-    endpoint_descriptor: ?*EndpointDescriptor = null,
-    endpoint_number: EndpointNumber = 0,
-    endpoint_type: u2 = TransferType.control,
-    max_packet_size: PacketSize = DEFAULT_MAX_PACKET_SIZE,
-    next_data_pid: u2 = 0,
-    setup: SetupPacket, // only used when transfer_type == .control,
-    semaphore: ?SID = null,
-    short_attempt: bool = false,
-    status: CompletionStatus = .incomplete,
-    state: State = undefined,
-    timeout: usize = 100,
 
-    pub fn initControlAllocated(xfer: *Transfer, dev: *Device, setup: SetupPacket, buffer: []u8) void {
-        xfer.* = .{
+    semaphore: ?SID = semaphore.NO_SEM,
+
+    pub fn initControlAllocated(req: *TransferRequest, dev: *Device, setup: SetupPacket, buffer: []u8) void {
+        req.* = .{
             .actual_size = 0,
             .attempted_bytes_remaining = 0,
             .attempted_packets_remaining = 0,
             .attempted_size = 0,
-            .bytes_transferred = 0,
             .control_phase = 0,
+            .complete_split = false,
+            .csplit_retries = 0,
             .device = dev,
-            .device_address = dev.address,
-            .device_speed = dev.speed,
-            .data_buffer = buffer,
-            .endpoint_number = 0,
-            .endpoint_type = TransferType.control,
-            .setup = setup,
-            .state = .token, // used?
+            .data = buffer.ptr,
+            .size = @truncate(buffer.len),
+            .setup_data = setup,
         };
     }
 
-    pub fn initControl(setup_packet: SetupPacket, data_buffer: []u8) Transfer {
+    pub fn initControl(dev: *Device, setup_packet: SetupPacket, data_buffer: []u8) TransferRequest {
         return .{
-            .device = null,
-            .endpoint_number = 0,
-            .endpoint_type = TransferType.control,
-            .state = .token,
-            .setup = setup_packet,
-            .data_buffer = data_buffer,
+            .device = dev,
+            .setup_data = setup_packet,
+            .data = data_buffer.ptr,
+            .size = @truncate(data_buffer.len),
         };
     }
 
-    pub fn initInterrupt(data_buffer: []u8) Transfer {
+    pub fn initInterrupt(dev: *Device, data_buffer: []u8) TransferRequest {
         return .{
-            .device = null,
-            .endpoint_number = 0,
-            .endpoint_type = TransferType.interrupt,
-            // only the data size on the setup packet matters.
-            .setup = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, 0, 0, 0, @truncate(data_buffer.len)),
-            .data_buffer = data_buffer,
+            .device = dev,
+            .endpoint_desc = dev.configuration.endpoints[0][0],
+            .setup_data = undefined,
+            .data = data_buffer.ptr,
+            .size = @truncate(data_buffer.len),
         };
     }
 
-    pub fn deinit(self: *Transfer) void {
+    pub fn deinit(self: *TransferRequest) void {
         if (self.deferrer_thread) |tid| {
             schedule.kill(tid);
         }
@@ -147,13 +152,11 @@ pub const Transfer = struct {
         }
     }
 
-    pub fn addressTo(self: *Transfer, dev: *Device) void {
-        self.device = dev;
-        self.device_address = dev.address;
+    pub fn isControlRequest(self: *TransferRequest) bool {
+        return self.endpoint_desc == null or (self.endpoint_desc.?.attributes.endpoint_type == TransferType.control);
     }
 
-    pub fn complete(self: *Transfer, txn_status: CompletionStatus) void {
-        self.state = .complete;
+    pub fn complete(self: *TransferRequest, txn_status: CompletionStatus) void {
         self.status = txn_status;
 
         if (self.completion) |c| {
@@ -161,51 +164,7 @@ pub const Transfer = struct {
         }
     }
 
-    pub fn transferCompleteTransaction(self: *Transfer, txn_status: TransactionStatus) void {
-        // The Transfer's state machine goes in here.
-        switch (self.endpoint_type) {
-            TransferType.control => self.transferCompleteControlTransaction(txn_status),
-            TransferType.interrupt => self.complete(.ok),
-            else => {
-                log.warn("transferCompleteTransaction: unsupported transfer type 0x{x}", .{self.endpoint_type});
-            },
-        }
-    }
-
-    fn transferCompleteControlTransaction(self: *Transfer, txn_status: TransactionStatus) void {
-        switch (self.state) {
-            .token => switch (txn_status) {
-                .ok => {
-                    if (self.setup.data_size > 0) {
-                        self.state = .data;
-                    } else {
-                        self.state = .handshake;
-                    }
-                },
-                .timeout => {
-                    // TODO do we retry? do we halt? for now, just
-                    // report failure
-                    self.complete(.timeout);
-                },
-                inline else => self.complete(.protocol_error),
-            },
-            .data => switch (txn_status) {
-                .ok => self.state = .handshake,
-                .timeout => self.complete(.timeout),
-                inline else => self.complete(.protocol_error),
-            },
-            .handshake => switch (txn_status) {
-                .ok => self.complete(.ok),
-                .timeout => self.complete(.timeout),
-                inline else => self.complete(.protocol_error),
-            },
-            .complete => {
-                log.warn("transferCompleteControlTransaction: was called after transfer had already completed", .{});
-            },
-        }
-    }
-
-    pub fn getTransactionPid(self: *Transfer) u4 {
+    pub fn getTransactionPid(self: *TransferRequest) u4 {
         // this probably needs to be extended to account for the
         // transfer type
         return switch (self.state) {

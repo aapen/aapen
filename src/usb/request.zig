@@ -30,7 +30,7 @@ pub fn RT(r: u5, t: u2, d: u1) RequestType {
     return .{ .recipient = r, .type = t, .transfer_direction = d };
 }
 
-pub const standard_device_in = RT(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host);
-pub const standard_device_out = RT(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device);
-pub const class_device_in = RT(RequestTypeRecipient.other, RequestTypeType.standard, RequestTypeDirection.device_to_host);
-pub const class_device_out = RT(RequestTypeRecipient.other, RequestTypeType.standard, RequestTypeDirection.host_to_device);
+pub const device_standard_in = RT(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host);
+pub const device_standard_out = RT(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device);
+pub const other_class_in = RT(RequestTypeRecipient.other, RequestTypeType.class, RequestTypeDirection.device_to_host);
+pub const other_class_out = RT(RequestTypeRecipient.other, RequestTypeType.class, RequestTypeDirection.host_to_device);

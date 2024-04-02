@@ -30,9 +30,8 @@ const NUM_SEMAPHORES = semaphore.NUM_SEMAPHORES;
 // TODO move this to a common "definitions" module
 pub const Error = error{
     NoMoreQueues,
-    BadThreadId,
-    BadQueueId,
     QueueEmpty,
+    BadQueueId,
 };
 
 /// Number of queue entries allowed in the entire system, across all queues.
@@ -103,7 +102,7 @@ pub fn allocate() !QID {
 
 /// Append to the queue
 pub fn enqueue(tid: TID, qid: QID) !TID {
-    if (isBadTid(tid)) return Error.BadThreadId;
+    if (isBadTid(tid)) return schedule.Error.BadThreadId;
     if (isBadQid(qid)) return Error.BadQueueId;
 
     const tail = quetail(qid);
@@ -127,7 +126,7 @@ pub fn dequeue(qid: QID) !TID {
 
 /// Insert in the queue according to priority ordering (highest to lowest)
 pub fn insert(tid: TID, priority: Key, qid: QID) !void {
-    if (isBadTid(tid)) return Error.BadThreadId;
+    if (isBadTid(tid)) return schedule.Error.BadThreadId;
     if (isBadQid(qid)) return Error.BadQueueId;
 
     var next = quetab(quehead(qid)).next;
@@ -147,7 +146,7 @@ pub fn insert(tid: TID, priority: Key, qid: QID) !void {
 // inserted, record only the delta from the predecessor. (Useful for
 // tracking timeouts.)
 pub fn insertDelta(tid: TID, value: Key, qid: QID) !void {
-    if (isBadTid(tid)) return Error.BadThreadId;
+    if (isBadTid(tid)) return schedule.Error.BadThreadId;
     if (isBadQid(qid)) return Error.BadQueueId;
 
     var key = value;

@@ -115,8 +115,9 @@ pub const Device = struct {
 
     /// Hub this is attached to. Null means this is the root hub.
     parent: ?*Device,
+
     /// Port on the parent hub this is attached to
-    parent_port: u32,
+    port_number: u7,
 
     device_descriptor: DeviceDescriptor,
     configuration: *DeviceConfiguration,
@@ -137,7 +138,7 @@ pub const Device = struct {
             .address = 0,
             .speed = .Full,
             .parent = null,
-            .parent_port = 0,
+            .port_number = 0,
             .device_descriptor = undefined,
             .product = "",
             .state = .unconfigured,

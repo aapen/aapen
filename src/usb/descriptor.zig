@@ -13,7 +13,7 @@ const InterfaceClass = interface.InterfaceClass;
 const transfer = @import("transfer.zig");
 const setup = transfer.setup;
 const SetupPacket = transfer.SetupPacket;
-const Transfer = transfer.Transfer;
+const Transfer = transfer.TransferRequest;
 const TransferType = transfer.TransferType;
 
 /// Index of a string descriptor
@@ -235,7 +235,7 @@ pub const StringDescriptor = extern struct {
 
     pub fn asSlice(self: *const StringDescriptor, allocator: Allocator) ![]u8 {
         const actual_length = (self.header.length - @sizeOf(Header)) / 2;
-        const result = try allocator.alloc(u8, actual_length + 1);
+        const result = try allocator.alloc(u8, actual_length);
         @memset(result, 0);
 
         for (0..actual_length) |i| {

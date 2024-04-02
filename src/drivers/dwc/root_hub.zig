@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.dwc_otg_usb);
+const log = std.log.scoped(.dwc_otg_usb_root_hub);
 
 const time = @import("../../time.zig");
 const delayMillis = time.delayMillis;
@@ -27,7 +27,7 @@ const RequestTypeRecipient = usb.RequestTypeRecipient;
 const RequestTypeType = usb.RequestTypeType;
 const StandardDeviceRequests = usb.StandardDeviceRequests;
 const StringDescriptor = usb.StringDescriptor;
-const Transfer = usb.Transfer;
+const TransferRequest = usb.TransferRequest;
 const TransferBytes = usb.TransferBytes;
 const TransferStatus = usb.TransferCompletionStatus;
 const TransferFactory = usb.TransferFactory;
@@ -44,29 +44,29 @@ const Self = @This();
 // ----------------------------------------------------------------------
 host_registers: ?*volatile reg.HostRegisters = null,
 
-root_hub_device_status: DeviceStatus = usb.STATUS_SELF_POWERED,
-
-root_hub_hub_status: HubStatus = .{
-    .hub_status = .{
-        .local_power_source = 1,
-        .overcurrent = 0,
-    },
-    .change_status = .{
-        .local_power_changed = 0,
-        .overcurrent_changed = 0,
-    },
-},
-
-root_hub_port_status: PortStatus = .{
-    .port_status = @bitCast(@as(u16, 0)),
-    .port_change = @bitCast(@as(u16, 0)),
-},
-
-root_hub_status_change_transfer: ?*Transfer = null,
+root_hub_device_status: DeviceStatus = undefined,
+root_hub_hub_status: HubStatus = undefined,
+root_hub_port_status: PortStatus = undefined,
+root_hub_status_change_transfer: ?*TransferRequest = null,
 
 pub fn init(self: *Self, registers: *volatile HostRegisters) void {
     self.* = .{
         .host_registers = registers,
+        .root_hub_device_status = usb.STATUS_SELF_POWERED,
+        .root_hub_hub_status = .{
+            .hub_status = .{
+                .local_power_source = 1,
+                .overcurrent = 0,
+            },
+            .change_status = .{
+                .local_power_changed = 0,
+                .overcurrent_changed = 0,
+            },
+        },
+        .root_hub_port_status = .{
+            .port_status = @bitCast(@as(u16, 0)),
+            .port_change = @bitCast(@as(u16, 0)),
+        },
     };
 }
 
@@ -81,14 +81,14 @@ const root_hub_device_descriptor: DeviceDescriptor = .{
     .usb_standard_compliance = 0x200,
     .device_class = DeviceClass.hub,
     .device_subclass = 0,
-    .device_protocol = 0,
+    .device_protocol = 1,
     .max_packet_size = 64,
-    .vendor = 0,
-    .product = 0,
-    .device_release = 0,
-    .manufacturer_name = 0,
-    .product_name = 1,
-    .serial_number = 0,
+    .vendor = 0x1209, // see https://pid.codes
+    .product = 0x0007, // see https://pid.codes
+    .device_release = 0x0100,
+    .manufacturer_name = 3,
+    .product_name = 2,
+    .serial_number = 1,
     .configuration_count = 1,
 };
 
@@ -110,7 +110,7 @@ const root_hub_configuration: RootHubConfiguration = .{
         .configuration = 0,
         .attributes = .{
             .remote_wakeup = 0,
-            .self_powered = 0,
+            .self_powered = 1,
         },
         .power_max = 0,
     },
@@ -124,7 +124,7 @@ const root_hub_configuration: RootHubConfiguration = .{
         .endpoint_count = 1,
         .interface_class = InterfaceClass.hub,
         .interface_subclass = 0,
-        .interface_protocol = 0,
+        .interface_protocol = 1, // full speed hub
         .interface_string = 0,
     },
     .endpoint = .{
@@ -132,14 +132,14 @@ const root_hub_configuration: RootHubConfiguration = .{
             .length = EndpointDescriptor.STANDARD_LENGTH,
             .descriptor_type = DescriptorType.endpoint,
         },
-        .endpoint_address = (1 << 7) | 1,
+        .endpoint_address = 0x81, // Endpoint 1, direction IN
         .attributes = .{
             .endpoint_type = TransferType.interrupt,
             .iso_synch_type = IsoSynchronizationType.none,
             .usage_type = IsoUsageType.data,
         },
-        .max_packet_size = 64,
-        .interval = 0xff,
+        .max_packet_size = 0x04,
+        .interval = 0x0c,
     },
 };
 
@@ -158,12 +158,18 @@ fn mkStringDescriptor(comptime payload: []const u16) StringDescriptor {
     };
 }
 
-const root_hub_string_0 = mkStringDescriptor(&[_]u16{0x0409});
-const root_hub_string_1 = mkStringDescriptor(&[_]u16{ 'U', 'S', 'B', ' ', '2', '.', '0', ' ', 'R', 'o', 'o', 't', ' ', 'H', 'u', 'b' });
+const root_hub_default_language = mkStringDescriptor(&[_]u16{0x0409});
+const root_hub_serial_number = mkStringDescriptor(&[_]u16{ '0', '0', '4', '2' });
+const root_hub_product_name = mkStringDescriptor(&[_]u16{ 'U', 'S', 'B', ' ', '2', '.', '0', ' ', 'R', 'o', 'o', 't', ' ', 'H', 'u', 'b' });
+const root_hub_manufacturer = mkStringDescriptor(&[_]u16{ 'M', '&', 'R', ' ', 'h', 'o', 'b', 'b', 'y', ' ', 's', 'h', 'o', 'p' });
 
+// The order of these items must correspond to the indexes in the
+// root_hub_device_descriptor
 const root_hub_strings = &[_]StringDescriptor{
-    root_hub_string_0,
-    root_hub_string_1,
+    root_hub_default_language,
+    root_hub_serial_number,
+    root_hub_product_name,
+    root_hub_manufacturer,
 };
 
 const RootHubDescriptor = extern struct {
@@ -178,8 +184,8 @@ const root_hub_hub_descriptor: RootHubDescriptor = .{
             .descriptor_type = DescriptorType.hub,
         },
         .number_ports = 1,
-        .characteristics = @bitCast(@as(u16, 0)),
-        .power_on_to_power_good = 0,
+        .characteristics = @bitCast(@as(u16, 8)),
+        .power_on_to_power_good = 1,
         .controller_current = 0,
     },
     .extra_data = .{ 0x00, 0xff },
@@ -196,7 +202,7 @@ fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) HostPort
     // We zero out some bits because they are "write clear" and we
     // could accidentally reset them if they read as 1
     hw_status.enabled = 0;
-    hw_status.connect_changed = 0;
+    hw_status.connected_changed = 0;
     hw_status.enabled_changed = 0;
     hw_status.overcurrent_changed = 0;
 
@@ -251,16 +257,18 @@ pub fn hubHandlePortInterrupt(self: *Self) void {
     if (self.host_registers) |host_reg| {
         var hw_status = host_reg.port;
 
-        self.root_hub_port_status.port_status.connected = hw_status.connect;
+        log.info("host port interrupt, hw_status = 0x{x:0>8}", .{@as(u32, @bitCast(hw_status))});
+
+        self.root_hub_port_status.port_status.connected = hw_status.connected;
         self.root_hub_port_status.port_status.enabled = hw_status.enabled;
-        self.root_hub_port_status.port_status.suspended = hw_status.status_suspend;
+        self.root_hub_port_status.port_status.suspended = hw_status.suspended;
         self.root_hub_port_status.port_status.overcurrent = hw_status.overcurrent;
         self.root_hub_port_status.port_status.reset = hw_status.reset;
         self.root_hub_port_status.port_status.power = hw_status.power;
         self.root_hub_port_status.port_status.low_speed_device = if (hw_status.speed == .low) 1 else 0;
         self.root_hub_port_status.port_status.high_speed_device = if (hw_status.speed == .high) 1 else 0;
 
-        self.root_hub_port_status.port_change.connected_changed = hw_status.connect_changed;
+        self.root_hub_port_status.port_change.connected_changed = hw_status.connected_changed;
         self.root_hub_port_status.port_change.enabled_changed = hw_status.enabled_changed;
         self.root_hub_port_status.port_change.overcurrent_changed = hw_status.overcurrent_changed;
 
@@ -288,9 +296,9 @@ pub fn hubHandlePortInterrupt(self: *Self) void {
 
 fn hubNotifyPortChange(self: *Self) void {
     if (self.root_hub_status_change_transfer) |request| {
-        log.debug("root hub completing pending interrupt transfer", .{});
+        log.debug("host port status changed; completing status changed transfer on root hub", .{});
         self.root_hub_status_change_transfer = null;
-        if (request.data_buffer.len >= 1) {
+        if (request.size >= 1) {
             // in the status change, bit 0 indicates the hub changed,
             // bits 1..N indicate a port change. We pretend the DWC
             // host port is port 1, so we set bit 1 in the one-byte
@@ -298,11 +306,9 @@ fn hubNotifyPortChange(self: *Self) void {
             //
             // See USB specification, revision 2.0 dated April 2000,
             // section 11.12.4
-            request.data_buffer[0] = 0x02;
-            request.actual_size = 1;
-        } else {
-            request.actual_size = 0;
+            request.data[0] = 0x02;
         }
+        request.actual_size = 1;
         request.complete(.ok);
     }
 }
@@ -310,7 +316,7 @@ fn hubNotifyPortChange(self: *Self) void {
 // ----------------------------------------------------------------------
 // Request Handling Behavior
 // ----------------------------------------------------------------------
-const Handler = struct { u2, ?u8, ?u5, *const fn (self: *Self, transfer: *Transfer) TransferStatus };
+const Handler = struct { u2, ?u8, ?u5, *const fn (self: *Self, req: *TransferRequest) TransferStatus };
 
 // null means "don't care", ignore this field when dispatching.
 
@@ -329,51 +335,54 @@ const handlers: []const Handler = &.{
     .{ RequestTypeType.class, ClassRequest.clear_feature, RequestTypeRecipient.other, hubClearPortFeature },
 };
 
-fn replyWithStructure(transfer: *Transfer, v: *const anyopaque, size: usize) TransferStatus {
-    const requested_length = transfer.setup.data_size;
+fn replyWithStructure(req: *TransferRequest, v: *const anyopaque, size: usize) TransferStatus {
+    const requested_length = req.setup_data.data_size;
     const provided_length = @min(requested_length, size);
     log.debug("responding with {d} bytes from the structure", .{provided_length});
-    @memcpy(transfer.data_buffer[0..provided_length], @as([*]const u8, @ptrCast(v))[0..provided_length]);
-    transfer.actual_size = provided_length;
+    @memcpy(req.data, @as([*]const u8, @ptrCast(v))[0..provided_length]);
+
+    //    @memcpy(req.data_buffer[0..provided_length], @as([*]const u8, @ptrCast(v))[0..provided_length]);
+
+    req.actual_size = provided_length;
     return .ok;
 }
 
-fn hubGetDeviceDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
+fn hubGetDeviceDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     _ = self;
-    return replyWithStructure(transfer, &root_hub_device_descriptor, @sizeOf(@TypeOf(root_hub_device_descriptor)));
+    return replyWithStructure(req, &root_hub_device_descriptor, @sizeOf(@TypeOf(root_hub_device_descriptor)));
 }
 
-fn hubGetConfigurationDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
+fn hubGetConfigurationDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     _ = self;
-    return replyWithStructure(transfer, &root_hub_configuration, @sizeOf(@TypeOf(root_hub_configuration)));
+    return replyWithStructure(req, &root_hub_configuration, @sizeOf(@TypeOf(root_hub_configuration)));
 }
 
-fn hubGetStringDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
+fn hubGetStringDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     _ = self;
-    const descriptor_index = transfer.setup.value & 0x0f;
+    const descriptor_index = req.setup_data.value & 0x0f;
     if (descriptor_index > root_hub_strings.len) {
         log.warn("hubGetStringDescriptor: descriptor_index {d} is greater than {d}", .{ descriptor_index, root_hub_strings.len });
         return .unsupported_request;
     }
 
     const string = &root_hub_strings[descriptor_index];
-    return replyWithStructure(transfer, string, string.header.length);
+    return replyWithStructure(req, string, string.header.length);
 }
 
-fn hubGetDeviceStatus(self: *Self, transfer: *Transfer) TransferStatus {
-    return replyWithStructure(transfer, &self.root_hub_device_status, @sizeOf(@TypeOf(self.root_hub_device_status)));
+fn hubGetDeviceStatus(self: *Self, req: *TransferRequest) TransferStatus {
+    return replyWithStructure(req, &self.root_hub_device_status, @sizeOf(@TypeOf(self.root_hub_device_status)));
 }
 
-fn hubSetAddress(_: *Self, _: *Transfer) TransferStatus {
+fn hubSetAddress(_: *Self, _: *TransferRequest) TransferStatus {
     return .ok;
 }
 
-fn hubGetDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
-    const descriptor_type = transfer.setup.value >> 8;
+fn hubGetDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
+    const descriptor_type = req.setup_data.value >> 8;
     switch (descriptor_type) {
-        DescriptorType.device => return self.hubGetDeviceDescriptor(transfer),
-        DescriptorType.configuration => return self.hubGetConfigurationDescriptor(transfer),
-        DescriptorType.string => return self.hubGetStringDescriptor(transfer),
+        DescriptorType.device => return self.hubGetDeviceDescriptor(req),
+        DescriptorType.configuration => return self.hubGetConfigurationDescriptor(req),
+        DescriptorType.string => return self.hubGetStringDescriptor(req),
         else => {
             log.warn("hubGetDescriptor: descriptor type {d} not supported", .{descriptor_type});
             return .unsupported_request;
@@ -381,17 +390,17 @@ fn hubGetDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
     }
 }
 
-fn hubGetConfiguration(self: *const Self, transfer: *Transfer) TransferStatus {
+fn hubGetConfiguration(self: *const Self, req: *TransferRequest) TransferStatus {
     _ = self;
-    if (transfer.setup.data_size >= 1) {
-        transfer.data_buffer[0] = 1;
+    if (req.setup_data.data_size >= 1) {
+        req.data[0] = 1;
     }
     return .ok;
 }
 
-fn hubSetConfiguration(self: *Self, transfer: *Transfer) TransferStatus {
+fn hubSetConfiguration(self: *Self, req: *TransferRequest) TransferStatus {
     _ = self;
-    const requested_configuration = transfer.setup.value;
+    const requested_configuration = req.setup_data.value;
     if (requested_configuration == 1) {
         log.debug("hubSetConfiguration: using requested configuration {d}", .{requested_configuration});
         return .ok;
@@ -401,34 +410,35 @@ fn hubSetConfiguration(self: *Self, transfer: *Transfer) TransferStatus {
     }
 }
 
-fn hubGetHubDescriptor(self: *Self, transfer: *Transfer) TransferStatus {
+fn hubGetHubDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     _ = self;
-    const descriptor_index = transfer.setup.value & 0x0f;
+    const descriptor_index = req.setup_data.value & 0x0f;
     if (descriptor_index == 0) {
-        return replyWithStructure(transfer, &root_hub_hub_descriptor, @sizeOf(@TypeOf(root_hub_hub_descriptor)));
+        return replyWithStructure(req, &root_hub_hub_descriptor, @sizeOf(@TypeOf(root_hub_hub_descriptor)));
     } else {
         log.warn("hubGetHubDescriptor: descriptor index {d} not supported", .{descriptor_index});
         return .unsupported_request;
     }
 }
 
-fn hubGetHubStatus(self: *Self, transfer: *Transfer) TransferStatus {
-    return replyWithStructure(transfer, &self.root_hub_hub_status, @sizeOf(@TypeOf(self.root_hub_hub_status)));
+fn hubGetHubStatus(self: *Self, req: *TransferRequest) TransferStatus {
+    log.debug("hubGetHubStatus: status = 0x{x:0>8}", .{@as(u32, @bitCast(self.root_hub_hub_status))});
+    return replyWithStructure(req, &self.root_hub_hub_status, @sizeOf(@TypeOf(self.root_hub_hub_status)));
 }
 
-fn hubGetPortStatus(self: *Self, transfer: *Transfer) TransferStatus {
-    log.debug("hubGetPortStatus: port {d}", .{transfer.setup.index});
-    return replyWithStructure(transfer, &self.root_hub_port_status, @sizeOf(@TypeOf(self.root_hub_port_status)));
+fn hubGetPortStatus(self: *Self, req: *TransferRequest) TransferStatus {
+    log.debug("hubGetPortStatus: port {d} status = 0x{x:0>8}", .{ req.setup_data.index, @as(u32, @bitCast(self.root_hub_port_status)) });
+    return replyWithStructure(req, &self.root_hub_port_status, @sizeOf(@TypeOf(self.root_hub_port_status)));
 }
 
-fn hubSetHubFeature(self: *Self, _: *Transfer) TransferStatus {
+fn hubSetHubFeature(self: *Self, _: *TransferRequest) TransferStatus {
     _ = self;
     log.warn("hubSetHubFeature: set hub feature not supported", .{});
     return .unsupported_request;
 }
 
-fn hubSetPortFeature(self: *Self, transfer: *Transfer) TransferStatus {
-    const feature = transfer.setup.value;
+fn hubSetPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
+    const feature = req.setup_data.value;
 
     switch (feature) {
         PortFeature.port_power => return self.hostPortPowerOn(),
@@ -440,14 +450,14 @@ fn hubSetPortFeature(self: *Self, transfer: *Transfer) TransferStatus {
     }
 }
 
-fn hubClearHubFeature(self: *Self, _: *Transfer) TransferStatus {
+fn hubClearHubFeature(self: *Self, _: *TransferRequest) TransferStatus {
     _ = self;
     log.warn("hubClearHubFeature: clear hub feature not supported", .{});
     return .unsupported_request;
 }
 
-fn hubClearPortFeature(self: *Self, transfer: *Transfer) TransferStatus {
-    const feature = transfer.setup.value;
+fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
+    const feature = req.setup_data.value;
 
     log.debug("hubClearPortFeature: feature {d}", .{feature});
 
@@ -465,34 +475,33 @@ fn hubClearPortFeature(self: *Self, transfer: *Transfer) TransferStatus {
     return .ok;
 }
 
-pub fn hubHandleTransfer(self: *Self, transfer: *Transfer) void {
-    switch (transfer.endpoint_type) {
-        TransferType.control => {
-            const req_type = transfer.setup.request_type.type;
-            const request = transfer.setup.request;
-            const recipient = transfer.setup.request_type.recipient;
+pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
+    if (req.endpoint_desc == null) {
+        log.debug("hubHandleTransfer: processing control message", .{});
 
-            for (handlers) |h| {
-                if (req_type == h[0] and (h[1] == null or h[1] == request) and (h[2] == null or h[2] == recipient)) {
-                    transfer.complete(h[3](self, transfer));
-                    return;
-                }
-            }
-        },
-        TransferType.interrupt => {
-            // assume this is for endpoint 1
-            log.debug("hubHandleTransfer: holding interrupt transfer for when a status change happens", .{});
-            self.root_hub_status_change_transfer = transfer;
+        // this is a control request to the default endpoint.
+        const req_type = req.setup_data.request_type.type;
+        const request = req.setup_data.request;
+        const recipient = req.setup_data.request_type.recipient;
 
-            // we might have previously gotten a status change that we
-            // need to report right now
-            if (@as(u16, @bitCast(self.root_hub_port_status.port_change)) != 0) {
-                self.hubNotifyPortChange();
+        for (handlers) |h| {
+            if (req_type == h[0] and
+                (h[1] == null or h[1] == request) and
+                (h[2] == null or h[2] == recipient))
+            {
+                req.complete(h[3](self, req));
+                return;
             }
-        },
-        else => {
-            log.warn("hubHandleTransfer: endpoint type {any} not supported", .{transfer.endpoint_type});
-            transfer.complete(.unsupported_request);
-        },
+        }
+    } else {
+        // this is an interrupt transfer request for the status change endpoint.
+        log.debug("hubHandleTransfer: holding status change request a status change occurs", .{});
+        self.root_hub_status_change_transfer = req;
+
+        // we might have previously gotten a status change that we
+        // need to report right now
+        if (@as(u16, @bitCast(self.root_hub_port_status.port_change)) != 0) {
+            self.hubNotifyPortChange();
+        }
     }
 }

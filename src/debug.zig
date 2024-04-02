@@ -70,7 +70,6 @@ const Symbol = struct {
 
     pub fn lookupByAddr(addr: u64) ?*const Symbol {
         if (!debug_info_valid) {
-            _ = printf("debug info not available\n");
             return null;
         }
 
@@ -88,7 +87,6 @@ const Symbol = struct {
 
     pub fn lookupByName(nm: [*:0]const u8) ?*const Symbol {
         if (!debug_info_valid) {
-            _ = printf("debug info not available\n");
             return null;
         }
 
@@ -150,7 +148,6 @@ pub fn lookupSymbol(addr: u64) ?[*:0]const u8 {
     if (Symbol.lookupByAddr(addr)) |found| {
         return found.name();
     } else {
-        _ = printf("not found\n");
         return null;
     }
 }
@@ -159,7 +156,6 @@ pub fn addressOf(name: [*:0]const u8) u64 {
     if (Symbol.lookupByName(name)) |found| {
         return found.low_pc;
     } else {
-        _ = printf("not found\n");
         return 0;
     }
 }
@@ -209,6 +205,7 @@ pub const options = struct {
     pub const log_level = .warn;
     pub const log_scope_levels = &[_]ScopeLevel{
         .{ .scope = .dwc_otg_usb, .level = .debug },
+        .{ .scope = .dwc_otg_usb_root_hub, .level = .debug },
         .{ .scope = .dwc_otg_usb_channel, .level = .debug },
         .{ .scope = .schedule, .level = .debug },
         .{ .scope = .usb, .level = .debug },

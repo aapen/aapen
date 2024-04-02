@@ -16,7 +16,7 @@ pub const Error = error{
     NoMoreSemaphores,
     BadSemaphoreId,
     BadCount,
-};
+} || queue.Error;
 
 pub const NUM_SEMAPHORES = 128;
 

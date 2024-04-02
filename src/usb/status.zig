@@ -1,3 +1,5 @@
+const schedule = @import("../schedule.zig");
+
 pub const Error = error{
     DeviceDetaching,
     DeviceUnconfigured,
@@ -12,11 +14,12 @@ pub const Error = error{
     ResetTimeout,
     TooManyDevices,
     TooManyHubs,
+    TransferFailed,
     TransferIncomplete,
     TransferStarted,
     TransferTimeout,
     UnsupportedRequest,
-};
+} || schedule.Error;
 
 pub const TransactionStatus = enum {
     ok,

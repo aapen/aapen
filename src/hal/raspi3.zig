@@ -6,7 +6,6 @@ const arch = @import("../architecture.zig");
 const synchronize = @import("../synchronize.zig");
 
 const Forth = @import("../forty/forth.zig").Forth;
-const auto = @import("../forty/auto.zig");
 
 // Memory map
 pub const device_start: u64 = 0x3b40_0000;

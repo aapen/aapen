@@ -8,6 +8,8 @@ const kernelExit = root.kernel_hooks.kernel_exit;
 const arch = @import("architecture.zig");
 const cpu = arch.cpu;
 
+const atomic = @import("atomic.zig");
+
 const queue = @import("queue.zig");
 const Key = queue.Key;
 const QID = queue.QID;
@@ -19,7 +21,8 @@ const time = @import("time.zig");
 
 pub const Error = error{
     NoMoreThreads,
-};
+    BadThreadId,
+} || semaphore.Error;
 
 // thread table entry unused
 pub const THREAD_FREE: u8 = 0;
@@ -64,6 +67,9 @@ var readyq: QID = undefined;
 
 /// queue of sleeping threads
 pub var sleepq: QID = undefined;
+
+// when > 0, rescheduling is deferred for some reason.
+pub var resdefer: u64 = 0;
 
 pub const InterruptMask = u32;
 
@@ -382,6 +388,11 @@ fn childExited(tid: TID) u64 {
 }
 
 pub fn reschedule() void {
+    if (atomic.atomicFetch(&resdefer) > 0) {
+        _ = atomic.atomicInc(&resdefer);
+        return;
+    }
+
     const old: *ThreadEntry = thrent(current);
     var new: *ThreadEntry = undefined;
 

@@ -10,6 +10,8 @@ const log = std.log.scoped(.usb);
 const root = @import("root");
 const HCI = root.HAL.USBHCI;
 
+const arch = @import("architecture.zig");
+
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 
@@ -86,8 +88,8 @@ pub const RequestType = request.RequestType;
 pub const RequestTypeDirection = request.RequestTypeDirection;
 pub const RequestTypeType = request.RequestTypeType;
 pub const RequestTypeRecipient = request.RequestTypeRecipient;
-pub const request_device_standard_in = request.standard_device_in;
-pub const request_device_standard_out = request.standard_device_out;
+pub const request_device_standard_in = request.device_standard_in;
+pub const request_device_standard_out = request.device_standard_out;
 
 const semaphore = @import("semaphore.zig");
 const SID = semaphore.SID;
@@ -100,9 +102,9 @@ pub const DEFAULT_MAX_PACKET_SIZE = transfer.DEFAULT_MAX_PACKET_SIZE;
 pub const PacketSize = transfer.PacketSize;
 pub const PID2 = transfer.PID2;
 pub const SetupPacket = transfer.SetupPacket;
-pub const Transfer = transfer.Transfer;
+pub const TransferRequest = transfer.TransferRequest;
 pub const TransferBytes = transfer.TransferBytes;
-pub const TransferCompletionStatus = transfer.Transfer.CompletionStatus;
+pub const TransferCompletionStatus = transfer.TransferRequest.CompletionStatus;
 pub const TransferType = transfer.TransferType;
 
 pub const TransferFactory = @import("usb/transfer_factory.zig");
@@ -118,8 +120,10 @@ pub fn defineModule(forth: *Forth) !void {
         .{ "init", "usb-init" },
         .{ "getDevice", "usb-device" },
     });
-    try forth.defineConstant("usbhci", @intFromPtr(&root.hal.usb_hci));
+    try forth.defineConstant("usbhci", @intFromPtr(root.hal.usb_hci));
     try forth.defineStruct("Device", Device, .{});
+
+    try root.HAL.USBHCI.defineModule(forth);
 }
 
 pub fn getDevice(id: u64) ?*Device {
@@ -204,7 +208,8 @@ pub fn allocateDevice(parent: ?*Device) !DeviceAddress {
         if (!devices[addr].in_use) {
             var dev = &devices[addr];
             dev.in_use = true;
-            errdefer dev.in_use = false;
+            dev.speed = UsbSpeed.High;
+
             dev.parent = parent;
             if (parent != null) {
                 dev.depth = parent.?.depth + 1;
@@ -240,11 +245,13 @@ pub fn attachDevice(devid: DeviceAddress) !void {
     // descriptor to find the real max packet size.
     dev.device_descriptor.max_packet_size = 8;
 
+    log.debug("attach device: read device descriptor, irq flags = 0x{x:0>8}", .{arch.cpu.irqFlagsRead()});
+
     // when attaching a device, it will be in the default state:
     // responding to address 0, endpoint 0
     try deviceDescriptorRead(dev, 8);
 
-    dev.device_descriptor.dump();
+    // dev.device_descriptor.dump();
 
     log.debug("device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
 
@@ -257,10 +264,10 @@ pub fn attachDevice(devid: DeviceAddress) !void {
     log.debug("reading configuration descriptor", .{});
     try deviceConfigurationDescriptorRead(dev);
 
-    dev.configuration.dump();
+    // dev.configuration.dump();
 
     const use_config = dev.configuration.configuration_descriptor.configuration_value;
-    log.debug("setting device to use configuration {d}", .{use_config});
+    //    log.debug("setting device to use configuration {d}", .{use_config});
     try deviceSetConfiguration(dev, use_config);
 
     var buf: [512]u8 = [_]u8{0} ** 512;
@@ -290,6 +297,7 @@ fn bindDriver(dev: *Device) !void {
                 },
                 else => {
                     log.err("Driver bind error {any}", .{e});
+                    return e;
                 },
             }
         }
@@ -301,9 +309,9 @@ fn bindDriver(dev: *Device) !void {
 // ----------------------------------------------------------------------
 
 // submit a transfer for asynchronous processing
-pub fn transferSubmit(xfer: *Transfer) !void {
+pub fn transferSubmit(req: *TransferRequest) !void {
     // check if the device is being detached or has not been configured
-    if (xfer.device) |dev| {
+    if (req.device) |dev| {
         switch (dev.state) {
             .detaching => return Error.DeviceDetaching,
             .unconfigured => return Error.DeviceUnconfigured,
@@ -314,25 +322,11 @@ pub fn transferSubmit(xfer: *Transfer) !void {
     }
 
     // TODO track how many requests are pending for a device
-
-    try root.hal.usb_hci.perform(xfer);
+    try root.hal.usb_hci.perform(req);
 }
 
-pub fn transferAwait(xfer: *Transfer, timeout: u32) !void {
-    const deadline = time.deadlineMillis(timeout);
-
-    while (time.ticks() < deadline and xfer.status == .incomplete) {}
-
-    switch (xfer.status) {
-        .incomplete => return Error.TransferIncomplete,
-        .timeout => return Error.TransferTimeout,
-        .unsupported_request => return Error.UnsupportedRequest,
-        .protocol_error => return Error.InvalidData,
-        inline else => return,
-    }
-}
-
-fn controlMessageDone(xfer: *Transfer) void {
+fn controlMessageDone(xfer: *TransferRequest) void {
+    log.debug("signalling completion semaphore {d}", .{xfer.semaphore.?});
     semaphore.signal(xfer.semaphore.?) catch {
         log.err("failed to signal semaphore {?d} on completion of control msg", .{xfer.semaphore});
     };
@@ -341,7 +335,14 @@ fn controlMessageDone(xfer: *Transfer) void {
 // ----------------------------------------------------------------------
 // Specific transfers
 // ----------------------------------------------------------------------
-pub fn controlMessage(dev: *Device, endp: ?*EndpointDescriptor, req: Request, req_type: RequestType, val: u16, index: u16, data: []u8) !Transfer.CompletionStatus {
+pub fn controlMessage(
+    dev: *Device,
+    req_code: Request,
+    req_type: RequestType,
+    val: u16,
+    index: u16,
+    data: []u8,
+) !TransferRequest.CompletionStatus {
     const sem: SID = try semaphore.create(0);
     defer {
         semaphore.free(sem) catch |err| {
@@ -349,65 +350,95 @@ pub fn controlMessage(dev: *Device, endp: ?*EndpointDescriptor, req: Request, re
         };
     }
 
-    const setup: SetupPacket = SetupPacket.init2(req_type, req, val, index, @truncate(data.len));
-    var xfer: *Transfer = try allocator.create(Transfer);
-    xfer.initControlAllocated(dev, setup, data);
+    log.debug("[{d}:{d}] completion semaphore id {d}", .{ dev.address, 0, sem });
 
-    xfer.endpoint_descriptor = endp;
-    xfer.completion = controlMessageDone;
-    xfer.semaphore = sem;
-    try transferSubmit(xfer);
+    const setup: SetupPacket = SetupPacket.init2(req_type, req_code, val, index, @truncate(data.len));
+    var req: *TransferRequest = try allocator.create(TransferRequest);
+    req.initControlAllocated(dev, setup, data);
+
+    const debug = @import("debug.zig");
+    log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, SETUP contents", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+
+    debug.sliceDump(std.mem.asBytes(&req.setup_data));
+
+    req.completion = controlMessageDone;
+    req.semaphore = sem;
+    try transferSubmit(req);
+    // TODO add the ability to time out
     semaphore.wait(sem) catch |err| {
         log.err("semaphore {d} wait error: {any}", .{ sem, err });
     };
-    var st = xfer.status;
-    if (st == .ok and xfer.actual_size != data.len) {
+
+    if (data.len > 0) {
+        log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, received", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+        debug.sliceDump(data[0..req.actual_size]);
+    } else {
+        log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, no data expected", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+    }
+
+    var st = req.status;
+    if (st == .ok and req.actual_size != data.len) {
         st = .incomplete;
     }
-    xfer.deinit();
-    allocator.destroy(xfer);
+    req.deinit();
+    allocator.destroy(req);
     return st;
 }
 
 pub fn deviceDescriptorRead(dev: *Device, maxlen: TransferBytes) !void {
+    log.debug("[{d}:{d}] read device descriptor (maxlen {d} bytes)", .{ dev.address, 0, maxlen });
     const buffer: []u8 = std.mem.asBytes(&dev.device_descriptor);
     const readlen = @min(maxlen, buffer.len);
-    _ = try controlMessage(
+    const result = try controlMessage(
         dev,
-        null,
         StandardDeviceRequests.get_descriptor, //req
         request_device_standard_in, // req type
         @as(u16, DescriptorType.device) << 8, // value
         LangID.none, // index
         buffer[0..readlen], // data
     );
-
-    // var xfer = TransferFactory.initDeviceDescriptorTransfer(0, 0, std.mem.asBytes(&dev.device_descriptor));
-    // xfer.addressTo(dev);
-
-    // try transferSubmit(&xfer);
-    // try transferAwait(&xfer, 100);
+    if (result == .failed) {
+        return Error.TransferFailed;
+    }
 }
 
 pub fn deviceSetAddress(dev: *Device, address: DeviceAddress) !void {
-    var xfer = TransferFactory.initSetAddressTransfer(address);
-    xfer.addressTo(dev);
+    log.debug("[{d}:{d}] set address {d}", .{ dev.address, 0, address });
 
-    try transferSubmit(&xfer);
-    try transferAwait(&xfer, 100);
+    const result = try controlMessage(
+        dev,
+        StandardDeviceRequests.set_address, // req
+        request_device_standard_out, // req type
+        address, // value
+        0, // index (not used for this transfer)
+        &.{}, // data (not used for this transfer)
+    );
+
+    if (result == .failed) {
+        return Error.TransferFailed;
+    }
 
     dev.address = address;
 }
 
 pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
+    log.debug("[{d}:{d}] configuration descriptor read", .{ dev.address, 0 });
     // first transfer returns the configuration descriptor which
     // includes the total length of the whole configuration tree
     var desc: ConfigurationDescriptor = undefined;
-    var xfer = TransferFactory.initConfigurationDescriptorTransfer(0, std.mem.asBytes(&desc));
-    xfer.addressTo(dev);
 
-    try transferSubmit(&xfer);
-    try transferAwait(&xfer, 100);
+    const result = try controlMessage(
+        dev,
+        StandardDeviceRequests.get_descriptor, // req
+        request_device_standard_in, // req type
+        @as(u16, DescriptorType.configuration) << 8, // value
+        0, // index
+        std.mem.asBytes(&desc),
+    );
+    if (result != .ok) {
+        log.debug("configuration descriptor read, first read result {s}", .{@tagName(result)});
+        return Error.TransferFailed;
+    }
 
     // now allocate enough space for the whole configuration (which
     // includes the interface descriptors and endpoint descriptors)
@@ -415,27 +446,45 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
     const configuration: []u8 = try allocator.alloc(u8, buffer_size);
     defer allocator.free(configuration);
 
-    xfer = TransferFactory.initConfigurationDescriptorTransfer(0, configuration);
-    xfer.addressTo(dev);
-
-    try transferSubmit(&xfer);
-    try transferAwait(&xfer, 100);
+    const result2 = try controlMessage(
+        dev,
+        StandardDeviceRequests.get_descriptor, // req
+        request_device_standard_in, // req type
+        @as(u16, DescriptorType.configuration) << 8, // value
+        0, // index
+        configuration,
+    );
+    if (result2 != .ok) {
+        log.debug("configuration descriptor read part 2, second read result {s}", .{@tagName(result2)});
+        return Error.TransferFailed;
+    }
 
     dev.configuration = try DeviceConfiguration.initFromBytes(allocator, configuration);
+    dev.configuration.dump();
 }
 
 pub fn deviceSetConfiguration(dev: *Device, use_config: u8) !void {
-    var xfer = TransferFactory.initSetConfigurationTransfer(use_config);
-    xfer.addressTo(dev);
+    log.debug("[{d}:{d}] set configuration {d}", .{ dev.address, 0, use_config });
 
-    try transferSubmit(&xfer);
-    try transferAwait(&xfer, 100);
+    _ = try controlMessage(
+        dev,
+        StandardDeviceRequests.set_configuration, // req
+        request_device_standard_out, // req type
+        use_config, // value
+        0, // index (not used for this transfer)
+        &.{}, // data (not used for this transfer)
+    );
 }
 
 pub fn deviceGetStringDescriptor(dev: *Device, index: StringIndex, lang_id: u16, buffer: []u8) !void {
-    var xfer = TransferFactory.initStringDescriptorTransfer(index, lang_id, buffer);
-    xfer.addressTo(dev);
+    log.debug("[{d}:{d}] get string descriptor {d}", .{ dev.address, 0, index });
 
-    try transferSubmit(&xfer);
-    try transferAwait(&xfer, 100);
+    _ = try controlMessage(
+        dev,
+        StandardDeviceRequests.get_descriptor, // req
+        request_device_standard_in, // req type
+        @as(u16, DescriptorType.string) << 8 | index,
+        lang_id,
+        buffer,
+    );
 }
