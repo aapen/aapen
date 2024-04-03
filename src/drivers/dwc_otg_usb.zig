@@ -685,7 +685,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
 
         log.debug("split control: port {d}, hub {d}, enable {d}", .{ split_control.port_address, split_control.hub_address, split_control.split_enable });
 
-        if (req.size > characteristics.max_packet_size) {
+        if (transfer.size > characteristics.max_packet_size) {
             transfer.size = characteristics.max_packet_size;
             req.short_attempt = true;
         }

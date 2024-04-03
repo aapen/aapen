@@ -264,6 +264,10 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
         (int_status.data_toggle_error == 1 and self.registers.channel_character.endpoint_direction == EndpointDirection.out))
     {
         log.err("channel {d} transfer error (interrupts = 0x{x:0>8},  packet count = {d})", .{ self.id, @as(u32, @bitCast(int_status)), self.registers.transfer.packet_count });
+
+        self.host.dumpStatus();
+        self.channelStatus();
+
         interrupt_reason = .transfer_failed;
     } else if (int_status.frame_overrun == 1) {
         log.debug("channel {d} frame overrun. restarting transaction", .{self.id});
@@ -397,7 +401,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
                 if (!req.isControlRequest() or
                     req.control_phase == TransferRequest.control_data_phase)
                 {
-                    req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr) - @intFromPtr(req.data));
+                    req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr.?) - @intFromPtr(req.data));
                 }
                 return .transfer_needs_restart;
             }
@@ -405,7 +409,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             if (req.isControlRequest() and req.control_phase < 2) {
                 req.complete_split = false;
                 if (req.control_phase == TransferRequest.control_data_phase) {
-                    req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr) - @intFromPtr(req.data));
+                    req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr.?) - @intFromPtr(req.data));
                     log.debug("channel {d} data phase, actual size so far {d}", .{ self.id, req.actual_size });
                 }
                 req.control_phase += 1;

@@ -170,7 +170,7 @@ pub fn init() !void {
     errdefer freeDevice(dev0);
 
     log.debug("attaching root hub", .{});
-    if (attachDevice(dev0)) {
+    if (attachDevice(dev0, UsbSpeed.High)) {
         log.debug("usb initialized", .{});
         root_hub = &devices[dev0];
         return;
@@ -208,7 +208,7 @@ pub fn allocateDevice(parent: ?*Device) !DeviceAddress {
         if (!devices[addr].in_use) {
             var dev = &devices[addr];
             dev.in_use = true;
-            dev.speed = UsbSpeed.High;
+            //            dev.speed = UsbSpeed.High;
 
             dev.parent = parent;
             if (parent != null) {
@@ -238,8 +238,11 @@ pub fn freeDevice(devid: DeviceAddress) void {
     dev.in_use = false;
 }
 
-pub fn attachDevice(devid: DeviceAddress) !void {
+pub fn attachDevice(devid: DeviceAddress, speed: UsbSpeed) !void {
     var dev = &devices[devid - 1];
+
+    // assume the speed detected by the hub this device is attached to
+    dev.speed = speed;
 
     // default to max packet size of 8 until we can read the device
     // descriptor to find the real max packet size.

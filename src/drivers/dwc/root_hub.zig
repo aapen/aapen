@@ -184,8 +184,8 @@ const root_hub_hub_descriptor: RootHubDescriptor = .{
             .descriptor_type = DescriptorType.hub,
         },
         .number_ports = 1,
-        .characteristics = @bitCast(@as(u16, 8)),
-        .power_on_to_power_good = 1,
+        .characteristics = @bitCast(@as(u16, 0)),
+        .power_on_to_power_good = 0,
         .controller_current = 0,
     },
     .extra_data = .{ 0x00, 0xff },
@@ -326,7 +326,7 @@ const handlers: []const Handler = &.{
     .{ RequestTypeType.standard, StandardDeviceRequests.get_descriptor, null, hubGetDescriptor },
     .{ RequestTypeType.standard, StandardDeviceRequests.get_configuration, null, hubGetConfiguration },
     .{ RequestTypeType.standard, StandardDeviceRequests.set_configuration, null, hubSetConfiguration },
-    .{ RequestTypeType.class, ClassRequest.get_descriptor, null, hubGetHubDescriptor },
+    .{ RequestTypeType.class, ClassRequest.get_descriptor, RequestTypeRecipient.device, hubGetHubDescriptor },
     .{ RequestTypeType.class, ClassRequest.get_status, RequestTypeRecipient.device, hubGetHubStatus },
     .{ RequestTypeType.class, ClassRequest.get_status, RequestTypeRecipient.other, hubGetPortStatus },
     .{ RequestTypeType.class, ClassRequest.set_feature, RequestTypeRecipient.device, hubSetHubFeature },
@@ -493,6 +493,7 @@ pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
                 return;
             }
         }
+        log.debug("unhandled request: type 0x{x}, req 0x{x}", .{ @as(u8, @bitCast(req.setup_data.request_type)), request });
     } else {
         // this is an interrupt transfer request for the status change endpoint.
         log.debug("hubHandleTransfer: holding status change request a status change occurs", .{});
