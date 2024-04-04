@@ -272,7 +272,7 @@ pub const Hub = struct {
     descriptor: HubDescriptor,
     port_count: u8,
     ports: []Port,
-    status_change_buffer: [1]u8,
+    status_change_buffer: [4]u8,
     status_change_request: TransferRequest,
 
     pub fn init(self: *Hub, table_index: u5) void {
@@ -283,7 +283,7 @@ pub const Hub = struct {
             .descriptor = undefined,
             .port_count = 0,
             .ports = undefined,
-            .status_change_buffer = [1]u8{0},
+            .status_change_buffer = [_]u8{0} ** 4,
             .status_change_request = undefined,
         };
     }
