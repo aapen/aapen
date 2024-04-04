@@ -286,22 +286,24 @@ fn bindDriver(dev: *Device) !void {
     }
 
     for (drivers.items) |drv| {
-        log.debug("Attempting to bind driver {s} to device", .{drv.name});
-        if (drv.bind(dev)) {
-            var buf: [512]u8 = [_]u8{0} ** 512;
-            log.info("Bound driver {s} to {s}", .{ drv.name, dev.description(&buf) });
-            return;
-        } else |e| {
-            switch (e) {
-                error.DeviceUnsupported => {
-                    log.debug("Driver {s} doesn't support this device", .{drv.name});
-                    // move on to the next driver.
-                    continue;
-                },
-                else => {
-                    log.err("Driver bind error {any}", .{e});
-                    return e;
-                },
+        if (drv.canBind(dev)) {
+            log.debug("Attempting to bind driver {s} to device", .{drv.name});
+            if (drv.bind(dev)) {
+                var buf: [512]u8 = [_]u8{0} ** 512;
+                log.info("Bound driver {s} to {s}", .{ drv.name, dev.description(&buf) });
+                return;
+            } else |e| {
+                switch (e) {
+                    error.DeviceUnsupported => {
+                        log.debug("Driver {s} doesn't support this device", .{drv.name});
+                        // move on to the next driver.
+                        continue;
+                    },
+                    else => {
+                        log.err("Driver bind error {any}", .{e});
+                        return e;
+                    },
+                }
             }
         }
     }

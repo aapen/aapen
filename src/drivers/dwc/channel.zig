@@ -271,7 +271,7 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
         interrupt_reason = .transfer_failed;
     } else if (int_status.frame_overrun == 1) {
         log.debug("channel {d} frame overrun. restarting transaction", .{self.id});
-        interrupt_reason = .transfer_needs_restart;
+        interrupt_reason = .transaction_needs_restart;
     } else if (int_status.nyet == 1) {
         log.debug("channel {d} received nyet from device; split retry needed", .{self.id});
         req.csplit_retries += 1;
@@ -279,7 +279,7 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
             log.debug("channel {d} restarting split transaction (CSPLIT tried {d} times)", .{ self.id, req.csplit_retries });
             req.complete_split = false;
         }
-        interrupt_reason = .transfer_needs_restart;
+        interrupt_reason = .transaction_needs_restart;
     } else if (int_status.nak == 1) {
         log.debug("channel {d} received nak from device; deferring transfer", .{self.id});
         interrupt_reason = .transfer_needs_defer;
@@ -439,7 +439,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
         {
             req.complete_split = true;
             log.debug("channel {d} must continue transfer (complete_split = {})", .{ self.id, req.complete_split });
-            return .transfer_needs_restart;
+            return .transaction_needs_restart;
         } else if (req.isControlRequest() and req.control_phase == TransferRequest.control_status_phase) {
             return .transfer_completed;
         } else {

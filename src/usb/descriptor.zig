@@ -45,12 +45,15 @@ pub const DescriptorType = struct {
     pub const interface: u8 = 4;
     pub const endpoint: u8 = 5;
 
+    // hid
+    pub const hid: u8 = 0x21;
+
+    // class
+    pub const class_interface: u8 = 0x24;
+    pub const class_endpoint: u8 = 0x25;
+
     // device
     pub const hub: u8 = 0x29;
-
-    //class
-    pub const class_interface: u8 = 36;
-    pub const class_endpoint: u8 = 37;
 };
 
 pub const Header = packed struct {
@@ -58,18 +61,9 @@ pub const Header = packed struct {
     descriptor_type: u8,
 };
 
-pub const Descriptor = extern union {
-    header: Header,
-    device: DeviceDescriptor,
-    configuration: ConfigurationDescriptor,
-    interface: InterfaceDescriptor,
-    endpoint: EndpointDescriptor,
-    string: StringDescriptor,
-
-    const Error = error{
-        LengthMismatch,
-        UnexpectedType,
-    };
+const Error = error{
+    LengthMismatch,
+    UnexpectedType,
 };
 
 pub const DeviceDescriptor = extern struct {
@@ -101,11 +95,11 @@ pub const DeviceDescriptor = extern struct {
     pub fn fromSlice(buffer: []u8) !*DeviceDescriptor {
         const maybe_device_descriptor: *DeviceDescriptor = @ptrCast(@alignCast(buffer.ptr));
         if (maybe_device_descriptor.header.length != @sizeOf(DeviceDescriptor)) {
-            return Descriptor.Error.LengthMismatch;
+            return Error.LengthMismatch;
         }
 
         if (maybe_device_descriptor.header.descriptor_type != DescriptorType.device)
-            return Descriptor.Error.UnexpectedType;
+            return Error.UnexpectedType;
 
         return maybe_device_descriptor;
     }
@@ -157,6 +151,10 @@ pub const InterfaceDescriptor = packed struct {
     interface_subclass: u8,
     interface_protocol: u8,
     interface_string: StringIndex,
+
+    pub fn isHid(self: *const InterfaceDescriptor) bool {
+        return self.interface_class == DeviceClass.hid and (self.interface_subclass == 0x00 or self.interface_subclass == 0x01);
+    }
 
     pub fn dump(self: *const InterfaceDescriptor) void {
         log.debug("InterfaceDescriptor [", .{});
@@ -244,5 +242,26 @@ pub const StringDescriptor = extern struct {
             result[i] = ascii_char;
         }
         return result;
+    }
+};
+
+pub const HidDescriptor = extern struct {
+    header: Header,
+    hid_specification: BCD,
+    country_code: u8,
+    descriptor_count: u8,
+    class_descriptor_type: u8,
+    class_descriptor_length: u16,
+    optional_descriptor_type: u8,
+    optional_descriptor_length: u16,
+
+    pub fn dump(self: *const HidDescriptor) void {
+        log.debug("HidDescriptor [", .{});
+        log.debug("  hid_specification = 0x{x}", .{self.hid_specification});
+        log.debug("  country_code = {d}", .{self.country_code});
+        log.debug("  descriptor_count = {d}", .{self.descriptor_count});
+        log.debug("  class_descriptor_type = {d}", .{self.class_descriptor_type});
+        log.debug("  class_descriptor_length = {d}", .{self.class_descriptor_length});
+        log.debug("]", .{});
     }
 };

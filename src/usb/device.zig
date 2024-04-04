@@ -3,11 +3,14 @@ const Allocator = std.mem.Allocator;
 const bufPrint = std.fmt.bufPrint;
 const log = std.log.scoped(.usb);
 
+const root = @import("root");
+
 const descriptor = @import("descriptor.zig");
 const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
 const DescriptorType = descriptor.DescriptorType;
 const DeviceDescriptor = descriptor.DeviceDescriptor;
 const EndpointDescriptor = descriptor.EndpointDescriptor;
+const HidDescriptor = descriptor.HidDescriptor;
 const InterfaceDescriptor = descriptor.InterfaceDescriptor;
 const StringDescriptor = descriptor.StringDescriptor;
 
@@ -237,6 +240,7 @@ pub const DeviceConfiguration = struct {
     allocator: Allocator,
     configuration_descriptor: ConfigurationDescriptor,
     interfaces: [MAX_INTERFACES]?*InterfaceDescriptor,
+    hids: [MAX_INTERFACES]?*HidDescriptor,
     endpoints: [MAX_INTERFACES][MAX_ENDPOINTS]?*EndpointDescriptor,
 
     pub fn initFromBytes(allocator: Allocator, configuration_tree: []const u8) !*DeviceConfiguration {
@@ -247,6 +251,7 @@ pub const DeviceConfiguration = struct {
             .allocator = allocator,
             .configuration_descriptor = std.mem.zeroes(ConfigurationDescriptor),
             .interfaces = std.mem.zeroes([MAX_INTERFACES]?*InterfaceDescriptor),
+            .hids = std.mem.zeroes([MAX_INTERFACES]?*HidDescriptor),
             .endpoints = std.mem.zeroes([MAX_INTERFACES][MAX_ENDPOINTS]?*EndpointDescriptor),
         };
 
@@ -270,55 +275,68 @@ pub const DeviceConfiguration = struct {
         }
     }
 
-    fn parseConfiguration(self: *DeviceConfiguration, configuration_tree: []const u8) !void {
-        var here: usize = 0;
-        const config_start = here;
-        const config_length = configuration_tree[here];
+    const ParseState = struct {
+        here: usize = 0,
+        tree: []const u8,
 
-        if (configuration_tree[here + 1] != DescriptorType.configuration) {
-            return DeviceConfiguration.ParseError.BadData;
+        fn expect(self: *const ParseState, v: u8) !void {
+            // note that this looks ahead by one byte because the
+            // descriptor header is always {length: u8, type: u8}
+            if (self.tree[self.here + 1] != v) {
+                return DeviceConfiguration.ParseError.BadData;
+            }
         }
 
-        here = here + config_length;
-        const config_end = here;
+        fn copy(state: *ParseState, comptime T: type, allocator: Allocator) !*T {
+            const struct_start = state.here;
+            const struct_length = state.tree[state.here];
+            state.here += struct_length;
+            const struct_end = state.here;
+            return try alignedCopy(T, allocator, state.tree[struct_start..struct_end]);
+        }
+    };
 
-        const partial_copy = try alignedCopy(ConfigurationDescriptor, self.allocator, configuration_tree[config_start..config_end]);
+    fn parseConfiguration(self: *DeviceConfiguration, configuration_tree: []const u8) !void {
+        var state: ParseState = .{
+            .here = 0,
+            .tree = configuration_tree,
+        };
+
+        try state.expect(DescriptorType.configuration);
+
+        const partial_copy = try state.copy(ConfigurationDescriptor, self.allocator);
         self.configuration_descriptor = partial_copy.*;
         self.allocator.destroy(partial_copy);
 
         const expect_interfaces = self.configuration_descriptor.interface_count;
 
         for (0..expect_interfaces) |iface_num| {
-            const iface_length = configuration_tree[here];
-
-            if (configuration_tree[here + 1] != DescriptorType.interface) {
-                return DeviceConfiguration.ParseError.BadData;
-            }
-
-            const iface_start = here;
-            here = here + iface_length;
-            const iface_end = here;
-
-            const iface = try alignedCopy(InterfaceDescriptor, self.allocator, configuration_tree[iface_start..iface_end]);
+            try state.expect(DescriptorType.interface);
+            const iface = try state.copy(InterfaceDescriptor, self.allocator);
             errdefer self.allocator.destroy(iface);
-
             self.interfaces[iface_num] = iface;
+
+            // question: is the HID descriptor _mandatory_ when the
+            // interface class is 0x03?
+            if (iface.isHid()) {
+                if (state.expect(DescriptorType.hid)) {
+                    // For now, assume that the HID descriptor is
+                    // optional and if the type doesn't match, then
+                    // jump to parsing endpoint descriptors.
+                    const hid = try state.copy(HidDescriptor, self.allocator);
+                    errdefer self.allocator.destroy(hid);
+                    self.hids[iface_num] = hid;
+                } else |_| {
+                    // it wasn't a HID descriptor, but that's OK. for
+                    // now we are assuming the HID descriptor is optional
+                }
+            }
 
             const expect_endpoints = iface.endpoint_count;
             for (0..expect_endpoints) |endpoint_num| {
-                const endpoint_length = configuration_tree[here];
-
-                if (configuration_tree[here + 1] != DescriptorType.endpoint) {
-                    return DeviceConfiguration.ParseError.BadData;
-                }
-
-                const endpoint_start = here;
-                here = here + endpoint_length;
-                const endpoint_end = here;
-
-                const endpoint = try alignedCopy(EndpointDescriptor, self.allocator, configuration_tree[endpoint_start..endpoint_end]);
+                try state.expect(DescriptorType.endpoint);
+                const endpoint = try state.copy(EndpointDescriptor, self.allocator);
                 errdefer self.allocator.destroy(endpoint);
-
                 self.endpoints[iface_num][endpoint_num] = endpoint;
             }
         }
@@ -341,6 +359,10 @@ pub const DeviceConfiguration = struct {
             if (self.interfaces[i]) |iface| {
                 iface.dump();
 
+                if (self.hids[i]) |hid| {
+                    hid.dump();
+                }
+
                 for (0..MAX_ENDPOINTS) |e| {
                     if (self.endpoints[i][e]) |endp| {
                         endp.dump();
@@ -354,31 +376,7 @@ pub const DeviceConfiguration = struct {
 
 pub const DeviceDriver = struct {
     name: []const u8,
+    canBind: *const fn (device: *Device) bool,
     bind: *const fn (device: *Device) Error!void,
     unbind: ?*const fn (device: *Device) void,
 };
-
-// ----------------------------------------------------------------------
-// Testing
-// ----------------------------------------------------------------------
-const expect = std.testing.expect;
-const expectEqual = std.testing.expectEqual;
-
-test "we can parse a configuration tree into a device" {
-    std.debug.print("\n", .{});
-
-    const canned_configuration_descriptor = [_]u8{ 0x09, 0x02, 0x19, 0x00, 0x01, 0x01, 0x00, 0xe0, 0x00, 0x09, 0x04, 0x00, 0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x07, 0x05, 0x81, 0x03, 0x02, 0x00, 0xff };
-
-    var config = try DeviceConfiguration.initFromBytes(std.testing.allocator, &canned_configuration_descriptor);
-    defer {
-        config.deinit();
-        std.testing.allocator.destroy(config);
-    }
-
-    try expectEqual(@as(u8, 1), config.configuration_descriptor.interface_count);
-    try expect(config.interfaces[0] != null);
-    try expectEqual(@as(u8, 1), config.interfaces[0].?.endpoint_count);
-    try expect(config.endpoints[0][0] != null);
-    try expectEqual(@as(u8, 0x81), config.endpoints[0][0].?.endpoint_address);
-    try expectEqual(TransferType.interrupt, config.endpoints[0][0].?.attributes.transfer_type);
-}

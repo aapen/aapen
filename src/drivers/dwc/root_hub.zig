@@ -112,7 +112,7 @@ const root_hub_configuration: RootHubConfiguration = .{
             .remote_wakeup = 0,
             .self_powered = 1,
         },
-        .power_max = 0,
+        .power_max = 1,
     },
     .interface = .{
         .header = .{
@@ -186,7 +186,7 @@ const root_hub_hub_descriptor: RootHubDescriptor = .{
         .number_ports = 1,
         .characteristics = @bitCast(@as(u16, 0)),
         .power_on_to_power_good = 0,
-        .controller_current = 0,
+        .controller_current = 1,
     },
     .extra_data = .{ 0x00, 0xff },
 };

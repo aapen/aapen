@@ -666,6 +666,10 @@ fn hubThread(_: *anyopaque) void {
     }
 }
 
+pub fn hubDriverCanBind(dev: *Device) bool {
+    return dev.device_descriptor.device_class == DeviceClass.hub;
+}
+
 pub fn hubDriverDeviceBind(dev: *Device) Error!void {
     hubs_lock.acquire();
     defer hubs_lock.release();
@@ -693,6 +697,7 @@ pub fn hubDriverDeviceUnbind(dev: *Device) void {
 
 pub const usb_hub_driver: DeviceDriver = .{
     .name = "USB Hub",
+    .canBind = hubDriverCanBind,
     .bind = hubDriverDeviceBind,
     .unbind = hubDriverDeviceUnbind,
 };

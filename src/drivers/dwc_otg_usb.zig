@@ -715,7 +715,9 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         }
 
         // if we are sending data, copy it into the aligned buffer
-        @memcpy(channel.aligned_buffer[0..transfer.size], data.?);
+        if (characteristics.endpoint_direction == 0) {
+            @memcpy(channel.aligned_buffer[0..transfer.size], data.?);
+        }
     }
 
     // It's OK if this doesn't match the DMA address selected
@@ -804,23 +806,6 @@ pub fn channelStartTransaction(self: *Self, channel: *Channel, req: *TransferReq
 const active_transaction_interrupts: ChannelInterrupt = .{
     .halt = 1,
 };
-
-// const active_transaction_interrupts: ChannelInterrupt = .{
-//     .transfer_complete = 1,
-//     .halt = 1,
-//     .ahb_error = 1,
-//     .stall = 1,
-//     .nak = 1,
-//     .ack = 1,
-//     .nyet = 1,
-//     .transaction_error = 1,
-//     .babble_error = 1,
-//     .frame_overrun = 1,
-//     .data_toggle_error = 1,
-//     .buffer_not_available = 1,
-//     .excessive_transmission = 1,
-//     .frame_list_rollover = 1,
-// };
 
 // ----------------------------------------------------------------------
 // Deferred transfer support

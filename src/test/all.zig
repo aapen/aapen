@@ -21,6 +21,7 @@ pub const string = @import("string.zig").testBody;
 pub const synchronize = @import("synchronize.zig").testBody;
 pub const transfer = @import("transfer.zig").testBody;
 pub const transfer_factory = @import("transfer_factory.zig").testBody;
+pub const usb_cdesc = @import("usb_cdesc.zig").testBody;
 
 pub fn locateTest(comptime testname: []const u8) fn (*anyopaque) void {
     const test_fn = @field(@This(), testname);

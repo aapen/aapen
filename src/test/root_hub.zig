@@ -22,7 +22,7 @@ const LangID = usb.LangID;
 const PortStatus = usb.PortStatus;
 const PortFeature = usb.PortFeature;
 const StringDescriptor = usb.StringDescriptor;
-const Transfer = usb.Transfer;
+const TransferRequest = usb.TransferRequest;
 const TransferBytes = usb.TransferBytes;
 const TransferCompletionStatus = usb.TransferCompletionStatus;
 const TransferFactory = usb.TransferFactory;
@@ -68,7 +68,7 @@ fn fakeRegisters() reg.HostRegisters {
     };
 }
 
-fn expectTransferCompletionStatus(expected_status: TransferCompletionStatus, xfer: *Transfer) void {
+fn expectTransferCompletionStatus(expected_status: TransferCompletionStatus, xfer: *TransferRequest) void {
     var regs: HostRegisters = fakeRegisters();
     var hub: RootHub = .{};
     hub.init(&regs);
@@ -78,13 +78,13 @@ fn expectTransferCompletionStatus(expected_status: TransferCompletionStatus, xfe
 }
 
 fn supportedTransferTypes() !void {
-    var iso: Transfer = .{
+    var iso: TransferRequest = .{
         .endpoint_type = TransferType.isochronous,
         .setup = undefined,
         .data_buffer = &.{},
     };
 
-    var bulk: Transfer = .{
+    var bulk: TransferRequest = .{
         .endpoint_type = TransferType.bulk,
         .setup = undefined,
         .data_buffer = &.{},
