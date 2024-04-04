@@ -431,16 +431,11 @@ fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
 
     const intr_status = self.core_registers.core_interrupt_status;
 
-    log.debug("irq handle: status 0x{x:0>8} (mask = 0x{x:0>8})", .{
-        @as(u32, @bitCast(intr_status)),
-        @as(u32, @bitCast(self.core_registers.core_interrupt_mask)),
-    });
-
     // check if one of the channels raised the interrupt
     if (intr_status.host_channel == 1) {
         const all_intrs = self.host_registers.all_channel_interrupts;
         //        self.host_registers.all_channel_interrupts = all_intrs;
-        log.debug("irq handle: channel int 0x{x:0>8}", .{@as(u32, @bitCast(all_intrs))});
+        log.debug("irq handle: host channel ints 0x{x:0>8}", .{@as(u32, @bitCast(all_intrs))});
 
         // Find the channel that has something to say
         var channel_mask: u32 = 1;
@@ -667,7 +662,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
     // if talking to a low or full speed device, handle the
     // split register
     if (req.device.?.speed != UsbSpeed.High) {
-        log.debug("device needs a split transaction, finding TT", .{});
+        // log.debug("device needs a split transaction, finding TT", .{});
 
         // find which hub is the transaction translator (TT)
         var tt_hub_port: u7 = 0;
@@ -683,7 +678,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         split_control.hub_address = if (tt_hub) |h| h.address else 0;
         split_control.split_enable = 1;
 
-        log.debug("split control: port {d}, hub {d}, enable {d}", .{ split_control.port_address, split_control.hub_address, split_control.split_enable });
+        // log.debug("split control: port {d}, hub {d}, enable {d}", .{ split_control.port_address, split_control.hub_address, split_control.split_enable });
 
         if (transfer.size > characteristics.max_packet_size) {
             transfer.size = characteristics.max_packet_size;
@@ -701,7 +696,6 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
     } else if (isAligned(data.?)) {
         channel.registers.channel_dma_addr = @truncate(@intFromPtr(data.?));
     } else {
-        log.debug("buffer not DMA aligned, using channel's buffer at 0x{x:0>8}", .{@intFromPtr(channel.aligned_buffer.ptr)});
         channel.registers.channel_dma_addr = @truncate(@intFromPtr(channel.aligned_buffer.ptr));
 
         // the aligned buffer is a fixed size, so it might not be big

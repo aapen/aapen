@@ -695,7 +695,7 @@ pub fn hubDriverDeviceUnbind(dev: *Device) void {
     _ = dev;
 }
 
-pub const usb_hub_driver: DeviceDriver = .{
+pub const driver: DeviceDriver = .{
     .name = "USB Hub",
     .canBind = hubDriverCanBind,
     .bind = hubDriverDeviceBind,

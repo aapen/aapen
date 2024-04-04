@@ -270,18 +270,18 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
 
         interrupt_reason = .transfer_failed;
     } else if (int_status.frame_overrun == 1) {
-        log.debug("channel {d} frame overrun. restarting transaction", .{self.id});
+        // log.debug("channel {d} frame overrun. restarting transaction", .{self.id});
         interrupt_reason = .transaction_needs_restart;
     } else if (int_status.nyet == 1) {
-        log.debug("channel {d} received nyet from device; split retry needed", .{self.id});
+        // log.debug("channel {d} received nyet from device; split retry needed", .{self.id});
         req.csplit_retries += 1;
         if (req.csplit_retries > 10) {
-            log.debug("channel {d} restarting split transaction (CSPLIT tried {d} times)", .{ self.id, req.csplit_retries });
+            // log.debug("channel {d} restarting split transaction (CSPLIT tried {d} times)", .{ self.id, req.csplit_retries });
             req.complete_split = false;
         }
         interrupt_reason = .transaction_needs_restart;
     } else if (int_status.nak == 1) {
-        log.debug("channel {d} received nak from device; deferring transfer", .{self.id});
+        // log.debug("channel {d} received nak from device; deferring transfer", .{self.id});
         interrupt_reason = .transfer_needs_defer;
         req.complete_split = false;
     } else {
@@ -341,7 +341,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
     _ = bytes_remaining;
 
     // log.debug("channel {d} reports packets_remaining {d}", .{ self.id, packets_remaining });
-    log.debug("channel {d} packets remaining {d} of {d}, so packets transferred {d}", .{ self.id, packets_remaining, req.attempted_packets_remaining, packets_transferred });
+    // log.debug("channel {d} packets remaining {d} of {d}, so packets transferred {d}", .{ self.id, packets_remaining, req.attempted_packets_remaining, packets_transferred });
 
     if (packets_transferred != 0) {
         var bytes_transferred: TransferBytes = 0;
@@ -354,6 +354,9 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             bytes_transferred = req.attempted_bytes_remaining - self.registers.transfer.size;
 
             if (!Host.isAligned(req.cur_data_ptr.?)) {
+                // we're reading into a different buffer than the
+                // original caller provided. copy the results from our
+                // DMA aligned buffer to the one the caller can see
                 const start_pos = req.attempted_size - req.attempted_bytes_remaining;
                 @memcpy(req.cur_data_ptr.?, self.aligned_buffer[start_pos .. start_pos + bytes_transferred]);
             }
@@ -373,7 +376,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             }
         }
 
-        log.debug("channel {d} calculated {d} bytes transferred", .{ self.id, bytes_transferred });
+        // log.debug("channel {d} calculated {d} bytes transferred", .{ self.id, bytes_transferred });
 
         req.attempted_packets_remaining -= packets_transferred;
         req.attempted_bytes_remaining -= bytes_transferred;
@@ -410,8 +413,8 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
                 req.complete_split = false;
                 if (req.control_phase == TransferRequest.control_data_phase) {
                     req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr.?) - @intFromPtr(req.data));
-                    log.debug("channel {d} data phase, actual size so far {d}", .{ self.id, req.actual_size });
                 }
+
                 req.control_phase += 1;
 
                 if (req.control_phase == TransferRequest.control_data_phase and req.size == 0) {
@@ -437,10 +440,12 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             self.registers.split_control.split_enable == 1 and
             !req.complete_split)
         {
+            // Start CSPLIT
             req.complete_split = true;
             log.debug("channel {d} must continue transfer (complete_split = {})", .{ self.id, req.complete_split });
             return .transaction_needs_restart;
         } else if (req.isControlRequest() and req.control_phase == TransferRequest.control_status_phase) {
+            log.debug("channel {d} status phase completed", .{self.id});
             return .transfer_completed;
         } else {
             log.err("channel {d} no packets transferred", .{self.id});

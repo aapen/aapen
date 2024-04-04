@@ -210,6 +210,7 @@ pub const options = struct {
         .{ .scope = .schedule, .level = .debug },
         .{ .scope = .usb, .level = .debug },
         .{ .scope = .usb_hub, .level = .debug },
+        .{ .scope = .usb_hid_keyboard, .level = .debug },
         .{ .scope = .forty, .level = .info },
     };
 };

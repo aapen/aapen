@@ -60,6 +60,8 @@ pub const EndpointNumber = endpoint.EndpointNumber;
 const function = @import("usb/function.zig");
 pub const MAX_FUNCTIONS = function.MAX_FUNCTIONS;
 
+const hid_keyboard = @import("usb/hid_keyboard.zig");
+
 const hub = @import("usb/hub.zig");
 pub const Characteristics = hub.Characteristics;
 pub const ChangeStatusP = hub.ChangeStatusP;
@@ -73,7 +75,6 @@ pub const HubDescriptor = hub.HubDescriptor;
 pub const ClassRequest = hub.ClassRequest;
 //pub const FeatureSelector = hub.FeatureSelector;
 pub const TTDirection = hub.TTDirection;
-const usb_hub_driver = hub.usb_hub_driver;
 
 const interface = @import("usb/interface.zig");
 pub const InterfaceClass = interface.InterfaceClass;
@@ -160,8 +161,8 @@ pub fn init() !void {
 
     try hub.initialize(allocator);
 
-    try registerDriver(&usb_hub_driver);
-    log.debug("registered hub driver", .{});
+    try registerDriver(&hub.driver);
+    try registerDriver(&hid_keyboard.driver);
 
     try root.hal.usb_hci.initialize(allocator);
     log.debug("started host controller", .{});
