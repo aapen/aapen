@@ -6,6 +6,13 @@ const printf = root.printf;
 const arch = @import("architecture.zig");
 const cpu = arch.cpu;
 
+const atomic = @import("atomic.zig");
+const atomicAdd = atomic.atomicAddi16;
+const atomicAddFetch = atomic.atomicAddFetchi16;
+const atomicReset = atomic.atomicReseti16;
+const atomicSub = atomic.atomicSubi16;
+const atomicSubFetch = atomic.atomicSubFetchi16;
+
 const queue = @import("queue.zig");
 const Key = queue.Key;
 const QID = queue.QID;
@@ -101,8 +108,8 @@ pub fn wait(sid: SID) !void {
 
     const thr = schedule.thrent(schedule.current);
     const sem = sement(sid);
-    sem.count -= 1;
-    if (sem.count < 0) {
+
+    if (atomicSubFetch(&sem.count, 1) < 0) {
         thr.state = schedule.THREAD_WAIT;
         thr.semaphore = sid;
         _ = try queue.enqueue(schedule.current, sem.queue);
@@ -118,9 +125,7 @@ pub fn signal(sid: SID) !void {
 
     const sem = sement(sid);
 
-    const old = sem.count;
-    sem.count += 1;
-    if (old < 0) {
+    if (atomicAdd(&sem.count, 1) < 0) {
         const waiting_tid = try queue.dequeue(sem.queue);
         try schedule.ready(waiting_tid, true);
     }
@@ -135,8 +140,7 @@ pub fn signalN(sid: SID, cnt: SemaphoreCount) !void {
 
     const sem = sement(sid);
     for (0..cnt) |_| {
-        sem.count += 1;
-        if (sem.count <= 0) {
+        if (atomic.atomicAdd(&sem.count, 1) < 0) {
             schedule.ready(queue.dequeue(sem.queue), false);
         }
     }
