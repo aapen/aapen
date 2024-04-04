@@ -646,12 +646,17 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         characteristics.endpoint_direction = req.endpoint_desc.?.direction();
         data = req.data + req.actual_size;
         transfer.size = @truncate(req.size - req.actual_size);
-        if (characteristics.endpoint_type == TransferType.interrupt and
-            transfer.size > characteristics.packets_per_frame * characteristics.max_packet_size)
-        {
-            transfer.size = characteristics.packets_per_frame * characteristics.max_packet_size;
-            req.short_attempt = true;
+
+        if (characteristics.endpoint_type == TransferType.interrupt) {
+            if (transfer.size > characteristics.packets_per_frame * characteristics.max_packet_size) {
+                transfer.size = characteristics.packets_per_frame * characteristics.max_packet_size;
+                req.short_attempt = true;
+            } else {
+                const mps = characteristics.max_packet_size;
+                transfer.size = @truncate((transfer.size + mps - 1) / mps);
+            }
         }
+
         transfer.packet_id = req.next_data_pid;
 
         debugLogTransfer(req, "starting transaction");
