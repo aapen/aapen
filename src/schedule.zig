@@ -10,6 +10,8 @@ const cpu = arch.cpu;
 
 const atomic = @import("atomic.zig");
 
+const debug = @import("debug.zig");
+
 const queue = @import("queue.zig");
 const Key = queue.Key;
 const QID = queue.QID;
@@ -619,6 +621,21 @@ pub fn dumpContextRecord(stack_bottom: u64) void {
     }
 }
 
+fn threadPc(stack_bottom: u64) u64 {
+    const stack_ptr: [*]u64 = @ptrFromInt(stack_bottom);
+    return stack_ptr[CONTEXT_WORDS - 2];
+}
+
+fn threadLr(stack_bottom: u64) u64 {
+    const stack_ptr: [*]u64 = @ptrFromInt(stack_bottom);
+    return stack_ptr[CONTEXT_WORDS - 3];
+}
+
+fn threadFp(stack_bottom: u64) u64 {
+    const stack_ptr: [*]u64 = @ptrFromInt(stack_bottom);
+    return stack_ptr[CONTEXT_WORDS - 4];
+}
+
 // ----------------------------------------------------------------------
 // Forty interop
 // ----------------------------------------------------------------------
@@ -628,15 +645,75 @@ const Forth = @import("forty/forth.zig").Forth;
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
         .{ "processTable", "ps" },
+        .{ "stackDump", "thread-stack" },
     });
 }
 
+const state_names: [8][]const u8 = .{
+    "free",
+    "run",
+    "ready",
+    "recv",
+    "recvtm",
+    "sleep",
+    "susp",
+    "wait",
+};
+
 pub fn processTable() void {
-    _ = printf("\nTID\t%016s\tstate\twaitsem\tstack\n", "name");
+    _ = printf("TID\t%016s\t state\twaitsem\tstack\n", "name");
 
     for (&thread_table, 0..) |thr, tid| {
         if (thr.state != THREAD_FREE) {
-            _ = printf("%04d\t%016s\t%d\t%d\t0x%08x\n", tid, &thr.name, thr.state, thr.semaphore, thr.stack_pointer);
+            _ = printf("%04d\t%016s\t%06s\t%d\t0x%08x\n", tid, &thr.name, state_names[thr.state].ptr, thr.semaphore, thr.stack_pointer);
         }
     }
 }
+
+pub fn stackDump(maybe_tid: u64) void {
+    if (maybe_tid > std.math.maxInt(TID)) {
+        _ = printf("Out of range\n");
+        return;
+    }
+
+    const tid: TID = @bitCast(@as(u16, @truncate(maybe_tid & 0xffff)));
+
+    if (isBadTid(tid)) return;
+
+    if (tid == current) {
+        _ = printf("Can't dump stack of running thread\n");
+        return;
+    }
+
+    const thr = thrent(tid);
+    const base: Frame = .{
+        .fp = threadFp(thr.stack_pointer),
+        .lr = threadLr(thr.stack_pointer),
+    };
+
+    var i: usize = 0;
+    var cur: ?*const Frame = &base;
+    while (cur != null) : (i += 1) {
+        cur.?.print(i);
+        const next = cur.?.next();
+        if (next == null or next == cur) break;
+        cur = next;
+    }
+}
+
+const Frame = struct {
+    fp: u64,
+    lr: u64,
+
+    pub fn print(self: *const Frame, i: usize) void {
+        _ = printf("%d\t0x%08x\t%s\n", i, self.lr, self.symbol());
+    }
+
+    pub fn next(self: *const Frame) ?*Frame {
+        return @ptrFromInt(self.fp);
+    }
+
+    pub fn symbol(self: *const Frame) [*:0]const u8 {
+        return debug.lookupSymbol(self.lr) orelse "";
+    }
+};
