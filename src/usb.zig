@@ -12,8 +12,7 @@ const HCI = root.HAL.USBHCI;
 
 const arch = @import("architecture.zig");
 
-const forty = @import("forty/forth.zig");
-const Forth = forty.Forth;
+const Forth = @import("forty/forth.zig").Forth;
 
 const time = @import("time.zig");
 
@@ -124,6 +123,7 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineConstant("usbhci", @intFromPtr(root.hal.usb_hci));
     try forth.defineStruct("Device", Device, .{});
 
+    try hid_keyboard.defineModule(forth);
     try root.HAL.USBHCI.defineModule(forth);
 }
 
@@ -351,6 +351,7 @@ pub fn controlMessage(
 ) !TransferRequest.CompletionStatus {
     const sem: SID = try semaphore.create(0);
     defer {
+        log.debug("freeing semaphore {d}", .{sem});
         semaphore.free(sem) catch |err| {
             log.err("semaphore {d} free error: {any}", .{ sem, err });
         };
@@ -374,13 +375,16 @@ pub fn controlMessage(
     semaphore.wait(sem) catch |err| {
         log.err("semaphore {d} wait error: {any}", .{ sem, err });
     };
+    log.debug("[{d}:{d}] awakened from semaphore.wait", .{ dev.address, 0 });
 
-    if (data.len > 0) {
-        log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, received", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
-        debug.sliceDump(data[0..req.actual_size]);
-    } else {
-        log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, no data expected", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
-    }
+    // if (data.len > 0) {
+    //     log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, received", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+    //     debug.sliceDump(data[0..req.actual_size]);
+    // } else {
+    //     log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, no data expected", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+    // }
+
+    log.debug("[{d}:{d}] got here", .{ dev.address, 0 });
 
     var st = req.status;
     if (st == .ok and req.actual_size != data.len) {

@@ -96,6 +96,10 @@ pub const HubProtocol = struct {
     pub const high_speed_hub_multiple_tt: u8 = 0x02;
 };
 
+pub const HidSubclass = struct {
+    pub const boot: u8 = 0x01;
+};
+
 /// See https://www.usb.org/sites/default/files/documents/hid1_11.pdf,
 /// page 9
 pub const HidProtocol = struct {
@@ -228,6 +232,34 @@ pub const Device = struct {
             DeviceClass.vendor_specific => "Vendor specific",
             else => "Unknown",
         };
+    }
+
+    pub fn interfaceCount(self: *const Device) usize {
+        return self.configuration.configuration_descriptor.interface_count;
+    }
+
+    pub fn interface(self: *const Device, i: usize) ?*InterfaceDescriptor {
+        if (i < self.interfaceCount()) {
+            return self.configuration.interfaces[i].?;
+        } else {
+            return null;
+        }
+    }
+
+    pub fn interfaceClass(self: *const Device, i: usize) ?u8 {
+        if (self.interface(i)) |iface| {
+            return iface.interface_class;
+        } else {
+            return null;
+        }
+    }
+
+    pub fn interfaceProtocol(self: *const Device, i: usize) ?u8 {
+        if (self.interface(i)) |iface| {
+            return iface.interface_protocol;
+        } else {
+            return null;
+        }
     }
 };
 

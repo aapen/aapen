@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const le = std.builtin.Endian.Little;
 
 const Parser = @import("dwarf/Parser.zig");
-const Subprogram = @import("dwarf/Subprogram.zig");
+const DebugSymbol = @import("dwarf/DebugSymbol.zig");
 
 pub fn main() !void {
     var gp = std.heap.GeneralPurposeAllocator(.{}){};
@@ -31,10 +31,10 @@ pub fn main() !void {
     var dump = try Parser.parse(allocator, elf_data);
     defer dump.deinit();
 
-    var subprograms = try dump.accumulateSubprograms(allocator);
-    defer subprograms.deinit(allocator);
+    var debug_symbols = try dump.accumulateDebugSymbols(allocator);
+    defer debug_symbols.deinit(allocator);
 
-    Subprogram.sort(subprograms);
+    DebugSymbol.sort(debug_symbols);
 
     var addrtable = try DynamicString.init(allocator);
     defer addrtable.deinit();
@@ -45,19 +45,21 @@ pub fn main() !void {
     var strings = try DynamicString.init(allocator);
     defer strings.deinit();
 
-    // const stdout = std.io.getStdOut().writer();
-    // try stdout.print("found {d} subprograms\n", .{subprograms.items.len});
+    const stdout = std.io.getStdOut().writer();
+    _ = stdout;
+    // try stdout.print("found {d} debug symbols\n", .{debug_symbols.items.len});
+    // try dump.printCompileUnits(stdout);
 
-    // for (subprograms.items, 0..) |*it, i| {
-    //     std.debug.print("[{d}]: low = 0x{x:0>16}, high = 0x{x:0>16}, name = {s}\n", .{ i, it.low_pc, it.high_pc, it.getName() });
+    // for (debug_symbols.items, 0..) |*it, i| {
+    //     try stdout.print("[{d}]: low = 0x{x:0>16}, high = 0x{x:0>16}, name = {s}\n", .{ i, it.low_addr, it.high_addr, it.getName() });
     // }
 
     var idx: u64 = 0;
-    for (subprograms.items) |*sub| {
+    for (debug_symbols.items) |*sub| {
         const currlen: u64 = strings.length();
 
-        try addrtable.append(std.mem.asBytes(&sub.low_pc));
-        try addrtable.append(std.mem.asBytes(&sub.high_pc));
+        try addrtable.append(std.mem.asBytes(&sub.low_addr));
+        try addrtable.append(std.mem.asBytes(&sub.high_addr));
         try addrtable.append(std.mem.asBytes(&currlen));
 
         try strings.append(sub.getName());
@@ -65,8 +67,6 @@ pub fn main() !void {
 
         idx += 1;
     }
-
-    // try dump.printCompileUnits(stdout);
 
     // Open the output file
     const image_out: []u8 = args[2];

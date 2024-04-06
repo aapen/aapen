@@ -73,6 +73,8 @@ fn unknownBreakpointDisplay(context: *ExceptionContext) void {
     const bkpt_number: u16 = @truncate(context.esr.iss & 0xffff);
 
     _ = printf("[breakpoint]: ELR 0x%08x, Type 0x%08x\n", elr, bkpt_number);
+
+    context.elr += 4;
 }
 
 fn unhandledExceptionDisplay(context: *ExceptionContext, entry_type: u64) void {

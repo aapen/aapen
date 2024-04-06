@@ -4,18 +4,18 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const abi = std.dwarf.abi;
 const dwarf = std.dwarf;
-const fs = std.fs;
+const VirtualMachine = dwarf.call_frame.VirtualMachine;
 const leb = std.leb;
 const log = std.log;
 
 const AbbrevLookupTable = std.AutoHashMap(u64, struct { pos: usize, len: usize });
 const AbbrevTable = @import("AbbrevTable.zig");
 const CompileUnit = @import("CompileUnit.zig");
-
+const DebugSymbol = @import("DebugSymbol.zig");
 const Elf = @import("Elf.zig");
-const VirtualMachine = dwarf.call_frame.VirtualMachine;
-
-const Subprogram = @import("Subprogram.zig");
+const Exprloc = @import("Exprloc.zig");
+const Location = Exprloc.Location;
+const LocationTag = Exprloc.LocationTag;
 
 const Parser = @This();
 
@@ -262,11 +262,11 @@ fn advanceByFormSize(cu: *CompileUnit, form: u64, creader: anytype) !void {
 fn walkCompileUnit(
     parser: *Parser,
     allocator: Allocator,
-    subprograms: *std.ArrayListUnmanaged(Subprogram),
+    symbols: *std.ArrayListUnmanaged(DebugSymbol),
     elf: *const Elf,
     cu: *const CompileUnit,
     die: *CompileUnit.DebugInfoEntry,
-    table: AbbrevTable,
+    table: *const AbbrevTable,
 ) !void {
     if (die.code == 0) return;
 
@@ -276,46 +276,79 @@ fn walkCompileUnit(
         dwarf.TAG.compile_unit => {
             for (die.children.items) |die_index| {
                 const child = cu.diePtr(die_index);
-                try parser.walkCompileUnit(allocator, subprograms, elf, cu, child, table);
+                try parser.walkCompileUnit(allocator, symbols, elf, cu, child, table);
             }
         },
+        dwarf.TAG.variable => {
+            const variable: *DebugSymbol = try symbols.addOne(allocator);
+            variable.* = .{};
+            var size: u64 = 0;
+            for (decl.attrs.items, die.values.items) |attr, value| {
+                switch (attr.at) {
+                    dwarf.AT.name => {
+                        variable.name = attr.getString(value, cu.header.dw_format, parser.elf.*) orelse return error.MalformedDwarf;
+                    },
+                    dwarf.AT.location => {
+                        const exprloc = try attr.getExprloc(value) orelse return error.MalformedDwarf;
+                        const loc = Exprloc.evaluate(exprloc, allocator);
+
+                        switch (loc) {
+                            LocationTag.unknown => {
+                                // not a supported location
+                                // expression, skip this variable.
+                                _ = symbols.pop();
+                                return;
+                            },
+                            LocationTag.absolute => |addr| {
+                                variable.low_addr = addr;
+                            },
+                        }
+                    },
+                    else => {},
+                }
+            }
+
+            variable.high_addr = variable.low_addr + size;
+        },
         dwarf.TAG.label => {
-            const subprogram: *Subprogram = try subprograms.addOne(allocator);
-            subprogram.* = .{};
+            const label: *DebugSymbol = try symbols.addOne(allocator);
+            label.* = .{};
 
             for (decl.attrs.items, die.values.items) |attr, value| {
                 switch (attr.at) {
                     dwarf.AT.name => {
-                        subprogram.name = attr.getString(value, cu.header.dw_format, parser.elf.*) orelse return error.MalformedDwarf;
+                        label.name = attr.getString(value, cu.header.dw_format, parser.elf.*) orelse return error.MalformedDwarf;
                     },
                     dwarf.AT.low_pc => {
                         const addr = attr.getAddr(value, cu.header) orelse return error.MalformedDwarf;
-                        subprogram.low_pc = addr;
-                        subprogram.high_pc = addr;
+                        label.low_addr = addr;
+                        label.high_addr = addr;
                     },
                     else => {},
                 }
             }
         },
         dwarf.TAG.subprogram => {
-            const subprogram: *Subprogram = try subprograms.addOne(allocator);
+            const subprogram: *DebugSymbol = try symbols.addOne(allocator);
+            errdefer _ = symbols.pop();
+
             subprogram.* = .{};
 
             for (decl.attrs.items, die.values.items) |attr, value| {
                 switch (attr.at) {
                     dwarf.AT.@"inline" => {
-                        _ = subprograms.pop();
+                        _ = symbols.pop();
                         return;
                     },
                     dwarf.AT.low_pc => {
                         const addr = attr.getAddr(value, cu.header) orelse return error.MalformedDwarf;
-                        subprogram.low_pc = addr;
+                        subprogram.low_addr = addr;
                     },
                     dwarf.AT.high_pc => {
                         if (try attr.getConstant(value)) |offset| {
-                            subprogram.high_pc = @intCast(subprogram.low_pc + offset);
+                            subprogram.high_addr = @intCast(subprogram.low_addr + offset);
                         } else if (attr.getAddr(value, cu.header)) |addr| {
-                            subprogram.high_pc = addr;
+                            subprogram.high_addr = addr;
                         } else {
                             return error.MalformedDwarf;
                         }
@@ -332,7 +365,7 @@ fn walkCompileUnit(
                         // DW_AT_abstract_origin, it doesn't have a
                         // name. That means we can't use it to look up
                         // symbols by address.
-                        _ = subprograms.pop();
+                        _ = symbols.pop();
                         return;
                     },
                     dwarf.AT.external => {
@@ -348,28 +381,29 @@ fn walkCompileUnit(
             // binary image, we can discard them here.
             if (subprogram.name.len == 0 and subprogram.linkage_name.len == 0) {
                 std.debug.print("subprogram had no name but made it through to here. removing it.\n", .{});
-                _ = subprograms.pop();
+                _ = symbols.pop();
             }
 
             // if the low_pc is zero it's not useful for our debugging
-            // (might be an external function or an inlined block)
-            if (subprogram.low_pc == 0) {
-                _ = subprograms.pop();
+            // (might be an external function, an inlined block, or a
+            // non-exported variable name)
+            if (subprogram.low_addr == 0) {
+                _ = symbols.pop();
             }
         },
         else => {},
     }
 }
 
-pub fn accumulateSubprograms(parser: *Parser, allocator: Allocator) !std.ArrayListUnmanaged(Subprogram) {
-    var subprograms = std.ArrayListUnmanaged(Subprogram){};
+pub fn accumulateDebugSymbols(parser: *Parser, allocator: Allocator) !std.ArrayListUnmanaged(DebugSymbol) {
+    var subprograms = std.ArrayListUnmanaged(DebugSymbol){};
 
     for (parser.compile_units.items) |*cu| {
         const table = parser.getAbbrevTable(cu.header.debug_abbrev_offset).?;
 
         for (cu.children.items) |die_index| {
             const die = cu.diePtr(die_index);
-            try parser.walkCompileUnit(allocator, &subprograms, parser.elf, cu, die, table);
+            try parser.walkCompileUnit(allocator, &subprograms, parser.elf, cu, die, &table);
         }
     }
 

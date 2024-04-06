@@ -12,7 +12,7 @@ const Elf = @import("Elf.zig");
 const Parser = @import("Parser.zig");
 const Loc = Parser.Loc;
 
-const Subprogram = @import("Subprogram.zig");
+const DebugSymbol = @import("DebugSymbol.zig");
 
 children: std.ArrayListUnmanaged(usize) = .{},
 dies: std.ArrayListUnmanaged(DebugInfoEntry) = .{},
@@ -35,6 +35,13 @@ pub fn addDie(cu: *CompileUnit, allocator: Allocator) !usize {
 
 pub fn diePtr(cu: *const CompileUnit, index: usize) *DebugInfoEntry {
     return &cu.dies.items[index];
+}
+
+pub fn getDieAt(cu: *const CompileUnit, offset: usize) ?*DebugInfoEntry {
+    for (cu.dies.items) |*die| {
+        if (die.loc.pos == offset) return die;
+    }
+    return null;
 }
 
 pub fn nextCompileUnitOffset(cu: CompileUnit) u64 {

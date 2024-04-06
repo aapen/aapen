@@ -26,22 +26,29 @@ pub fn deinit(table: *AbbrevTable, allocator: Allocator) void {
     table.decls.deinit(allocator);
 }
 
-pub fn getDecl(table: AbbrevTable, code: u64) ?Decl {
+pub fn getDecl(table: *const AbbrevTable, code: u64) ?Decl {
     for (table.decls.items) |decl| {
         if (decl.code == code) return decl;
     }
     return null;
 }
 
+pub fn getDeclAt(table: *const AbbrevTable, loc: u64) ?Decl {
+    for (table.decls.items) |decl| {
+        if (decl.loc == loc) return decl;
+    }
+    return null;
+}
+
 pub fn format(
-    table: AbbrevTable,
+    table: *const AbbrevTable,
     comptime unused_fmt_string: []const u8,
     options: std.fmt.FormatOptions,
     writer: anytype,
 ) !void {
     _ = unused_fmt_string;
     _ = options;
-    for (table.decls.items) |decl| {
+    for (table.decls.items) |*decl| {
         try writer.print("{}\n", .{decl});
     }
 }

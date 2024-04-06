@@ -826,6 +826,7 @@ pub fn deferTransfer(self: *Self, req: *TransferRequest) !void {
             semaphore.free(req.deferrer_thread_sem.?);
             req.deferrer_thread_sem = null;
         }
+        log.debug("created semaphore {d} for deferred transfer", .{req.deferrer_thread_sem.?});
     }
 
     // first time through, allocate a thread.
@@ -835,7 +836,8 @@ pub fn deferTransfer(self: *Self, req: *TransferRequest) !void {
             .host = self,
             .req = req,
         };
-        req.deferrer_thread = try schedule.spawn(deferredTransfer, "usb defer", &args);
+        req.deferrer_thread = try schedule.spawn(deferredTransfer, "dwc defer", &args);
+        log.debug("spawned thread {d} for deferred transfer", .{req.deferrer_thread.?});
     }
 
     // let the thread progress
@@ -860,11 +862,15 @@ fn deferredTransfer(args_ptr: *anyopaque) void {
     }
 
     while (true) {
-        semaphore.wait(req.deferrer_thread_sem.?) catch {
+        semaphore.wait(req.deferrer_thread_sem.?) catch |err| {
+            log.err("deferredTransfer semaphore {d} error {any}", .{ req.deferrer_thread_sem.?, err });
             // TODO something
         };
 
-        schedule.sleep(interval_ms) catch {
+        log.debug("deferring transfer for {d}ms", .{interval_ms});
+
+        schedule.sleep(interval_ms) catch |err| {
+            log.err("deferredTransfer sleep error {any}", .{err});
             // TODO something
         };
 

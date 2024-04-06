@@ -203,6 +203,10 @@ pub const EndpointDescriptor = packed struct {
         return @truncate((self.endpoint_address >> 7) & 0x1);
     }
 
+    pub fn isType(self: *const EndpointDescriptor, ty: u2) bool {
+        return self.attributes.endpoint_type == ty;
+    }
+
     pub fn dump(self: *const EndpointDescriptor) void {
         log.debug("EndpointDescriptor [", .{});
         log.debug("  endpoint_address = {d}", .{self.endpoint_address});

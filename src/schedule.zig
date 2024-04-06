@@ -389,6 +389,11 @@ fn childExited(tid: TID) u64 {
     return @bitCast(ThreadSignal{ .tid = tid, .event_type = SIGNAL_CHILD_EXIT });
 }
 
+pub export var current_thread_continued: u64 = 0;
+pub export var current_thread_requeued: u64 = 0;
+pub export var nothing_runnable: u64 = 0;
+pub export var thread_switched: u64 = 0;
+
 pub fn reschedule() void {
     if (atomic.atomicFetch(&resdefer) > 0) {
         _ = atomic.atomicInc(&resdefer);
@@ -400,20 +405,18 @@ pub fn reschedule() void {
 
     old.irq_mask = cpu.disable();
 
-    //    _ = printf("reschedule: old tid is %d, old state is %d\n", current, old.state);
-
     if (THREAD_RUNNING == old.state) {
         if (queue.nonEmpty(readyq) and old.priority > queue.firstKey(readyq)) {
             // the current thread is still the highest priority, keep
             // running it
+            _ = atomic.atomicInc(&current_thread_continued);
             cpu.restore(old.irq_mask);
             return;
         }
 
         old.state = THREAD_READY;
 
-        //        _ = printf("reschedule: old thread is still runnable. inserting %d to readylist\n", current);
-
+        _ = atomic.atomicInc(&current_thread_requeued);
         queue.insert(current, old.priority, readyq) catch {};
     }
 
@@ -426,10 +429,15 @@ pub fn reschedule() void {
         next_tid = queue.dequeue(readyq) catch NO_TID;
 
         if (next_tid == NO_TID) {
+            _ = atomic.atomicInc(&nothing_runnable);
             cpu.wfe();
         } else {
             //            _ = printf("reschedule: selected %d\n", next_tid);
         }
+    }
+
+    if (next_tid != current) {
+        _ = atomic.atomicInc(&thread_switched);
     }
 
     current = next_tid;
@@ -661,11 +669,11 @@ const state_names: [8][]const u8 = .{
 };
 
 pub fn processTable() void {
-    _ = printf("TID\t%016s\t state\twaitsem\tstack\n", "name");
+    _ = printf("TID\t%016s\t state\tpri\twaitsem\tstack\n", "name");
 
     for (&thread_table, 0..) |thr, tid| {
         if (thr.state != THREAD_FREE) {
-            _ = printf("%04d\t%016s\t%06s\t%d\t0x%08x\n", tid, &thr.name, state_names[thr.state].ptr, thr.semaphore, thr.stack_pointer);
+            _ = printf("%04d\t%016s\t%06s\t%d\t%d\t0x%08x\n", tid, &thr.name, state_names[thr.state].ptr, thr.priority, thr.semaphore, thr.stack_pointer);
         }
     }
 }
