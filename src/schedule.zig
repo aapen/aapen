@@ -652,8 +652,9 @@ const Forth = @import("forty/forth.zig").Forth;
 
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
-        .{ "processTable", "ps" },
+        .{ "threadTable", "threads" },
         .{ "stackDump", "thread-stack" },
+        .{ "threadPriority", "thread-priority" },
     });
 }
 
@@ -668,7 +669,7 @@ const state_names: [8][]const u8 = .{
     "wait",
 };
 
-pub fn processTable() void {
+pub fn threadTable() void {
     _ = printf("TID\t%016s\t state\tpri\twaitsem\tstack\n", "name");
 
     for (&thread_table, 0..) |thr, tid| {
@@ -725,3 +726,28 @@ const Frame = struct {
         return debug.lookupSymbol(self.lr) orelse "";
     }
 };
+
+pub fn threadPriority(maybe_tid: u64, maybe_priority: u64) void {
+    if (maybe_tid > std.math.maxInt(TID)) {
+        _ = printf("Thread ID out of range\n");
+        return;
+    }
+
+    if (maybe_priority > std.math.maxInt(Key)) {
+        _ = printf("Priority out of range\n");
+        return;
+    }
+
+    const tid: TID = @bitCast(@as(u16, @truncate(maybe_tid & 0x7fff)));
+
+    if (isBadTid(tid)) return;
+
+    const priority: Key = @bitCast(@as(u32, @truncate(maybe_priority & 0x7fff_ffff)));
+
+    const thr = thrent(tid);
+
+    if (thr.priority != priority) {
+        thr.priority = priority;
+        reschedule();
+    }
+}
