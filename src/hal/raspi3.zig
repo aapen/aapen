@@ -22,7 +22,6 @@ pub const timer_frequency_hz = 1_000_000;
 
 // ARM devices
 const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
-const arm_local_timer = @import("../drivers/arm_local_timer.zig");
 const pl011 = @import("../drivers/pl011.zig");
 
 // Broadcom devices
@@ -34,6 +33,7 @@ const bcm_mailbox = @import("../drivers/bcm_mailbox.zig");
 const bcm_board_info = @import("../drivers/bcm_board_info.zig");
 const bcm_peripheral_clocks = @import("../drivers/bcm_peripheral_clocks.zig");
 const bcm_power = @import("../drivers/bcm_power.zig");
+const bcm_timer = @import("../drivers/bcm_timer.zig");
 const bcm_video_controller = @import("../drivers/bcm_video_controller.zig");
 
 // Other devices
@@ -41,7 +41,7 @@ const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
 const simple_bus = @import("../drivers/simple_bus.zig");
 
 pub const BoardInfoController = bcm_board_info;
-pub const Clock = arm_local_timer.Clock;
+pub const Clock = bcm_timer.Clock;
 pub const DMA = bcm_dma;
 pub const InterruptController = arm_local_interrupt;
 pub const Irq = InterruptController.Irq;
@@ -52,14 +52,14 @@ pub const Mailbox = bcm_mailbox;
 pub const PeripheralClockController = bcm_peripheral_clocks.PeripheralClockController;
 pub const PowerController = bcm_power;
 pub const SOC = simple_bus;
-pub const Timer = arm_local_timer.Timer;
-pub const TimerHandler = arm_local_timer.TimerHandler;
+pub const Timer = bcm_timer.Timer;
+pub const TimerHandler = bcm_timer.TimerHandler;
 pub const Uart = pl011;
 pub const USBHCI = dwc_otg_usb;
 pub const VideoController = bcm_video_controller;
 
-pub const delayMillis = arm_local_timer.delayMillis;
-pub const delayMicros = arm_local_timer.delayMicros;
+pub const delayMillis = bcm_timer.delayMillis;
+pub const delayMicros = bcm_timer.delayMicros;
 
 const Self = @This();
 
@@ -138,7 +138,7 @@ pub fn defineModule(forth: *Forth, hal: *Self) !void {
     // names ("Usb" and diagnostics)
 
     try arm_local_interrupt.defineModule(forth);
-    try arm_local_timer.defineModule(forth);
+    try bcm_timer.defineModule(forth);
     try bcm_dma.defineModule(forth);
     try bcm_gpio.defineModule(forth);
     try bcm_i2c.defineModule(forth);
