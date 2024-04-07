@@ -2,7 +2,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const root = @import("root");
-const debug = root.debug;
 
 const Forth = @import("forty/forth.zig").Forth;
 const auto = @import("forty/auto.zig");
@@ -20,32 +19,12 @@ const Self = @This();
 pub fn defineModule(forth: *Forth, console: *Self) !void {
     try forth.defineStruct("MainConsole", Self, .{});
     try forth.defineConstant("console", @intFromPtr(console));
-    try forth.defineNamespace(Self, .{.{"chello"}});
 }
 
 // ----------------------------------------------------------------------
 // Zig affordances
 // ----------------------------------------------------------------------
 pub const Writer = std.io.Writer(*Self, error{}, write);
-
-// ----------------------------------------------------------------------
-// C interop
-// ----------------------------------------------------------------------
-
-export fn _putchar(ch: u8) callconv(.C) c_int {
-    root.main_console.putc(ch);
-    return ch;
-}
-
-const cstub = @cImport({
-    @cInclude("printf.h");
-});
-
-pub const printf = cstub.printf;
-
-pub fn chello() void {
-    _ = printf("Hello, %s!\nmain_console.init = 0x%08x\n", "world", &init);
-}
 
 // ----------------------------------------------------------------------
 // Implementation

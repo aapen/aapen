@@ -4,7 +4,10 @@ const RingBuffer = std.RingBuffer;
 const ScopeLevel = std.log.ScopeLevel;
 
 const root = @import("root");
-const printf = root.printf;
+
+const p = @import("printf.zig");
+const printf = p.printf;
+const vprintf = p.vprintf;
 
 const Forth = @import("forty/forth.zig").Forth;
 

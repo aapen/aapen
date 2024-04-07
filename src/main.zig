@@ -4,7 +4,6 @@ const atomic = @import("atomic.zig");
 const arch = @import("architecture.zig");
 
 pub const debug = @import("debug.zig");
-pub const printf = MainConsole.printf;
 pub const panic = debug.panic;
 
 const disassemble = @import("disassemble.zig");
@@ -20,6 +19,9 @@ const MainConsole = @import("main_console.zig");
 
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
+
+const p = @import("printf.zig");
+pub const printf = p.printf;
 
 const Serial = @import("serial.zig"); //TBD
 const schedule = @import("schedule.zig");
@@ -262,6 +264,8 @@ fn displayInit() !void {
 
     main_console = try MainConsole.init(kernel_allocator, char_buffer_console);
     main_console_valid = true;
+
+    p.consoleIsReady();
 }
 
 fn diagnosticsInit() !void {
