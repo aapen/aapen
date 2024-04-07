@@ -155,6 +155,9 @@ pub fn disconnect(self: *Self, id: IrqId) void {
 }
 
 pub fn enable(self: *Self, id: IrqId) void {
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
     const basic = self.routing[id].enable_mask_basic;
     const extended = self.routing[id].enable_mask_extended;
 
@@ -172,6 +175,9 @@ pub fn enable(self: *Self, id: IrqId) void {
 }
 
 pub fn disable(self: *Self, id: IrqId) void {
+    self.routing_lock.acquire();
+    defer self.routing_lock.release();
+
     const basic = self.routing[id].enable_mask_basic;
     const extended = self.routing[id].enable_mask_extended;
 

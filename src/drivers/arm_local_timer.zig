@@ -7,6 +7,9 @@ const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
 
+const arch = @import("../architecture.zig");
+const cpu = arch.cpu;
+
 const Forth = @import("../forty/forth.zig").Forth;
 
 pub fn defineModule(forth: *Forth) !void {
@@ -119,6 +122,9 @@ pub const Timer = struct {
     }
 
     pub fn reset(self: *Timer, interval: u32) void {
+        const im = cpu.disable();
+        defer cpu.restore(im);
+
         // writing to this register clears the detected flag where
         // there is a 1 bit. bit 0 -> timer 0, bit 1 -> timer 1, etc.
         self.control.match |= self.match_reset;

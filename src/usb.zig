@@ -11,6 +11,7 @@ const root = @import("root");
 const HCI = root.HAL.USBHCI;
 
 const arch = @import("architecture.zig");
+const cpu = arch.cpu;
 
 const Forth = @import("forty/forth.zig").Forth;
 
@@ -316,6 +317,9 @@ fn bindDriver(dev: *Device) !void {
 
 // submit a transfer for asynchronous processing
 pub fn transferSubmit(req: *TransferRequest) !void {
+    const im = cpu.disable();
+    defer cpu.restore(im);
+
     // check if the device is being detached or has not been configured
     if (req.device) |dev| {
         switch (dev.state) {
