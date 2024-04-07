@@ -158,9 +158,7 @@ power_and_clock_control: *volatile PowerAndClock,
 all_channel_intmask_lock: TicketLock,
 intc: *InterruptController,
 irq_id: IrqId,
-irq_handler: IrqHandler = .{
-    .callback = irqHandle,
-},
+irq_handler: IrqHandler = irqHandle,
 translations: *const AddressTranslations,
 power_controller: *PowerController,
 num_host_channels: u4,
@@ -385,7 +383,7 @@ fn initializeInterrupts(self: *Self) !void {
     self.host_registers.all_channel_interrupts = @bitCast(clear_all);
 
     // Connect interrupt handler & enable interrupts on the ARM PE
-    self.intc.connect(self.irq_id, &self.irq_handler);
+    self.intc.connect(self.irq_id, &self.irq_handler, self);
     self.intc.enable(self.irq_id);
 
     // Enable interrupts for the host controller (this is the DWC side)
@@ -424,10 +422,10 @@ fn haltAllChannels(self: *Self) !void {
 // ----------------------------------------------------------------------
 // Interrupt handling
 // ----------------------------------------------------------------------
-fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
+fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
     _ = atomic.atomicReset(&schedule.resdefer, 1);
 
-    var self = @fieldParentPtr(Self, "irq_handler", this);
+    var self: *Self = @ptrCast(@alignCast(private));
 
     const intr_status = self.core_registers.core_interrupt_status;
 

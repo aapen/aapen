@@ -45,7 +45,7 @@ pub fn irqFlags() u64 {
 // ----------------------------------------------------------------------
 // External IRQ Identifiers
 // ----------------------------------------------------------------------
-pub const max_irq_id = 64;
+pub const max_irq_id = 96;
 
 pub const IrqId = u6;
 
@@ -66,33 +66,29 @@ const IrqRouting = struct {
     enable_mask_basic: u32,
     enable_mask_extended: u64,
     handler: ?*IrqHandler,
+    private: ?*anyopaque,
 
     fn mk(en: u32, enx: u64) IrqRouting {
         return .{
             .enable_mask_basic = en,
             .enable_mask_extended = enx,
             .handler = null,
+            .private = null,
         };
     }
-};
 
-pub const IrqHandler = struct {
-    callback: *const fn (*IrqHandler, *Self, IrqId) void,
-
-    fn invoke(this: *IrqHandler, controller: *Self, id: IrqId) void {
-        this.callback(this, controller, id);
+    fn invoke(this: *const IrqRouting, controller: *Self, id: IrqId) void {
+        if (this.handler) |h| {
+            h.*(controller, id, this.private);
+        }
     }
 };
+
+pub const IrqHandler = *const fn (*Self, IrqId, ?*anyopaque) void;
 
 // ----------------------------------------------------------------------
 // Interrupt controller
 // ----------------------------------------------------------------------
-
-const null_handler: IrqHandler = .{
-    .callback = do_nothing,
-};
-
-fn do_nothing(_: *IrqHandler, _: *Self) void {}
 
 const Registers = extern struct {
     irq_pending: [3]u32,
@@ -140,18 +136,19 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
     return self;
 }
 
-pub fn connect(self: *Self, id: IrqId, handler: *IrqHandler) void {
+pub fn connect(self: *Self, id: IrqId, handler: *IrqHandler, private: *anyopaque) void {
     self.routing_lock.acquire();
     defer self.routing_lock.release();
 
     self.routing[id].handler = handler;
+    self.routing[id].private = private;
 }
 
 pub fn disconnect(self: *Self, id: IrqId) void {
     self.routing_lock.acquire();
     defer self.routing_lock.release();
 
-    self.routing[id].handler = &null_handler;
+    self.routing[id].handler = null;
 }
 
 pub fn enable(self: *Self, id: IrqId) void {
@@ -200,12 +197,10 @@ pub fn disable(self: *Self, id: IrqId) void {
 
 fn invokeHandler(self: *Self, id: IrqId) void {
     self.routing_lock.acquire();
-    const route = &self.routing[id];
+    const route = self.routing[id];
     self.routing_lock.release();
 
-    if (route.handler) |h| {
-        h.invoke(self, id);
-    }
+    route.invoke(self, id);
 }
 
 pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
@@ -219,6 +214,10 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
         const next: u5 = @truncate(@ctz(basic_interrupts));
 
         switch (next) {
+            0 => {
+                // ARM CPU timer
+                //                self.invokeHandler(Irq.ARM_TIMER);
+            },
             8 => {
                 // handle all pending_1 later
                 pending_1_received = true;

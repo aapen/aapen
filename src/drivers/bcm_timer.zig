@@ -81,9 +81,7 @@ pub const Timer = struct {
     match_reset: u4 = 0,
     next_callback: ?*const TimerHandler,
     repeat_cycles: u32 = 0,
-    irq_handle: IrqHandler = .{
-        .callback = irqHandle,
-    },
+    irq_handle: IrqHandler = irqHandle,
 
     pub fn init(allocator: Allocator, id: usize, base: u64, clock: *Clock, intc: *InterruptController) !*Timer {
         var self = try allocator.create(Timer);
@@ -102,7 +100,7 @@ pub const Timer = struct {
             .intc = intc,
         };
 
-        intc.connect(self.irq, &self.irq_handle);
+        intc.connect(self.irq, &self.irq_handle, self);
 
         return self;
     }
@@ -132,8 +130,8 @@ pub const Timer = struct {
     }
 };
 
-pub fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
-    const timer: *Timer = @fieldParentPtr(Timer, "irq_handle", this);
+pub fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
+    const timer: *Timer = @ptrCast(@alignCast(private));
 
     // invoke callback
     if (timer.next_callback) |cb| {

@@ -75,9 +75,7 @@ interrupt_controller: *InterruptController,
 gpio: *GPIO,
 
 // Don't need this right now, but probably soon...
-irq_handler: IrqHandler = .{
-    .callback = irqHandle,
-},
+irq_handler: IrqHandler = irqHandle,
 
 pub fn init(allocator: Allocator, register_base: u64, gpio: *GPIO, interrupt_controller: *InterruptController) !*Self {
     const self = try allocator.create(Self);
@@ -180,7 +178,7 @@ pub fn receive(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
     return Status.Success;
 }
 
-pub fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
-    //var self: *Self = @fieldParentPtr(Self, "irq_handler", this);
-    _ = this;
+pub fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
+    var self: *Self = @ptrCast(@alignCast(private));
+    _ = self;
 }

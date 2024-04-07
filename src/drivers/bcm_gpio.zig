@@ -149,10 +149,7 @@ pins: [64]Pin = init: {
 registers: *volatile Registers,
 interrupt_controller: *InterruptController,
 interrupts_enabled: bool,
-
-irq_handler: IrqHandler = .{
-    .callback = irqHandle,
-},
+irq_handler: IrqHandler = irqHandle,
 
 pub fn init(allocator: Allocator, register_base: u64, interrupt_controller: *InterruptController) !*Self {
     const self = try allocator.create(Self);
@@ -163,10 +160,10 @@ pub fn init(allocator: Allocator, register_base: u64, interrupt_controller: *Int
         .interrupts_enabled = false,
     };
 
-    self.interrupt_controller.connect(Irq.GPIO_0, &self.irq_handler);
-    self.interrupt_controller.connect(Irq.GPIO_1, &self.irq_handler);
-    self.interrupt_controller.connect(Irq.GPIO_2, &self.irq_handler);
-    self.interrupt_controller.connect(Irq.GPIO_3, &self.irq_handler);
+    self.interrupt_controller.connect(Irq.GPIO_0, &self.irq_handler, self);
+    self.interrupt_controller.connect(Irq.GPIO_1, &self.irq_handler, self);
+    self.interrupt_controller.connect(Irq.GPIO_2, &self.irq_handler, self);
+    self.interrupt_controller.connect(Irq.GPIO_3, &self.irq_handler, self);
     self.interrupt_controller.enable(Irq.GPIO_3);
     self.interrupt_controller.enable(Irq.GPIO_2);
     self.interrupt_controller.enable(Irq.GPIO_1);
@@ -246,8 +243,8 @@ pub fn get(self: *Self, bc_id: u64) bool {
     return (levels & p.getset_mask) != 0;
 }
 
-pub fn irqHandle(this: *IrqHandler, _: *InterruptController, _: IrqId) void {
-    var self: *Self = @fieldParentPtr(Self, "irq_handler", this);
+pub fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
+    var self: *Self = @ptrCast(@alignCast(private));
 
     // Make sure we have some status to report.
     if ((self.registers.event_detect_status[0] == 0) and
