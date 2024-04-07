@@ -7,9 +7,6 @@ const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.usb_hub);
 
-const root = @import("root");
-const delayMillis = root.HAL.delayMillis;
-
 const arch = @import("../architecture.zig");
 const cpu = arch.cpu;
 
@@ -24,6 +21,7 @@ const schedule = @import("../schedule.zig");
 const TID = schedule.TID;
 
 const time = @import("../time.zig");
+const delayMillis = time.delayMillis;
 
 const descriptor = @import("descriptor.zig");
 const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;

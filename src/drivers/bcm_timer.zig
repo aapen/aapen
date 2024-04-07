@@ -13,17 +13,7 @@ const cpu = arch.cpu;
 const Forth = @import("../forty/forth.zig").Forth;
 
 pub fn defineModule(forth: *Forth) !void {
-    try forth.defineNamespace(@This(), .{
-        .{ "systemTicks", "ticks", "system clock ticks since boot" },
-    });
-}
-
-pub fn systemTicks() u64 {
-    return root.hal.clock.ticks();
-}
-
-pub fn delayMillis(count: u32) void {
-    root.hal.clock.delayMillis(count);
+    _ = forth;
 }
 
 pub const Clock = struct {

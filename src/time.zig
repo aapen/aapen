@@ -25,6 +25,7 @@ pub fn defineModule(forth: *Forth) !void {
         .{ "uptime", "uptime", "seconds since boot" },
         .{ "quantaInSecond", "quptime", "interrupt quanta, range is 0 to 999" },
         .{ "restartTimer", "restart-timer", "force restart timer interrupts" },
+        .{ "ticks", "ticks", "system clock ticks since boot" },
     });
 }
 

@@ -58,9 +58,6 @@ pub const Uart = pl011;
 pub const USBHCI = dwc_otg_usb;
 pub const VideoController = bcm_video_controller;
 
-pub const delayMillis = bcm_timer.delayMillis;
-pub const delayMicros = bcm_timer.delayMicros;
-
 const Self = @This();
 
 board_info_controller: BoardInfoController,
