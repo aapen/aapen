@@ -113,7 +113,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     self.usb_hci = try USBHCI.init(allocator, peripheral_base + 0x980000, self.interrupt_controller, Irq.USB_HCI, &self.soc.bus_ranges, &self.power_controller);
 
     for (0..3) |timer_id| {
-        self.timer[timer_id] = try Timer.init(allocator, timer_id, peripheral_base + 0x3000, self.clock, self.interrupt_controller);
+        self.timer[timer_id] = try Timer.init(allocator, @truncate(timer_id), peripheral_base + 0x3000, self.clock, self.interrupt_controller);
     }
 
     self.system_timer = self.timer[1];

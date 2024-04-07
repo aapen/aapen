@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const root = @import("root");
 const InterruptController = root.HAL.InterruptController;
+const Irq = InterruptController.Irq;
 const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
@@ -83,11 +84,11 @@ pub const Timer = struct {
     repeat_cycles: u32 = 0,
     irq_handle: IrqHandler = irqHandle,
 
-    pub fn init(allocator: Allocator, id: usize, base: u64, clock: *Clock, intc: *InterruptController) !*Timer {
+    pub fn init(allocator: Allocator, id: u2, base: u64, clock: *Clock, intc: *InterruptController) !*Timer {
         var self = try allocator.create(Timer);
 
         const timer_id: u2 = @truncate(id);
-        const irq_id: IrqId = @as(IrqId, @truncate(id));
+        const irq_id: IrqId = Irq.fromGpuIrq(id);
 
         self.* = Timer{
             .timer_id = timer_id,

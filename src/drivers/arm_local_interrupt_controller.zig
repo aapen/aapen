@@ -47,19 +47,36 @@ pub fn irqFlags() u64 {
 // ----------------------------------------------------------------------
 pub const max_irq_id = 96;
 
-pub const IrqId = u6;
+pub const IrqId = u7;
 
 pub const Irq = struct {
-    pub const TIMER_0: u6 = 0;
-    pub const TIMER_1: u6 = 1;
-    pub const TIMER_2: u6 = 2;
-    pub const TIMER_3: u6 = 3;
-    pub const USB_HCI: u6 = 9;
-    pub const GPIO_0: u6 = 49;
-    pub const GPIO_1: u6 = 50;
-    pub const GPIO_2: u6 = 51;
-    pub const GPIO_3: u6 = 52;
-    pub const UART: u6 = 57;
+    const extended_1: IrqId = 32;
+
+    pub const ARM_TIMER: IrqId = 0;
+
+    pub const TIMER_0: IrqId = Irq.fromGpuIrq(0);
+    pub const TIMER_1: IrqId = Irq.fromGpuIrq(1);
+    pub const TIMER_2: IrqId = Irq.fromGpuIrq(2);
+    pub const TIMER_3: IrqId = Irq.fromGpuIrq(3);
+    pub const GPU_7: IrqId = Irq.fromGpuIrq(7);
+    pub const USB_HCI: IrqId = Irq.fromGpuIrq(9);
+    pub const GPU_10: IrqId = Irq.fromGpuIrq(10);
+    pub const GPU_18: IrqId = Irq.fromGpuIrq(18);
+    pub const GPU_19: IrqId = Irq.fromGpuIrq(19);
+    pub const GPIO_0: IrqId = Irq.fromGpuIrq(49);
+    pub const GPIO_1: IrqId = Irq.fromGpuIrq(50);
+    pub const GPIO_2: IrqId = Irq.fromGpuIrq(51);
+    pub const GPIO_3: IrqId = Irq.fromGpuIrq(52);
+    pub const I2C: IrqId = Irq.fromGpuIrq(53);
+    pub const SPI: IrqId = Irq.fromGpuIrq(54);
+    pub const PCM: IrqId = Irq.fromGpuIrq(55);
+    pub const GPU_56: IrqId = Irq.fromGpuIrq(56);
+    pub const UART: IrqId = Irq.fromGpuIrq(57);
+    pub const GPU_62: IrqId = Irq.fromGpuIrq(62);
+
+    pub fn fromGpuIrq(gpu_irq_id: u32) IrqId {
+        return extended_1 + @as(IrqId, @truncate(gpu_irq_id));
+    }
 };
 
 const IrqRouting = struct {
@@ -68,7 +85,17 @@ const IrqRouting = struct {
     handler: ?*IrqHandler,
     private: ?*anyopaque,
 
-    fn mk(en: u32, enx: u64) IrqRouting {
+    fn from(irq_id: IrqId) IrqRouting {
+        const en = if (irq_id < Irq.extended_1)
+            @as(u32, 1) << @truncate(irq_id)
+        else
+            0;
+
+        const enx = if (irq_id >= Irq.extended_1)
+            @as(u64, 1) << @truncate(irq_id - Irq.extended_1)
+        else
+            0;
+
         return .{
             .enable_mask_basic = en,
             .enable_mask_extended = enx,
@@ -108,9 +135,7 @@ registers: *volatile Registers,
 fn routeAddFromId(self: *Self, id: IrqId) void {
     self.routing_lock.acquire();
     defer self.routing_lock.release();
-
-    const enable_extended = @as(u64, 1) << id;
-    self.routing[id] = IrqRouting.mk(0, enable_extended);
+    self.routing[id] = IrqRouting.mk(id);
 }
 
 pub fn init(allocator: Allocator, register_base: u64) !*Self {
@@ -119,19 +144,8 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
     self.registers = @ptrFromInt(register_base);
 
     for (0..max_irq_id) |id| {
-        self.routing[id] = IrqRouting.mk(0, id);
+        self.routing[id] = IrqRouting.from(@truncate(id));
     }
-
-    self.routeAddFromId(Irq.TIMER_0);
-    self.routeAddFromId(Irq.TIMER_1);
-    self.routeAddFromId(Irq.TIMER_2);
-    self.routeAddFromId(Irq.TIMER_3);
-    self.routeAddFromId(Irq.USB_HCI);
-    self.routeAddFromId(Irq.GPIO_0);
-    self.routeAddFromId(Irq.GPIO_1);
-    self.routeAddFromId(Irq.GPIO_2);
-    self.routeAddFromId(Irq.GPIO_3);
-    self.routeAddFromId(Irq.UART);
 
     return self;
 }
@@ -211,12 +225,12 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
     var pending_2_received: bool = false;
 
     while (basic_interrupts != 0) {
-        const next: u5 = @truncate(@ctz(basic_interrupts));
+        const next_bit_set: u5 = @truncate(@ctz(basic_interrupts));
 
-        switch (next) {
+        switch (next_bit_set) {
             0 => {
                 // ARM CPU timer
-                //                self.invokeHandler(Irq.ARM_TIMER);
+                // self.invokeHandler(Irq.ARM_TIMER);
             },
             8 => {
                 // handle all pending_1 later
@@ -231,6 +245,7 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
                 self.invokeHandler(Irq.USB_HCI);
             },
             19 => {
+                // Basic IRQ bit 19 -> GPU IRQ 57 -> UART
                 self.invokeHandler(Irq.UART);
             },
             else => {
@@ -238,7 +253,7 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
             },
         }
 
-        basic_interrupts &= ~(@as(u32, 1) << next);
+        basic_interrupts &= ~(@as(u32, 1) << next_bit_set);
     }
 
     // Handle the pending 1 interupts, but mask off ones which we
@@ -246,34 +261,55 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
     if (pending_1_received) {
         var pending_1 = self.registers.irq_pending[1];
         while (pending_1 != 0) {
-            const next: u5 = @truncate(@ctz(pending_1));
-            switch (next) {
-                0, 1, 2, 3 => {
-                    self.invokeHandler(@as(IrqId, next));
+            const next_bit_set: u6 = @ctz(pending_1);
+            const irq_id = @as(IrqId, next_bit_set + 32);
+            switch (irq_id) {
+                Irq.TIMER_0,
+                Irq.TIMER_1,
+                Irq.TIMER_2,
+                Irq.TIMER_3,
+                => {
+                    self.invokeHandler(irq_id);
                 },
-                7, 9, 10, 18, 19 => {
+                Irq.GPU_7,
+                Irq.USB_HCI,
+                Irq.GPU_10,
+                Irq.GPU_18,
+                Irq.GPU_19,
+                => {
                     // already handled, these were presented on the basic register
                 },
                 else => {},
             }
-            pending_1 &= ~(@as(u32, 1) << next);
+            pending_1 &= ~(@as(u32, 1) << @truncate(next_bit_set));
         }
     }
 
     if (pending_2_received) {
         var pending_2 = self.registers.irq_pending[2];
         while (pending_2 != 0) {
-            const next: u5 = @truncate(@ctz(pending_2));
-            switch (next) {
-                17, 18, 19, 20 => {
-                    self.invokeHandler(@as(IrqId, next + @as(IrqId, 32)));
+            const next_bit_set: u6 = @ctz(pending_2);
+            const irq_id = @as(IrqId, next_bit_set + @as(IrqId, 64));
+            switch (irq_id) {
+                Irq.GPIO_0,
+                Irq.GPIO_1,
+                Irq.GPIO_2,
+                Irq.GPIO_3,
+                => {
+                    self.invokeHandler(irq_id);
                 },
-                21, 22, 23, 24, 25, 30 => {
+                Irq.I2C,
+                Irq.SPI,
+                Irq.PCM,
+                Irq.GPU_56,
+                Irq.UART,
+                Irq.GPU_62,
+                => {
                     // already handled, these were presented on the basic register
                 },
                 else => {},
             }
-            pending_2 &= ~(@as(u32, 1) << next);
+            pending_2 &= ~(@as(u32, 1) << @truncate(next_bit_set));
         }
     }
 }
