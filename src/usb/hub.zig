@@ -34,6 +34,7 @@ const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;
 const DeviceClass = device.DeviceClass;
 const DeviceDriver = device.DeviceDriver;
+const HubProtocol = device.HubProtocol;
 const StandardDeviceRequests = device.StandardDeviceRequests;
 const UsbSpeed = device.UsbSpeed;
 
@@ -52,6 +53,9 @@ const device_class_in = request.device_class_in;
 const device_class_out = request.device_class_out;
 const other_class_in = request.other_class_in;
 const other_class_out = request.other_class_out;
+
+const transaction_translator = @import("transaction_translator.zig");
+const TransactionTranslator = transaction_translator.TransactionTranslator;
 
 const transfer = @import("transfer.zig");
 const SetupPacket = transfer.SetupPacket;
@@ -249,7 +253,8 @@ pub const PortStatus = packed struct {
 // some timing constants from the USB spec
 const RESET_TIMEOUT = 100;
 const PORT_RESET_TIMEOUT = 800;
-const PORT_RESET_DELAY = 10;
+const ROOT_RESET_DELAY = 60;
+const SHORT_RESET_DELAY = 10;
 
 // ----------------------------------------------------------------------
 // Local implementation
@@ -270,8 +275,11 @@ pub const Hub = struct {
     descriptor: HubDescriptor,
     port_count: u8,
     ports: []Port,
-    status_change_buffer: [4]u8,
+    status_change_buffer: [8]u8,
     status_change_request: TransferRequest,
+    tt: TransactionTranslator,
+
+    error_count: u64 = 0,
 
     pub fn init(self: *Hub, table_index: u5) void {
         self.* = .{
@@ -281,8 +289,9 @@ pub const Hub = struct {
             .descriptor = undefined,
             .port_count = 0,
             .ports = undefined,
-            .status_change_buffer = [_]u8{0} ** 4,
+            .status_change_buffer = [_]u8{0} ** 8,
             .status_change_request = undefined,
+            .tt = .{ .hub = null, .think_time = 0 },
         };
     }
 
@@ -317,6 +326,22 @@ pub const Hub = struct {
             if (self.descriptor.characteristics.compound == Compound.compound) "compound device " else "",
             self.port_count,
         });
+
+        switch (dev.device_descriptor.device_protocol) {
+            HubProtocol.full_speed_hub => {},
+            HubProtocol.high_speed_hub_single_tt,
+            HubProtocol.high_speed_hub_multiple_tt,
+            => self.tt = .{ .hub = self.device },
+            else => {},
+        }
+
+        const full_speed_bit_time = 666;
+        self.tt.think_time = switch (self.descriptor.characteristics.tt_think_time) {
+            TtThinkTime.tt_8 => full_speed_bit_time,
+            TtThinkTime.tt_16 => full_speed_bit_time * 2,
+            TtThinkTime.tt_24 => full_speed_bit_time * 3,
+            TtThinkTime.tt_32 => full_speed_bit_time * 4,
+        };
 
         try self.initPorts();
         try self.powerOnPorts();
@@ -443,7 +468,7 @@ pub const Hub = struct {
         }
     }
 
-    fn portReset(self: *Hub, port: *Port) !void {
+    fn portReset(self: *Hub, port: *Port, delay: u32) !void {
         log.debug("hub {d} portReset {d}", .{ self.index, port.number });
 
         try self.portFeatureSet(port, PortFeature.port_reset);
@@ -452,7 +477,7 @@ pub const Hub = struct {
         while (port.status.port_status.reset == 1 and
             time.ticks() < deadline)
         {
-            try schedule.sleep(PORT_RESET_DELAY);
+            try schedule.sleep(delay);
             try self.portStatusGet(port);
         }
 
@@ -463,8 +488,10 @@ pub const Hub = struct {
         log.debug("hub {d} portReset {d} finished", .{ self.index, port.number });
     }
 
-    fn portAttachDevice(self: *Hub, port: *Port) !void {
-        try self.portReset(port);
+    fn portAttachDevice(self: *Hub, port: *Port, portstatus: PortStatus) !void {
+        const port_reset_delay: u32 = if (self.device.isRootHub()) ROOT_RESET_DELAY else SHORT_RESET_DELAY;
+
+        try self.portReset(port, port_reset_delay);
         errdefer {
             log.err("hub {d} failed to attach device, disabling port {d}", .{ self.index, port.number });
             self.portFeatureClear(port, PortFeature.port_enable) catch {};
@@ -478,17 +505,16 @@ pub const Hub = struct {
 
         const dev: *Device = &usb.devices[new_device];
 
-        try self.portStatusGet(port);
-
+        //        try self.portStatusGet(port);
         log.debug("hub {d} port {d} reports speed is {s}", .{
             self.index,
             port.number,
-            if (port.status.port_status.high_speed_device == 1) "high" else if (port.status.port_status.low_speed_device == 1) "low" else "full",
+            if (portstatus.port_status.high_speed_device == 1) "high" else if (port.status.port_status.low_speed_device == 1) "low" else "full",
         });
 
-        if (port.status.port_status.high_speed_device == 1) {
+        if (portstatus.port_status.high_speed_device == 1) {
             dev.speed = .High;
-        } else if (port.status.port_status.low_speed_device == 1) {
+        } else if (portstatus.port_status.low_speed_device == 1) {
             dev.speed = .Low;
         } else {
             dev.speed = .Full;
@@ -496,17 +522,32 @@ pub const Hub = struct {
 
         log.debug("hub {d} {s}-speed device connected to port {d}", .{ self.index, @tagName(dev.speed), port.number });
 
-        dev.port_number = port.number;
+        dev.parent_port = port.number;
 
         try usb.attachDevice(new_device, dev.speed);
 
         port.device = dev;
     }
 
-    fn portDetachDevice(self: *Hub, port: *Port) !void {
+    fn portDetachDevice(self: *Hub, port: *Port, dev: *Device) !void {
+        _ = dev;
+        _ = self;
         _ = port;
         // TODO
-        _ = self;
+    }
+
+    fn portConnectChange(self: *Hub, port: *Port, portstatus: PortStatus) !void {
+        const connected: bool = (portstatus.port_status.connected == 1);
+
+        // TODO  detach the old device
+        if (port.device) |old_dev| {
+            try self.portDetachDevice(port, old_dev);
+        }
+
+        // attach the new device
+        if (connected) {
+            try self.portAttachDevice(port, portstatus);
+        }
     }
 
     fn portStatusChanged(self: *Hub, port: *Port) void {
@@ -521,28 +562,14 @@ pub const Hub = struct {
             });
 
             if (port.status.port_change.connected_changed == 1) {
-                // connection changed: either device connect or
-                // disconnect
-                log.debug("hub {d} port {d} device now {s}", .{
-                    self.index,
-                    port.number,
-                    if (port.status.port_status.connected == 1) "connected" else "disconnected",
-                });
-
+                // maybe device connect or disconnect
                 self.portFeatureClear(port, PortFeature.c_port_connection) catch |err| {
                     log.err("hub {d} attempt to clear PortFeature.c_port_connection on {d}: {any}", .{ self.index, port.number, err });
                 };
 
-                // TODO  detach the old device
-                // self.portDetachDevice(port_number);
-
-                // TODO  if the status is connected, attach the new
-                // device
-                if (port.status.port_status.connected == 1) {
-                    self.portAttachDevice(port) catch |err| {
-                        log.err("hub {d} attempt to attach device on {d}: {any}", .{ self.index, port.number, err });
-                    };
-                }
+                self.portConnectChange(port, port.status) catch |err| {
+                    log.err("hub {d} port connect change error {any}", .{ self.index, err });
+                };
             }
 
             if (port.status.port_change.enabled_changed == 1) {
@@ -571,6 +598,7 @@ pub const Hub = struct {
             }
         } else |err| {
             log.err("hub {d} error getting status of port {d}: {any}", .{ self.index, port.number, err });
+            return;
         }
     }
 

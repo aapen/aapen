@@ -246,9 +246,16 @@ pub fn attachDevice(devid: DeviceAddress, speed: UsbSpeed) !void {
     // assume the speed detected by the hub this device is attached to
     dev.speed = speed;
 
-    // default to max packet size of 8 until we can read the device
+    // default to max packet size according to speed until we can read the device
     // descriptor to find the real max packet size.
-    dev.device_descriptor.max_packet_size = 8;
+    dev.device_descriptor.max_packet_size = switch (speed) {
+        UsbSpeed.Super => 255, // super speed is supposed to have mps
+        // of 512, but we're re-using the descriptor's field which is
+        // a u8
+        UsbSpeed.High => 64,
+        UsbSpeed.Full => 64,
+        UsbSpeed.Low => 8,
+    };
 
     log.debug("attach device: read device descriptor, irq flags = 0x{x:0>8}", .{arch.cpu.irqFlagsRead()});
 

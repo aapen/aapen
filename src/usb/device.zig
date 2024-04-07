@@ -19,6 +19,9 @@ const Error = @import("status.zig").Error;
 const LangID = @import("language.zig").LangID;
 const DEFAULT_LANG = LangID.en_US;
 
+const transaction_translator = @import("transaction_translator.zig");
+const TT = transaction_translator.TransactionTranslator;
+
 const transfer = @import("transfer.zig");
 const setup = transfer.setup;
 const SetupPacket = transfer.SetupPacket;
@@ -124,7 +127,10 @@ pub const Device = struct {
     parent: ?*Device,
 
     /// Port on the parent hub this is attached to
-    port_number: u7,
+    parent_port: u7,
+
+    /// Transaction Translator to use for this device
+    tt: ?*TT,
 
     device_descriptor: DeviceDescriptor,
     configuration: *DeviceConfiguration,
@@ -145,13 +151,14 @@ pub const Device = struct {
             .address = 0,
             .speed = .Full,
             .parent = null,
-            .port_number = 0,
+            .parent_port = 0,
             .device_descriptor = undefined,
             .product = "",
             .state = .unconfigured,
             .driver = null,
             .driver_private = &nothing_private,
             .configuration = undefined,
+            .tt = null,
         };
     }
 

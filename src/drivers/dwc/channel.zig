@@ -34,22 +34,6 @@ pub const ChannelId = u5;
 
 const Self = @This();
 
-// pub const Transfer = struct {
-//     buffer: []u8 = undefined,
-//     initial_transfer_size: reg.TransferSize = undefined,
-//     bytes_remaining: u19 = 0,
-//     packets_remaining: u10 = 0,
-
-//     pub fn prepare(self: *Transfer, buffer: []u8, max_packet_size: PacketSize) void {
-//         const bytes_remaining: u19 = @truncate(buffer.len);
-//         const packets_remaining: u10 = @truncate((bytes_remaining + max_packet_size - 1) / max_packet_size);
-
-//         self.buffer = buffer;
-//         self.bytes_remaining = bytes_remaining;
-//         self.packets_remaining = packets_remaining;
-//     }
-// };
-
 pub const CompletionHandler = struct {
     callbackCompleted: *const fn (*const CompletionHandler, *Self, data: []u8) void,
     callbackHalted: *const fn (*const CompletionHandler, *Self) void,

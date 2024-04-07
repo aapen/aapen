@@ -673,7 +673,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
 
         // TODO - is this guaranteed to finish?
         while (tt_hub != null and tt_hub.?.speed != UsbSpeed.High) {
-            tt_hub_port = tt_hub.?.port_number;
+            tt_hub_port = tt_hub.?.parent_port;
             tt_hub = tt_hub.?.parent;
         }
 
@@ -739,7 +739,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
 
     channel.active_transfer = req;
 
-    log.info("Setting up transactions on channel {d}:\n" ++
+    log.debug("Setting up transactions on channel {d}:\n" ++
         "\t\tmax_packet_size={d}, " ++
         "endpoint_number={d}, endpoint_direction={d},\n" ++
         "\t\tlow_speed={d}, endpoint_type={d}, device_address={d},\n\t\t" ++
@@ -849,11 +849,14 @@ fn deferredTransfer(args_ptr: *anyopaque) void {
 
     var interval_ms: u32 = 0;
 
-    if (req.device.?.speed == UsbSpeed.High) {
-        interval_ms = (@as(u32, 1) << @as(u5, @truncate(req.endpoint_desc.?.interval)) - 1) / USB_UFRAMES_PER_MS;
-    } else {
-        interval_ms = req.endpoint_desc.?.interval / USB_FRAMES_PER_MS;
-    }
+    // if (req.device.?.speed == UsbSpeed.High) {
+    //     interval_ms = (@as(u32, 1) << @as(u5, @truncate(req.endpoint_desc.?.interval)) - 1) /
+    //         USB_UFRAMES_PER_MS;
+    // } else {
+    //     interval_ms = req.endpoint_desc.?.interval / USB_FRAMES_PER_MS;
+    // }
+
+    interval_ms = 500;
 
     if (interval_ms == 0) {
         interval_ms = 1;
@@ -894,7 +897,7 @@ fn debugLogTransfer(req: *TransferRequest, msg: []const u8) void {
         }
     }
 
-    log.info("[{d}:{d} {s}] {s}", .{ req.device.?.address, endpoint_number, transfer_type, msg });
+    log.debug("[{d}:{d} {s}] {s}", .{ req.device.?.address, endpoint_number, transfer_type, msg });
 }
 
 // ----------------------------------------------------------------------
