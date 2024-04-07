@@ -22,15 +22,13 @@ pub const Clock = struct {
 
     count_low: *volatile u32,
     count_high: *volatile u32,
-    ticks_per_micro: u32,
 
-    pub fn init(allocator: Allocator, register_base: u64, clock_frequency_hz: u32) !*Clock {
+    pub fn init(allocator: Allocator, register_base: u64) !*Clock {
         const self = try allocator.create(Self);
 
         self.* = .{
             .count_low = @ptrFromInt(register_base + 0x04),
             .count_high = @ptrFromInt(register_base + 0x08),
-            .ticks_per_micro = clock_frequency_hz / 1_000_000,
         };
 
         return self;
@@ -44,24 +42,6 @@ pub const Clock = struct {
 
     pub fn ticksReadLow(self: *const Clock) u32 {
         return self.count_low.*;
-    }
-
-    pub fn delayMillis(self: *const Clock, millis: u32) void {
-        self.delayMicros(millis * 1000);
-    }
-
-    // spin loop until 'count' ticks elapse
-    pub fn delayMicros(self: *const Clock, micros: u32) void {
-        const deadline = self.deadlineMicros(micros);
-        while (self.ticks() <= deadline) {}
-    }
-
-    pub fn deadlineMillis(self: *const Clock, millis: u32) u64 {
-        return self.deadlineMicros(millis * 1000);
-    }
-
-    pub fn deadlineMicros(self: *const Clock, micros: u32) u64 {
-        return self.ticks() + (micros * self.ticks_per_micro);
     }
 };
 

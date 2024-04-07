@@ -17,10 +17,8 @@ pub const data_cache_line_length: usize = 64;
 
 pub const DMA_ALIGNMENT: u29 = 64;
 
-// Clock
-pub const timer_frequency_hz = 1_000_000;
-
 // ARM devices
+const arm_cpu_timer = @import("../drivers/arm_cpu_timer.zig");
 const arm_local_interrupt = @import("../drivers/arm_local_interrupt_controller.zig");
 const pl011 = @import("../drivers/pl011.zig");
 
@@ -40,6 +38,7 @@ const bcm_video_controller = @import("../drivers/bcm_video_controller.zig");
 const dwc_otg_usb = @import("../drivers/dwc_otg_usb.zig");
 const simple_bus = @import("../drivers/simple_bus.zig");
 
+pub const Timer = arm_cpu_timer;
 pub const BoardInfoController = bcm_board_info;
 pub const Clock = bcm_timer.Clock;
 pub const DMA = bcm_dma;
@@ -52,8 +51,7 @@ pub const Mailbox = bcm_mailbox;
 pub const PeripheralClockController = bcm_peripheral_clocks.PeripheralClockController;
 pub const PowerController = bcm_power;
 pub const SOC = simple_bus;
-pub const Timer = bcm_timer.Timer;
-pub const TimerHandler = bcm_timer.TimerHandler;
+pub const PeripheralTimer = bcm_timer.Timer;
 pub const Uart = pl011;
 pub const USBHCI = dwc_otg_usb;
 pub const VideoController = bcm_video_controller;
@@ -73,7 +71,7 @@ power_controller: PowerController,
 uart: Uart,
 soc: SOC,
 system_timer: *Timer,
-timer: [4]*Timer,
+timers: [4]*PeripheralTimer,
 usb_hci: *USBHCI,
 video_controller: VideoController,
 
@@ -90,13 +88,11 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.interrupt_controller = try InterruptController.init(allocator, peripheral_base + 0xb200);
 
-    self.clock = try Clock.init(allocator, peripheral_base + 0x3000, timer_frequency_hz);
+    self.clock = try Clock.init(allocator, peripheral_base + 0x3000);
 
     self.dma = DMA.init(allocator, peripheral_base + 0x7000, self.interrupt_controller, &self.soc.dma_ranges);
 
     self.gpio = try GPIO.init(allocator, peripheral_base + 0x200000, self.interrupt_controller);
-
-    self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
 
     self.mailbox = Mailbox.init(allocator, peripheral_base + 0xb880, &self.soc.bus_ranges);
 
@@ -113,10 +109,10 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     self.usb_hci = try USBHCI.init(allocator, peripheral_base + 0x980000, self.interrupt_controller, Irq.USB_HCI, &self.soc.bus_ranges, &self.power_controller);
 
     for (0..3) |timer_id| {
-        self.timer[timer_id] = try Timer.init(allocator, @truncate(timer_id), peripheral_base + 0x3000, self.clock, self.interrupt_controller);
+        self.timers[timer_id] = try PeripheralTimer.init(allocator, @truncate(timer_id), peripheral_base + 0x3000, self.clock, self.interrupt_controller);
     }
 
-    self.system_timer = self.timer[1];
+    self.system_timer = try Timer.init(allocator, self.interrupt_controller);
 
     self.i2c = try I2C.init(allocator, peripheral_base + 0x804000, self.gpio, self.interrupt_controller);
     //self.emmc = try EMMC.init(allocator, 0x3f202000, self.gpio, self.interrupt_controller, &self.peripheral_clock_controller);

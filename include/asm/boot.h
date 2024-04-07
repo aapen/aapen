@@ -12,9 +12,10 @@
 #define SCTLR_EL1_VALUE                      (SCTLR_RES1 | SCTLR_DCACHE_ENABLED | SCTLR_ICACHE_ENABLED | SCTLR_NAA_DISABLED)
 
 // Counter Hardware Control
-#define CNTHCTL_EL1PCTEN_DISABLE             (1 << 0)
-#define CNTHCTL_EL1PCEN_DISABLE              (0 << 1)
-#define CNTHCTL_EL2_VALUE                    (CNTHCTL_EL1PCTEN_DISABLE | CNTHCTL_EL1PCEN_DISABLE)
+// Do not trap accesses to the physical or virtual counters from EL1
+#define CNTHCTL_EL1PCTEN_DISABLE             (1 << 10)
+#define CNTHCTL_EL1PTEN_DISABLE              (1 << 11)
+#define CNTHCTL_EL2_VALUE                    (CNTHCTL_EL1PCTEN_DISABLE | CNTHCTL_EL1PTEN_DISABLE)
 
 // Feature Access Control
 // Zig and LLVM like to use vector registers. We must disable traps on

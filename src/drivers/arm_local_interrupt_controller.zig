@@ -131,6 +131,7 @@ const Registers = extern struct {
 routing_lock: TicketLock = TicketLock.initWithTargetLevel("irq routing", true, .FIQ),
 routing: [max_irq_id]IrqRouting = undefined,
 registers: *volatile Registers,
+core_sources: [4]*volatile u32,
 
 fn routeAddFromId(self: *Self, id: IrqId) void {
     self.routing_lock.acquire();
@@ -145,6 +146,10 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
 
     for (0..max_irq_id) |id| {
         self.routing[id] = IrqRouting.from(@truncate(id));
+    }
+
+    for (0..3) |core| {
+        self.core_sources[core] = @ptrFromInt(0x4000_0060 + (4 * core));
     }
 
     return self;
@@ -220,9 +225,16 @@ fn invokeHandler(self: *Self, id: IrqId) void {
 pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
     _ = context;
 
+    var core_interrupts = self.core_sources[0].*;
+
     var basic_interrupts = self.registers.irq_pending[0];
     var pending_1_received: bool = false;
     var pending_2_received: bool = false;
+
+    const cntvirq_interrupt: u32 = 0x08;
+    if ((core_interrupts & cntvirq_interrupt) != 0) {
+        self.invokeHandler(Irq.ARM_TIMER);
+    }
 
     while (basic_interrupts != 0) {
         const next_bit_set: u5 = @truncate(@ctz(basic_interrupts));
@@ -230,7 +242,7 @@ pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
         switch (next_bit_set) {
             0 => {
                 // ARM CPU timer
-                // self.invokeHandler(Irq.ARM_TIMER);
+                self.invokeHandler(Irq.ARM_TIMER);
             },
             8 => {
                 // handle all pending_1 later

@@ -270,7 +270,7 @@ pub fn kill(tid: TID) void {
 }
 
 pub fn sleep(millis: u32) !void {
-    const ticks: u32 = @truncate(@min(millis * time.QUANTA_PER_MILLI, std.math.maxInt(u32)));
+    const ticks: u32 = @truncate(@min(millis * time.quanta_per_second / 1000, std.math.maxInt(u32)));
 
     const im = cpu.disable();
     defer cpu.restore(im);

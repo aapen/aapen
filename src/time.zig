@@ -9,10 +9,11 @@ const atomic = @import("atomic.zig");
 const queue = @import("queue.zig");
 const schedule = @import("schedule.zig");
 
-pub const TICKS_PER_SECOND = root.HAL.timer_frequency_hz;
-pub const TICKS_PER_MILLI = TICKS_PER_SECOND / 1_000;
-pub const QUANTA_PER_SECOND = 1000;
-pub const QUANTA_PER_MILLI = 1;
+pub const quanta_per_second: u32 = 1000;
+
+pub var ticks_per_second: u32 = 0;
+pub var ticks_per_milli: u32 = 0;
+pub var quantum: u32 = 0;
 
 pub var quanta_since_boot: u64 = 0;
 pub var seconds_since_boot: u64 = 0;
@@ -33,6 +34,12 @@ pub fn defineModule(forth: *Forth) !void {
 // Public functions
 // ----------------------------------------------------------------------
 pub fn init() void {
+    ticks_per_second = root.hal.system_timer.frequency;
+    ticks_per_milli = ticks_per_second / 1000;
+
+    quantum = ticks_per_second / quanta_per_second;
+    _ = root.printf("clock frequency = %d Hz\nquantum = %d ticks\n", ticks_per_second, quantum);
+
     quanta_since_boot = 0;
     seconds_since_boot = 0;
 
@@ -53,7 +60,7 @@ pub fn uptime() u64 {
 }
 
 pub fn ticks() u64 {
-    return root.hal.clock.ticks();
+    return root.hal.system_timer.ticks();
 }
 
 // ----------------------------------------------------------------------
@@ -61,24 +68,25 @@ pub fn ticks() u64 {
 // ----------------------------------------------------------------------
 
 pub fn deadlineMillis(millis: u32) u64 {
-    return ticks() + (millis * TICKS_PER_MILLI);
+    return ticks() + (millis * ticks_per_milli);
 }
 
 pub fn delayMillis(millis: u32) void {
-    root.hal.clock.delayMillis(millis);
+    const deadline = deadlineMillis(millis);
+
+    while (root.hal.system_timer.ticks() <= deadline) {}
 }
 
 // ----------------------------------------------------------------------
 // Timer interrupts
 // ----------------------------------------------------------------------
-const quantum: u32 = TICKS_PER_SECOND / QUANTA_PER_SECOND;
 
 fn clockHandle(timer: *HAL.Timer) void {
     timer.reset(quantum);
 
     const now = atomic.atomicInc(&quanta_since_boot);
 
-    if (now == QUANTA_PER_SECOND) {
+    if (now >= quanta_per_second) {
         _ = atomic.atomicInc(&seconds_since_boot);
         _ = atomic.atomicReset(&quanta_since_boot, 0);
     }
