@@ -655,6 +655,7 @@ pub fn defineModule(forth: *Forth) !void {
         .{ "threadTable", "threads" },
         .{ "stackDump", "thread-stack" },
         .{ "threadPriority", "thread-priority" },
+        .{ "sleepQueue", "sleepq" },
     });
 }
 
@@ -750,4 +751,8 @@ pub fn threadPriority(maybe_tid: u64, maybe_priority: u64) void {
         thr.priority = priority;
         reschedule();
     }
+}
+
+pub fn sleepQueue() void {
+    queue.dumpQ(sleepq);
 }

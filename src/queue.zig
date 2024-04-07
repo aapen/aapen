@@ -271,7 +271,7 @@ pub fn dumpQ(qid: QID) void {
         if (qent == quetail(qid)) {
             _ = printf("tail: %d", qent);
         } else {
-            _ = printf("%d", qent);
+            _ = printf("%d (%d)", qent, quetab(qent).key);
         }
 
         const next = quetab(qent).next;
