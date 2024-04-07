@@ -24,6 +24,7 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
         .{ "uptime", "uptime", "seconds since boot" },
         .{ "quantaInSecond", "quptime", "interrupt quanta, range is 0 to 999" },
+        .{ "restartTimer", "restart-timer", "force restart timer interrupts" },
     });
 }
 
@@ -87,4 +88,14 @@ fn clockHandle(timer: *HAL.Timer) void {
     } else {
         schedule.reschedule();
     }
+}
+
+pub fn restartTimer() void {
+    // THIS IS A HACK
+    //
+    // for some reason, I keep losing the timer interrupts. something
+    // is happening that prevents the timer from being reset for the
+    // next quantum. Until I can figure out why that happens, this
+    // acts like shock paddles to restart the regular rhythm.
+    root.hal.system_timer.reset(quantum);
 }
