@@ -1,8 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const log = std.log.scoped(.usb);
-
 const device = @import("device.zig");
 const DeviceClass = device.DeviceClass;
 const StandardDeviceRequests = device.StandardDeviceRequests;
@@ -15,6 +13,8 @@ const setup = transfer.setup;
 const SetupPacket = transfer.SetupPacket;
 const Transfer = transfer.TransferRequest;
 const TransferType = transfer.TransferType;
+
+var log = @import("../logger.zig").initWithLevel("usb", .info);
 
 /// Index of a string descriptor
 pub const StringIndex = u8;
@@ -82,14 +82,14 @@ pub const DeviceDescriptor = extern struct {
     configuration_count: u8 = 0,
 
     pub fn dump(self: *const DeviceDescriptor) void {
-        log.debug("DeviceDescriptor [", .{});
-        log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ self.device_class, self.device_subclass, self.device_protocol });
-        log.debug("  vendor = 0x{x:0>4}", .{self.vendor});
-        log.debug("  product = 0x{x:0>4}", .{self.product});
-        log.debug("  max_packet_size = 0x{d}", .{self.max_packet_size});
-        log.debug("  usb_standard_compliance = 0x{x}", .{self.usb_standard_compliance});
-        log.debug("  configuration_count = 0x{d}", .{self.configuration_count});
-        log.debug("]", .{});
+        log.debug(@src(), "DeviceDescriptor [", .{});
+        log.debug(@src(), "  class-subclass-protocol = {d}-{d}-{d}", .{ self.device_class, self.device_subclass, self.device_protocol });
+        log.debug(@src(), "  vendor = 0x{x:0>4}", .{self.vendor});
+        log.debug(@src(), "  product = 0x{x:0>4}", .{self.product});
+        log.debug(@src(), "  max_packet_size = 0x{d}", .{self.max_packet_size});
+        log.debug(@src(), "  usb_standard_compliance = 0x{x}", .{self.usb_standard_compliance});
+        log.debug(@src(), "  configuration_count = 0x{d}", .{self.configuration_count});
+        log.debug(@src(), "]", .{});
     }
 
     pub fn fromSlice(buffer: []u8) !*DeviceDescriptor {
@@ -125,15 +125,15 @@ pub const ConfigurationDescriptor = packed struct {
     power_max: u8,
 
     pub fn dump(self: *const ConfigurationDescriptor) void {
-        log.debug("ConfigurationDescriptor [", .{});
-        log.debug("  total length = {d}", .{self.total_length});
-        log.debug("  interface count = {d}", .{self.interface_count});
-        log.debug("  configuration value = {d}", .{self.configuration_value});
-        log.debug("  configuration = {d}", .{self.configuration});
-        log.debug("  remote wakeup = {d}", .{self.attributes.remote_wakeup});
-        log.debug("  self powered = {d}", .{self.attributes.self_powered});
-        log.debug("  power max = {d} mA", .{self.power_max});
-        log.debug("]", .{});
+        log.debug(@src(), "ConfigurationDescriptor [", .{});
+        log.debug(@src(), "  total length = {d}", .{self.total_length});
+        log.debug(@src(), "  interface count = {d}", .{self.interface_count});
+        log.debug(@src(), "  configuration value = {d}", .{self.configuration_value});
+        log.debug(@src(), "  configuration = {d}", .{self.configuration});
+        log.debug(@src(), "  remote wakeup = {d}", .{self.attributes.remote_wakeup});
+        log.debug(@src(), "  self powered = {d}", .{self.attributes.self_powered});
+        log.debug(@src(), "  power max = {d} mA", .{self.power_max});
+        log.debug(@src(), "]", .{});
     }
 };
 
@@ -157,13 +157,13 @@ pub const InterfaceDescriptor = packed struct {
     }
 
     pub fn dump(self: *const InterfaceDescriptor) void {
-        log.debug("InterfaceDescriptor [", .{});
-        log.debug("  interface number = {d}", .{self.interface_number});
-        log.debug("  alternate_setting = {d}", .{self.alternate_setting});
-        log.debug("  endpoint count = {d}", .{self.endpoint_count});
-        log.debug("  class-subclass-protocol = {d}-{d}-{d}", .{ self.interface_class, self.interface_subclass, self.interface_protocol });
-        log.debug("  interface string = {d}", .{self.interface_string});
-        log.debug("]", .{});
+        log.debug(@src(), "InterfaceDescriptor [", .{});
+        log.debug(@src(), "  interface number = {d}", .{self.interface_number});
+        log.debug(@src(), "  alternate_setting = {d}", .{self.alternate_setting});
+        log.debug(@src(), "  endpoint count = {d}", .{self.endpoint_count});
+        log.debug(@src(), "  class-subclass-protocol = {d}-{d}-{d}", .{ self.interface_class, self.interface_subclass, self.interface_protocol });
+        log.debug(@src(), "  interface string = {d}", .{self.interface_string});
+        log.debug(@src(), "]", .{});
     }
 };
 
@@ -208,12 +208,12 @@ pub const EndpointDescriptor = packed struct {
     }
 
     pub fn dump(self: *const EndpointDescriptor) void {
-        log.debug("EndpointDescriptor [", .{});
-        log.debug("  endpoint_address = {d}", .{self.endpoint_address});
-        log.debug("  attributes = 0x{x}", .{@as(u8, @bitCast(self.attributes))});
-        log.debug("  max_packet_size = {d}", .{self.max_packet_size});
-        log.debug("  interval = {d}", .{self.interval});
-        log.debug("]", .{});
+        log.debug(@src(), "EndpointDescriptor [", .{});
+        log.debug(@src(), "  endpoint_address = {d}", .{self.endpoint_address});
+        log.debug(@src(), "  attributes = 0x{x}", .{@as(u8, @bitCast(self.attributes))});
+        log.debug(@src(), "  max_packet_size = {d}", .{self.max_packet_size});
+        log.debug(@src(), "  interval = {d}", .{self.interval});
+        log.debug(@src(), "]", .{});
     }
 };
 
@@ -260,12 +260,12 @@ pub const HidDescriptor = extern struct {
     optional_descriptor_length: u16,
 
     pub fn dump(self: *const HidDescriptor) void {
-        log.debug("HidDescriptor [", .{});
-        log.debug("  hid_specification = 0x{x}", .{self.hid_specification});
-        log.debug("  country_code = {d}", .{self.country_code});
-        log.debug("  descriptor_count = {d}", .{self.descriptor_count});
-        log.debug("  class_descriptor_type = {d}", .{self.class_descriptor_type});
-        log.debug("  class_descriptor_length = {d}", .{self.class_descriptor_length});
-        log.debug("]", .{});
+        log.debug(@src(), "HidDescriptor [", .{});
+        log.debug(@src(), "  hid_specification = 0x{x}", .{self.hid_specification});
+        log.debug(@src(), "  country_code = {d}", .{self.country_code});
+        log.debug(@src(), "  descriptor_count = {d}", .{self.descriptor_count});
+        log.debug(@src(), "  class_descriptor_type = {d}", .{self.class_descriptor_type});
+        log.debug(@src(), "  class_descriptor_length = {d}", .{self.class_descriptor_length});
+        log.debug(@src(), "]", .{});
     }
 };

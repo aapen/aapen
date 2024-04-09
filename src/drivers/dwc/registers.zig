@@ -1,5 +1,4 @@
 const std = @import("std");
-const log = std.log.scoped(.dwc_otg_usb_channel);
 
 const usb = @import("../../usb.zig");
 const TransferType = usb.TransferType;

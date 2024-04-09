@@ -20,6 +20,8 @@ const MainConsole = @import("main_console.zig");
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 
+const Logger = @import("logger.zig");
+
 const p = @import("printf.zig");
 pub const printf = p.printf;
 
@@ -53,6 +55,7 @@ pub var interpreter: Forth = Forth{};
 pub var uart_valid = false;
 pub var char_buffer_console_valid = false;
 pub var main_console_valid = false;
+pub var log: Logger = Logger.init("main");
 
 extern fn _start() noreturn;
 

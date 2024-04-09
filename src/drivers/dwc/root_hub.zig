@@ -1,5 +1,6 @@
 const std = @import("std");
-const log = std.log.scoped(.dwc_otg_usb_root_hub);
+
+var log = @import("../../logger.zig").initWithLevel("dwc2", .info);
 
 const time = @import("../../time.zig");
 const delayMillis = time.delayMillis;
@@ -211,7 +212,7 @@ fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) HostPort
 
 fn hostPortPowerOn(self: *Self) TransferStatus {
     if (self.host_registers) |host_reg| {
-        log.debug("hostPortPowerOn", .{});
+        log.debug(@src(), "hostPortPowerOn", .{});
 
         var hw_status = self.hostPortSafeRead(host_reg);
 
@@ -257,7 +258,7 @@ pub fn hubHandlePortInterrupt(self: *Self) void {
     if (self.host_registers) |host_reg| {
         var hw_status = host_reg.port;
 
-        log.info("host port interrupt, hw_status = 0x{x:0>8}", .{@as(u32, @bitCast(hw_status))});
+        log.debug(@src(), "host port interrupt, hw_status = 0x{x:0>8}", .{@as(u32, @bitCast(hw_status))});
 
         self.root_hub_port_status.port_status.connected = hw_status.connected;
         self.root_hub_port_status.port_status.enabled = hw_status.enabled;
@@ -296,7 +297,7 @@ pub fn hubHandlePortInterrupt(self: *Self) void {
 
 fn hubNotifyPortChange(self: *Self) void {
     if (self.root_hub_status_change_transfer) |request| {
-        log.debug("host port status changed; completing status changed transfer on root hub", .{});
+        log.debug(@src(), "host port status changed; completing status changed transfer on root hub", .{});
         self.root_hub_status_change_transfer = null;
         if (request.size >= 1) {
             // in the status change, bit 0 indicates the hub changed,
@@ -338,7 +339,7 @@ const handlers: []const Handler = &.{
 fn replyWithStructure(req: *TransferRequest, v: *const anyopaque, size: usize) TransferStatus {
     const requested_length = req.setup_data.data_size;
     const provided_length = @min(requested_length, size);
-    log.debug("responding with {d} bytes from the structure", .{provided_length});
+    log.debug(@src(), "responding with {d} bytes from the structure", .{provided_length});
     @memcpy(req.data, @as([*]const u8, @ptrCast(v))[0..provided_length]);
 
     //    @memcpy(req.data_buffer[0..provided_length], @as([*]const u8, @ptrCast(v))[0..provided_length]);
@@ -361,7 +362,7 @@ fn hubGetStringDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     _ = self;
     const descriptor_index = req.setup_data.value & 0x0f;
     if (descriptor_index > root_hub_strings.len) {
-        log.warn("hubGetStringDescriptor: descriptor_index {d} is greater than {d}", .{ descriptor_index, root_hub_strings.len });
+        log.warn(@src(), "hubGetStringDescriptor: descriptor_index {d} is greater than {d}", .{ descriptor_index, root_hub_strings.len });
         return .unsupported_request;
     }
 
@@ -384,7 +385,7 @@ fn hubGetDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
         DescriptorType.configuration => return self.hubGetConfigurationDescriptor(req),
         DescriptorType.string => return self.hubGetStringDescriptor(req),
         else => {
-            log.warn("hubGetDescriptor: descriptor type {d} not supported", .{descriptor_type});
+            log.warn(@src(), "hubGetDescriptor: descriptor type {d} not supported", .{descriptor_type});
             return .unsupported_request;
         },
     }
@@ -402,10 +403,10 @@ fn hubSetConfiguration(self: *Self, req: *TransferRequest) TransferStatus {
     _ = self;
     const requested_configuration = req.setup_data.value;
     if (requested_configuration == 1) {
-        log.debug("hubSetConfiguration: using requested configuration {d}", .{requested_configuration});
+        log.debug(@src(), "hubSetConfiguration: using requested configuration {d}", .{requested_configuration});
         return .ok;
     } else {
-        log.warn("hubSetConfiguration: requested configuration {d} not supported", .{requested_configuration});
+        log.warn(@src(), "hubSetConfiguration: requested configuration {d} not supported", .{requested_configuration});
         return .unsupported_request;
     }
 }
@@ -416,24 +417,24 @@ fn hubGetHubDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     if (descriptor_index == 0) {
         return replyWithStructure(req, &root_hub_hub_descriptor, @sizeOf(@TypeOf(root_hub_hub_descriptor)));
     } else {
-        log.warn("hubGetHubDescriptor: descriptor index {d} not supported", .{descriptor_index});
+        log.warn(@src(), "hubGetHubDescriptor: descriptor index {d} not supported", .{descriptor_index});
         return .unsupported_request;
     }
 }
 
 fn hubGetHubStatus(self: *Self, req: *TransferRequest) TransferStatus {
-    log.debug("hubGetHubStatus: status = 0x{x:0>8}", .{@as(u32, @bitCast(self.root_hub_hub_status))});
+    log.debug(@src(), "hubGetHubStatus: status = 0x{x:0>8}", .{@as(u32, @bitCast(self.root_hub_hub_status))});
     return replyWithStructure(req, &self.root_hub_hub_status, @sizeOf(@TypeOf(self.root_hub_hub_status)));
 }
 
 fn hubGetPortStatus(self: *Self, req: *TransferRequest) TransferStatus {
-    log.debug("hubGetPortStatus: port {d} status = 0x{x:0>8}", .{ req.setup_data.index, @as(u32, @bitCast(self.root_hub_port_status)) });
+    log.debug(@src(), "hubGetPortStatus: port {d} status = 0x{x:0>8}", .{ req.setup_data.index, @as(u32, @bitCast(self.root_hub_port_status)) });
     return replyWithStructure(req, &self.root_hub_port_status, @sizeOf(@TypeOf(self.root_hub_port_status)));
 }
 
 fn hubSetHubFeature(self: *Self, _: *TransferRequest) TransferStatus {
     _ = self;
-    log.warn("hubSetHubFeature: set hub feature not supported", .{});
+    log.warn(@src(), "hubSetHubFeature: set hub feature not supported", .{});
     return .unsupported_request;
 }
 
@@ -444,7 +445,7 @@ fn hubSetPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
         PortFeature.port_power => return self.hostPortPowerOn(),
         PortFeature.port_reset => return self.hostPortReset(),
         else => {
-            log.warn("hubSetPortFeature: port feature {d} not supported", .{feature});
+            log.warn(@src(), "hubSetPortFeature: port feature {d} not supported", .{feature});
             return .unsupported_request;
         },
     }
@@ -452,14 +453,14 @@ fn hubSetPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
 
 fn hubClearHubFeature(self: *Self, _: *TransferRequest) TransferStatus {
     _ = self;
-    log.warn("hubClearHubFeature: clear hub feature not supported", .{});
+    log.warn(@src(), "hubClearHubFeature: clear hub feature not supported", .{});
     return .unsupported_request;
 }
 
 fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
     const feature = req.setup_data.value;
 
-    log.debug("hubClearPortFeature: feature {d}", .{feature});
+    log.debug(@src(), "hubClearPortFeature: feature {d}", .{feature});
 
     switch (feature) {
         PortFeature.c_port_connection => self.root_hub_port_status.port_change.connected_changed = 0,
@@ -468,7 +469,7 @@ fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
         PortFeature.c_port_over_current => self.root_hub_port_status.port_change.overcurrent_changed = 0,
         PortFeature.c_port_reset => self.root_hub_port_status.port_change.reset_changed = 0,
         else => {
-            log.warn("hubClearPortFeature: feature {d} not supported", .{feature});
+            log.warn(@src(), "hubClearPortFeature: feature {d} not supported", .{feature});
             return .unsupported_request;
         },
     }
@@ -477,7 +478,7 @@ fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
 
 pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
     if (req.endpoint_desc == null) {
-        log.debug("hubHandleTransfer: processing control message", .{});
+        log.debug(@src(), "hubHandleTransfer: processing control message", .{});
 
         // this is a control request to the default endpoint.
         const req_type = req.setup_data.request_type.type;
@@ -493,10 +494,10 @@ pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
                 return;
             }
         }
-        log.debug("unhandled request: type 0x{x}, req 0x{x}", .{ @as(u8, @bitCast(req.setup_data.request_type)), request });
+        log.debug(@src(), "unhandled request: type 0x{x}, req 0x{x}", .{ @as(u8, @bitCast(req.setup_data.request_type)), request });
     } else {
         // this is an interrupt transfer request for the status change endpoint.
-        log.debug("hubHandleTransfer: holding status change request a status change occurs", .{});
+        log.debug(@src(), "hubHandleTransfer: holding status change request a status change occurs", .{});
         self.root_hub_status_change_transfer = req;
 
         // we might have previously gotten a status change that we

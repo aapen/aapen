@@ -1,5 +1,4 @@
 const std = @import("std");
-const log = std.log.scoped(.schedule);
 
 const root = @import("root");
 const printf = root.printf;
@@ -11,6 +10,8 @@ const cpu = arch.cpu;
 const atomic = @import("atomic.zig");
 
 const debug = @import("debug.zig");
+
+var log = @import("logger.zig").initWithLevel("schedule", .info);
 
 const queue = @import("queue.zig");
 const Key = queue.Key;
@@ -170,7 +171,7 @@ pub fn spawnWithOptions(proc: ThreadFunction, args: *anyopaque, options: *const 
 }
 
 pub fn create(proc: u64, ssize: u64, priority: Key, name: []const u8, args_ptr: u64) !TID {
-    // _ = printf("create: current is %d, thread_count is %d\n", current, thread_count);
+    log.debug(@src(), "create: current is {d}, thread count is {d}", .{ current, thread_count });
 
     const im = cpu.disable();
     defer cpu.restore(im);
@@ -183,7 +184,7 @@ pub fn create(proc: u64, ssize: u64, priority: Key, name: []const u8, args_ptr: 
 
     thread_count += 1;
 
-    // _ = printf("thread_count now %d\n", thread_count);
+    log.debug(@src(), "thread count now {d}", .{thread_count});
 
     const thr = thrent(tid);
 
@@ -199,7 +200,7 @@ pub fn create(proc: u64, ssize: u64, priority: Key, name: []const u8, args_ptr: 
 }
 
 pub fn ready(tid: TID, resched: bool) !void {
-    // _ = printf("ready: tid is %d, reschedule? %b\n", tid, resched);
+    log.debug(@src(), "ready: tid is {d}, reschedule? {}", .{ tid, resched });
 
     if (isBadTid(tid)) {
         return error.BadThreadId;
@@ -210,8 +211,8 @@ pub fn ready(tid: TID, resched: bool) !void {
 
     try queue.insert(tid, thr.priority, readyq);
 
-    // _ = printf("ready: readylist after insert");
-    // queue.dumpQ(readylist);
+    // log.debug(@src(), "ready: readylist after insert", .{});
+    // queue.dumpQ(readyq);
 
     if (resched) {
         reschedule();
@@ -219,7 +220,7 @@ pub fn ready(tid: TID, resched: bool) !void {
 }
 
 pub fn kill(tid: TID) void {
-    // _ = printf("kill tid %d, current is %d\n", tid, current);
+    log.debug(@src(), "kill tid {d}, current is {d}", .{ tid, current });
 
     const im = cpu.disable();
     defer cpu.restore(im);
@@ -230,17 +231,17 @@ pub fn kill(tid: TID) void {
 
     thread_count -= 1;
 
-    // _ = printf("thread_count now %d\n", thread_count);
+    log.debug(@src(), "thread_count now {d}", .{thread_count});
 
     if (thread_count < 1) {
-        // _ = printf("last thread finished, time to exit\n");
+        log.debug(@src(), "last thread finished, time to exit", .{});
         kernelExit();
     }
 
     // signal parent thread? do we need a concept of parent thread?
     if (thr.parent != NO_TID) {
         send(thr.parent, childExited(tid)) catch {
-            // TODO complain
+            log.err(@src(), "cannot signal thread's parent {d}", .{thr.parent});
         };
     }
 
@@ -422,8 +423,8 @@ pub fn reschedule() void {
 
     var next_tid: TID = NO_TID;
 
-    //    _ = printf("reschedule: readylist ");
-    // queue.dumpQ(readylist);
+    log.debug(@src(), "reschedule: readylist", .{});
+    // queue.dumpQ(readyq);
 
     while (isBadTid(next_tid)) {
         next_tid = queue.dequeue(readyq) catch NO_TID;
@@ -432,7 +433,7 @@ pub fn reschedule() void {
             _ = atomic.atomicInc(&nothing_runnable);
             cpu.wfe();
         } else {
-            //            _ = printf("reschedule: selected %d\n", next_tid);
+            log.debug(@src(), "reschedule: selected {d}", .{next_tid});
         }
     }
 
@@ -443,10 +444,6 @@ pub fn reschedule() void {
     current = next_tid;
     new = thrent(current);
     new.state = THREAD_RUNNING;
-
-    //    _ = printf("reschedule: current is now %d, current state is now %d\n", current, new.state);
-    //    _ = printf("reschedule: &old.stack_pointer = 0x%08x, &new.stack_pointer = 0x%08x\n", &old.stack_pointer, &new.stack_pointer);
-    // _ = printf("reschedule: old.stack_pointer = 0x%08x, new.stack_pointer = 0x%08x\n", old.stack_pointer, new.stack_pointer);
 
     context_switch(&old.stack_pointer, &new.stack_pointer);
 
@@ -489,7 +486,7 @@ fn strncpy(dst: []u8, src: []const u8) void {
 /// Convenience for indexing into the table with an i16
 /// Caller MUST verify the value is non-negative
 pub inline fn thrent(x: TID) *ThreadEntry {
-    if (x < 0) log.debug("thrent will panic, tid passed in is negative", .{});
+    if (x < 0) log.debug(@src(), "thrent will panic, tid passed in is negative", .{});
     return &thread_table[@intCast(x)];
 }
 
@@ -582,12 +579,12 @@ pub fn reinit() !void {
 
 pub fn dumpThread(tid: TID) void {
     if (tid >= NUM_THREADS or tid < 0) {
-        _ = printf("bad thread id: %d\n", tid);
+        log.info(@src(), "bad thread id {d}", .{tid});
         return;
     }
 
     if (thrent(tid).state == THREAD_FREE) {
-        _ = printf("thread free: %d\n", tid);
+        log.info(@src(), "thread free {d}", .{tid});
         return;
     }
 }

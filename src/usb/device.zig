@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const bufPrint = std.fmt.bufPrint;
-const log = std.log.scoped(.usb);
 
 const root = @import("root");
 
@@ -18,6 +17,8 @@ const Error = @import("status.zig").Error;
 
 const LangID = @import("language.zig").LangID;
 const DEFAULT_LANG = LangID.en_US;
+
+var log = @import("../logger.zig").initWithLevel("usb", .info);
 
 const transaction_translator = @import("transaction_translator.zig");
 const TT = transaction_translator.TransactionTranslator;
@@ -202,10 +203,10 @@ pub const Device = struct {
             if (desc.asSlice(usb.allocator)) |s| {
                 self.product = s;
             } else |err| {
-                log.err("error extracting product name, err {any}", .{err});
+                log.err(@src(), "error extracting product name, err {any}", .{err});
             }
         } else |err| {
-            log.err("error fetching product name, index {d}, err {any}", .{ self.device_descriptor.product_name, err });
+            log.err(@src(), "error fetching product name, index {d}, err {any}", .{ self.device_descriptor.product_name, err });
         }
 
         return self.product;
@@ -392,7 +393,7 @@ pub const DeviceConfiguration = struct {
     }
 
     pub fn dump(self: *const DeviceConfiguration) void {
-        log.debug("DeviceConfiguration [", .{});
+        log.debug(@src(), "DeviceConfiguration [", .{});
         self.configuration_descriptor.dump();
         for (0..MAX_INTERFACES) |i| {
             if (self.interfaces[i]) |iface| {
@@ -409,7 +410,7 @@ pub const DeviceConfiguration = struct {
                 }
             }
         }
-        log.debug("]", .{});
+        log.debug(@src(), "]", .{});
     }
 };
 

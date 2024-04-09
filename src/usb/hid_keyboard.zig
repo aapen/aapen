@@ -4,12 +4,12 @@
 /// Revision 1.1
 const std = @import("std");
 
-const log = std.log.scoped(.usb_hid_keyboard);
-
 const root = @import("root");
 const delayMillis = root.HAL.delayMillis;
 
 const Forth = @import("../forty/forth.zig").Forth;
+
+var log = @import("../logger.zig").initWithLevel("usb_hid_keyboard", .info);
 
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
@@ -67,20 +67,20 @@ var poll: TransferRequest = undefined;
 fn keyboardPollCompletion(req: *TransferRequest) void {
     _ = req;
     semaphore.signal(polling_semaphore.?) catch |err| {
-        log.err("keyboard poll completion cannot signal {?d}: {any}", .{ polling_semaphore, err });
+        log.err(@src(), "keyboard poll completion cannot signal {?d}: {any}", .{ polling_semaphore, err });
     };
 }
 
 pub fn readKeySync() []u8 {
     if (keyboard_interface == null) {
-        log.err("No keyboard", .{});
+        log.err(@src(), "No keyboard", .{});
         return polling_buffer[0..0];
     }
 
     // on first invocation, create a semaphore and transfer request
     if (polling_semaphore == null) {
         polling_semaphore = semaphore.create(0) catch |err| {
-            log.err("semaphore create error {any}", .{err});
+            log.err(@src(), "semaphore create error {any}", .{err});
             return polling_buffer[0..0];
         };
         poll = .{
@@ -94,12 +94,12 @@ pub fn readKeySync() []u8 {
     }
 
     usb.transferSubmit(&poll) catch |err| {
-        log.err("transfer submit error {any}", .{err});
+        log.err(@src(), "transfer submit error {any}", .{err});
         return polling_buffer[0..0];
     };
 
     semaphore.wait(polling_semaphore.?) catch |err| {
-        log.err("semaphore wait error {any}", .{err});
+        log.err(@src(), "semaphore wait error {any}", .{err});
         return polling_buffer[0..0];
     };
 
@@ -151,7 +151,7 @@ pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
             continue;
         }
 
-        log.debug("selecting interface {d}, endpoint {d}", .{ i, in_interrupt_endpoint.?.endpoint_address });
+        log.debug(@src(), "selecting interface {d}, endpoint {d}", .{ i, in_interrupt_endpoint.?.endpoint_address });
         keyboard_device = dev;
         keyboard_interface = iface;
         keyboard_endpoint = in_interrupt_endpoint;
@@ -159,7 +159,7 @@ pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
 }
 
 pub fn hidKeyboardDriverDeviceUnbind(dev: *Device) void {
-    log.debug("hid keyboard driver pretending to unbind device {d}", .{dev.address});
+    log.debug(@src(), "hid keyboard driver pretending to unbind device {d}", .{dev.address});
 }
 
 pub const driver: DeviceDriver = .{

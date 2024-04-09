@@ -1,13 +1,11 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const RingBuffer = std.RingBuffer;
-const ScopeLevel = std.log.ScopeLevel;
 
 const root = @import("root");
 
 const p = @import("printf.zig");
 const printf = p.printf;
-const vprintf = p.vprintf;
 
 const Forth = @import("forty/forth.zig").Forth;
 
@@ -198,85 +196,6 @@ pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?us
     schedule.kill(schedule.current);
 
     unreachable;
-}
-
-// ----------------------------------------------------------------------
-// Logging support
-// ----------------------------------------------------------------------
-pub const options = struct {
-    pub const logFn = log;
-    pub const log_level = .warn;
-    pub const log_scope_levels = &[_]ScopeLevel{
-        .{ .scope = .dwc_otg_usb, .level = .info },
-        .{ .scope = .dwc_otg_usb_root_hub, .level = .info },
-        .{ .scope = .dwc_otg_usb_channel, .level = .info },
-        .{ .scope = .schedule, .level = .debug },
-        .{ .scope = .usb, .level = .debug },
-        .{ .scope = .usb_hub, .level = .debug },
-        .{ .scope = .usb_hid_keyboard, .level = .debug },
-        .{ .scope = .forty, .level = .info },
-    };
-};
-
-pub fn log(
-    comptime level: std.log.Level,
-    comptime scope: @TypeOf(.EnumLiteral),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    if (comptime !std.log.logEnabled(level, scope)) return;
-
-    const prefix = switch (scope) {
-        std.log.default_log_scope => "",
-        else => @tagName(scope) ++ " ",
-    } ++ "[" ++ comptime level.asText() ++ "]: ";
-
-    if (root.main_console_valid) {
-        root.main_console.print(prefix ++ format ++ "\n", args) catch {};
-    } else {
-        serial.writer.print(prefix ++ format ++ "\n", args) catch {};
-    }
-}
-
-pub fn sliceDumpAsWords(buf: []const u8) void {
-    const buf_words = std.mem.bytesAsSlice(u32, buf);
-    const len = buf_words.len;
-    var offset: usize = 0;
-
-    while (offset < len) {
-        _ = printf("%016x  %08x\n", @intFromPtr(buf_words.ptr) + offset, buf_words[offset]);
-        offset += 1;
-    }
-}
-
-pub fn sliceDump(buf: []const u8) void {
-    const len = buf.len;
-    var offset: usize = 0;
-
-    while (offset < len) {
-        _ = printf("%016x  ", @intFromPtr(buf.ptr) + offset);
-
-        for (0..16) |iByte| {
-            if (offset + iByte < len) {
-                _ = printf("%02x ", buf[offset + iByte]);
-            } else {
-                _ = printf("   ");
-            }
-            if (iByte == 7) {
-                _ = printf("  ");
-            }
-        }
-        _ = printf("  |");
-        for (0..16) |iByte| {
-            if (offset + iByte < len) {
-                _ = printf("%c", string.toPrintable(buf[offset + iByte]));
-            } else {
-                _ = printf(" ");
-            }
-        }
-        _ = printf("|\n");
-        offset += 16;
-    }
 }
 
 // ------------------------------------------------------------------------------

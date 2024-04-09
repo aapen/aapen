@@ -1,5 +1,4 @@
 const std = @import("std");
-const log = std.log.scoped(.usb);
 
 const descriptor = @import("descriptor.zig");
 const EndpointDescriptor = descriptor.EndpointDescriptor;

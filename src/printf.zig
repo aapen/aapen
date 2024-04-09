@@ -3,13 +3,15 @@ const serial = @import("serial.zig");
 
 pub const printf = cstub.printf;
 pub const vprintf = cstub.vprintf;
+pub const sprintf = cstub.sprintf;
+pub const vsprintf = cstub.vsprintf;
 
 // ----------------------------------------------------------------------
 // C interop
 // ----------------------------------------------------------------------
 var putc: *const fn (u8) void = noVideoPutc;
 
-export fn _putchar(ch: u8) callconv(.C) c_int {
+pub export fn _putchar(ch: u8) callconv(.C) c_int {
     putc(ch);
     return ch;
 }

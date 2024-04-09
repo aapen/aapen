@@ -3,8 +3,6 @@ const Allocator = std.mem.Allocator;
 const DoublyLinkedList = std.DoublyLinkedList;
 const PendingTransfers = DoublyLinkedList(*TransferRequest);
 
-const log = std.log.scoped(.dwc_otg_usb);
-
 const root = @import("root");
 const HAL = root.HAL;
 const InterruptController = HAL.InterruptController;
@@ -25,6 +23,8 @@ const debug = @import("../debug.zig");
 const ChannelSet = @import("../channel_set.zig");
 
 const Forth = @import("../forty/forth.zig").Forth;
+
+var log = @import("../logger.zig").initWithLevel("dwc2", .info);
 
 const mailbox = @import("../mailbox.zig");
 const Mailbox = mailbox.Mailbox;
@@ -247,7 +247,7 @@ fn powerOn(self: *Self) !void {
     const power_result = try self.power_controller.powerOn(POWER_DEVICE_USB_HCD);
 
     if (power_result != .power_on) {
-        log.err("Failed to power on USB device: {any}", .{power_result});
+        log.err(@src(), "Failed to power on USB device: {any}", .{power_result});
         return Error.PowerFailure;
     }
 
@@ -259,7 +259,7 @@ fn powerOff(self: *Self) !void {
     const power_result = try self.power_controller.powerOff(POWER_DEVICE_USB_HCD);
 
     if (power_result != .power_off) {
-        log.err("Failed to power off USB device: {any}", .{power_result});
+        log.err(@src(), "Failed to power off USB device: {any}", .{power_result});
         return Error.PowerFailure;
     }
 }
@@ -267,10 +267,10 @@ fn powerOff(self: *Self) !void {
 fn verifyHostControllerDevice(self: *Self) !void {
     const id = self.core_registers.vendor_id;
 
-    log.info("DWC2 OTG core rev: {x}.{x:0>3}\n", .{ id.device_series, id.device_minor_rev });
+    log.info(@src(), "DWC2 OTG core rev: {x}.{x:0>3}", .{ id.device_series, id.device_minor_rev });
 
     if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
-        log.warn(" gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
+        log.warn(@src(), " gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
         return Error.IncorrectDevice;
     }
 }
@@ -348,7 +348,7 @@ fn initializeControllerCore(self: *Self) !void {
 }
 
 fn resetSoft(self: *Self) !void {
-    // log.debug("core controller reset", .{});
+    // log.debug(@src(), "core controller reset", .{});
 
     // trigger the soft reset
     self.core_registers.reset.soft_reset = 1;
@@ -389,7 +389,7 @@ fn initializeInterrupts(self: *Self) !void {
     // Enable interrupts for the host controller (this is the DWC side)
     self.core_registers.ahb_config.global_interrupt_enable = 1;
 
-    log.debug("initializeInterrupts: mask = 0x{x:0>8}, status = 0x{x:0>8}", .{
+    log.debug(@src(), "initializeInterrupts: mask = 0x{x:0>8}, status = 0x{x:0>8}", .{
         @as(u32, @bitCast(self.core_registers.core_interrupt_mask)),
         @as(u32, @bitCast(self.core_registers.core_interrupt_status)),
     });
@@ -433,7 +433,7 @@ fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
     if (intr_status.host_channel == 1) {
         const all_intrs = self.host_registers.all_channel_interrupts;
         //        self.host_registers.all_channel_interrupts = all_intrs;
-        log.debug("irq handle: host channel ints 0x{x:0>8}", .{@as(u32, @bitCast(all_intrs))});
+        log.debug(@src(), "irq handle: host channel ints 0x{x:0>8}", .{@as(u32, @bitCast(all_intrs))});
 
         // Find the channel that has something to say
         var channel_mask: u32 = 1;
@@ -468,7 +468,7 @@ fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
 }
 
 pub fn dumpStatus(self: *Self) void {
-    log.info("{s: >28}", .{"Core registers"});
+    log.info(@src(), "{s: >28}", .{"Core registers"});
     dumpRegisterPair(
         "otg_control",
         @bitCast(self.core_registers.otg_control),
@@ -506,19 +506,19 @@ pub fn dumpStatus(self: *Self) void {
         @bitCast(self.core_registers.nonperiodic_tx_status),
     );
 
-    log.info("", .{});
-    log.info("{s: >28}", .{"Host registers"});
+    log.info(@src(), "", .{});
+    log.info(@src(), "{s: >28}", .{"Host registers"});
     dumpRegisterPair("port", @bitCast(self.host_registers.port), "config", @bitCast(self.host_registers.config));
     dumpRegisterPair("frame_interval", @bitCast(self.host_registers.frame_interval), "frame_num", @bitCast(self.host_registers.frame_num));
     dumpRegisterPair("all_channel_interrupts", @bitCast(self.host_registers.all_channel_interrupts), "all_channel_interrupts_mask", @bitCast(self.host_registers.all_channel_interrupts_mask));
 }
 
 pub fn dumpRegisterPair(f1: []const u8, v1: u32, f2: []const u8, v2: u32) void {
-    log.info("{s: >28}: {x:0>8}\t{s: >28}: {x:0>8}", .{ f1, v1, f2, v2 });
+    log.info(@src(), "{s: >28}: {x:0>8}\t{s: >28}: {x:0>8}", .{ f1, v1, f2, v2 });
 }
 
 fn dumpRegister(field_name: []const u8, v: u32) void {
-    log.info("{s: >28}: {x:0>8}", .{ field_name, v });
+    log.info(@src(), "{s: >28}: {x:0>8}", .{ field_name, v });
 }
 
 // ----------------------------------------------------------------------
@@ -543,12 +543,12 @@ pub fn channelFree(self: *Self, channel: *Channel) void {
 fn channelInterruptEnable(self: *Self, channel: Channel.ChannelId) void {
     _ = channel;
     _ = self;
-    // log.debug("interrupt enable channel {d}", .{channel});
+    // log.debug(@src(),"interrupt enable channel {d}", .{channel});
 
 }
 
 fn channelInterruptDisable(self: *Self, channel: Channel.ChannelId) void {
-    // log.debug("interrupt disable channel {d}", .{channel});
+    // log.debug(@src(),"interrupt disable channel {d}", .{channel});
 
     self.all_channel_intmask_lock.acquire();
     defer self.all_channel_intmask_lock.release();
@@ -590,11 +590,11 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
             characteristics.packets_per_frame += @truncate((ep.max_packet_size >> 11) & 0x3);
         }
 
-        log.debug("channel start transfer to endpoint {d} mps {d}", .{ characteristics.endpoint_number, characteristics.max_packet_size });
+        log.debug(@src(), "channel start transfer to endpoint {d} mps {d}", .{ characteristics.endpoint_number, characteristics.max_packet_size });
     } else {
         // This transfer aims at the default control
         // endpoint. (Endpoint 0.)
-        log.debug("channel start transfer to default control endpoint", .{});
+        log.debug(@src(), "channel start transfer to default control endpoint", .{});
         characteristics.endpoint_number = 0;
         characteristics.endpoint_type = TransferType.control;
         characteristics.max_packet_size = req.device.?.device_descriptor.max_packet_size;
@@ -610,7 +610,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
                 transfer.size = @sizeOf(SetupPacket);
                 transfer.packet_id = DwcTransferSizePid.setup;
 
-                debug.sliceDump(std.mem.asBytes(&req.setup_data));
+                log.sliceDump(std.mem.asBytes(&req.setup_data));
             },
             TransferRequest.control_data_phase => {
                 debugLogTransfer(req, "starting DATA transaction");
@@ -665,7 +665,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
     // if talking to a low or full speed device, handle the
     // split register
     if (req.device.?.speed != UsbSpeed.High) {
-        // log.debug("device needs a split transaction, finding TT", .{});
+        // log.debug(@src(),"device needs a split transaction, finding TT", .{});
 
         // find which hub is the transaction translator (TT)
         var tt_hub_port: u7 = 0;
@@ -681,7 +681,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         split_control.hub_address = if (tt_hub) |h| h.address else 0;
         split_control.split_enable = 1;
 
-        // log.debug("split control: port {d}, hub {d}, enable {d}", .{ split_control.port_address, split_control.hub_address, split_control.split_enable });
+        // log.debug(@src(),"split control: port {d}, hub {d}, enable {d}", .{ split_control.port_address, split_control.hub_address, split_control.split_enable });
 
         if (transfer.size > characteristics.max_packet_size) {
             transfer.size = characteristics.max_packet_size;
@@ -723,7 +723,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
     req.cur_data_ptr = data;
 
     if (channel.registers.channel_dma_addr & (DMA_ALIGNMENT - 1) != 0) {
-        log.warn("data ptr 0x{x:0>8} misaligned by 0x{x} bytes", .{ channel.registers.channel_dma_addr, (channel.registers.channel_dma_addr & (DMA_ALIGNMENT - 1)) });
+        log.warn(@src(), "data ptr 0x{x:0>8} misaligned by 0x{x} bytes", .{ channel.registers.channel_dma_addr, (channel.registers.channel_dma_addr & (DMA_ALIGNMENT - 1)) });
     }
 
     const mps = characteristics.max_packet_size;
@@ -739,7 +739,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
 
     channel.active_transfer = req;
 
-    log.debug("Setting up transactions on channel {d}:\n" ++
+    log.debug(@src(), "Setting up transactions on channel {d}:\n" ++
         "\t\tmax_packet_size={d}, " ++
         "endpoint_number={d}, endpoint_direction={d},\n" ++
         "\t\tlow_speed={d}, endpoint_type={d}, device_address={d},\n\t\t" ++
@@ -824,7 +824,7 @@ pub fn deferTransfer(self: *Self, req: *TransferRequest) !void {
             semaphore.free(req.deferrer_thread_sem.?);
             req.deferrer_thread_sem = null;
         }
-        log.debug("created semaphore {d} for deferred transfer", .{req.deferrer_thread_sem.?});
+        log.debug(@src(), "created semaphore {d} for deferred transfer", .{req.deferrer_thread_sem.?});
     }
 
     // first time through, allocate a thread.
@@ -835,7 +835,7 @@ pub fn deferTransfer(self: *Self, req: *TransferRequest) !void {
             .req = req,
         };
         req.deferrer_thread = try schedule.spawn(deferredTransfer, "dwc defer", &args);
-        log.debug("spawned thread {d} for deferred transfer", .{req.deferrer_thread.?});
+        log.debug(@src(), "spawned thread {d} for deferred transfer", .{req.deferrer_thread.?});
     }
 
     // let the thread progress
@@ -864,21 +864,21 @@ fn deferredTransfer(args_ptr: *anyopaque) void {
 
     while (true) {
         semaphore.wait(req.deferrer_thread_sem.?) catch |err| {
-            log.err("deferredTransfer semaphore {d} error {any}", .{ req.deferrer_thread_sem.?, err });
+            log.err(@src(), "deferredTransfer semaphore {d} error {any}", .{ req.deferrer_thread_sem.?, err });
             // TODO something
         };
 
-        log.debug("deferring transfer for {d}ms", .{interval_ms});
+        log.debug(@src(), "deferring transfer for {d}ms", .{interval_ms});
 
         schedule.sleep(interval_ms) catch |err| {
-            log.err("deferredTransfer sleep error {any}", .{err});
+            log.err(@src(), "deferredTransfer sleep error {any}", .{err});
             // TODO something
         };
 
         if (host.channelAllocate()) |channel| {
             host.channelStartTransfer(channel, req);
         } else |err| {
-            log.err("channel allocate error: {any}", .{err});
+            log.err(@src(), "channel allocate error: {any}", .{err});
         }
     }
 }
@@ -897,7 +897,7 @@ fn debugLogTransfer(req: *TransferRequest, msg: []const u8) void {
         }
     }
 
-    log.debug("[{d}:{d} {s}] {s}", .{ req.device.?.address, endpoint_number, transfer_type, msg });
+    log.debug(@src(), "[{d}:{d} {s}] {s}", .{ req.device.?.address, endpoint_number, transfer_type, msg });
 }
 
 // ----------------------------------------------------------------------
@@ -926,14 +926,14 @@ pub fn dwcDriverLoop(args: *anyopaque) void {
                     if (self.channelAllocate()) |channel| {
                         self.channelStartTransfer(channel, xfer);
                     } else |err| {
-                        log.err("channel allocate error: {any}", .{err});
+                        log.err(@src(), "channel allocate error: {any}", .{err});
                     }
                 }
             } else {
-                log.err("malformed transfer: no device", .{});
+                log.err(@src(), "malformed transfer: no device", .{});
             }
         } else |err| {
-            log.err("transfer_mailbox receive error: {any}", .{err});
+            log.err(@src(), "transfer_mailbox receive error: {any}", .{err});
         }
     }
 }

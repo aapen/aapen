@@ -5,6 +5,8 @@ const root = @import("root");
 const HAL = root.HAL;
 const Forth = @import("forty/forth.zig").Forth;
 
+var log = @import("logger.zig").initWithLevel("time", .warn);
+
 const atomic = @import("atomic.zig");
 const queue = @import("queue.zig");
 const schedule = @import("schedule.zig");
@@ -38,7 +40,8 @@ pub fn init() void {
     ticks_per_milli = ticks_per_second / 1000;
 
     quantum = ticks_per_second / quanta_per_second;
-    _ = root.printf("clock frequency = %d Hz\nquantum = %d ticks\n", ticks_per_second, quantum);
+
+    log.info(@src(), "clock frequency = {d} Hz\tquantum = {d}", .{ ticks_per_second, quantum });
 
     quanta_since_boot = 0;
     seconds_since_boot = 0;

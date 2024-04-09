@@ -1,5 +1,6 @@
 const std = @import("std");
-const log = std.log.scoped(.channel_set);
+
+var log = @import("logger.zig").init("channel_set");
 
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
@@ -40,7 +41,7 @@ pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
             }
 
             if (this.available.isSet(channel)) {
-                log.err("Attempt to free channel {d} but it was not allocated.", .{channel});
+                log.err(@src(), "Attempt to free channel {d} but it was not allocated.", .{channel});
             } else {
                 this.available.set(channel);
             }

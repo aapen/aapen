@@ -18,6 +18,9 @@ const std = @import("std");
 const root = @import("root");
 const printf = root.printf;
 
+const Logger = @import("logger.zig");
+var log = Logger.initWithLevel("queue", .debug);
+
 const schedule = @import("schedule.zig");
 const isBadTid = schedule.isBadTid;
 const NO_TID = schedule.NO_TID;

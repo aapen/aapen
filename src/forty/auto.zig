@@ -1,5 +1,4 @@
 const std = @import("std");
-const log = std.log.scoped(.forty);
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;

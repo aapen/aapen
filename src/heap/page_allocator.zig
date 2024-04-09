@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const log = std.log.scoped(.page_allocator);
+
+var log = @import("../logger.zig").initWithLevel("heap", .info);
 
 const memory = @import("../memory.zig");
 
@@ -52,6 +53,6 @@ fn free(_: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
     if (memory.free(@intFromPtr(buf.ptr), aligned_len)) {
         return;
     } else |err| {
-        log.err("memory.free({x:0>8}, {x:0>8}): {any}", .{ @intFromPtr(buf.ptr), aligned_len, err });
+        log.err(@src(), "memory.free({x:0>8}, {x:0>8}): {any}", .{ @intFromPtr(buf.ptr), aligned_len, err });
     }
 }

@@ -5,7 +5,6 @@
 /// handling for the kernel.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const log = std.log.scoped(.usb);
 
 const root = @import("root");
 const HCI = root.HAL.USBHCI;
@@ -15,12 +14,12 @@ const cpu = arch.cpu;
 
 const Forth = @import("forty/forth.zig").Forth;
 
+var log = @import("logger.zig").initWithLevel("usb", .info);
+
 const time = @import("time.zig");
 
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
-
-pub const Bus = @import("usb/bus.zig");
 
 const descriptor = @import("usb/descriptor.zig");
 pub const DescriptorIndex = descriptor.DescriptorIndex;
@@ -166,18 +165,18 @@ pub fn init() !void {
     try registerDriver(&hid_keyboard.driver);
 
     try root.hal.usb_hci.initialize(allocator);
-    log.debug("started host controller", .{});
+    log.debug(@src(), "started host controller", .{});
 
     const dev0 = try allocateDevice(null);
     errdefer freeDevice(dev0);
 
-    log.debug("attaching root hub", .{});
+    log.debug(@src(), "attaching root hub", .{});
     if (attachDevice(dev0, UsbSpeed.High)) {
-        log.debug("usb initialized", .{});
+        log.debug(@src(), "usb initialized", .{});
         root_hub = &devices[dev0];
         return;
     } else |err| {
-        log.err("usb init failed: {any}", .{err});
+        log.err(@src(), "usb init failed: {any}", .{err});
         return err;
     }
 }
@@ -189,14 +188,14 @@ pub fn registerDriver(device_driver: *const DeviceDriver) !void {
     var already_registered = false;
     for (drivers.items) |drv| {
         if (drv == device_driver) {
-            log.err("device driver is already registered, skipping it", .{});
+            log.err(@src(), "device driver is already registered, skipping it", .{});
             already_registered = true;
             break;
         }
     }
 
     if (!already_registered) {
-        log.info("registering {s}", .{device_driver.name});
+        log.info(@src(), "registering {s}", .{device_driver.name});
         try drivers.append(device_driver);
     }
 }
@@ -257,7 +256,7 @@ pub fn attachDevice(devid: DeviceAddress, speed: UsbSpeed) !void {
         UsbSpeed.Low => 8,
     };
 
-    log.debug("attach device: read device descriptor, irq flags = 0x{x:0>8}", .{arch.cpu.irqFlagsRead()});
+    log.debug(@src(), "attach device: read device descriptor, irq flags = 0x{x:0>8}", .{arch.cpu.irqFlagsRead()});
 
     // when attaching a device, it will be in the default state:
     // responding to address 0, endpoint 0
@@ -265,25 +264,25 @@ pub fn attachDevice(devid: DeviceAddress, speed: UsbSpeed) !void {
 
     // dev.device_descriptor.dump();
 
-    log.debug("device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
+    log.debug(@src(), "device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
 
-    log.debug("assigning address {d}", .{devid});
+    log.debug(@src(), "assigning address {d}", .{devid});
     try deviceSetAddress(dev, devid);
 
     // now read the real descriptor
     try deviceDescriptorRead(dev, @sizeOf(DeviceDescriptor));
 
-    log.debug("reading configuration descriptor", .{});
+    log.debug(@src(), "reading configuration descriptor", .{});
     try deviceConfigurationDescriptorRead(dev);
 
     // dev.configuration.dump();
 
     const use_config = dev.configuration.configuration_descriptor.configuration_value;
-    //    log.debug("setting device to use configuration {d}", .{use_config});
+    //    log.debug(@src(), "setting device to use configuration {d}", .{use_config});
     try deviceSetConfiguration(dev, use_config);
 
     var buf: [512]u8 = [_]u8{0} ** 512;
-    log.debug("attaching {s}", .{dev.description(&buf)});
+    log.debug(@src(), "attaching {s}", .{dev.description(&buf)});
 
     try bindDriver(dev);
 }
@@ -296,20 +295,20 @@ fn bindDriver(dev: *Device) !void {
 
     for (drivers.items) |drv| {
         if (drv.canBind(dev)) {
-            log.debug("Attempting to bind driver {s} to device", .{drv.name});
+            log.debug(@src(), "Attempting to bind driver {s} to device", .{drv.name});
             if (drv.bind(dev)) {
                 var buf: [512]u8 = [_]u8{0} ** 512;
-                log.info("Bound driver {s} to {s}", .{ drv.name, dev.description(&buf) });
+                log.info(@src(), "Bound driver {s} to {s}", .{ drv.name, dev.description(&buf) });
                 return;
             } else |e| {
                 switch (e) {
                     error.DeviceUnsupported => {
-                        log.debug("Driver {s} doesn't support this device", .{drv.name});
+                        log.debug(@src(), "Driver {s} doesn't support this device", .{drv.name});
                         // move on to the next driver.
                         continue;
                     },
                     else => {
-                        log.err("Driver bind error {any}", .{e});
+                        log.err(@src(), "Driver bind error {any}", .{e});
                         return e;
                     },
                 }
@@ -343,9 +342,9 @@ pub fn transferSubmit(req: *TransferRequest) !void {
 }
 
 fn controlMessageDone(xfer: *TransferRequest) void {
-    log.debug("signalling completion semaphore {d}", .{xfer.semaphore.?});
+    log.debug(@src(), "signalling completion semaphore {d}", .{xfer.semaphore.?});
     semaphore.signal(xfer.semaphore.?) catch {
-        log.err("failed to signal semaphore {?d} on completion of control msg", .{xfer.semaphore});
+        log.err(@src(), "failed to signal semaphore {?d} on completion of control msg", .{xfer.semaphore});
     };
 }
 
@@ -362,40 +361,39 @@ pub fn controlMessage(
 ) !TransferRequest.CompletionStatus {
     const sem: SID = try semaphore.create(0);
     defer {
-        log.debug("freeing semaphore {d}", .{sem});
+        log.debug(@src(), "freeing semaphore {d}", .{sem});
         semaphore.free(sem) catch |err| {
-            log.err("semaphore {d} free error: {any}", .{ sem, err });
+            log.err(@src(), "semaphore {d} free error: {any}", .{ sem, err });
         };
     }
 
-    log.debug("[{d}:{d}] completion semaphore id {d}", .{ dev.address, 0, sem });
+    log.debug(@src(), "[{d}:{d}] completion semaphore id {d}", .{ dev.address, 0, sem });
 
     const setup: SetupPacket = SetupPacket.init2(req_type, req_code, val, index, @truncate(data.len));
     var req: *TransferRequest = try allocator.create(TransferRequest);
     req.initControlAllocated(dev, setup, data);
 
-    const debug = @import("debug.zig");
-    log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, SETUP contents", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+    log.debug(@src(), "[{d}:{d}] req_type 0x{x}, req_code 0x{x}, SETUP contents", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
 
-    debug.sliceDump(std.mem.asBytes(&req.setup_data));
+    log.sliceDump(std.mem.asBytes(&req.setup_data));
 
     req.completion = controlMessageDone;
     req.semaphore = sem;
     try transferSubmit(req);
     // TODO add the ability to time out
     semaphore.wait(sem) catch |err| {
-        log.err("semaphore {d} wait error: {any}", .{ sem, err });
+        log.err(@src(), "semaphore {d} wait error: {any}", .{ sem, err });
     };
-    log.debug("[{d}:{d}] awakened from semaphore.wait", .{ dev.address, 0 });
+    log.debug(@src(), "[{d}:{d}] awakened from semaphore.wait", .{ dev.address, 0 });
 
     // if (data.len > 0) {
-    //     log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, received", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
-    //     debug.sliceDump(data[0..req.actual_size]);
+    //     log.debug(@src(), "[{d}:{d}] req_type 0x{x}, req_code 0x{x}, received", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+    //     log.sliceDump(data[0..req.actual_size]);
     // } else {
-    //     log.debug("[{d}:{d}] req_type 0x{x}, req_code 0x{x}, no data expected", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+    //     log.debug(@src(), "[{d}:{d}] req_type 0x{x}, req_code 0x{x}, no data expected", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
     // }
 
-    log.debug("[{d}:{d}] got here", .{ dev.address, 0 });
+    log.debug(@src(), "[{d}:{d}] got here", .{ dev.address, 0 });
 
     var st = req.status;
     if (st == .ok and req.actual_size != data.len) {
@@ -407,7 +405,7 @@ pub fn controlMessage(
 }
 
 pub fn deviceDescriptorRead(dev: *Device, maxlen: TransferBytes) !void {
-    log.debug("[{d}:{d}] read device descriptor (maxlen {d} bytes)", .{ dev.address, 0, maxlen });
+    log.debug(@src(), "[{d}:{d}] read device descriptor (maxlen {d} bytes)", .{ dev.address, 0, maxlen });
     const buffer: []u8 = std.mem.asBytes(&dev.device_descriptor);
     const readlen = @min(maxlen, buffer.len);
     const result = try controlMessage(
@@ -424,7 +422,7 @@ pub fn deviceDescriptorRead(dev: *Device, maxlen: TransferBytes) !void {
 }
 
 pub fn deviceSetAddress(dev: *Device, address: DeviceAddress) !void {
-    log.debug("[{d}:{d}] set address {d}", .{ dev.address, 0, address });
+    log.debug(@src(), "[{d}:{d}] set address {d}", .{ dev.address, 0, address });
 
     const result = try controlMessage(
         dev,
@@ -443,7 +441,7 @@ pub fn deviceSetAddress(dev: *Device, address: DeviceAddress) !void {
 }
 
 pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
-    log.debug("[{d}:{d}] configuration descriptor read", .{ dev.address, 0 });
+    log.debug(@src(), "[{d}:{d}] configuration descriptor read", .{ dev.address, 0 });
     // first transfer returns the configuration descriptor which
     // includes the total length of the whole configuration tree
     var desc: ConfigurationDescriptor = undefined;
@@ -457,7 +455,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
         std.mem.asBytes(&desc),
     );
     if (result != .ok) {
-        log.debug("configuration descriptor read, first read result {s}", .{@tagName(result)});
+        log.debug(@src(), "configuration descriptor read, first read result {s}", .{@tagName(result)});
         return Error.TransferFailed;
     }
 
@@ -476,7 +474,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
         configuration,
     );
     if (result2 != .ok) {
-        log.debug("configuration descriptor read part 2, second read result {s}", .{@tagName(result2)});
+        log.debug(@src(), "configuration descriptor read part 2, second read result {s}", .{@tagName(result2)});
         return Error.TransferFailed;
     }
 
@@ -485,7 +483,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
 }
 
 pub fn deviceSetConfiguration(dev: *Device, use_config: u8) !void {
-    log.debug("[{d}:{d}] set configuration {d}", .{ dev.address, 0, use_config });
+    log.debug(@src(), "[{d}:{d}] set configuration {d}", .{ dev.address, 0, use_config });
 
     _ = try controlMessage(
         dev,
@@ -498,7 +496,7 @@ pub fn deviceSetConfiguration(dev: *Device, use_config: u8) !void {
 }
 
 pub fn deviceGetStringDescriptor(dev: *Device, index: StringIndex, lang_id: u16, buffer: []u8) !void {
-    log.debug("[{d}:{d}] get string descriptor {d}", .{ dev.address, 0, index });
+    log.debug(@src(), "[{d}:{d}] get string descriptor {d}", .{ dev.address, 0, index });
 
     _ = try controlMessage(
         dev,
