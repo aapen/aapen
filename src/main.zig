@@ -37,9 +37,6 @@ pub const HAL = switch (config.board) {
 };
 const diagnostics = @import("hal/diagnostics.zig");
 
-// Supply debug options to Zig's stdlib.
-pub const std_options = debug.options;
-
 // Present an "operating system" interface layer to Zig's stdlib.
 pub const os = @import("os.zig");
 
