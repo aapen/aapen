@@ -24,7 +24,8 @@ const ChannelSet = @import("../channel_set.zig");
 
 const Forth = @import("../forty/forth.zig").Forth;
 
-var log = @import("../logger.zig").initWithLevel("dwc2", .info);
+const Logger = @import("../logger.zig");
+pub var log: *Logger = undefined;
 
 const mailbox = @import("../mailbox.zig");
 const Mailbox = mailbox.Mailbox;
@@ -194,6 +195,8 @@ pub fn init(
     translations: *AddressTranslations,
     power: *PowerController,
 ) !*Self {
+    log = Logger.init("dwc2", .info);
+
     const self = try allocator.create(Self);
 
     self.* = .{
@@ -610,7 +613,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
                 transfer.size = @sizeOf(SetupPacket);
                 transfer.packet_id = DwcTransferSizePid.setup;
 
-                log.sliceDump(std.mem.asBytes(&req.setup_data));
+                log.sliceDump(@src(), std.mem.asBytes(&req.setup_data));
             },
             TransferRequest.control_data_phase => {
                 debugLogTransfer(req, "starting DATA transaction");

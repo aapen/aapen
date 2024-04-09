@@ -46,12 +46,11 @@ pub fn main() !void {
     defer strings.deinit();
 
     const stdout = std.io.getStdOut().writer();
-    _ = stdout;
-    // try stdout.print("found {d} debug symbols\n", .{debug_symbols.items.len});
+    try stdout.print("found {d} debug symbols\n", .{debug_symbols.items.len});
     // try dump.printCompileUnits(stdout);
 
     // for (debug_symbols.items, 0..) |*it, i| {
-    //     try stdout.print("[{d}]: low = 0x{x:0>16}, high = 0x{x:0>16}, name = {s}\n", .{ i, it.low_addr, it.high_addr, it.getName() });
+    //     try stdout.print("[{d}]: low = 0x{x:0>16}, high = 0x{x:0>16}, name = {s}, linkage_name = {s}\n", .{ i, it.low_addr, it.high_addr, it.name, it.linkage_name });
     // }
 
     var idx: u64 = 0;

@@ -15,7 +15,6 @@ const DebugSymbol = @import("DebugSymbol.zig");
 const Elf = @import("Elf.zig");
 const Exprloc = @import("Exprloc.zig");
 const Location = Exprloc.Location;
-const LocationTag = Exprloc.LocationTag;
 
 const Parser = @This();
 
@@ -288,18 +287,21 @@ fn walkCompileUnit(
                     dwarf.AT.name => {
                         variable.name = attr.getString(value, cu.header.dw_format, parser.elf.*) orelse return error.MalformedDwarf;
                     },
+                    dwarf.AT.linkage_name => {
+                        variable.linkage_name = attr.getString(value, cu.header.dw_format, parser.elf.*) orelse return error.MalformedDwarf;
+                    },
                     dwarf.AT.location => {
                         const exprloc = try attr.getExprloc(value) orelse return error.MalformedDwarf;
                         const loc = Exprloc.evaluate(exprloc, allocator);
 
                         switch (loc) {
-                            LocationTag.unknown => {
+                            Location.unknown => {
                                 // not a supported location
                                 // expression, skip this variable.
                                 _ = symbols.pop();
                                 return;
                             },
-                            LocationTag.absolute => |addr| {
+                            Location.absolute => |addr| {
                                 variable.low_addr = addr;
                             },
                         }
@@ -309,6 +311,16 @@ fn walkCompileUnit(
             }
 
             variable.high_addr = variable.low_addr + size;
+
+            if (variable.name.len == 0 and variable.linkage_name.len == 0) {
+                // it has no name (but I have no idea why this happens)
+                _ = symbols.pop();
+            }
+
+            if (variable.high_addr == 0 and variable.low_addr == 0) {
+                // it was optimized out
+                _ = symbols.pop();
+            }
         },
         dwarf.TAG.label => {
             const label: *DebugSymbol = try symbols.addOne(allocator);

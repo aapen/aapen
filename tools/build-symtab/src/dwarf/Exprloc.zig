@@ -12,12 +12,7 @@ const options = expressions.ExpressionOptions{
 
 const ExpressionMachine = expressions.StackMachine(options);
 
-pub const LocationTag = enum {
-    unknown,
-    absolute,
-};
-
-pub const Location = union(LocationTag) {
+pub const Location = union(enum) {
     unknown: void,
     absolute: u64,
 };

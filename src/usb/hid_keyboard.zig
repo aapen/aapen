@@ -3,13 +3,15 @@
 /// See USB Device Class Definition for Human Interface Devices
 /// Revision 1.1
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const root = @import("root");
 const delayMillis = root.HAL.delayMillis;
 
 const Forth = @import("../forty/forth.zig").Forth;
 
-var log = @import("../logger.zig").initWithLevel("usb_hid_keyboard", .info);
+const Logger = @import("../logger.zig");
+var log: *Logger = undefined;
 
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
@@ -162,8 +164,14 @@ pub fn hidKeyboardDriverDeviceUnbind(dev: *Device) void {
     log.debug(@src(), "hid keyboard driver pretending to unbind device {d}", .{dev.address});
 }
 
+pub fn hidKeyboardDriverInitialize(allocator: Allocator) !void {
+    _ = allocator;
+    log = Logger.init("usb_hid_keyboard", .info);
+}
+
 pub const driver: DeviceDriver = .{
     .name = "USB Keyboard",
+    .initialize = hidKeyboardDriverInitialize,
     .canBind = hidKeyboardDriverCanBind,
     .bind = hidKeyboardDriverDeviceBind,
     .unbind = hidKeyboardDriverDeviceUnbind,

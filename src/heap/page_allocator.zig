@@ -1,7 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-var log = @import("../logger.zig").initWithLevel("heap", .info);
+const Logger = @import("../logger.zig");
+var log: *Logger = undefined;
 
 const memory = @import("../memory.zig");
 
@@ -20,6 +21,9 @@ pub fn init(start: u64, end: u64) Allocator {
         .ptr = &.{},
         .vtable = &vtable,
     };
+
+    Logger.allocator = allocator;
+    log = Logger.init("heap", .info);
 
     return allocator;
 }

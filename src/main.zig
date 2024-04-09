@@ -52,7 +52,7 @@ pub var interpreter: Forth = Forth{};
 pub var uart_valid = false;
 pub var char_buffer_console_valid = false;
 pub var main_console_valid = false;
-pub var log: Logger = Logger.init("main");
+pub var log: *Logger = undefined;
 
 extern fn _start() noreturn;
 
@@ -83,6 +83,12 @@ export fn kernelInit(core_id: usize) noreturn {
 
     debug.init();
 
+    heap.init();
+
+    kernel_allocator = os.heap.page_allocator;
+
+    log = Logger.init("main", .info);
+
     schedule.init() catch |err| {
         debug.kernelError("scheduler init error", err);
         arch.cpu.park();
@@ -92,10 +98,6 @@ export fn kernelInit(core_id: usize) noreturn {
         debug.kernelError("semaphore init error", err);
         arch.cpu.park();
     };
-
-    heap.init();
-
-    kernel_allocator = os.heap.page_allocator;
 
     // configure this as thread 0
     schedule.becomeThread0(0x20000, 0x20000);
@@ -110,6 +112,10 @@ export fn kernelInit(core_id: usize) noreturn {
 
     diagnosticsInit() catch |err| {
         debug.kernelError("diagnostics init error", err);
+    };
+
+    usbInit() catch |err| {
+        debug.kernelError("usb init error", err);
     };
 
     // Allow other cores to start. They will begin at _start (from
@@ -170,6 +176,10 @@ fn startForty(_: *anyopaque) void {
             } else |err| {
                 debug.kernelError("Forth init error", err);
             }
+
+            Logger.defineModule(interp) catch |err| {
+                debug.kernelError("Logger define module", err);
+            };
 
             debug.defineModule(interp) catch |err| {
                 debug.kernelError("Debug define module", err);
@@ -273,9 +283,5 @@ fn diagnosticsInit() !void {
 }
 
 fn usbInit() !void {
-    // if (Usb.init(heap.allocator)) |_| {
-    //     debug.kernelMessage("USB core init");
-    // } else |err| {
-    //     debug.kernelError("USB core init error", err);
-    // }
+    try Usb.init();
 }

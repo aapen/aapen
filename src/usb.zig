@@ -14,7 +14,8 @@ const cpu = arch.cpu;
 
 const Forth = @import("forty/forth.zig").Forth;
 
-var log = @import("logger.zig").initWithLevel("usb", .info);
+const Logger = @import("logger.zig");
+pub var log: *Logger = undefined;
 
 const time = @import("time.zig");
 
@@ -117,7 +118,7 @@ const Self = @This();
 
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(Self, .{
-        .{ "init", "usb-init" },
+        .{ "initialize", "usb-init" },
         .{ "getDevice", "usb-device" },
     });
     try forth.defineConstant("usbhci", @intFromPtr(root.hal.usb_hci));
@@ -148,7 +149,11 @@ var drivers_lock: TicketLock = undefined;
 var root_hub: ?*Device = undefined;
 var bus_lock: TicketLock = undefined;
 
+// `init` does the allocations and registrations needed, but does not
+// activate the hardware
 pub fn init() !void {
+    log = Logger.init("usb", .info);
+
     allocator = root.kernel_allocator;
     drivers = Drivers.init(allocator);
 
@@ -159,11 +164,14 @@ pub fn init() !void {
         devices[i].init();
     }
 
-    try hub.initialize(allocator);
-
     try registerDriver(&hub.driver);
     try registerDriver(&hid_keyboard.driver);
 
+    try initializeDrivers();
+}
+
+// `initialize` activates the hardware and does the initial port scan
+pub fn initialize() !void {
     try root.hal.usb_hci.initialize(allocator);
     log.debug(@src(), "started host controller", .{});
 
@@ -197,6 +205,17 @@ pub fn registerDriver(device_driver: *const DeviceDriver) !void {
     if (!already_registered) {
         log.info(@src(), "registering {s}", .{device_driver.name});
         try drivers.append(device_driver);
+    }
+}
+
+fn initializeDrivers() !void {
+    drivers_lock.acquire();
+    defer drivers_lock.release();
+
+    for (drivers.items) |drv| {
+        drv.initialize(allocator) catch |err| {
+            log.err(@src(), "driver {s} initialization error {any}", .{ drv.name, err });
+        };
     }
 }
 
@@ -375,7 +394,7 @@ pub fn controlMessage(
 
     log.debug(@src(), "[{d}:{d}] req_type 0x{x}, req_code 0x{x}, SETUP contents", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
 
-    log.sliceDump(std.mem.asBytes(&req.setup_data));
+    log.sliceDump(@src(), std.mem.asBytes(&req.setup_data));
 
     req.completion = controlMessageDone;
     req.semaphore = sem;

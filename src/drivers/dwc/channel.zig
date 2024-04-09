@@ -7,8 +7,6 @@ const cpu = arch.cpu;
 
 const Host = @import("../dwc_otg_usb.zig");
 
-var log = @import("../../logger.zig").initWithLevel("dwc2", .info);
-
 const synchronize = @import("../../synchronize.zig");
 const time = @import("../../time.zig");
 
@@ -99,12 +97,12 @@ pub fn interruptsClearPending(self: *Self) void {
 const all_zero_bits: ChannelInterrupt = @bitCast(@as(u32, 0));
 
 pub fn interruptDisableAll(self: *Self) void {
-    // log.debug(@src(),"channel {d} interrupt disable all", .{self.id});
+    // Host.log.debug(@src(),"channel {d} interrupt disable all", .{self.id});
     self.registers.channel_int_mask = all_zero_bits;
 }
 
 pub fn interruptsEnableActiveTransaction(self: *Self) void {
-    // log.debug(@src(),"channel {d} interrupt enable active transaction", .{self.id});
+    // Host.log.debug(@src(),"channel {d} interrupt enable active transaction", .{self.id});
     self.registers.channel_int_mask = .{
         .transfer_complete = 1,
         .halt = 1,
@@ -133,7 +131,7 @@ const InterruptReason = enum {
 
 pub fn channelInterrupt2(self: *Self, host: *Host) void {
     if (self.active_transfer == null) {
-        log.debug(@src(), "channel {d} received a spurious interrupt.", .{self.id});
+        Host.log.debug(@src(), "channel {d} received a spurious interrupt.", .{self.id});
         return;
     }
 
@@ -143,7 +141,7 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
 
     var buf = std.mem.zeroes([128]u8);
     const l = int_status.debugDecode(&buf);
-    log.debug(@src(), "channel {d} interrupt{s}, characteristics 0x{x:0>8}, transfer 0x{x:0>8}", .{
+    Host.log.debug(@src(), "channel {d} interrupt{s}, characteristics 0x{x:0>8}, transfer 0x{x:0>8}", .{
         self.id,
         buf[0..l],
         @as(u32, @bitCast(self.registers.channel_character)),
@@ -156,32 +154,32 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
         (int_status.nyet == 1 and !req.complete_split) or
         (int_status.data_toggle_error == 1 and self.registers.channel_character.endpoint_direction == EndpointDirection.out))
     {
-        log.err(@src(), "channel {d} transfer error (interrupts = 0x{x:0>8},  packet count = {d})", .{ self.id, @as(u32, @bitCast(int_status)), self.registers.transfer.packet_count });
+        Host.log.err(@src(), "channel {d} transfer error (interrupts = 0x{x:0>8},  packet count = {d})", .{ self.id, @as(u32, @bitCast(int_status)), self.registers.transfer.packet_count });
 
         self.host.dumpStatus();
         self.channelStatus();
 
         interrupt_reason = .transfer_failed;
     } else if (int_status.frame_overrun == 1) {
-        // log.debug(@src(),"channel {d} frame overrun. restarting transaction", .{self.id});
+        // Host.log.debug(@src(),"channel {d} frame overrun. restarting transaction", .{self.id});
         interrupt_reason = .transaction_needs_restart;
     } else if (int_status.nyet == 1) {
-        // log.debug(@src(),"channel {d} received nyet from device; split retry needed", .{self.id});
+        // Host.log.debug(@src(),"channel {d} received nyet from device; split retry needed", .{self.id});
         req.csplit_retries += 1;
         if (req.csplit_retries > 10) {
-            // log.debug(@src(),"channel {d} restarting split transaction (CSPLIT tried {d} times)", .{ self.id, req.csplit_retries });
+            // Host.log.debug(@src(),"channel {d} restarting split transaction (CSPLIT tried {d} times)", .{ self.id, req.csplit_retries });
             req.complete_split = false;
         }
         interrupt_reason = .transaction_needs_restart;
     } else if (int_status.nak == 1) {
-        // log.debug(@src(),"channel {d} received nak from device; deferring transfer", .{self.id});
+        // Host.log.debug(@src(),"channel {d} received nak from device; deferring transfer", .{self.id});
         interrupt_reason = .transfer_needs_defer;
         req.complete_split = false;
     } else {
         interrupt_reason = self.channelHaltedNormal(req, int_status);
     }
 
-    log.debug(@src(), "channel {d} interrupt_reason {s}", .{ self.id, @tagName(interrupt_reason) });
+    Host.log.debug(@src(), "channel {d} interrupt_reason {s}", .{ self.id, @tagName(interrupt_reason) });
 
     var completion: TransferRequest.CompletionStatus = undefined;
 
@@ -233,8 +231,8 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
     const bytes_remaining = self.registers.transfer.size;
     _ = bytes_remaining;
 
-    // log.debug(@src(),"channel {d} reports packets_remaining {d}", .{ self.id, packets_remaining });
-    // log.debug(@src(),"channel {d} packets remaining {d} of {d}, so packets transferred {d}", .{ self.id, packets_remaining, req.attempted_packets_remaining, packets_transferred });
+    // Host.log.debug(@src(),"channel {d} reports packets_remaining {d}", .{ self.id, packets_remaining });
+    // Host.log.debug(@src(),"channel {d} packets remaining {d} of {d}, so packets transferred {d}", .{ self.id, packets_remaining, req.attempted_packets_remaining, packets_transferred });
 
     if (packets_transferred != 0) {
         var bytes_transferred: TransferBytes = 0;
@@ -269,13 +267,13 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             }
         }
 
-        // log.debug(@src(),"channel {d} calculated {d} bytes transferred", .{ self.id, bytes_transferred });
+        // Host.log.debug(@src(),"channel {d} calculated {d} bytes transferred", .{ self.id, bytes_transferred });
 
         req.attempted_packets_remaining -= packets_transferred;
         req.attempted_bytes_remaining -= bytes_transferred;
         req.cur_data_ptr.? += bytes_transferred;
 
-        //        log.debug(@src(),"channel {d} packets remaining {d}, bytes remaining {d}", .{ self.id, req.attempted_packets_remaining, req.attempted_bytes_remaining });
+        //        Host.log.debug(@src(),"channel {d} packets remaining {d}, bytes remaining {d}", .{ self.id, req.attempted_packets_remaining, req.attempted_bytes_remaining });
 
         // is the transfer completed?
         if (req.attempted_packets_remaining == 0 or
@@ -283,7 +281,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             bytes_transferred < packets_transferred * max_packet_size))
         {
             if (ints.transfer_complete == 0) {
-                log.err(@src(), "channel {d} expected transfer_completed flag but was not observed.", .{self.id});
+                Host.log.err(@src(), "channel {d} expected transfer_completed flag but was not observed.", .{self.id});
                 return .transfer_failed;
             }
 
@@ -291,7 +289,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
                 req.attempted_bytes_remaining == 0 and
                 ty != TransferType.interrupt)
             {
-                log.debug(@src(), "channel {d} starting next part of {d} byte transfer, after short attempt of {d} bytes", .{ self.id, req.size, req.attempted_size });
+                Host.log.debug(@src(), "channel {d} starting next part of {d} byte transfer, after short attempt of {d} bytes", .{ self.id, req.size, req.attempted_size });
                 req.complete_split = false;
                 req.next_data_pid = self.registers.transfer.packet_id;
                 if (!req.isControlRequest() or
@@ -316,7 +314,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
                 return .transfer_needs_restart;
             }
 
-            log.debug(@src(), "channel {d} transfer completed", .{self.id});
+            Host.log.debug(@src(), "channel {d} transfer completed", .{self.id});
             return .transfer_completed;
         } else {
             // transfer not complete, start the next transaction
@@ -324,7 +322,7 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
                 req.complete_split = !req.complete_split;
             }
 
-            log.debug(@src(), "channel {d} will continue transfer", .{self.id});
+            Host.log.debug(@src(), "channel {d} will continue transfer", .{self.id});
             return .transaction_needs_restart;
         }
     } else {
@@ -335,13 +333,13 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
         {
             // Start CSPLIT
             req.complete_split = true;
-            log.debug(@src(), "channel {d} must continue transfer (complete_split = {})", .{ self.id, req.complete_split });
+            Host.log.debug(@src(), "channel {d} must continue transfer (complete_split = {})", .{ self.id, req.complete_split });
             return .transaction_needs_restart;
         } else if (req.isControlRequest() and req.control_phase == TransferRequest.control_status_phase) {
-            log.debug(@src(), "channel {d} status phase completed", .{self.id});
+            Host.log.debug(@src(), "channel {d} status phase completed", .{self.id});
             return .transfer_completed;
         } else {
-            log.err(@src(), "channel {d} no packets transferred", .{self.id});
+            Host.log.err(@src(), "channel {d} no packets transferred", .{self.id});
             return .transfer_failed;
         }
     }
@@ -349,14 +347,14 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
 
 pub fn channelAbort(self: *Self) void {
     if (self.state != .Active) {
-        log.warn(@src(), "channel {d} attempt to abort, but channel is not active (state is {any})", .{ self.id, self.state });
+        Host.log.warn(@src(), "channel {d} attempt to abort, but channel is not active (state is {any})", .{ self.id, self.state });
         return;
     }
 
     const im = cpu.disable();
     defer cpu.restore(im);
 
-    log.debug(@src(), "channel {d} abort requested", .{self.id});
+    Host.log.debug(@src(), "channel {d} abort requested", .{self.id});
 
     // listen for only the halted interrupt that tells us the disable
     // request is completed
@@ -367,12 +365,12 @@ pub fn channelAbort(self: *Self) void {
 }
 
 pub fn channelStatus(self: *Self) void {
-    log.info(@src(), "{s: >28}", .{"Channel registers"});
+    Host.log.info(@src(), "{s: >28}", .{"Channel registers"});
     dumpRegisterPair("characteristics", @bitCast(self.registers.channel_character), "split_control", @bitCast(self.registers.split_control));
     dumpRegisterPair("interrupt", @bitCast(self.registers.channel_int), "int. mask", @bitCast(self.registers.channel_int_mask));
     dumpRegisterPair("transfer", @bitCast(self.registers.transfer), "dma addr", @bitCast(self.registers.channel_dma_addr));
 }
 
 pub fn dumpRegisterPair(f1: []const u8, v1: u32, f2: []const u8, v2: u32) void {
-    log.info(@src(), "{s: >28}: {x:0>8}\t{s: >28}: {x:0>8}", .{ f1, v1, f2, v2 });
+    Host.log.info(@src(), "{s: >28}: {x:0>8}\t{s: >28}: {x:0>8}", .{ f1, v1, f2, v2 });
 }

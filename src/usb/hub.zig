@@ -11,7 +11,8 @@ const cpu = arch.cpu;
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
 
-var log = @import("../logger.zig").initWithLevel("usb_hub", .info);
+const Logger = @import("../logger.zig");
+var log: *Logger = undefined;
 
 const synchronize = @import("../synchronize.zig");
 const OneShot = synchronize.OneShot;
@@ -626,6 +627,8 @@ var hub_status_change_semaphore: SID = undefined;
 var hubs_with_pending_status_change: u32 = 0;
 
 pub fn initialize(alloc: Allocator) !void {
+    log = Logger.init("usb_hub", .info);
+
     allocator = alloc;
 
     for (0..MAX_HUBS) |i| {
@@ -722,6 +725,7 @@ pub fn hubDriverDeviceUnbind(dev: *Device) void {
 
 pub const driver: DeviceDriver = .{
     .name = "USB Hub",
+    .initialize = initialize,
     .canBind = hubDriverCanBind,
     .bind = hubDriverDeviceBind,
     .unbind = hubDriverDeviceUnbind,

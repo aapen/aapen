@@ -11,7 +11,8 @@ const atomic = @import("atomic.zig");
 
 const debug = @import("debug.zig");
 
-var log = @import("logger.zig").initWithLevel("schedule", .info);
+const Logger = @import("logger.zig");
+var log: *Logger = undefined;
 
 const queue = @import("queue.zig");
 const Key = queue.Key;
@@ -118,6 +119,8 @@ pub var thread_table: [NUM_THREADS]ThreadEntry = init: {
 };
 
 pub fn init() !void {
+    log = Logger.init("schedule", .info);
+
     readyq = try queue.allocate();
     sleepq = try queue.allocate();
     current = NULL_THREAD;

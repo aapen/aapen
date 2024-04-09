@@ -13,6 +13,8 @@
 const std = @import("std");
 const root = @import("root");
 
+const Forth = @import("forty/forth.zig").Forth;
+
 const p = @import("printf.zig");
 const printf = p.printf;
 const putchar = p._putchar;
@@ -24,13 +26,21 @@ const Lock = @import("synchronize.zig").TicketLock;
 const Logger = @This();
 
 pub const Level = enum {
-    debug,
-    info,
-    warn,
-    err,
-    fatal,
     none, // disables logging
+    fatal,
+    err,
+    warn,
+    info,
+    debug,
 };
+
+const Loggers = std.StringHashMap(*Logger);
+
+var initialized: bool = false;
+var init_lock: Lock = Lock.init("log_init", true);
+var all_loggers: Loggers = undefined;
+
+pub var allocator: std.mem.Allocator = undefined;
 
 /// Minimum level this logger will emit
 level: Level = .info,
@@ -39,19 +49,46 @@ level: Level = .info,
 prefix: ?[]const u8 = null,
 
 /// Lock to prevent corrupted logs
-lock: Lock = Lock.init("logger", true),
+lock: Lock = undefined,
 
-pub fn init(prefix: []const u8) Logger {
-    return .{
-        .prefix = prefix,
-    };
-}
+pub fn init(prefix: []const u8, level: Level) *Logger {
+    init_lock.acquire();
+    defer init_lock.release();
 
-pub fn initWithLevel(prefix: []const u8, level: Level) Logger {
-    return .{
+    if (!initialized) {
+        all_loggers = Loggers.init(allocator);
+        initialized = true;
+    }
+
+    if (all_loggers.get(prefix)) |existing_logger| {
+        return existing_logger;
+    }
+
+    var self: *Logger = create();
+    self.* = .{
         .prefix = prefix,
         .level = level,
+        .lock = Lock.init(prefix, true),
     };
+    all_loggers.put(prefix, self) catch unreachable;
+
+    return self;
+}
+
+pub fn get(prefix: []const u8) ?*Logger {
+    init_lock.acquire();
+    defer init_lock.release();
+
+    if (initialized) {
+        if (all_loggers.get(prefix)) |existing_logger| {
+            return existing_logger;
+        }
+    }
+    return null;
+}
+
+fn create() *Logger {
+    return allocator.create(Logger) catch unreachable;
 }
 
 pub fn debug(self: *Logger, loc: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
@@ -96,13 +133,13 @@ fn logAtLevel(self: *Logger, level: Level, loc: std.builtin.SourceLocation, comp
 }
 
 pub fn source(self: *const Logger, loc: std.builtin.SourceLocation) void {
-    self.writeAll(loc.file);
+    self.writeTruncated(loc.file, 20);
     self.writeByte(':');
     self.writeInt(u32, loc.line);
 }
 
 fn enabled(self: *const Logger, requested_level: Level) bool {
-    return @intFromEnum(self.level) <= @intFromEnum(requested_level);
+    return @intFromEnum(self.level) >= @intFromEnum(requested_level);
 }
 
 inline fn newline(self: *const Logger) void {
@@ -131,6 +168,31 @@ fn writeAll(self: *const Logger, bytes: []const u8) void {
     const copylen = @min(bytes.len, 254);
     @memcpy(buf[0..copylen], bytes[0..copylen]);
     buf[copylen] = 0;
+
+    _ = self;
+    _ = root.printf("%s", &buf);
+}
+
+fn writeTruncated(self: *const Logger, bytes: []const u8, maxlen: u8) void {
+    var max = maxlen;
+    var buf: [256]u8 = [_]u8{32} ** 256;
+
+    if (max > 254) {
+        max = 254;
+    }
+
+    if (bytes.len > (max - 4)) {
+        @memcpy(buf[0..3], "...");
+        const copylen = max - 3;
+        const copystart = bytes.len - copylen;
+        @memcpy(buf[3..(3 + copylen)], bytes[copystart..]);
+        buf[max] = 0;
+    } else {
+        const copylen = bytes.len;
+        const deststart = maxlen - copylen;
+        @memcpy(buf[deststart..(deststart + copylen)], bytes[0..copylen]);
+        buf[deststart + copylen] = 0;
+    }
 
     _ = self;
     _ = root.printf("%s", &buf);
@@ -170,7 +232,7 @@ fn writeByteHex(self: *const Logger, byte: u8) void {
     _ = root.printf("%02x", byte);
 }
 
-pub fn sliceDump(self: *Logger, slice: []const u8) void {
+pub fn sliceDump(self: *Logger, loc: std.builtin.SourceLocation, slice: []const u8) void {
     if (!self.enabled(.debug)) return;
 
     self.lock.acquire();
@@ -180,7 +242,7 @@ pub fn sliceDump(self: *Logger, slice: []const u8) void {
     var offset: usize = 0;
 
     while (offset < len) {
-        self.writePrefix(.debug);
+        self.writeHeader(.debug, loc);
         self.writeAddrHex(@intFromPtr(slice.ptr) + offset);
 
         for (0..16) |iByte| {
@@ -225,3 +287,67 @@ const FmtWriter = struct {
         return self.logger.writeBytesNTimes(bytes, n);
     }
 };
+
+// ----------------------------------------------------------------------
+// Forty interop
+// ----------------------------------------------------------------------
+
+pub fn defineModule(forth: *Forth) !void {
+    try forth.defineNamespace(Logger, .{
+        .{ "logLevelSet", "set-log-level", "n s -- n : set logger level, 0 indicates failure" },
+        .{ "logLevelGet", "get-log-level", "s -- n : get logger level" },
+        .{ "dumpLoggers", "show-log-levels" },
+    });
+}
+
+pub fn logLevelSet(name: [*:0]u8, level: u64) bool {
+    init_lock.acquire();
+    defer init_lock.release();
+
+    if (!initialized) {
+        _ = printf("not initialized\n");
+        return false;
+    }
+
+    const new_level: Level = std.meta.intToEnum(Level, level) catch {
+        return false;
+    };
+
+    const prefix = std.mem.sliceTo(name, 0);
+    if (all_loggers.get(prefix)) |existing_logger| {
+        existing_logger.level = new_level;
+        return true;
+    }
+
+    return false;
+}
+
+pub fn logLevelGet(name: [*:0]u8) u64 {
+    init_lock.acquire();
+    defer init_lock.release();
+
+    if (!initialized) {
+        _ = printf("not initialized\n");
+        return 0;
+    }
+    const prefix = std.mem.sliceTo(name, 0);
+    if (all_loggers.get(prefix)) |existing_logger| {
+        return @intFromEnum(existing_logger.level);
+    }
+    return 0;
+}
+
+pub fn dumpLoggers() void {
+    init_lock.acquire();
+    defer init_lock.release();
+
+    if (!initialized) {
+        _ = printf("not initialized\n");
+        return;
+    }
+
+    var it = all_loggers.iterator();
+    while (it.next()) |entry| {
+        _ = printf("%s -> %d\n", entry.key_ptr.*.ptr, @as(u32, @intFromEnum(entry.value_ptr.*.level)));
+    }
+}
