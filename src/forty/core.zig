@@ -165,7 +165,7 @@ pub fn wordSEqual(forth: *Forth, _: *Header) ForthError!void {
 /// n --
 pub fn wordHexDot(forth: *Forth, _: *Header) ForthError!void {
     const v: u64 = try forth.stack.pop();
-    try forth.print("{x} ", .{v});
+    try forth.print("{x:0>2} ", .{v});
 }
 
 /// n --

@@ -631,6 +631,16 @@ cls
 
 test-all
 
+
+( usb testing )
+: !cursor-row ( -- ) [[ char-buffer CharBuffer.current-row +]] !w ;
+: !cursor-col ( -- ) [[ char-buffer CharBuffer.current-col +]] !w ;
+: home ( -- ) 0 dup !cursor-row !cursor-col ;
+: space ( -- )  0x20 emit ;
+: raw ( addr -- ) 8 times dup @b h. space inc repeat drop ;
+: decode ( addr -- ) dup raw key-decode dup if emit else drop space endif cr ;
+: readforoneminute ( -- ) uptime 60 + while dup uptime > do home usb-read-key decode done ;
+
 : aapen-logo
   yellow set-text-fg
   "                 AAA                              AAA                                                                        " s. cr
@@ -676,3 +686,4 @@ cr cr
 
 "Forty REPL" s. cr cr
 repl
+

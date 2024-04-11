@@ -853,19 +853,19 @@ fn deferredTransfer(args_ptr: *anyopaque) void {
 
     var interval_ms: u32 = 0;
 
-    // if (req.device.?.speed == UsbSpeed.High) {
-    //     interval_ms = (@as(u32, 1) << @as(u5, @truncate(req.endpoint_desc.?.interval)) - 1) /
-    //         USB_UFRAMES_PER_MS;
-    // } else {
-    //     interval_ms = req.endpoint_desc.?.interval / USB_FRAMES_PER_MS;
-    // }
+    if (req.device.?.speed == UsbSpeed.High) {
+        interval_ms = (@as(u32, 1) << @as(u5, @truncate(req.endpoint_desc.?.interval)) - 1) /
+            USB_UFRAMES_PER_MS;
+    } else {
+        interval_ms = req.endpoint_desc.?.interval / USB_FRAMES_PER_MS;
+    }
 
     // temporary while testing
-    interval_ms = 2500;
+    // interval_ms = 2500;
 
-    // if (interval_ms == 0) {
-    //     interval_ms = 1;
-    // }
+    if (interval_ms == 0) {
+        interval_ms = 1;
+    }
 
     while (true) {
         semaphore.wait(req.deferrer_thread_sem.?) catch |err| {
