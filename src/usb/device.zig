@@ -110,6 +110,15 @@ pub const HidProtocol = struct {
     pub const mouse: u8 = 0x02;
 };
 
+pub const HidClassRequest = struct {
+    pub const get_report: u8 = 0x01;
+    pub const get_idle: u8 = 0x02;
+    pub const get_protocol: u8 = 0x03;
+    pub const set_report: u8 = 0x09;
+    pub const set_idle: u8 = 0x0a;
+    pub const set_protocol: u8 = 0x0b;
+};
+
 pub const DeviceState = enum {
     unconfigured,
     attached,

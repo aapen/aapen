@@ -36,3 +36,5 @@ pub const other_class_in = RT(RequestTypeRecipient.other, RequestTypeType.class,
 pub const other_class_out = RT(RequestTypeRecipient.other, RequestTypeType.class, RequestTypeDirection.host_to_device);
 pub const device_class_in = RT(RequestTypeRecipient.device, RequestTypeType.class, RequestTypeDirection.device_to_host);
 pub const device_class_out = RT(RequestTypeRecipient.device, RequestTypeType.class, RequestTypeDirection.host_to_device);
+pub const interface_class_in = RT(RequestTypeRecipient.interface, RequestTypeType.class, RequestTypeDirection.device_to_host);
+pub const interface_class_out = RT(RequestTypeRecipient.interface, RequestTypeType.class, RequestTypeDirection.host_to_device);

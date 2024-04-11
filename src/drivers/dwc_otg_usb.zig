@@ -652,10 +652,11 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
             if (transfer.size > characteristics.packets_per_frame * characteristics.max_packet_size) {
                 transfer.size = characteristics.packets_per_frame * characteristics.max_packet_size;
                 req.short_attempt = true;
-            } else {
-                const mps = characteristics.max_packet_size;
-                transfer.size = @truncate((transfer.size + mps - 1) / mps);
             }
+            // else {
+            //     const mps = characteristics.max_packet_size;
+            //     transfer.size = @truncate((transfer.size + mps - 1) / mps);
+            // }
         }
 
         transfer.packet_id = req.next_data_pid;
@@ -859,11 +860,12 @@ fn deferredTransfer(args_ptr: *anyopaque) void {
     //     interval_ms = req.endpoint_desc.?.interval / USB_FRAMES_PER_MS;
     // }
 
-    interval_ms = 500;
+    // temporary while testing
+    interval_ms = 2500;
 
-    if (interval_ms == 0) {
-        interval_ms = 1;
-    }
+    // if (interval_ms == 0) {
+    //     interval_ms = 1;
+    // }
 
     while (true) {
         semaphore.wait(req.deferrer_thread_sem.?) catch |err| {

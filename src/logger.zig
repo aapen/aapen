@@ -156,6 +156,9 @@ fn writePrefix(self: *const Logger, level: Level) void {
     if (self.prefix) |pre| {
         self.writeByte('[');
         self.writeAll(@tagName(level));
+        for (0..(5 - @tagName(level).len)) |_| {
+            self.writeByte(' ');
+        }
         self.writeByte(']');
         self.writeByte(' ');
         self.writeAll(pre);
@@ -244,6 +247,7 @@ pub fn sliceDump(self: *Logger, loc: std.builtin.SourceLocation, slice: []const 
     while (offset < len) {
         self.writeHeader(.debug, loc);
         self.writeAddrHex(@intFromPtr(slice.ptr) + offset);
+        self.writeAll(":  ");
 
         for (0..16) |iByte| {
             if (offset + iByte < len) {
@@ -310,6 +314,7 @@ pub fn logLevelSet(name: [*:0]u8, level: u64) bool {
     }
 
     const new_level: Level = std.meta.intToEnum(Level, level) catch {
+        _ = printf("no such level\n");
         return false;
     };
 
@@ -348,6 +353,6 @@ pub fn dumpLoggers() void {
 
     var it = all_loggers.iterator();
     while (it.next()) |entry| {
-        _ = printf("%s -> %d\n", entry.key_ptr.*.ptr, @as(u32, @intFromEnum(entry.value_ptr.*.level)));
+        _ = printf("%s %d\n", entry.key_ptr.*.ptr, @as(u32, @intFromEnum(entry.value_ptr.*.level)));
     }
 }

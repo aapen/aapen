@@ -13,6 +13,9 @@ const Forth = @import("../forty/forth.zig").Forth;
 const Logger = @import("../logger.zig");
 var log: *Logger = undefined;
 
+const p = @import("../printf.zig");
+const printf = p.printf;
+
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
 
@@ -25,11 +28,15 @@ const device = @import("device.zig");
 const Device = device.Device;
 const DeviceClass = device.DeviceClass;
 const DeviceDriver = device.DeviceDriver;
+const HidClassRequest = device.HidClassRequest;
 const HidProtocol = device.HidProtocol;
 const HidSubclass = device.HidSubclass;
 
 const endpoint = @import("endpoint.zig");
 const EndpointDirection = endpoint.EndpointDirection;
+
+const request = @import("request.zig");
+const request_interface_class_out = request.interface_class_out;
 
 const transfer = @import("transfer.zig");
 const TransferRequest = transfer.TransferRequest;
@@ -48,6 +55,7 @@ const Self = @This();
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(Self, .{
         .{ "readKeySync", "usb-read-key" },
+        .{ "decodeKey", "key-decode" },
     });
 }
 
@@ -74,6 +82,15 @@ fn keyboardPollCompletion(req: *TransferRequest) void {
 }
 
 pub fn readKeySync() []u8 {
+    // Logger.get("usb").?.level = .debug;
+    // defer Logger.get("usb").?.level = .info;
+
+    // Logger.get("dwc2").?.level = .debug;
+    // defer Logger.get("dwc2").?.level = .info;
+
+    // Logger.get("usb_hid_keyboard").?.level = .debug;
+    // defer Logger.get("usb_hid_keyboard").?.level = .info;
+
     if (keyboard_interface == null) {
         log.err(@src(), "No keyboard", .{});
         return polling_buffer[0..0];
@@ -85,15 +102,16 @@ pub fn readKeySync() []u8 {
             log.err(@src(), "semaphore create error {any}", .{err});
             return polling_buffer[0..0];
         };
-        poll = .{
-            .device = keyboard_device.?,
-            .endpoint_desc = keyboard_endpoint.?,
-            .setup_data = undefined,
-            .data = &polling_buffer,
-            .size = POLLING_BUFFER_SIZE,
-            .completion = keyboardPollCompletion,
-        };
     }
+
+    poll = .{
+        .device = keyboard_device.?,
+        .endpoint_desc = keyboard_endpoint.?,
+        .setup_data = undefined,
+        .data = &polling_buffer,
+        .size = POLLING_BUFFER_SIZE,
+        .completion = keyboardPollCompletion,
+    };
 
     usb.transferSubmit(&poll) catch |err| {
         log.err(@src(), "transfer submit error {any}", .{err});
@@ -106,6 +124,45 @@ pub fn readKeySync() []u8 {
     };
 
     return &polling_buffer;
+}
+
+// ----------------------------------------------------------------------
+// Translation
+// ----------------------------------------------------------------------
+const Modifiers = packed struct {
+    left_control: u1,
+    left_shift: u1,
+    left_alt: u1,
+    left_hyper: u1,
+    right_control: u1,
+    right_shift: u1,
+    right_alt: u1,
+    right_hyper: u1,
+};
+
+pub fn decodeKey(buf: [*]u8) void {
+    const modifiers: Modifiers = @bitCast(buf[0]);
+    if (modifiers.left_control == 1 or modifiers.right_control == 1) {
+        _ = printf("CTRL ");
+    }
+    if (modifiers.left_alt == 1 or modifiers.right_alt == 1) {
+        _ = printf("ALT ");
+    }
+    if (modifiers.left_shift == 1 or modifiers.right_shift == 1) {
+        _ = printf("SHIFT ");
+    }
+    if (modifiers.left_hyper == 1 or modifiers.right_hyper == 1) {
+        _ = printf("HYPER ");
+    }
+
+    if (buf[2] != 0) {
+        const ch: u8 = buf[2] + (0x41 - 0x04);
+        if (std.ascii.isPrint(ch)) {
+            _ = printf("%c\n", ch);
+        } else {
+            _ = printf("%x\n", ch);
+        }
+    }
 }
 
 // ----------------------------------------------------------------------
@@ -153,10 +210,30 @@ pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
             continue;
         }
 
-        log.debug(@src(), "selecting interface {d}, endpoint {d}", .{ i, in_interrupt_endpoint.?.endpoint_address });
+        log.info(@src(), "usbaddr {d} keyboard: selecting interface {d}, endpoint {d}", .{ dev.address, i, in_interrupt_endpoint.?.endpoint_address });
+
         keyboard_device = dev;
         keyboard_interface = iface;
         keyboard_endpoint = in_interrupt_endpoint;
+
+        const status = usb.controlMessage(
+            dev,
+            HidClassRequest.set_protocol, // request
+            request_interface_class_out, // request type
+            0, // value - id of hid boot protocol
+            @truncate(i), // index - interface to use
+            &.{}, // data (not used for this transfer)
+        );
+
+        if (status) |s| {
+            if (s != .ok) {
+                log.warn(@src(), "cannot set keyboard to use boot protocol: {any}", .{status});
+            }
+        } else |err| {
+            log.err(@src(), "error sending control message to set protocol: {any}", .{err});
+        }
+
+        return;
     }
 }
 

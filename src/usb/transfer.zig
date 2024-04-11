@@ -97,6 +97,7 @@ pub const TransferRequest = struct {
     attempted_bytes_remaining: TransferBytes = 0,
     attempted_packets_remaining: TransferPackets = 0,
     csplit_retries: u16 = 0,
+    nak_count: u16 = 0,
 
     deferrer_thread_sem: ?SID = null,
     deferrer_thread: ?TID = null,
@@ -112,6 +113,7 @@ pub const TransferRequest = struct {
             .control_phase = 0,
             .complete_split = false,
             .csplit_retries = 0,
+            .nak_count = 0,
             .device = dev,
             .data = buffer.ptr,
             .size = @truncate(buffer.len),

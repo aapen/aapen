@@ -172,9 +172,17 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
         }
         interrupt_reason = .transaction_needs_restart;
     } else if (int_status.nak == 1) {
-        // Host.log.debug(@src(),"channel {d} received nak from device; deferring transfer", .{self.id});
-        interrupt_reason = .transfer_needs_defer;
-        req.complete_split = false;
+        // Host.log.debug(@src(),"channel {d} received nak from
+        // device; deferring transfer", .{self.id});
+        req.nak_count += 1;
+
+        if (req.nak_count > 5) {
+            // temporary while testing
+            interrupt_reason = .transfer_failed;
+        } else {
+            interrupt_reason = .transfer_needs_defer;
+            req.complete_split = false;
+        }
     } else {
         interrupt_reason = self.channelHaltedNormal(req, int_status);
     }
