@@ -1,11 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const time = @import("../time.zig");
-
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
+const schedule = @import("../schedule.zig");
 const string = @import("string.zig");
 const parser = @import("parser.zig");
 
@@ -107,7 +106,9 @@ pub fn wordReset(_: *Forth, _: *Header) ForthError!void {
 /// --
 pub fn wordSleep(forth: *Forth, _: *Header) ForthError!void {
     const n = try forth.popAs(u32);
-    time.delayMillis(n);
+    schedule.sleep(n) catch {
+        return ForthError.BadOperation;
+    };
 }
 
 /// --

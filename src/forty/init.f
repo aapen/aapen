@@ -637,9 +637,11 @@ test-all
 : !cursor-col ( -- ) [[ char-buffer CharBuffer.current-col +]] !w ;
 : home ( -- ) 0 dup !cursor-row !cursor-col ;
 : space ( -- )  0x20 emit ;
-: raw ( addr -- ) 8 times dup @b h. space inc repeat drop ;
-: decode ( addr -- ) dup raw key-decode dup if emit else drop space endif cr ;
-: read-for-minutes ( -- ) cls 60 * uptime + while dup uptime > do home usb-read-key dup if  decode else drop endif done ;
+: show-char ( n -- ) dup if emit else drop space endif ;
+: decoded ( addr -- ) 0 6 for-range dup ->stack swap key-decode show-char repeat drop ;
+: raw ( addr -- ) dup 8 + for-range ->stack @b h. space repeat ;
+: show-key ( addr -- ) dup raw decoded cr ;
+: read-for-minutes ( -- ) cls 60 * uptime + while dup uptime > do home usb-read-key dup if show-key else drop endif done ;
 
 : aapen-logo
   yellow set-text-fg

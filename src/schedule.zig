@@ -54,6 +54,7 @@ pub const MIN_STACK_SIZE: u64 = (2 * 8 * CONTEXT_WORDS);
 
 // TODO move this to a common "definitions" module
 pub const DEFAULT_PRIORITY: Key = 100;
+pub const MIN_PRIORITY: Key = queue.MINKEY + 1;
 
 pub const TID = i16;
 pub const NULL_THREAD: TID = 0;
@@ -81,7 +82,8 @@ extern fn context_switch(old_context_ptr: *u64, new_context_ptr: *u64) void;
 
 pub const ThreadEntry = struct {
     state: u8,
-    priority: Key,
+    base_priority: Key,
+    current_priority: Key,
     stack_pointer: u64,
     stack_base: u64,
     stack_length: usize,
@@ -95,7 +97,8 @@ pub const ThreadEntry = struct {
     pub fn init() ThreadEntry {
         return .{
             .state = THREAD_FREE,
-            .priority = 0,
+            .base_priority = 0,
+            .current_priority = 0,
             .stack_pointer = undefined,
             .stack_base = undefined,
             .stack_length = undefined,
@@ -134,7 +137,8 @@ pub fn becomeThread0(kernel_stack_top: u64, kernel_stack_size: u64) void {
     strncpy(thr0.name[0..NAME_LEN], "null");
     thr0.parent = NO_TID;
     thr0.state = THREAD_RUNNING;
-    thr0.priority = queue.MINKEY + 1;
+    thr0.base_priority = MIN_PRIORITY;
+    thr0.current_priority = thr0.base_priority;
     thr0.stack_base = kernel_stack_top - kernel_stack_size;
     thr0.stack_length = kernel_stack_size;
     // the stack pointer will be overwritten on first context change
@@ -193,7 +197,8 @@ pub fn create(proc: u64, ssize: u64, priority: Key, name: []const u8, args_ptr: 
 
     thr.parent = current;
     thr.state = THREAD_SUSPEND;
-    thr.priority = priority;
+    thr.base_priority = priority;
+    thr.current_priority = thr.base_priority;
     thr.stack_base = stack_addr;
     thr.stack_length = stack_size;
     strncpy(thr.name[0..NAME_LEN], name);
@@ -211,8 +216,9 @@ pub fn ready(tid: TID, resched: bool) !void {
 
     const thr = thrent(tid);
     thr.state = THREAD_READY;
+    thr.current_priority = thr.base_priority;
 
-    try queue.insert(tid, thr.priority, readyq);
+    try queue.insert(tid, thr.current_priority, readyq);
 
     // log.debug(@src(), "ready: readylist after insert", .{});
     // queue.dumpQ(readyq);
@@ -294,6 +300,9 @@ pub fn unsleep(tid: TID) !void {
     if (thr.state != THREAD_SLEEP and thr.state != THREAD_RECEIVING_TIMEOUT) {
         return error.NotSleeping;
     }
+
+    thr.current_priority = thr.base_priority;
+
     const next = queue.quetab(tid).next;
     if (next < NUM_THREADS) {
         queue.quetab(next).key += queue.quetab(tid).key;
@@ -410,7 +419,7 @@ pub fn reschedule() void {
     old.irq_mask = cpu.disable();
 
     if (THREAD_RUNNING == old.state) {
-        if (queue.nonEmpty(readyq) and old.priority > queue.firstKey(readyq)) {
+        if (queue.nonEmpty(readyq) and old.current_priority > queue.firstKey(readyq)) {
             // the current thread is still the highest priority, keep
             // running it
             _ = atomic.atomicInc(&current_thread_continued);
@@ -420,8 +429,14 @@ pub fn reschedule() void {
 
         old.state = THREAD_READY;
 
+        // decrease priority just a bit every time the thread uses up
+        // all its time.
+        if (old.current_priority > MIN_PRIORITY) {
+            old.current_priority -= 1;
+        }
+
         _ = atomic.atomicInc(&current_thread_requeued);
-        queue.insert(current, old.priority, readyq) catch {};
+        queue.insert(current, old.current_priority, readyq) catch {};
     }
 
     var next_tid: TID = NO_TID;
@@ -675,7 +690,7 @@ pub fn threadTable() void {
 
     for (&thread_table, 0..) |thr, tid| {
         if (thr.state != THREAD_FREE) {
-            _ = printf("%04d\t%016s\t%06s\t%d\t%d\t0x%08x\n", tid, &thr.name, state_names[thr.state].ptr, thr.priority, thr.semaphore, thr.stack_pointer);
+            _ = printf("%04d\t%016s\t%06s\t%d\t%d\t0x%08x\n", tid, &thr.name, state_names[thr.state].ptr, thr.current_priority, thr.semaphore, thr.stack_pointer);
         }
     }
 }
@@ -747,8 +762,8 @@ pub fn threadPriority(maybe_tid: u64, maybe_priority: u64) void {
 
     const thr = thrent(tid);
 
-    if (thr.priority != priority) {
-        thr.priority = priority;
+    if (thr.current_priority != priority) {
+        thr.current_priority = priority;
         reschedule();
     }
 }

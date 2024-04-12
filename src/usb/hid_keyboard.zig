@@ -294,13 +294,13 @@ pub const usage: [256]Usage = init: {
     break :init initial_value;
 };
 
-pub fn decodeKey(buf: [*]u8) u8 {
+pub fn decodeKey(buf: [*]u8, index: usize) u8 {
     const modifiers: u8 = @bitCast(buf[0]);
-    if (buf[2] != 0) {
+    if (buf[2 + index] != 0) {
         if (modifiers & Modifiers.any_shift != 0) {
-            return usage[buf[2]].shifted_ascii_value;
+            return usage[buf[2 + index]].shifted_ascii_value;
         } else {
-            return usage[buf[2]].unshifted_ascii_value;
+            return usage[buf[2 + index]].unshifted_ascii_value;
         }
     }
     return 0;

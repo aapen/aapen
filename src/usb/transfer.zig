@@ -160,6 +160,10 @@ pub const TransferRequest = struct {
     pub fn complete(self: *TransferRequest, txn_status: CompletionStatus) void {
         self.status = txn_status;
 
+        if (self.deferrer_thread) |tid| {
+            schedule.kill(tid);
+        }
+
         if (self.completion) |c| {
             c(self);
         }
