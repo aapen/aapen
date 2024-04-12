@@ -639,7 +639,7 @@ test-all
 : space ( -- )  0x20 emit ;
 : raw ( addr -- ) 8 times dup @b h. space inc repeat drop ;
 : decode ( addr -- ) dup raw key-decode dup if emit else drop space endif cr ;
-: readforoneminute ( -- ) uptime 60 + while dup uptime > do home usb-read-key decode done ;
+: read-for-minutes ( -- ) cls 60 * uptime + while dup uptime > do home usb-read-key dup if  decode else drop endif done ;
 
 : aapen-logo
   yellow set-text-fg

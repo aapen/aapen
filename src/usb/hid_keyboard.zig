@@ -62,6 +62,7 @@ pub fn defineModule(forth: *Forth) !void {
 // ----------------------------------------------------------------------
 // Keyboard polling
 // ----------------------------------------------------------------------
+
 var keyboard_device: ?*Device = null;
 var keyboard_interface: ?*InterfaceDescriptor = null;
 var keyboard_endpoint: ?*EndpointDescriptor = null;
@@ -81,26 +82,17 @@ fn keyboardPollCompletion(req: *TransferRequest) void {
     };
 }
 
-pub fn readKeySync() []u8 {
-    // Logger.get("usb").?.level = .debug;
-    // defer Logger.get("usb").?.level = .info;
-
-    // Logger.get("dwc2").?.level = .debug;
-    // defer Logger.get("dwc2").?.level = .info;
-
-    // Logger.get("usb_hid_keyboard").?.level = .debug;
-    // defer Logger.get("usb_hid_keyboard").?.level = .info;
-
+pub fn readKeySync() ?[*]u8 {
     if (keyboard_interface == null) {
         log.err(@src(), "No keyboard", .{});
-        return polling_buffer[0..0];
+        return null;
     }
 
     // on first invocation, create a semaphore and transfer request
     if (polling_semaphore == null) {
         polling_semaphore = semaphore.create(0) catch |err| {
             log.err(@src(), "semaphore create error {any}", .{err});
-            return polling_buffer[0..0];
+            return null;
         };
     }
 
@@ -115,15 +107,19 @@ pub fn readKeySync() []u8 {
 
     usb.transferSubmit(&poll) catch |err| {
         log.err(@src(), "transfer submit error {any}", .{err});
-        return polling_buffer[0..0];
+        return null;
     };
 
     semaphore.wait(polling_semaphore.?) catch |err| {
         log.err(@src(), "semaphore wait error {any}", .{err});
-        return polling_buffer[0..0];
+        return null;
     };
 
-    return &polling_buffer;
+    if (poll.status == .ok) {
+        return &polling_buffer;
+    } else {
+        return null;
+    }
 }
 
 // ----------------------------------------------------------------------
