@@ -4,6 +4,7 @@
 /// Revision 1.1
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
 const delayMillis = root.HAL.delayMillis;
@@ -16,8 +17,13 @@ var log: *Logger = undefined;
 const p = @import("../printf.zig");
 const printf = p.printf;
 
+const schedule = @import("../schedule.zig");
+
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
+
+const synchronize = @import("../synchronize.zig");
+const OneShot = synchronize.OneShot;
 
 const descriptor = @import("descriptor.zig");
 const EndpointDescriptor = descriptor.EndpointDescriptor;
@@ -54,92 +60,161 @@ const Self = @This();
 
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(Self, .{
-        .{ "readKeySync", "usb-read-key" },
-        .{ "decodeKey", "key-decode" },
+        .{ "startPolling", "kbd-poll-loop" },
+        .{ "stopPolling", "kill-kbd-poll-loop" },
+        .{ "nextKey", "usb-key" },
+        .{ "hasKey", "usb-key?" },
     });
+}
+
+pub fn nextKey() u8 {
+    while (!hasKey()) {
+        schedule.sleep(10) catch {};
+    }
+
+    return input_buffer.read() orelse 0;
+}
+
+pub fn hasKey() bool {
+    return input_buffer.len() > 0;
 }
 
 // ----------------------------------------------------------------------
 // Keyboard polling
 // ----------------------------------------------------------------------
+const INPUT_BUFFER_SIZE = 16;
+var input_buffer_storage: [INPUT_BUFFER_SIZE]u8 = undefined;
+var input_buffer: RingBuffer = undefined;
+
+var driver_initialized: OneShot = .{};
+var shutdown_signal: OneShot = .{};
 
 var keyboard_device: ?*Device = null;
 var keyboard_interface: ?*InterfaceDescriptor = null;
 var keyboard_endpoint: ?*EndpointDescriptor = null;
 
-// this is a quick & dirty way to see key press and release events via
-// polling.
-const POLLING_BUFFER_SIZE = 8;
-
-var polling_semaphore: ?SID = null;
-var polling_buffer: [POLLING_BUFFER_SIZE]u8 = [_]u8{0} ** POLLING_BUFFER_SIZE;
-var poll: TransferRequest = undefined;
+const REPORT_SIZE = 8;
+var report: [REPORT_SIZE]u8 = [_]u8{0} ** REPORT_SIZE;
+var last_report: [REPORT_SIZE]u8 = [_]u8{0} ** REPORT_SIZE;
 
 fn keyboardPollCompletion(req: *TransferRequest) void {
-    _ = req;
-    semaphore.signal(polling_semaphore.?) catch |err| {
-        log.err(@src(), "keyboard poll completion cannot signal {?d}: {any}", .{ polling_semaphore, err });
+    semaphore.signal(req.semaphore.?) catch |err| {
+        log.err(@src(), "keyboard poll completion cannot signal {?d}: {any}", .{ req.semaphore, err });
     };
 }
 
-pub fn readKeySync() ?[*]u8 {
-    if (keyboard_interface == null) {
-        log.err(@src(), "No keyboard", .{});
-        return null;
+fn initializePolling() !TransferRequest {
+    shutdown_signal = .{};
+
+    while (!driver_initialized.isSignalled()) {
+        try schedule.sleep(1000);
     }
 
-    // on first invocation, create a semaphore and transfer request
-    if (polling_semaphore == null) {
-        polling_semaphore = semaphore.create(0) catch |err| {
-            log.err(@src(), "semaphore create error {any}", .{err});
-            return null;
-        };
-    }
+    input_buffer = RingBuffer{
+        .data = &input_buffer_storage,
+        .write_index = 0,
+        .read_index = 0,
+    };
 
-    poll = .{
+    const interrupt_completion_sem = semaphore.create(0) catch |err| {
+        log.err(@src(), "semaphore create error {any}", .{err});
+        return Error.BadSemaphoreId;
+    };
+
+    return .{
         .device = keyboard_device.?,
         .endpoint_desc = keyboard_endpoint.?,
         .setup_data = undefined,
-        .data = &polling_buffer,
-        .size = POLLING_BUFFER_SIZE,
+        .data = &report,
+        .size = REPORT_SIZE,
         .completion = keyboardPollCompletion,
+        .semaphore = interrupt_completion_sem,
     };
+}
 
-    usb.transferSubmit(&poll) catch |err| {
-        log.err(@src(), "transfer submit error {any}", .{err});
-        return null;
-    };
-
-    semaphore.wait(polling_semaphore.?) catch |err| {
-        log.err(@src(), "semaphore wait error {any}", .{err});
-        return null;
-    };
-
-    if (poll.status == .ok) {
-        return &polling_buffer;
-    } else {
-        return null;
+fn shutdownPolling(req: *const TransferRequest) void {
+    if (req.semaphore) |s| {
+        semaphore.free(s) catch |err| {
+            log.err(@src(), "semaphore free error {any}", .{err});
+        };
     }
+}
+
+fn in(ch: u8, rpt: [*]u8) bool {
+    for (2..8) |i| {
+        if (rpt[i] == ch) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn processCurrentReport() void {
+    const modifiers: Modifiers = @bitCast(report[0]);
+
+    for (2..8) |idx| {
+        if (report[idx] != 0) {
+            const u = report[idx];
+            const ch = usage[u].value[modifiers.which()];
+
+            if (ch != 0 and !in(u, &last_report)) {
+                input_buffer.writeAssumeCapacity(ch);
+            }
+        }
+    }
+
+    @memcpy(last_report[0..8], report[0..8]);
+}
+
+pub fn pollKeyboard(args: *anyopaque) void {
+    _ = args;
+
+    const interrupt_request_template = initializePolling() catch |err| {
+        log.err(@src(), "initialize polling error {any}", .{err});
+        return;
+    };
+
+    defer shutdownPolling(&interrupt_request_template);
+
+    while (!shutdown_signal.isSignalled()) {
+        var interrupt_request = interrupt_request_template;
+
+        usb.transferSubmit(&interrupt_request) catch |err| {
+            log.err(@src(), "transfer submit error {any}", .{err});
+            return;
+        };
+
+        semaphore.wait(interrupt_request.semaphore.?) catch |err| {
+            log.err(@src(), "semaphore wait error {any}", .{err});
+            return;
+        };
+
+        if (interrupt_request.status == .ok) {
+            processCurrentReport();
+        }
+    }
+}
+
+pub fn startPolling() !void {
+    _ = try schedule.spawn(pollKeyboard, "usb-kbd", &.{});
+}
+
+pub fn stopPolling() void {
+    shutdown_signal.signal();
 }
 
 // ----------------------------------------------------------------------
 // Translation
 // ----------------------------------------------------------------------
+
+// The bitfields in this strut are defined by the USB keyboard boot protocol
 const Modifiers = packed struct {
-    pub const any_shift: u8 = @bitCast(Modifiers{
-        .left_shift = 1,
-        .right_shift = 1,
-    });
-
-    pub const any_control: u8 = @bitCast(Modifiers{
-        .left_control = 1,
-        .right_control = 1,
-    });
-
-    pub const any_alt: u8 = @bitCast(Modifiers{
-        .left_alt = 1,
-        .right_alt = 1,
-    });
+    fn which(mod: *const Modifiers) u2 {
+        var w: u2 = 0;
+        w |= if (mod.left_shift != 0 or mod.right_shift != 0) 0b01 else 0b00;
+        w |= if (mod.left_control != 0 or mod.right_control != 0) 0b10 else 0b00;
+        return w;
+    }
 
     left_control: u1 = 0,
     left_shift: u1 = 0,
@@ -153,158 +228,87 @@ const Modifiers = packed struct {
 
 // See HID Usage Tables for USB, version 1.3, section 10
 // https://usb.org/sites/default/files/hut1_3_0.pdf
+
+// column 1 - unshifted
+// column 2 - shifted
+// column 3 - control
+// column 4 - control + shift
 const boot_protocol_usage = .{
-    .{ 0x04, .none, 'a' },
-    .{ 0x05, .none, 'b' },
-    .{ 0x06, .none, 'c' },
-    .{ 0x07, .none, 'd' },
-    .{ 0x08, .none, 'e' },
-    .{ 0x09, .none, 'f' },
-    .{ 0x0A, .none, 'g' },
-    .{ 0x0B, .none, 'h' },
-    .{ 0x0C, .none, 'i' },
-    .{ 0x0D, .none, 'j' },
-    .{ 0x0E, .none, 'k' },
-    .{ 0x0F, .none, 'l' },
-    .{ 0x10, .none, 'm' },
-    .{ 0x11, .none, 'n' },
-    .{ 0x12, .none, 'o' },
-    .{ 0x13, .none, 'p' },
-    .{ 0x14, .none, 'q' },
-    .{ 0x15, .none, 'r' },
-    .{ 0x16, .none, 's' },
-    .{ 0x17, .none, 't' },
-    .{ 0x18, .none, 'u' },
-    .{ 0x19, .none, 'v' },
-    .{ 0x1A, .none, 'w' },
-    .{ 0x1B, .none, 'x' },
-    .{ 0x1C, .none, 'y' },
-    .{ 0x1D, .none, 'z' },
-    .{ 0x1E, .none, '1' },
-    .{ 0x1F, .none, '2' },
-    .{ 0x20, .none, '3' },
-    .{ 0x21, .none, '4' },
-    .{ 0x22, .none, '5' },
-    .{ 0x23, .none, '6' },
-    .{ 0x24, .none, '7' },
-    .{ 0x25, .none, '8' },
-    .{ 0x26, .none, '9' },
-    .{ 0x27, .none, '0' },
-    .{ 0x28, .none, '\n' }, // newline
-    .{ 0x29, .none, '\x1b' }, // escape
-    .{ 0x2A, .none, '\x08' }, // backspace
-    .{ 0x2B, .none, '\x09' }, // tab
-    .{ 0x2C, .none, ' ' },
-    .{ 0x2D, .none, '-' },
-    .{ 0x2E, .none, '=' },
-    .{ 0x2F, .none, '[' },
-    .{ 0x30, .none, ']' },
-    .{ 0x31, .none, '\\' },
-    .{ 0x33, .none, ';' },
-    .{ 0x34, .none, '\'' },
-    .{ 0x35, .none, '`' },
-    .{ 0x36, .none, ',' },
-    .{ 0x37, .none, '.' },
-    .{ 0x38, .none, '/' },
-    .{ 0x3A, .none, '\x93' }, // F1
-    .{ 0x3B, .none, '\x94' }, // F2
-    .{ 0x3C, .none, '\x95' }, // F3
-    .{ 0x3D, .none, '\x96' }, // F4
-    .{ 0x3E, .none, '\x97' }, // F5
-    .{ 0x3F, .none, '\x98' }, // F6
-    .{ 0x40, .none, '\x99' }, // F7
-    .{ 0x41, .none, '\x9a' }, // F8
-    .{ 0x42, .none, '\x9b' }, // F9
-    .{ 0x43, .none, '\x9c' }, // F10
-    .{ 0x44, .none, '\x9d' }, // F11
-    .{ 0x45, .none, '\x9e' }, // F12
-    .{ 0x4f, .none, '\xa0' }, // right arrow
-    .{ 0x50, .none, '\xa1' }, // left arrow
-    .{ 0x51, .none, '\xa2' }, // down arrow
-    .{ 0x52, .none, '\xa3' }, // up arrow
-    .{ 0x04, .shift, 'A' },
-    .{ 0x05, .shift, 'B' },
-    .{ 0x06, .shift, 'C' },
-    .{ 0x07, .shift, 'D' },
-    .{ 0x08, .shift, 'E' },
-    .{ 0x09, .shift, 'F' },
-    .{ 0x0A, .shift, 'G' },
-    .{ 0x0B, .shift, 'H' },
-    .{ 0x0C, .shift, 'I' },
-    .{ 0x0D, .shift, 'J' },
-    .{ 0x0E, .shift, 'K' },
-    .{ 0x0F, .shift, 'L' },
-    .{ 0x10, .shift, 'M' },
-    .{ 0x11, .shift, 'N' },
-    .{ 0x12, .shift, 'O' },
-    .{ 0x13, .shift, 'P' },
-    .{ 0x14, .shift, 'Q' },
-    .{ 0x15, .shift, 'R' },
-    .{ 0x16, .shift, 'S' },
-    .{ 0x17, .shift, 'T' },
-    .{ 0x18, .shift, 'U' },
-    .{ 0x19, .shift, 'V' },
-    .{ 0x1A, .shift, 'W' },
-    .{ 0x1B, .shift, 'X' },
-    .{ 0x1C, .shift, 'Y' },
-    .{ 0x1D, .shift, 'Z' },
-    .{ 0x1E, .shift, '!' },
-    .{ 0x1F, .shift, '@' },
-    .{ 0x20, .shift, '#' },
-    .{ 0x21, .shift, '$' },
-    .{ 0x22, .shift, '%' },
-    .{ 0x23, .shift, '^' },
-    .{ 0x24, .shift, '&' },
-    .{ 0x25, .shift, '*' },
-    .{ 0x26, .shift, '(' },
-    .{ 0x27, .shift, ')' },
-    .{ 0x28, .shift, '\n' }, // newline
-    .{ 0x29, .shift, '\x1b' }, // escape
-    .{ 0x2A, .shift, '\x08' }, // backspace
-    .{ 0x2B, .shift, '\x09' }, // tab
-    .{ 0x2D, .shift, '_' },
-    .{ 0x2E, .shift, '+' },
-    .{ 0x2F, .shift, '{' },
-    .{ 0x30, .shift, '}' },
-    .{ 0x31, .shift, '|' },
-    .{ 0x33, .shift, ':' },
-    .{ 0x34, .shift, '\"' },
-    .{ 0x35, .shift, '~' },
-    .{ 0x36, .shift, '<' },
-    .{ 0x37, .shift, '>' },
-    .{ 0x38, .shift, '?' },
+    .{ 0x04, 'a', 'A', '\x01', '\x01' },
+    .{ 0x05, 'b', 'B', '\x02', '\x02' },
+    .{ 0x06, 'c', 'C', '\x03', '\x03' },
+    .{ 0x07, 'd', 'D', '\x04', '\x04' },
+    .{ 0x08, 'e', 'E', '\x05', '\x05' },
+    .{ 0x09, 'f', 'F', '\x06', '\x06' },
+    .{ 0x0A, 'g', 'G', '\x07', '\x07' },
+    .{ 0x0B, 'h', 'H', '\x08', '\x08' },
+    .{ 0x0C, 'i', 'I', '\x09', '\x09' },
+    .{ 0x0D, 'j', 'J', '\x0A', '\x0A' },
+    .{ 0x0E, 'k', 'K', '\x0B', '\x0B' },
+    .{ 0x0F, 'l', 'L', '\x0C', '\x0C' },
+    .{ 0x10, 'm', 'M', '\x0D', '\x0D' },
+    .{ 0x11, 'n', 'N', '\x0E', '\x0E' },
+    .{ 0x12, 'o', 'O', '\x0F', '\x0F' },
+    .{ 0x13, 'p', 'P', '\x10', '\x10' },
+    .{ 0x14, 'q', 'Q', '\x11', '\x11' },
+    .{ 0x15, 'r', 'R', '\x12', '\x12' },
+    .{ 0x16, 's', 'S', '\x13', '\x13' },
+    .{ 0x17, 't', 'T', '\x14', '\x14' },
+    .{ 0x18, 'u', 'U', '\x15', '\x15' },
+    .{ 0x19, 'v', 'V', '\x16', '\x16' },
+    .{ 0x1A, 'w', 'W', '\x17', '\x17' },
+    .{ 0x1B, 'x', 'X', '\x18', '\x18' },
+    .{ 0x1C, 'y', 'Y', '\x19', '\x19' },
+    .{ 0x1D, 'z', 'Z', '\x1A', '\x1A' },
+    .{ 0x1E, '1', '!', '\x00', '\x00' },
+    .{ 0x1F, '2', '@', '\x00', '\x00' },
+    .{ 0x20, '3', '#', '\x00', '\x00' },
+    .{ 0x21, '4', '$', '\x00', '\x00' },
+    .{ 0x22, '5', '%', '\x00', '\x00' },
+    .{ 0x23, '6', '^', '\x00', '\x00' },
+    .{ 0x24, '7', '&', '\x00', '\x00' },
+    .{ 0x25, '8', '*', '\x00', '\x00' },
+    .{ 0x26, '9', '(', '\x00', '\x00' },
+    .{ 0x27, '0', ')', '\x00', '\x00' },
+    .{ 0x28, '\x0a', '\x0A', '\x0A', '\x0A' }, // Enter
+    .{ 0x29, '\x1B', '\x1B', '\x1B', '\x1B' }, // Escape
+    .{ 0x2A, '\x7F', '\x7F', '\x7F', '\x7F' }, // Backspace
+    .{ 0x2B, '\x09', '\x09', '\x09', '\x09' }, // Tab
+    .{ 0x2C, ' ', ' ', '\x00', '\x00' }, // Space
+    .{ 0x2D, '-', '_', '\x00', '\x00' },
+    .{ 0x2E, '=', '+', '\x00', '\x00' },
+    .{ 0x2F, '[', '{', '\x00', '\x00' },
+    .{ 0x30, ']', '}', '\x00', '\x00' },
+    .{ 0x31, '\\', '|', '\x00', '\x00' },
+    .{ 0x33, ';', ':', '\x00', '\x00' },
+    .{ 0x34, '\'', '\"', '\x00', '\x00' },
+    .{ 0x35, '`', '~', '\x00', '\x00' },
+    .{ 0x36, ',', '<', '\x00', '\x00' },
+    .{ 0x37, '.', '>', '\x00', '\x00' },
+    .{ 0x38, '/', '?', '\x00', '\x00' },
+    .{ 0x39, '\x00', '\x00', '\x00', '\x00' }, // Caps Lock
 };
 
 pub const Usage = struct {
-    unshifted_ascii_value: u8 = 0,
-    shifted_ascii_value: u8 = 0,
+    value: [4]u8,
+
+    fn fromSpec(tuple: struct { u8, u8, u8, u8, u8 }) Usage {
+        return .{
+            .value = .{ tuple[1], tuple[2], tuple[3], tuple[4] },
+        };
+    }
 };
 
 pub const usage: [256]Usage = init: {
     var initial_value: [256]Usage = undefined;
     for (0..256) |i| {
-        initial_value[i] = .{};
+        initial_value[i] = .{ .value = .{ 0, 0, 0, 0 } };
     }
     for (boot_protocol_usage) |u| {
-        switch (u[1]) {
-            .shift => initial_value[u[0]].shifted_ascii_value = u[2],
-            else => initial_value[u[0]].unshifted_ascii_value = u[2],
-        }
+        initial_value[u[0]] = Usage.fromSpec(u);
     }
     break :init initial_value;
 };
-
-pub fn decodeKey(buf: [*]u8, index: usize) u8 {
-    const modifiers: u8 = @bitCast(buf[0]);
-    if (buf[2 + index] != 0) {
-        if (modifiers & Modifiers.any_shift != 0) {
-            return usage[buf[2 + index]].shifted_ascii_value;
-        } else {
-            return usage[buf[2 + index]].unshifted_ascii_value;
-        }
-    }
-    return 0;
-}
 
 // ----------------------------------------------------------------------
 // Driver interface
@@ -367,7 +371,9 @@ pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
         );
 
         if (status) |s| {
-            if (s != .ok) {
+            if (s == .ok) {
+                driver_initialized.signal();
+            } else {
                 log.warn(@src(), "cannot set keyboard to use boot protocol: {any}", .{status});
             }
         } else |err| {

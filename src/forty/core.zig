@@ -99,11 +99,6 @@ pub fn wordKeyMaybe(forth: *Forth, _: *Header) ForthError!void {
 }
 
 /// --
-pub fn wordReset(_: *Forth, _: *Header) ForthError!void {
-    asm volatile ("brk 0x07c5");
-}
-
-/// --
 pub fn wordSleep(forth: *Forth, _: *Header) ForthError!void {
     const n = try forth.popAs(u32);
     schedule.sleep(n) catch {

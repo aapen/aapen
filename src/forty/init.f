@@ -407,6 +407,20 @@ finish
   done
 ;
 
+: clear-usb-buffer
+  while usb-key? do usb-key drop done
+;
+
+: usb-repl (-- : Prompt for and execute words from USB input, does not return )
+  clear-usb-buffer
+  emit-prompt
+  while
+    1
+  do
+    handlers usb-key dtab-trigger
+  done
+;
+
 (GPIO pins)
 
 : pins hal hal.gpio + @ ;
@@ -630,18 +644,6 @@ cls
 ;
 
 test-all
-
-
-( usb testing )
-: !cursor-row ( -- ) [[ char-buffer CharBuffer.current-row +]] !w ;
-: !cursor-col ( -- ) [[ char-buffer CharBuffer.current-col +]] !w ;
-: home ( -- ) 0 dup !cursor-row !cursor-col ;
-: space ( -- )  0x20 emit ;
-: show-char ( n -- ) dup if emit else drop space endif ;
-: decoded ( addr -- ) 0 6 for-range dup ->stack swap key-decode show-char repeat drop ;
-: raw ( addr -- ) dup 8 + for-range ->stack @b h. space repeat ;
-: show-key ( addr -- ) dup raw decoded cr ;
-: read-for-minutes ( -- ) cls 60 * uptime + while dup uptime > do home usb-read-key dup if show-key else drop endif done ;
 
 : aapen-logo
   yellow set-text-fg
