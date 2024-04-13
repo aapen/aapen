@@ -77,7 +77,7 @@ pub const OneShot = struct {
     value: u64 = 0,
 
     pub fn signal(self: *Self) void {
-        return atomic.atomicInc(&self.value);
+        _ = atomic.atomicInc(&self.value);
     }
 
     pub fn isSignalled(self: *Self) bool {
