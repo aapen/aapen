@@ -1,9 +1,21 @@
 const std = @import("std");
+const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
 const GPIO = root.HAL.GPIO;
 
+const HAL = root.HAL;
+const InterruptController = HAL.InterruptController;
+const IrqId = InterruptController.IrqId;
+const IrqHandlerFn = InterruptController.IrqHandlerFn;
+const IrqHandler = InterruptController.IrqHandler;
+
+const InputBuffer = @import("../input_buffer.zig");
+
 const Forth = @import("../forty/forth.zig").Forth;
+
+const Logger = @import("../logger.zig");
+pub var log: *Logger = undefined;
 
 const Self = @This();
 
@@ -192,9 +204,22 @@ const Registers = extern struct {
 
 registers: *volatile Registers,
 gpio: *GPIO,
+intc: *InterruptController,
+irq_id: IrqId,
+irq_handler: IrqHandler = irqHandle,
 
-pub fn init(register_base: u64, gpio: *GPIO) Self {
+pub fn init(register_base: u64, intc: *InterruptController, irq_id: IrqId, gpio: *GPIO) Self {
+    log = Logger.init("pl011", .debug);
+
+    input_buffer = RingBuffer{
+        .data = &input_buffer_storage,
+        .write_index = 0,
+        .read_index = 0,
+    };
+
     return .{
+        .intc = intc,
+        .irq_id = irq_id,
         .registers = @ptrFromInt(register_base),
         .gpio = gpio,
     };
@@ -237,7 +262,7 @@ pub fn initializeUart(self: *Self) void {
     };
 
     self.registers.interrupt_mask_set_clear = .{
-        .receive_interrupt_mask = InterruptBit.not_raised,
+        .receive_interrupt_mask = InterruptBit.raised,
         .transmit_interrupt_mask = InterruptBit.not_raised,
     };
     self.registers.control = .{
@@ -247,11 +272,9 @@ pub fn initializeUart(self: *Self) void {
 
     // Turn the UART on
     self.registers.control.uart_enable = EnableBitP.enable;
-}
 
-pub fn getc(self: *Self) u8 {
-    while (self.registers.flags.receive_fifo_empty != 0) {}
-    return self.registers.data.data;
+    self.intc.connect(self.irq_id, &self.irq_handler, self);
+    self.intc.enable(self.irq_id);
 }
 
 pub fn putc(self: *Self, ch: u8) void {
@@ -259,6 +282,15 @@ pub fn putc(self: *Self, ch: u8) void {
     self.registers.data.data = ch;
 }
 
-pub fn hasc(self: *Self) bool {
-    return self.registers.flags.receive_fifo_empty == 0;
+const INPUT_BUFFER_SIZE = 16;
+var input_buffer_storage: [INPUT_BUFFER_SIZE]u8 = undefined;
+var input_buffer: RingBuffer = undefined;
+
+fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
+    var self: *Self = @ptrCast(@alignCast(private));
+
+    if (self.registers.raw_interrupt_status.receive_interrupt_status == 1) {
+        const ch = self.registers.data.data;
+        InputBuffer.write(ch);
+    }
 }

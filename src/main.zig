@@ -12,6 +12,7 @@ const memory = @import("memory.zig");
 const heap = @import("heap.zig");
 const time = @import("time.zig");
 
+const InputBuffer = @import("input_buffer.zig");
 const FrameBuffer = @import("frame_buffer.zig");
 const CharBuffer = @import("char_buffer.zig");
 const CharBufferConsole = @import("char_buffer_console.zig");
@@ -262,6 +263,7 @@ pub fn powerDown() void {
 fn hardwareInit() !void {
     hal = try HAL.init(kernel_allocator);
     uart_valid = true;
+    InputBuffer.init();
 }
 
 fn displayInit() !void {

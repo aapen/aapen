@@ -233,12 +233,12 @@ finish
   2drop
 ;
 
-: dtab-create (dt-name -- dtab: Create a 128 entry key dispatch table)
+: dtab-create (dt-name -- dtab: Create a 256 entry key dispatch table)
   dup
   create
-    128 allot
+    256 allot
   finish
-  lookup data-address 0x0000 swap 0 128 dtab-set-range
+  lookup data-address 0x0000 swap 0 256 dtab-set-range
 ;
 
 : dtab-lookup (dtab ch -- handler-word: Lookup the handler for the ch)
@@ -379,16 +379,22 @@ finish
 'newline-handler   handlers char-cr  dtab-set
 'escape-handler    handlers char-esc dtab-set
 
-'bol-handler           handlers \a char-ctrl dtab-set
-'back-handler          handlers \b char-ctrl dtab-set
-'dump-text-handler     handlers \d char-ctrl dtab-set
-'eol-handler           handlers \e char-ctrl dtab-set
-'forward-handler       handlers \f char-ctrl dtab-set
-'toggle-insert-handler handlers \i char-ctrl dtab-set
-'next-handler          handlers \n char-ctrl dtab-set
-'previous-handler      handlers \p char-ctrl dtab-set
-'redraw-handler        handlers \r char-ctrl dtab-set
-'ex-handler            handlers \x char-ctrl dtab-set
+'bol-handler           handlers \a   char-ctrl dtab-set
+'bol-handler           handlers 0x84           dtab-set (home)
+'back-handler          handlers \b   char-ctrl dtab-set
+'back-handler          handlers 0x82           dtab-set (left arrow)
+'dump-text-handler     handlers \d   char-ctrl dtab-set
+'eol-handler           handlers \e   char-ctrl dtab-set
+'eol-handler           handlers 0x85           dtab-set (end)
+'forward-handler       handlers \f   char-ctrl dtab-set
+'forward-handler       handlers 0x83           dtab-set (right arrow)
+'toggle-insert-handler handlers \i   char-ctrl dtab-set
+'next-handler          handlers \n   char-ctrl dtab-set
+'next-handler          handlers 0x81           dtab-set (down arrow)
+'previous-handler      handlers \p   char-ctrl dtab-set
+'previous-handler      handlers 0x80           dtab-set (up arrow)
+'redraw-handler        handlers \r   char-ctrl dtab-set
+'ex-handler            handlers \x   char-ctrl dtab-set
 
 'insert-handler    handlers char-space \~ dtab-set-range
 
@@ -404,20 +410,6 @@ finish
     1
   do
     handle-one
-  done
-;
-
-: clear-usb-buffer
-  while usb-key? do usb-key drop done
-;
-
-: usb-repl (-- : Prompt for and execute words from USB input, does not return )
-  clear-usb-buffer
-  emit-prompt
-  while
-    1
-  do
-    handlers usb-key dtab-trigger
   done
 ;
 

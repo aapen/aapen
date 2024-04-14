@@ -9,6 +9,8 @@ const RingBuffer = std.RingBuffer;
 const root = @import("root");
 const delayMillis = root.HAL.delayMillis;
 
+const InputBuffer = @import("../input_buffer.zig");
+
 const Forth = @import("../forty/forth.zig").Forth;
 
 const Logger = @import("../logger.zig");
@@ -62,30 +64,12 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(Self, .{
         .{ "startPolling", "kbd-poll-loop" },
         .{ "stopPolling", "kill-kbd-poll-loop" },
-        .{ "nextKey", "usb-key" },
-        .{ "hasKey", "usb-key?" },
     });
-}
-
-pub fn nextKey() u8 {
-    while (!hasKey()) {
-        schedule.sleep(10) catch {};
-    }
-
-    return input_buffer.read() orelse 0;
-}
-
-pub fn hasKey() bool {
-    return input_buffer.len() > 0;
 }
 
 // ----------------------------------------------------------------------
 // Keyboard polling
 // ----------------------------------------------------------------------
-const INPUT_BUFFER_SIZE = 16;
-var input_buffer_storage: [INPUT_BUFFER_SIZE]u8 = undefined;
-var input_buffer: RingBuffer = undefined;
-
 var driver_initialized: OneShot = .{};
 var shutdown_signal: OneShot = .{};
 
@@ -109,12 +93,6 @@ fn initializePolling() !TransferRequest {
     while (!driver_initialized.isSignalled()) {
         try schedule.sleep(1000);
     }
-
-    input_buffer = RingBuffer{
-        .data = &input_buffer_storage,
-        .write_index = 0,
-        .read_index = 0,
-    };
 
     const interrupt_completion_sem = semaphore.create(0) catch |err| {
         log.err(@src(), "semaphore create error {any}", .{err});
@@ -157,8 +135,12 @@ fn processCurrentReport() void {
             const u = report[idx];
             const ch = usage[u].value[modifiers.which()];
 
+            if (u != 0 and ch == 0) {
+                log.debug(@src(), "unmapped key, usage code {x:0>2}", .{u});
+            }
+
             if (ch != 0 and !in(u, &last_report)) {
-                input_buffer.writeAssumeCapacity(ch);
+                InputBuffer.write(ch);
             }
         }
     }
@@ -280,6 +262,7 @@ const boot_protocol_usage = .{
     .{ 0x2F, '[', '{', '\x00', '\x00' },
     .{ 0x30, ']', '}', '\x00', '\x00' },
     .{ 0x31, '\\', '|', '\x00', '\x00' },
+    .{ 0x32, '#', '~', '\x00', '\x00' },
     .{ 0x33, ';', ':', '\x00', '\x00' },
     .{ 0x34, '\'', '\"', '\x00', '\x00' },
     .{ 0x35, '`', '~', '\x00', '\x00' },
@@ -287,6 +270,12 @@ const boot_protocol_usage = .{
     .{ 0x37, '.', '>', '\x00', '\x00' },
     .{ 0x38, '/', '?', '\x00', '\x00' },
     .{ 0x39, '\x00', '\x00', '\x00', '\x00' }, // Caps Lock
+    .{ 0x4A, '\x84', '\x84', '\x00', '\x00' }, // home
+    .{ 0x4D, '\x85', '\x85', '\x00', '\x00' }, // end
+    .{ 0x4F, '\x83', '\x81', '\x00', '\x00' }, // right arrow
+    .{ 0x50, '\x82', '\x82', '\x00', '\x00' }, // left arrow
+    .{ 0x51, '\x81', '\x81', '\x00', '\x00' }, // down arrow
+    .{ 0x52, '\x80', '\x80', '\x00', '\x00' }, // up arrow
 };
 
 pub const Usage = struct {

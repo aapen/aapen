@@ -24,14 +24,6 @@ pub fn putc(ch: u8) void {
     root.hal.uart.putc(ch);
 }
 
-pub fn getc() u8 {
-    return root.hal.uart.getc();
-}
-
-pub fn hasc() bool {
-    return root.hal.uart.hasc();
-}
-
 pub fn puts(string: []const u8) usize {
     serial_lock.acquire();
     defer serial_lock.release();

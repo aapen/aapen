@@ -7,6 +7,7 @@ const Forth = @import("forty/forth.zig").Forth;
 const auto = @import("forty/auto.zig");
 
 const CharBufferConsole = @import("char_buffer_console.zig");
+const InputBuffer = @import("input_buffer.zig");
 const Serial = @import("serial.zig");
 const Readline = @import("readline.zig");
 
@@ -90,7 +91,7 @@ pub fn readLine(self: *Self, prompt: []const u8, buffer: []u8) usize {
 
 pub fn getc(self: *Self) u8 {
     _ = self;
-    const ch = Serial.getc();
+    const ch = InputBuffer.read();
     return if (ch == '\r') '\n' else ch;
 }
 
@@ -116,7 +117,7 @@ pub fn putc(self: *Self, ch: u8) void {
 
 pub fn char_available(self: *Self) bool {
     _ = self;
-    return Serial.hasc();
+    return !InputBuffer.isEmpty();
 }
 
 fn newline(ch: u8) bool {

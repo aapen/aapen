@@ -102,7 +102,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.power_controller = PowerController.init(&self.mailbox);
 
-    self.uart = Uart.init(peripheral_base + 0x201000, self.gpio);
+    self.uart = Uart.init(peripheral_base + 0x201000, self.interrupt_controller, Irq.UART, self.gpio);
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
