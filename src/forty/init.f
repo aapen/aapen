@@ -396,7 +396,7 @@ finish
 'redraw-handler        handlers \r   char-ctrl dtab-set
 'ex-handler            handlers \x   char-ctrl dtab-set
 
-'insert-handler    handlers char-space \~ dtab-set-range
+'insert-handler    handlers char-space \~ 1 + dtab-set-range
 
 'line-demo-handler handlers \^ dtab-set
 
