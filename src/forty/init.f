@@ -397,6 +397,8 @@ finish
 'ex-handler            handlers \x   char-ctrl dtab-set
 
 'insert-handler    handlers char-space \~ 1 + dtab-set-range
+'insert-handler    handlers 0x90 0x9c dtab-set-range
+'insert-handler    handlers 0xA0 0xAc dtab-set-range
 
 'line-demo-handler handlers \^ dtab-set
 
