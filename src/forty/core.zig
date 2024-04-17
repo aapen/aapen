@@ -469,7 +469,7 @@ pub fn wordGreaterThanEqualU64(forth: *Forth, header: *Header) ForthError!void {
 /// addr -- T
 pub fn wordLoad(comptime T: type, forth: *Forth, _: *Header) ForthError!void {
     const a = try forth.stack.pop();
-    const p: *T = @ptrFromInt(a);
+    const p: *allowzero T = @ptrFromInt(a);
     const v = p.*;
     try forth.stack.push(v);
 }
@@ -479,7 +479,7 @@ pub fn wordStore(comptime T: type, forth: *Forth, _: *Header) ForthError!void {
     const a = try forth.stack.pop();
     const v = try forth.stack.pop();
 
-    const p: *T = @ptrFromInt(a);
+    const p: *allowzero T = @ptrFromInt(a);
     const nv: T = @truncate(v);
     p.* = nv;
 }
