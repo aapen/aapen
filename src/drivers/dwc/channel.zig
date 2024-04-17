@@ -5,7 +5,7 @@ const root = @import("root");
 const arch = @import("../../architecture.zig");
 const cpu = arch.cpu;
 
-const Host = @import("../dwc_otg_usb.zig");
+const schedule = @import("../../schedule.zig");
 
 const synchronize = @import("../../synchronize.zig");
 const time = @import("../../time.zig");
@@ -20,6 +20,8 @@ const TransferRequest = usb.TransferRequest;
 const TransferBytes = usb.TransferBytes;
 const TransferType = usb.TransferType;
 const UsbSpeed = usb.UsbSpeed;
+
+const Host = @import("../dwc_otg_usb.zig");
 
 const reg = @import("registers.zig");
 const ChannelCharacteristics = reg.ChannelCharacteristics;
@@ -215,6 +217,12 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
     self.interruptDisableAll();
     self.interruptsClearPending();
 
+    // deactivate the channel.
+    // this requires some delay after deactivation before the channel
+    // can be reactivated. for now we hack that by assuming that
+    // deferTransfer introduces enough delay.
+    // self.disable();
+
     self.active_transfer = null;
     host.channelFree(self);
 
@@ -250,9 +258,23 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
         const ty = char.endpoint_type;
 
         if (dir == EndpointDirection.in) {
-            bytes_transferred = req.attempted_bytes_remaining - self.registers.transfer.size;
+            if (self.registers.transfer.size > req.attempted_bytes_remaining) {
+                Host.log.err(@src(), "Transfer size seems wrong 0x{x} (attempted was 0x{x})", .{ self.registers.transfer.size, req.attempted_bytes_remaining });
 
-            if (!Host.isAligned(req.cur_data_ptr.?)) {
+                // High bit is set, do we have a negative number?
+                var volunteer_data_size: u32 = ~(self.registers.transfer.size) + 1;
+                if (req.cur_data_ptr != null and Host.isAligned(req.cur_data_ptr.?)) {
+                    Host.log.sliceDump(@src(), req.cur_data_ptr.?[0..(req.attempted_size + volunteer_data_size)]);
+                } else {
+                    Host.log.sliceDump(@src(), self.aligned_buffer[0..(req.attempted_size + volunteer_data_size)]);
+                }
+
+                bytes_transferred = req.attempted_bytes_remaining;
+            } else {
+                bytes_transferred = req.attempted_bytes_remaining - self.registers.transfer.size;
+            }
+
+            if (bytes_transferred > 0 and !Host.isAligned(req.cur_data_ptr.?)) {
                 // we're reading into a different buffer than the
                 // original caller provided. copy the results from our
                 // DMA aligned buffer to the one the caller can see
@@ -279,7 +301,10 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
 
         req.attempted_packets_remaining -= packets_transferred;
         req.attempted_bytes_remaining -= bytes_transferred;
-        req.cur_data_ptr.? += bytes_transferred;
+
+        if (req.cur_data_ptr != null) {
+            req.cur_data_ptr.? += bytes_transferred;
+        }
 
         //        Host.log.debug(@src(),"channel {d} packets remaining {d}, bytes remaining {d}", .{ self.id, req.attempted_packets_remaining, req.attempted_bytes_remaining });
 
@@ -334,7 +359,8 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             return .transaction_needs_restart;
         }
     } else {
-        // no packets transferred. also no error. it's a split thing.
+        // no packets transferred. also not an error. indicates that
+        // the start_split packet was acknowledged.
         if (ints.ack == 1 and
             self.registers.split_control.split_enable == 1 and
             !req.complete_split)
@@ -342,6 +368,9 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             // Start CSPLIT
             req.complete_split = true;
             Host.log.debug(@src(), "channel {d} must continue transfer (complete_split = {})", .{ self.id, req.complete_split });
+            schedule.sleep(50) catch |err| {
+                Host.log.err(@src(), "Can't sleep, clown'll eat me. {any}", .{err});
+            };
             return .transaction_needs_restart;
         } else if (req.isControlRequest() and req.control_phase == TransferRequest.control_status_phase) {
             Host.log.debug(@src(), "channel {d} status phase completed", .{self.id});

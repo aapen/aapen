@@ -303,10 +303,13 @@ pub const AhbConfig = packed struct {
 
 pub const UsbConfig = packed struct {
     toutcal: u3, // 0..3
-    phy_if: u1, // 3
+    phy_if_16: enum(u1) {
+        _8_bit = 0,
+        _16_bit = 1,
+    }, // 3
     mode_select: enum(u1) {
-        ulpi = 0,
-        utmi = 1,
+        utmi_plus = 0,
+        ulpi = 1,
     }, // 4,
     fs_intf: u1, // 5
     phy_sel: u1, // 6
@@ -321,7 +324,7 @@ pub const UsbConfig = packed struct {
     ulpi_auto_res: u1, // 18
     ulpi_clk_sus_m: u1, // 19
     ulpi_ext_vbus_drv: u1, // 20
-    ulpi_int_vbus_indicator: u1, // 21
+    ulpi_ext_vbus_indicator: u1, // 21
     term_sel_dl_pulse: u1, // 22
     indicator_complement: u1, //23
     indicator_passthrough: u1, // 24
@@ -335,16 +338,16 @@ pub const UsbConfig = packed struct {
 };
 
 pub const Reset = packed struct {
-    soft_reset: u1, // 0 (rs)
-    hclk_soft_reset: u1, // 1 (rs)
-    frame_counter_reset: u1, // 2 (rs)
-    in_token_queue_flush: u1, // 3
-    rx_fifo_flush: u1, // 4 (rs)
-    tx_fifo_flush: u1, // 5 (rs)
-    tx_fifo_flush_num: u5, // 6..10 (rw)
-    _reserved_11_29: u19, // 11..29
-    dma_request_in_progress: u1, // 30 (ro)
-    ahb_master_idle: u1, // 31 (ro)
+    soft_reset: u1 = 0, // 0 (rs)
+    hclk_soft_reset: u1 = 0, // 1 (rs)
+    frame_counter_reset: u1 = 0, // 2 (rs)
+    in_token_queue_flush: u1 = 0, // 3
+    rx_fifo_flush: u1 = 0, // 4 (rs)
+    tx_fifo_flush: u1 = 0, // 5 (rs)
+    tx_fifo_flush_num: u5 = 0, // 6..10 (rw)
+    _reserved_11_29: u19 = 0, // 11..29
+    dma_request_in_progress: u1 = 0, // 30 (ro)
+    ahb_master_idle: u1 = 0, // 31 (ro)
 };
 
 pub const InterruptStatus = packed struct {
@@ -470,6 +473,20 @@ pub const HwConfig1 = packed struct {
     direction15: u2,
 };
 
+pub const HighSpeedPhyType = enum(u2) {
+    not_supported = 0,
+    utmi = 1,
+    ulpi = 2,
+    utmi_ulpi = 3,
+};
+
+pub const FullSpeedPhyType = enum(u2) {
+    physical_0 = 0,
+    dedicated = 1,
+    physical_2 = 2,
+    physical_3 = 3,
+};
+
 pub const HwConfig2 = packed struct {
     operating_mode: enum(u3) {
         hnp_srp_capable_otg = 0,
@@ -481,25 +498,15 @@ pub const HwConfig2 = packed struct {
         no_srp_capable_host = 6,
         undefined = 7,
     }, // 0..2
-    architecture: enum(u2) {
+    dma_architecture: enum(u2) {
         slave_only = 0,
         ext_dma = 1,
         int_dma = 2,
         undefined = 3,
     }, // 3..4
     point_to_point: u1, // 5
-    high_speed_physical_type: enum(u2) {
-        not_supported = 0,
-        utmi = 1,
-        ulpi = 2,
-        utmi_ulpi = 3,
-    }, // 6..7
-    full_speed_physical_type: enum(u2) {
-        physical_0 = 0,
-        dedicated = 1,
-        physical_2 = 2,
-        physical_3 = 3,
-    }, // 8..9
+    high_speed_physical_type: HighSpeedPhyType, // 6..7
+    full_speed_physical_type: FullSpeedPhyType, // 8..9
     num_device_endpoints: u4, // 10..13
     num_host_channels: u4, // 14..17
     periodic_endpoint_supported: u1, // 18

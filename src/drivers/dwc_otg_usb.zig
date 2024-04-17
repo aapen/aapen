@@ -139,6 +139,7 @@ pub const HwConfig3 = reg.HwConfig3;
 pub const HwConfig4 = reg.HwConfig4;
 pub const CoreRegisters = reg.CoreRegisters;
 pub const PowerAndClock = reg.PowerAndClock;
+pub const HighSpeedPhyType = reg.HighSpeedPhyType;
 
 // ----------------------------------------------------------------------
 // HCD state
@@ -232,7 +233,7 @@ pub fn initialize(self: *Self, allocator: Allocator) !void {
 
     try self.powerOn();
     try self.verifyHostControllerDevice();
-    try self.resetSoft();
+    try self.coreReset();
     try self.initializeControllerCore();
     try self.initializeInterrupts();
 
@@ -276,40 +277,105 @@ fn verifyHostControllerDevice(self: *Self) !void {
         log.warn(@src(), " gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
         return Error.IncorrectDevice;
     }
+
+    const hwcfg = self.core_registers.hardware_config_2;
+    const fs_phy_type = hwcfg.full_speed_physical_type;
+    const hs_phy_type = hwcfg.high_speed_physical_type;
+    const dma_support = hwcfg.dma_architecture;
+    const endpoints = hwcfg.num_device_endpoints;
+    const channels = hwcfg.num_host_channels;
+
+    log.debug(@src(), "operating mode: {s}", .{
+        @tagName(hwcfg.operating_mode),
+    });
+
+    log.debug(@src(), "hsphy type: {s}, fsphy type: {s}, dma support: {s}", .{
+        @tagName(hs_phy_type),
+        @tagName(fs_phy_type),
+        @tagName(dma_support),
+    });
+
+    log.debug(@src(), "enpoints: {d}, channels: {d}", .{
+        endpoints,
+        channels,
+    });
+}
+
+/// Returns true if the physical interface supports USB high-speed connections
+fn isPhyHighSpeedSupported(self: *Self) bool {
+    return self.core_registers.hardware_config_2.high_speed_physical_type != .not_supported;
+}
+
+/// Initialize the physical interface for USB high-speed connection
+fn phyHighSpeedInit(self: *Self) !void {
+    var usb_config = self.core_registers.usb_config;
+
+    // deselect full-speed phy
+    usb_config.phy_sel = 0;
+
+    if (self.core_registers.hardware_config_2.high_speed_physical_type == .ulpi) {
+        log.debug(@src(), "High-speed ULPI PHY init", .{});
+
+        usb_config.mode_select = .ulpi;
+        usb_config.phy_if_16 = ._8_bit;
+        usb_config.ddr_sel = 0;
+        usb_config.ulpi_ext_vbus_drv = 0;
+        usb_config.ulpi_ext_vbus_indicator = 0;
+        usb_config.ulpi_fsls = 0;
+        usb_config.ulpi_clk_sus_m = 0;
+    } else {
+        log.debug(@src(), "High-speed UTMI+ PHY init", .{});
+        usb_config.mode_select = .utmi_plus;
+
+        usb_config.phy_if_16 = switch (self.core_registers.hardware_config_4.utmi_physical_data_width) {
+            .width_8_bit => ._8_bit,
+            .width_16_bit => ._16_bit,
+            .width_32_bit => ._16_bit, // not sure about this
+        };
+    }
+
+    // write config to register
+    self.core_registers.usb_config = usb_config;
+
+    try self.coreReset();
+
+    // set turnaround time. can only be done after core reset
+    usb_config.usb_trdtim = switch (self.core_registers.hardware_config_4.utmi_physical_data_width) {
+        .width_16_bit => 5,
+        else => 9,
+    };
+
+    self.core_registers.usb_config = usb_config;
+}
+
+fn phyFullSpeedInit(self: *Self) !void {
+    log.debug(@src(), "Full-speed PHY init", .{});
+
+    var usb_config = self.core_registers.usb_config;
+    usb_config.phy_sel = 1;
+    self.core_registers.usb_config = usb_config;
+
+    try self.coreReset();
+
+    // set turnaround time. can only be done after core reset
+    usb_config.usb_trdtim = 5;
+    self.core_registers.usb_config = usb_config;
 }
 
 fn initializeControllerCore(self: *Self) !void {
-    // clear bits 20 & 22 of core usb config register
-    var config: UsbConfig = self.core_registers.usb_config;
-    config.ulpi_ext_vbus_drv = 0;
-    config.term_sel_dl_pulse = 0;
-    self.core_registers.usb_config = config;
-
-    config.mode_select = .ulpi;
-    config.phy_if = 0;
-    self.core_registers.usb_config = config;
-
-    // need another reset to make the phy changes take effect
-    try self.resetSoft();
-
-    const hw2 = self.core_registers.hardware_config_2;
-    config = self.core_registers.usb_config;
-    if (hw2.high_speed_physical_type == .ulpi and hw2.full_speed_physical_type == .dedicated) {
-        config.ulpi_fsls = 1;
-        config.ulpi_clk_sus_m = 1;
+    if (self.isPhyHighSpeedSupported()) {
+        try self.phyHighSpeedInit();
     } else {
-        config.ulpi_fsls = 0;
-        config.ulpi_clk_sus_m = 0;
+        try self.phyFullSpeedInit();
     }
-    self.core_registers.usb_config = config;
 
-    self.num_host_channels = hw2.num_host_channels;
+    self.num_host_channels = self.core_registers.hardware_config_2.num_host_channels;
 
     self.power_and_clock_control.* = @bitCast(@as(u32, 0));
 
     try self.configPhyClockSpeed();
 
-    self.host_registers.config.fs_ls_support_only = 1;
+    //    self.host_registers.config.fs_ls_support_only = 1;
 
     const rx_words: u32 = 1024; // Size of Rx FIFO in 4-byte words
     const tx_words: u32 = 1024; // Size of Non-periodic Tx FIFO in 4-byte words
@@ -321,6 +387,9 @@ fn initializeControllerCore(self: *Self) !void {
     self.core_registers.nonperiodic_tx_fifo_size = @bitCast((tx_words << 16) | rx_words);
     self.core_registers.host_periodic_tx_fifo_size = @bitCast((ptx_words << 16) | (rx_words + tx_words));
 
+    try self.flushTxFifo(0x10);
+    try self.flushRxFifo();
+
     var ahb = self.core_registers.ahb_config;
     ahb.dma_enable = 1;
     ahb.dma_remainder_mode = .incremental;
@@ -328,29 +397,29 @@ fn initializeControllerCore(self: *Self) !void {
     ahb.max_axi_burst = 0;
     self.core_registers.ahb_config = ahb;
 
-    config = self.core_registers.usb_config;
-    switch (hw2.operating_mode) {
+    var usb_config = self.core_registers.usb_config;
+    switch (self.core_registers.hardware_config_2.operating_mode) {
         .hnp_srp_capable_otg => {
-            config.hnp_capable = 1;
-            config.srp_capable = 1;
+            usb_config.hnp_capable = 1;
+            usb_config.srp_capable = 1;
         },
         .srp_only_capable_otg, .srp_capable_device, .srp_capable_host => {
-            config.hnp_capable = 0;
-            config.srp_capable = 1;
+            usb_config.hnp_capable = 0;
+            usb_config.srp_capable = 1;
         },
         .no_hnp_src_capable_otg, .no_srp_capable_host, .no_srp_capable_device => {
-            config.hnp_capable = 0;
-            config.srp_capable = 0;
+            usb_config.hnp_capable = 0;
+            usb_config.srp_capable = 0;
         },
         else => {
-            config.hnp_capable = 0;
-            config.srp_capable = 0;
+            usb_config.hnp_capable = 0;
+            usb_config.srp_capable = 0;
         },
     }
-    self.core_registers.usb_config = config;
+    self.core_registers.usb_config = usb_config;
 }
 
-fn resetSoft(self: *Self) !void {
+fn coreReset(self: *Self) !void {
     // log.debug(@src(), "core controller reset", .{});
 
     // trigger the soft reset
@@ -359,24 +428,23 @@ fn resetSoft(self: *Self) !void {
     // wait up to 10 ms for reset to finish
     const reset_end = time.deadlineMillis(10);
 
-    // TODO what should we do if we don't see the soft_reset go to zero?
     while (time.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
 
     if (self.core_registers.reset.soft_reset != 0) {
         return Error.InitializationFailure;
     }
 
-    // wait 100 ms
-    time.delayMillis(100);
+    // wait for AHB master to go idle
+    const ahb_idle_wait_end = time.deadlineMillis(10);
+
+    while (time.ticks() < ahb_idle_wait_end and self.core_registers.reset.ahb_master_idle == 0) {}
+
+    if (self.core_registers.reset.ahb_master_idle != 1) {
+        return Error.InitializationFailure;
+    }
 }
 
 fn initializeInterrupts(self: *Self) !void {
-    // Enable only host channel and port interrupts
-    var enabled: InterruptMask = @bitCast(@as(u32, 0));
-    enabled.host_channel = 1;
-    enabled.port = 1;
-    self.core_registers.core_interrupt_mask = enabled;
-
     // Clear pending interrupts
     const clear_all: InterruptStatus = @bitCast(@as(u32, 0xffff_ffff));
     self.core_registers.core_interrupt_status = clear_all;
@@ -388,6 +456,12 @@ fn initializeInterrupts(self: *Self) !void {
     // Connect interrupt handler & enable interrupts on the ARM PE
     self.intc.connect(self.irq_id, &self.irq_handler, self);
     self.intc.enable(self.irq_id);
+
+    // Enable only host channel and port interrupts
+    var enabled: InterruptMask = @bitCast(@as(u32, 0));
+    enabled.host_channel = 1;
+    enabled.port = 1;
+    self.core_registers.core_interrupt_mask = enabled;
 
     // Enable interrupts for the host controller (this is the DWC side)
     self.core_registers.ahb_config.global_interrupt_enable = 1;
@@ -406,6 +480,32 @@ fn configPhyClockSpeed(self: *Self) !void {
     } else {
         self.host_registers.config.clock_rate = .clock_30_60_mhz;
     }
+}
+
+fn flushTxFifo(self: *Self, fifo_num: u5) !void {
+    const flush: Reset = .{
+        .tx_fifo_flush = 1,
+        .tx_fifo_flush_num = fifo_num,
+    };
+    self.core_registers.reset = flush;
+
+    const flush_wait_end = time.deadlineMillis(100);
+    while (self.core_registers.reset.tx_fifo_flush == 1 and time.ticks() < flush_wait_end) {}
+
+    // TODO return error if timeout hit without seeing tx_fifo_flush
+    // go low.
+}
+
+fn flushRxFifo(self: *Self) !void {
+    const flush: Reset = .{
+        .rx_fifo_flush = 1,
+    };
+    self.core_registers.reset = flush;
+    const flush_wait_end = time.deadlineMillis(100);
+    while (self.core_registers.reset.rx_fifo_flush == 1 and time.ticks() < flush_wait_end) {}
+
+    // TODO return error if timeout hit without seeing rx_fifo_flush
+    // go low.
 }
 
 fn haltAllChannels(self: *Self) !void {
@@ -575,6 +675,31 @@ pub fn perform(self: *Self, xfer: *TransferRequest) !void {
     try self.transfer_mailbox.send(xfer);
 }
 
+fn calculatePacketCount(self: *Self, input_size_in: TransferBytes, ep_dir: u1, ep_mps: u16) TransferSize {
+    _ = self;
+    var input_size = input_size_in;
+    var num_packets: u32 = (input_size + ep_mps - 1) / ep_mps;
+
+    if (num_packets > 256) {
+        num_packets = 256;
+    }
+
+    if (input_size == 0) {
+        num_packets = 1;
+    }
+
+    if (ep_dir == EndpointDirection.in) {
+        input_size = @truncate(num_packets * ep_mps);
+    }
+
+    return TransferSize{
+        .packet_count = @truncate(num_packets),
+        .size = input_size,
+        .packet_id = DwcTransferSizePid.data1,
+        .do_ping = 0,
+    };
+}
+
 /// Start or restart a transfer on a channel of the HCD
 pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferRequest) void {
     var characteristics: ChannelCharacteristics = @bitCast(@as(u32, 0));
@@ -604,12 +729,18 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         characteristics.packets_per_frame = 1;
     }
 
+    var input_size: TransferBytes = 0;
+    var next_pid: u2 = DwcTransferSizePid.data1;
+
     if (characteristics.endpoint_type == TransferType.control) {
         switch (req.control_phase) {
             TransferRequest.control_setup_phase => {
                 debugLogTransfer(req, "starting SETUP transaction");
                 characteristics.endpoint_direction = EndpointDirection.out;
                 data = @ptrCast(&req.setup_data);
+                input_size = @sizeOf(SetupPacket);
+                next_pid = DwcTransferSizePid.setup;
+
                 transfer.size = @sizeOf(SetupPacket);
                 transfer.packet_id = DwcTransferSizePid.setup;
 
@@ -619,10 +750,15 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
                 debugLogTransfer(req, "starting DATA transaction");
                 characteristics.endpoint_direction = req.setup_data.request_type.transfer_direction;
                 data = req.data + req.actual_size;
+                input_size = @truncate(req.size - req.actual_size);
+                next_pid = if (req.actual_size == 0) DwcTransferSizePid.data1 else req.next_data_pid;
+
                 transfer.size = @truncate(req.size - req.actual_size);
                 if (req.actual_size == 0) {
+                    // the first data packet is always DATA1
                     transfer.packet_id = DwcTransferSizePid.data1;
                 } else {
+                    // subsequent data packets alternate DATA0/1
                     transfer.packet_id = req.next_data_pid;
                 }
             },
@@ -637,6 +773,9 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
                     characteristics.endpoint_direction = EndpointDirection.out;
                 }
                 data = null;
+                input_size = 0;
+                next_pid = DwcTransferSizePid.data1;
+
                 transfer.size = 0;
                 transfer.packet_id = DwcTransferSizePid.data1;
             },
@@ -646,9 +785,17 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         // restarting (maybe after being deferred)
         characteristics.endpoint_direction = req.endpoint_desc.?.direction();
         data = req.data + req.actual_size;
+        input_size = @truncate(req.size - req.actual_size);
+        next_pid = req.next_data_pid;
+
         transfer.size = @truncate(req.size - req.actual_size);
 
         if (characteristics.endpoint_type == TransferType.interrupt) {
+            if (input_size > characteristics.packets_per_frame * characteristics.max_packet_size) {
+                input_size = characteristics.packets_per_frame * characteristics.max_packet_size;
+                req.short_attempt = true;
+            }
+
             if (transfer.size > characteristics.packets_per_frame * characteristics.max_packet_size) {
                 transfer.size = characteristics.packets_per_frame * characteristics.max_packet_size;
                 req.short_attempt = true;
@@ -659,7 +806,10 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
             // }
         }
 
-        transfer.packet_id = req.next_data_pid;
+        transfer = self.calculatePacketCount(input_size, characteristics.endpoint_direction, characteristics.max_packet_size);
+        transfer.packet_id = next_pid;
+
+        //        transfer.packet_id = req.next_data_pid;
 
         debugLogTransfer(req, "starting transaction");
     }
@@ -668,35 +818,36 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
 
     // if talking to a low or full speed device, handle the
     // split register
-    if (req.device.?.speed != UsbSpeed.High) {
-        // log.debug(@src(),"device needs a split transaction, finding TT", .{});
+    // if (req.device.?.speed != UsbSpeed.High) {
+    //     // log.debug(@src(),"device needs a split transaction, finding TT", .{});
 
-        // find which hub is the transaction translator (TT)
-        var tt_hub_port: u7 = 0;
-        var tt_hub: ?*Device = req.device.?;
+    //     // find which hub is the transaction translator (TT)
+    //     var tt_hub_port: u7 = 0;
+    //     var tt_hub: ?*Device = req.device.?;
 
-        // TODO - is this guaranteed to finish?
-        while (tt_hub != null and tt_hub.?.speed != UsbSpeed.High) {
-            tt_hub_port = tt_hub.?.parent_port;
-            tt_hub = tt_hub.?.parent;
-        }
+    //     // TODO - is this guaranteed to finish?
+    //     while (tt_hub != null and tt_hub.?.speed != UsbSpeed.High) {
+    //         tt_hub_port = tt_hub.?.parent_port;
+    //         tt_hub = tt_hub.?.parent;
+    //     }
 
-        split_control.port_address = if (tt_hub_port >= 1) tt_hub_port - 1 else 0;
-        split_control.hub_address = if (tt_hub) |h| h.address else 0;
-        split_control.split_enable = 1;
+    //     split_control.port_address = if (tt_hub_port >= 1) tt_hub_port - 1 else 0;
+    //     split_control.hub_address = if (tt_hub) |h| h.address else 0;
+    //     split_control.split_enable = 1;
+    //     split_control.transaction_position = 0b11;
 
-        // log.debug(@src(),"split control: port {d}, hub {d}, enable {d}", .{ split_control.port_address, split_control.hub_address, split_control.split_enable });
+    //     // log.debug(@src(),"split control: port {d}, hub {d}, enable {d}", .{ split_control.port_address, split_control.hub_address, split_control.split_enable });
 
-        if (transfer.size > characteristics.max_packet_size) {
-            transfer.size = characteristics.max_packet_size;
-            req.short_attempt = true;
-        }
+    //     if (transfer.size > characteristics.max_packet_size) {
+    //         transfer.size = characteristics.max_packet_size;
+    //         req.short_attempt = true;
+    //     }
 
-        characteristics.low_speed_device = switch (req.device.?.speed) {
-            .Low => 1,
-            else => 0,
-        };
-    }
+    //     characteristics.low_speed_device = switch (req.device.?.speed) {
+    //         .Low => 1,
+    //         else => 0,
+    //     };
+    // }
 
     if (data == null) {
         channel.registers.channel_dma_addr = 0;
@@ -719,6 +870,10 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         if (characteristics.endpoint_direction == 0) {
             @memcpy(channel.aligned_buffer[0..transfer.size], data.?);
         }
+    }
+
+    if (channel.registers.channel_dma_addr != 0 and req.size > 0) {
+        synchronize.dataCacheRangeCleanAndInvalidate(channel.registers.channel_dma_addr, req.size);
     }
 
     // It's OK if this doesn't match the DMA address selected
@@ -802,6 +957,8 @@ pub fn channelStartTransaction(self: *Self, channel: *Channel, req: *TransferReq
     channel_char.enable = 1;
     channel_char.disable = 0;
     channel.registers.channel_character = channel_char;
+
+    log.debug(@src(), "channel {d} characteristics {x:0>8}", .{ channel.id, @as(u32, @bitCast(channel.registers.channel_character)) });
 }
 
 const active_transaction_interrupts: ChannelInterrupt = .{
@@ -861,7 +1018,7 @@ fn deferredTransfer(args_ptr: *anyopaque) void {
     }
 
     // temporary while testing
-    // interval_ms = 2500;
+    //    interval_ms = 2500;
 
     if (interval_ms == 0) {
         interval_ms = 1;

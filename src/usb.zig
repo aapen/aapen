@@ -179,7 +179,7 @@ pub fn initialize() !void {
     errdefer freeDevice(dev0);
 
     log.debug(@src(), "attaching root hub", .{});
-    if (attachDevice(dev0, UsbSpeed.High)) {
+    if (attachDevice(dev0, UsbSpeed.Full)) {
         log.debug(@src(), "usb initialized", .{});
         root_hub = &devices[dev0];
         return;
@@ -314,10 +314,10 @@ fn bindDriver(dev: *Device) !void {
 
     for (drivers.items) |drv| {
         if (drv.canBind(dev)) {
-            log.debug(@src(), "Attempting to bind driver {s} to device", .{drv.name});
+            log.debug(@src(), "Attempting to bind '{s}' driver to device", .{drv.name});
             if (drv.bind(dev)) {
                 var buf: [512]u8 = [_]u8{0} ** 512;
-                log.info(@src(), "Bound driver {s} to {s}", .{ drv.name, dev.description(&buf) });
+                log.info(@src(), "Bound '{s}' driver to '{s}'", .{ drv.name, dev.description(&buf) });
                 return;
             } else |e| {
                 switch (e) {
@@ -405,14 +405,12 @@ pub fn controlMessage(
     };
     log.debug(@src(), "[{d}:{d}] awakened from semaphore.wait", .{ dev.address, 0 });
 
-    // if (data.len > 0) {
-    //     log.debug(@src(), "[{d}:{d}] req_type 0x{x}, req_code 0x{x}, received", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
-    //     log.sliceDump(data[0..req.actual_size]);
-    // } else {
-    //     log.debug(@src(), "[{d}:{d}] req_type 0x{x}, req_code 0x{x}, no data expected", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
-    // }
-
-    log.debug(@src(), "[{d}:{d}] got here", .{ dev.address, 0 });
+    if (data.len > 0) {
+        log.debug(@src(), "[{d}:{d}] req_type 0x{x}, req_code 0x{x}, received", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+        log.sliceDump(@src(), data[0..req.actual_size]);
+    } else {
+        log.debug(@src(), "[{d}:{d}] req_type 0x{x}, req_code 0x{x}, no data expected", .{ dev.address, 0, @as(u8, @bitCast(req_type)), req_code });
+    }
 
     var st = req.status;
     if (st == .ok and req.actual_size != data.len) {

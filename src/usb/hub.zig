@@ -505,7 +505,7 @@ pub const Hub = struct {
 
         const dev: *Device = &usb.devices[new_device];
 
-        //        try self.portStatusGet(port);
+        try self.portStatusGet(port);
         log.debug(@src(), "hub {d} port {d} reports speed is {s}", .{
             self.index,
             port.number,

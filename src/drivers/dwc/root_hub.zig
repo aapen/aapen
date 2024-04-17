@@ -161,7 +161,7 @@ fn mkStringDescriptor(comptime payload: []const u16) StringDescriptor {
 
 const root_hub_default_language = mkStringDescriptor(&[_]u16{0x0409});
 const root_hub_serial_number = mkStringDescriptor(&[_]u16{ '0', '0', '4', '2' });
-const root_hub_product_name = mkStringDescriptor(&[_]u16{ 'U', 'S', 'B', ' ', '2', '.', '0', ' ', 'R', 'o', 'o', 't', ' ', 'H', 'u', 'b' });
+const root_hub_product_name = mkStringDescriptor(&[_]u16{ 'A', 'a', 'p', 'e', 'n', ' ', 'U', 'S', 'B', ' ', '2', '.', '0', ' ', 'R', 'o', 'o', 't', ' ', 'H', 'u', 'b' });
 const root_hub_manufacturer = mkStringDescriptor(&[_]u16{ 'M', '&', 'R', ' ', 'h', 'o', 'b', 'b', 'y', ' ', 's', 'h', 'o', 'p' });
 
 // The order of these items must correspond to the indexes in the
