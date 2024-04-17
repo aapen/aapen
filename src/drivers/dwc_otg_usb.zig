@@ -741,8 +741,8 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
                 input_size = @sizeOf(SetupPacket);
                 next_pid = DwcTransferSizePid.setup;
 
-                transfer.size = @sizeOf(SetupPacket);
-                transfer.packet_id = DwcTransferSizePid.setup;
+                // transfer.size = @sizeOf(SetupPacket);
+                // transfer.packet_id = DwcTransferSizePid.setup;
 
                 log.sliceDump(@src(), std.mem.asBytes(&req.setup_data));
             },
@@ -753,14 +753,14 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
                 input_size = @truncate(req.size - req.actual_size);
                 next_pid = if (req.actual_size == 0) DwcTransferSizePid.data1 else req.next_data_pid;
 
-                transfer.size = @truncate(req.size - req.actual_size);
-                if (req.actual_size == 0) {
-                    // the first data packet is always DATA1
-                    transfer.packet_id = DwcTransferSizePid.data1;
-                } else {
-                    // subsequent data packets alternate DATA0/1
-                    transfer.packet_id = req.next_data_pid;
-                }
+                // transfer.size = @truncate(req.size - req.actual_size);
+                // if (req.actual_size == 0) {
+                //     // the first data packet is always DATA1
+                //     transfer.packet_id = DwcTransferSizePid.data1;
+                // } else {
+                //     // subsequent data packets alternate DATA0/1
+                //     transfer.packet_id = req.next_data_pid;
+                // }
             },
             else => {
                 debugLogTransfer(req, "starting STATUS transaction");
@@ -776,8 +776,8 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
                 input_size = 0;
                 next_pid = DwcTransferSizePid.data1;
 
-                transfer.size = 0;
-                transfer.packet_id = DwcTransferSizePid.data1;
+                // transfer.size = 0;
+                // transfer.packet_id = DwcTransferSizePid.data1;
             },
         }
     } else {
@@ -788,7 +788,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         input_size = @truncate(req.size - req.actual_size);
         next_pid = req.next_data_pid;
 
-        transfer.size = @truncate(req.size - req.actual_size);
+        // transfer.size = @truncate(req.size - req.actual_size);
 
         if (characteristics.endpoint_type == TransferType.interrupt) {
             if (input_size > characteristics.packets_per_frame * characteristics.max_packet_size) {
@@ -796,23 +796,23 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
                 req.short_attempt = true;
             }
 
-            if (transfer.size > characteristics.packets_per_frame * characteristics.max_packet_size) {
-                transfer.size = characteristics.packets_per_frame * characteristics.max_packet_size;
-                req.short_attempt = true;
-            }
+            // if (transfer.size > characteristics.packets_per_frame * characteristics.max_packet_size) {
+            //     transfer.size = characteristics.packets_per_frame * characteristics.max_packet_size;
+            //     req.short_attempt = true;
+            // }
             // else {
             //     const mps = characteristics.max_packet_size;
             //     transfer.size = @truncate((transfer.size + mps - 1) / mps);
             // }
         }
 
-        transfer = self.calculatePacketCount(input_size, characteristics.endpoint_direction, characteristics.max_packet_size);
-        transfer.packet_id = next_pid;
-
         //        transfer.packet_id = req.next_data_pid;
 
         debugLogTransfer(req, "starting transaction");
     }
+
+    transfer = self.calculatePacketCount(input_size, characteristics.endpoint_direction, characteristics.max_packet_size);
+    transfer.packet_id = next_pid;
 
     characteristics.device_address = req.device.?.address;
 
@@ -885,12 +885,12 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         log.warn(@src(), "data ptr 0x{x:0>8} misaligned by 0x{x} bytes", .{ channel.registers.channel_dma_addr, (channel.registers.channel_dma_addr & (DMA_ALIGNMENT - 1)) });
     }
 
-    const mps = characteristics.max_packet_size;
-    transfer.packet_count = @truncate((transfer.size + mps - 1) / mps);
+    // const mps = characteristics.max_packet_size;
+    // transfer.packet_count = @truncate((transfer.size + mps - 1) / mps);
 
-    if (transfer.packet_count == 0) {
-        transfer.packet_count = 1;
-    }
+    // if (transfer.packet_count == 0) {
+    //     transfer.packet_count = 1;
+    // }
 
     req.attempted_size = transfer.size;
     req.attempted_bytes_remaining = transfer.size;
@@ -899,11 +899,13 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
     channel.active_transfer = req;
 
     log.debug(@src(), "Setting up transactions on channel {d}:\n" ++
-        "\t\tmax_packet_size={d}, " ++
+        "\t\tdma_addr=0x{x:0>8}, " ++
+        "max_packet_size={d}, " ++
         "endpoint_number={d}, endpoint_direction={d},\n" ++
         "\t\tlow_speed={d}, endpoint_type={d}, device_address={d},\n\t\t" ++
         "size={d}, packet_count={d}, packet_id={d}, split_enable={d}, complete_split={}", .{
         channel.id,
+        channel.registers.channel_dma_addr,
         characteristics.max_packet_size,
         characteristics.endpoint_number,
         characteristics.endpoint_direction,
@@ -949,21 +951,17 @@ pub fn channelStartTransaction(self: *Self, channel: *Channel, req: *TransferReq
         req.csplit_retries = 0;
     }
 
-    channel.registers.channel_int_mask = active_transaction_interrupts;
+    channel.registers.channel_int_mask = .{ .halt = 1 };
     self.host_registers.all_channel_interrupts_mask |= @as(u32, 1) << channel.id;
 
     var channel_char = channel.registers.channel_character;
     channel_char.odd_frame = @truncate(next_frame & 1);
     channel_char.enable = 1;
-    channel_char.disable = 0;
+    //    channel_char.disable = 0;
     channel.registers.channel_character = channel_char;
 
     log.debug(@src(), "channel {d} characteristics {x:0>8}", .{ channel.id, @as(u32, @bitCast(channel.registers.channel_character)) });
 }
-
-const active_transaction_interrupts: ChannelInterrupt = .{
-    .halt = 1,
-};
 
 // ----------------------------------------------------------------------
 // Deferred transfer support

@@ -262,7 +262,7 @@ const SHORT_RESET_DELAY = 10;
 pub const MAX_HUBS = 8;
 
 pub const Hub = struct {
-    const Port = struct {
+    pub const Port = struct {
         number: u7,
         status: PortStatus,
         device_speed: UsbSpeed,
@@ -468,7 +468,7 @@ pub const Hub = struct {
         }
     }
 
-    fn portReset(self: *Hub, port: *Port, delay: u32) !void {
+    pub fn portReset(self: *Hub, port: *Port, delay: u32) !void {
         log.debug(@src(), "hub {d} portReset {d}", .{ self.index, port.number });
 
         try self.portFeatureSet(port, PortFeature.port_reset);
@@ -522,9 +522,7 @@ pub const Hub = struct {
 
         log.debug(@src(), "hub {d} {s}-speed device connected to port {d}", .{ self.index, @tagName(dev.speed), port.number });
 
-        dev.parent_port = port.number;
-
-        try usb.attachDevice(new_device, dev.speed);
+        try usb.attachDevice(new_device, dev.speed, self, port);
 
         port.device = dev;
     }

@@ -179,7 +179,7 @@ pub fn initialize() !void {
     errdefer freeDevice(dev0);
 
     log.debug(@src(), "attaching root hub", .{});
-    if (attachDevice(dev0, UsbSpeed.Full)) {
+    if (attachDevice(dev0, UsbSpeed.Full, null, null)) {
         log.debug(@src(), "usb initialized", .{});
         root_hub = &devices[dev0];
         return;
@@ -258,7 +258,7 @@ pub fn freeDevice(devid: DeviceAddress) void {
     dev.in_use = false;
 }
 
-pub fn attachDevice(devid: DeviceAddress, speed: UsbSpeed) !void {
+pub fn attachDevice(devid: DeviceAddress, speed: UsbSpeed, parent_hub: ?*Hub, parent_port: ?*Hub.Port) !void {
     var dev = &devices[devid - 1];
 
     // assume the speed detected by the hub this device is attached to
@@ -284,6 +284,11 @@ pub fn attachDevice(devid: DeviceAddress, speed: UsbSpeed) !void {
     // dev.device_descriptor.dump();
 
     log.debug(@src(), "device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
+
+    if (parent_hub) |h| {
+        try h.portReset(parent_port.?, 10);
+        dev.parent_port = parent_port.?.number;
+    }
 
     log.debug(@src(), "assigning address {d}", .{devid});
     try deviceSetAddress(dev, devid);

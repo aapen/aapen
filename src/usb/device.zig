@@ -29,6 +29,7 @@ const TransferType = transfer.TransferType;
 const TransferFactory = @import("transfer_factory.zig");
 
 const usb = @import("../usb.zig");
+const Hub = usb.Hub;
 const InterfaceClass = usb.InterfaceClass;
 
 pub const DeviceAddress = u7;

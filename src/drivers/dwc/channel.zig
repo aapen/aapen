@@ -143,11 +143,12 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
 
     var buf = std.mem.zeroes([128]u8);
     const l = int_status.debugDecode(&buf);
-    Host.log.debug(@src(), "channel {d} interrupt{s}, characteristics 0x{x:0>8}, transfer 0x{x:0>8}", .{
+    Host.log.debug(@src(), "channel {d} interrupt{s}, characteristics 0x{x:0>8}, transfer 0x{x:0>8}, dma_addr 0x{x:0>8}", .{
         self.id,
         buf[0..l],
         @as(u32, @bitCast(self.registers.channel_character)),
         @as(u32, @bitCast(self.registers.transfer)),
+        self.registers.channel_dma_addr,
     });
 
     if (int_status.stall == 1 or int_status.ahb_error == 1 or int_status.transaction_error == 1 or
@@ -217,12 +218,6 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
     self.interruptDisableAll();
     self.interruptsClearPending();
 
-    // deactivate the channel.
-    // this requires some delay after deactivation before the channel
-    // can be reactivated. for now we hack that by assuming that
-    // deferTransfer introduces enough delay.
-    // self.disable();
-
     self.active_transfer = null;
     host.channelFree(self);
 
@@ -262,19 +257,14 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
                 Host.log.err(@src(), "Transfer size seems wrong 0x{x} (attempted was 0x{x})", .{ self.registers.transfer.size, req.attempted_bytes_remaining });
 
                 // High bit is set, do we have a negative number?
-                var volunteer_data_size: u32 = ~(self.registers.transfer.size) + 1;
-                if (req.cur_data_ptr != null and Host.isAligned(req.cur_data_ptr.?)) {
-                    Host.log.sliceDump(@src(), req.cur_data_ptr.?[0..(req.attempted_size + volunteer_data_size)]);
-                } else {
-                    Host.log.sliceDump(@src(), self.aligned_buffer[0..(req.attempted_size + volunteer_data_size)]);
-                }
+                Host.log.sliceDump(@src(), self.aligned_buffer);
 
                 bytes_transferred = req.attempted_bytes_remaining;
             } else {
                 bytes_transferred = req.attempted_bytes_remaining - self.registers.transfer.size;
             }
 
-            if (bytes_transferred > 0 and !Host.isAligned(req.cur_data_ptr.?)) {
+            if (bytes_transferred > 0 and req.cur_data_ptr != null and !Host.isAligned(req.cur_data_ptr.?)) {
                 // we're reading into a different buffer than the
                 // original caller provided. copy the results from our
                 // DMA aligned buffer to the one the caller can see
