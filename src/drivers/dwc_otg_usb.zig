@@ -1077,23 +1077,25 @@ pub fn dwcDriverLoop(args: *anyopaque) void {
     const self: *Self = @alignCast(@ptrCast(args));
 
     while (!self.isShuttingDown()) {
-        if (self.transfer_mailbox.receive()) |xfer| {
-            //            debugLogTransfer(xfer, "begin");
-            if (xfer.device) |dev| {
-                if (dev.isRootHub()) {
-                    self.root_hub.hubHandleTransfer(xfer);
-                } else {
-                    if (self.channelAllocate()) |channel| {
-                        self.channelStartTransfer(channel, xfer);
-                    } else |err| {
-                        log.err(@src(), "channel allocate error: {any}", .{err});
-                    }
-                }
-            } else {
-                log.err(@src(), "malformed transfer: no device", .{});
-            }
-        } else |err| {
+        var xfer = self.transfer_mailbox.receive() catch |err| {
             log.err(@src(), "transfer_mailbox receive error: {any}", .{err});
+            continue;
+        };
+
+        var dev = xfer.device orelse {
+            log.err(@src(), "malformed xfer, no device given.", .{});
+            continue;
+        };
+
+        if (dev.isRootHub()) {
+            self.root_hub.hubHandleTransfer(xfer);
+        } else {
+            var channel = self.channelAllocate() catch |err| {
+                log.err(@src(), "channel allocate error: {any}", .{err});
+                continue;
+            };
+
+            self.channelStartTransfer(channel, xfer);
         }
     }
 }
