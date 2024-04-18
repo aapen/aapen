@@ -35,23 +35,9 @@ pub const ChannelId = u5;
 
 const Self = @This();
 
-pub const CompletionHandler = struct {
-    callbackCompleted: *const fn (*const CompletionHandler, *Self, data: []u8) void,
-    callbackHalted: *const fn (*const CompletionHandler, *Self) void,
-
-    fn completed(self: *const CompletionHandler, channel: *Self, data: []u8) void {
-        self.callbackCompleted(self, channel, data);
-    }
-
-    fn halted(self: *const CompletionHandler, channel: *Self) void {
-        self.callbackHalted(self, channel);
-    }
-};
-
 host: *Host = undefined,
 id: ChannelId = undefined,
 registers: *volatile reg.ChannelRegisters = undefined,
-completion_handler: ?*CompletionHandler = null,
 active_transfer: ?*TransferRequest = null,
 aligned_buffer: []u8 = undefined,
 
@@ -67,7 +53,6 @@ pub fn init(self: *Self, host: *Host, id: ChannelId, registers: *volatile Channe
         .id = id,
         .registers = registers,
         .aligned_buffer = aligned_buffer,
-        .completion_handler = null,
         .active_transfer = null,
     };
 }

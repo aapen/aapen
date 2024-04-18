@@ -50,33 +50,8 @@ pub const ChannelInterrupt = packed struct {
     frame_list_rollover: u1 = 0, // 13
     _reserved_18_31: u18 = 0, // 14..31
 
-    pub fn isStatusNakNyet(self: *const ChannelInterrupt) bool {
-        const st: u32 = @bitCast(self.*);
-        const nak_mask: u32 = @bitCast(ChannelInterrupt{
-            .nak = 1,
-            .nyet = 1,
-        });
-        return (st & nak_mask) != 0;
-    }
-
-    pub fn isStatusError(self: *const ChannelInterrupt) bool {
-        const st: u32 = @bitCast(self.*);
-        const error_mask: u32 = @bitCast(ChannelInterrupt{
-            .stall = 1,
-            .ahb_error = 1,
-            .transaction_error = 1,
-            .babble_error = 1,
-            .excessive_transmission = 1,
-            .frame_list_rollover = 1,
-        });
-
-        return (st & error_mask) != 0;
-    }
-
     pub fn debugDecode(self: *const ChannelInterrupt, buf: []u8) usize {
         var builder = std.io.fixedBufferStream(buf);
-        // var fba = std.heap.FixedBufferAllocator.init(buf);
-        // var builder = std.ArrayList(u8).init(fba.allocator());
         var written: usize = 0;
 
         if (self.transfer_complete == 1) {
