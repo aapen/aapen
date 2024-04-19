@@ -35,22 +35,14 @@ pub const ChannelId = u5;
 
 const Self = @This();
 
-host: *Host = undefined,
 id: ChannelId = undefined,
 registers: *volatile reg.ChannelRegisters = undefined,
 active_transfer: ?*TransferRequest = null,
 aligned_buffer: []u8 = undefined,
 
-pub const Error = error{
-    Timeout,
-    ChannelBusy,
-    UnsupportedInitialPid,
-};
-
-pub fn init(self: *Self, host: *Host, id: ChannelId, registers: *volatile ChannelRegisters, aligned_buffer: []u8) void {
+pub fn init(self: *Self, id: usize, registers: *volatile ChannelRegisters, aligned_buffer: []u8) void {
     self.* = .{
-        .host = host,
-        .id = id,
+        .id = @truncate(id),
         .registers = registers,
         .aligned_buffer = aligned_buffer,
         .active_transfer = null,
@@ -75,37 +67,13 @@ pub fn disable(self: *Self) void {
     self.registers.channel_character = channel_characteristics;
 }
 
-const all_one_bits: ChannelInterrupt = @bitCast(@as(u32, 0xffff_ffff));
-
 pub fn interruptsClearPending(self: *Self) void {
-    self.registers.channel_int = all_one_bits;
+    self.registers.channel_int = @bitCast(@as(u32, 0xffff_ffff));
 }
-
-const all_zero_bits: ChannelInterrupt = @bitCast(@as(u32, 0));
 
 pub fn interruptDisableAll(self: *Self) void {
     // Host.log.debug(@src(),"channel {d} interrupt disable all", .{self.id});
-    self.registers.channel_int_mask = all_zero_bits;
-}
-
-pub fn interruptsEnableActiveTransaction(self: *Self) void {
-    // Host.log.debug(@src(),"channel {d} interrupt enable active transaction", .{self.id});
-    self.registers.channel_int_mask = .{
-        .transfer_complete = 1,
-        .halt = 1,
-        .ahb_error = 1,
-        .stall = 1,
-        .nak = 1,
-        .ack = 1,
-        .nyet = 1,
-        .transaction_error = 1,
-        .babble_error = 1,
-        .frame_overrun = 1,
-        .data_toggle_error = 1,
-        .buffer_not_available = 1,
-        .excessive_transmission = 1,
-        .frame_list_rollover = 1,
-    };
+    self.registers.channel_int_mask = @bitCast(@as(u32, 0));
 }
 
 const InterruptReason = enum {
@@ -116,7 +84,7 @@ const InterruptReason = enum {
     transfer_completed,
 };
 
-pub fn channelInterrupt2(self: *Self, host: *Host) void {
+pub fn channelInterrupt2(self: *Self) void {
     if (self.active_transfer == null) {
         Host.log.debug(@src(), "channel {d} received a spurious interrupt.", .{self.id});
         return;
@@ -144,8 +112,8 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
     {
         Host.log.err(@src(), "channel {d} transfer error (interrupts = 0x{x:0>8},  packet count = {d})", .{ self.id, @as(u32, @bitCast(int_status)), self.registers.transfer.packet_count });
 
-        self.host.dumpStatus();
-        self.channelStatus();
+        Host.dumpStatus();
+        Host.channelStatus(self.id);
 
         interrupt_reason = .transfer_failed;
     } else if (int_status.frame_overrun == 1) {
@@ -184,11 +152,11 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
         .transfer_failed => completion = .failed,
         .transfer_needs_defer => {},
         .transfer_needs_restart => {
-            host.channelStartTransfer(self, req);
+            Host.channelStartTransfer(self, req);
             return;
         },
         .transaction_needs_restart => {
-            host.channelStartTransaction(self, req);
+            Host.channelStartTransaction(self, req);
             return;
         },
     }
@@ -204,14 +172,14 @@ pub fn channelInterrupt2(self: *Self, host: *Host) void {
     self.interruptsClearPending();
 
     self.active_transfer = null;
-    host.channelFree(self);
+    Host.channelFree(self);
 
     if (!req.isControlRequest() or req.control_phase == TransferRequest.control_data_phase) {
         req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr.?) - @intFromPtr(req.data));
     }
 
     if (interrupt_reason == .transfer_needs_defer) {
-        if (host.deferTransfer(req)) {
+        if (Host.deferTransfer(req)) {
             return;
         } else |_| {
             completion = .failed;
@@ -355,34 +323,4 @@ fn channelHaltedNormal(self: *Self, req: *TransferRequest, ints: ChannelInterrup
             return .transfer_failed;
         }
     }
-}
-
-pub fn channelAbort(self: *Self) void {
-    if (self.state != .Active) {
-        Host.log.warn(@src(), "channel {d} attempt to abort, but channel is not active (state is {any})", .{ self.id, self.state });
-        return;
-    }
-
-    const im = cpu.disable();
-    defer cpu.restore(im);
-
-    Host.log.debug(@src(), "channel {d} abort requested", .{self.id});
-
-    // listen for only the halted interrupt that tells us the disable
-    // request is completed
-    self.interruptDisableAll();
-    self.registers.channel_int_mask.halt = 1;
-    self.state = .Terminating;
-    self.disable();
-}
-
-pub fn channelStatus(self: *Self) void {
-    Host.log.info(@src(), "{s: >28}", .{"Channel registers"});
-    dumpRegisterPair("characteristics", @bitCast(self.registers.channel_character), "split_control", @bitCast(self.registers.split_control));
-    dumpRegisterPair("interrupt", @bitCast(self.registers.channel_int), "int. mask", @bitCast(self.registers.channel_int_mask));
-    dumpRegisterPair("transfer", @bitCast(self.registers.transfer), "dma addr", @bitCast(self.registers.channel_dma_addr));
-}
-
-pub fn dumpRegisterPair(f1: []const u8, v1: u32, f2: []const u8, v2: u32) void {
-    Host.log.info(@src(), "{s: >28}: {x:0>8}\t{s: >28}: {x:0>8}", .{ f1, v1, f2, v2 });
 }

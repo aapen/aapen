@@ -172,7 +172,7 @@ pub fn init() !void {
 
 // `initialize` activates the hardware and does the initial port scan
 pub fn initialize() !void {
-    try root.hal.usb_hci.initialize(allocator);
+    try root.hal.usb_hci.initialize();
     log.debug(@src(), "started host controller", .{});
 
     const dev0 = try allocateDevice(null);

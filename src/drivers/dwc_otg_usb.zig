@@ -153,23 +153,25 @@ const UsbTransferMailbox = Mailbox(*TransferRequest);
 
 const empty_slice: []u8 = &[_]u8{};
 
-allocator: Allocator,
-core_registers: *volatile CoreRegisters,
-host_registers: *volatile HostRegisters,
-power_and_clock_control: *volatile PowerAndClock,
-all_channel_intmask_lock: TicketLock,
-intc: *InterruptController,
-irq_id: IrqId,
-irq_handler: IrqHandler = irqHandle,
-translations: *const AddressTranslations,
-power_controller: *PowerController,
-num_host_channels: u4,
-channel_assignments: HcdChannels = .{},
-channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels,
-root_hub: RootHub = .{},
-transfer_mailbox: UsbTransferMailbox,
-driver_thread: schedule.TID,
-shutdown_signal: OneShot = .{},
+var core: *volatile CoreRegisters = undefined;
+var host: *volatile HostRegisters = undefined;
+var power: *volatile PowerAndClock = undefined;
+var power_controller: *PowerController = undefined;
+
+var driver_thread: schedule.TID = schedule.NO_TID;
+var shutdown_signal: OneShot = .{};
+var transfer_mailbox: UsbTransferMailbox = undefined;
+
+var root_hub: RootHub = .{};
+var num_host_channels: u4 = 0;
+
+var intc: *InterruptController = undefined;
+var irq_id: IrqId = 0;
+var irq_handler: IrqHandler = irqHandle;
+
+var channel_assignments: HcdChannels = .{};
+var channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels;
+var channel_buffers: [dwc_max_channels][1024]u8 align(DMA_ALIGNMENT) = [_][1024]u8{.{0} ** 1024} ** dwc_max_channels;
 
 // ----------------------------------------------------------------------
 // Forty interop
@@ -181,86 +183,76 @@ pub fn defineModule(forth: *Forth) !void {
     });
 }
 
-pub fn channelStatus(self: *Self, chid: u64) void {
-    self.channels[chid].channelStatus();
-}
-
 // ----------------------------------------------------------------------
 // Core interface layer: Initialization
 // ----------------------------------------------------------------------
 pub fn init(
     allocator: Allocator,
     register_base: u64,
-    intc: *InterruptController,
-    irq_id: IrqId,
-    translations: *AddressTranslations,
-    power: *PowerController,
+    interrupt_controller: *InterruptController,
+    ii: IrqId,
+    power_ctrl: *PowerController,
 ) !*Self {
     log = Logger.init("dwc2", .info);
 
     const self = try allocator.create(Self);
+    self.* = .{};
 
-    self.* = .{
-        .allocator = allocator,
-        .core_registers = @ptrFromInt(register_base),
-        .host_registers = @ptrFromInt(register_base + 0x400),
-        .power_and_clock_control = @ptrFromInt(register_base + 0xe00),
-        .all_channel_intmask_lock = TicketLock.init("all channels interrupt mask", true),
-        .intc = intc,
-        .irq_id = irq_id,
-        .translations = translations,
-        .power_controller = power,
-        .num_host_channels = 0,
-        .transfer_mailbox = undefined,
-        .driver_thread = schedule.NO_TID,
-        .shutdown_signal = .{},
-    };
+    core = @ptrFromInt(register_base);
+    host = @ptrFromInt(register_base + 0x400);
+    power = @ptrFromInt(register_base + 0xe00);
+    power_controller = power_ctrl;
 
-    self.root_hub.init(self.host_registers);
+    root_hub.init(host);
+
+    intc = interrupt_controller;
+    irq_id = ii;
+
+    const channel_registers: u64 = register_base + 0x500;
 
     for (0..dwc_max_channels) |chid| {
-        const register_offset: u64 = 0x500 + (@sizeOf(ChannelRegisters) * chid);
-        const registers: u64 = register_base + register_offset;
-        const aligned_buffer: []u8 = try allocator.alignedAlloc(u8, DMA_ALIGNMENT, 1024);
-        self.channels[chid].init(self, @truncate(chid), @ptrFromInt(registers), aligned_buffer);
+        const registers: u64 = channel_registers + (@sizeOf(ChannelRegisters) * chid);
+        channels[chid].init(chid, @ptrFromInt(registers), &channel_buffers[chid]);
     }
+
+    try transfer_mailbox.init(allocator, 1024);
 
     return self;
 }
 
-pub fn initialize(self: *Self, allocator: Allocator) !void {
-    try self.transfer_mailbox.init(allocator, 1024);
+pub fn initialize(self: *Self) !void {
+    _ = self;
 
-    try self.powerOn();
-    try self.verifyHostControllerDevice();
-    try self.coreReset();
-    try self.initializeControllerCore();
-    try self.initializeInterrupts();
+    try powerOn();
+    try verifyHostControllerDevice();
+    try coreReset();
+    try initializeControllerCore();
+    try initializeInterrupts();
 
     // higher priority so it gets scheduled ahead of the application
     // thread
     const DRIVER_THREAD_PRIO = 200;
-    self.driver_thread = try schedule.spawnWithOptions(dwcDriverLoop, self, &.{
+    driver_thread = try schedule.spawnWithOptions(dwcDriverLoop, &.{}, &.{
         .name = "dwc driver",
         .priority = DRIVER_THREAD_PRIO,
         .schedule = false,
     });
 }
 
-fn powerOn(self: *Self) !void {
-    const power_result = try self.power_controller.powerOn(POWER_DEVICE_USB_HCD);
+fn powerOn() !void {
+    const power_result = try power_controller.powerOn(POWER_DEVICE_USB_HCD);
 
     if (power_result != .power_on) {
         log.err(@src(), "Failed to power on USB device: {any}", .{power_result});
-        return Error.PowerFailure;
+        return error.PowerFailure;
     }
 
     // wait a bit for power to settle
     time.delayMillis(10);
 }
 
-fn powerOff(self: *Self) !void {
-    const power_result = try self.power_controller.powerOff(POWER_DEVICE_USB_HCD);
+fn powerOff() !void {
+    const power_result = try power_controller.powerOff(POWER_DEVICE_USB_HCD);
 
     if (power_result != .power_off) {
         log.err(@src(), "Failed to power off USB device: {any}", .{power_result});
@@ -268,22 +260,22 @@ fn powerOff(self: *Self) !void {
     }
 }
 
-fn verifyHostControllerDevice(self: *Self) !void {
-    const id = self.core_registers.vendor_id;
+fn verifyHostControllerDevice() !void {
+    const id = core.vendor_id;
 
     log.info(@src(), "DWC2 OTG core rev: {x}.{x:0>3}", .{ id.device_series, id.device_minor_rev });
 
     if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
         log.warn(@src(), " gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
-        return Error.IncorrectDevice;
+        return error.IncorrectDevice;
     }
 
-    const hwcfg = self.core_registers.hardware_config_2;
+    const hwcfg = core.hardware_config_2;
     const fs_phy_type = hwcfg.full_speed_physical_type;
     const hs_phy_type = hwcfg.high_speed_physical_type;
     const dma_support = hwcfg.dma_architecture;
     const endpoints = hwcfg.num_device_endpoints;
-    const channels = hwcfg.num_host_channels;
+    const num_channels = hwcfg.num_host_channels;
 
     log.debug(@src(), "operating mode: {s}", .{
         @tagName(hwcfg.operating_mode),
@@ -297,23 +289,23 @@ fn verifyHostControllerDevice(self: *Self) !void {
 
     log.debug(@src(), "enpoints: {d}, channels: {d}", .{
         endpoints,
-        channels,
+        num_channels,
     });
 }
 
 /// Returns true if the physical interface supports USB high-speed connections
-fn isPhyHighSpeedSupported(self: *Self) bool {
-    return self.core_registers.hardware_config_2.high_speed_physical_type != .not_supported;
+fn isPhyHighSpeedSupported() bool {
+    return core.hardware_config_2.high_speed_physical_type != .not_supported;
 }
 
 /// Initialize the physical interface for USB high-speed connection
-fn phyHighSpeedInit(self: *Self) !void {
-    var usb_config = self.core_registers.usb_config;
+fn phyHighSpeedInit() !void {
+    var usb_config = core.usb_config;
 
     // deselect full-speed phy
     usb_config.phy_sel = 0;
 
-    if (self.core_registers.hardware_config_2.high_speed_physical_type == .ulpi) {
+    if (core.hardware_config_2.high_speed_physical_type == .ulpi) {
         log.debug(@src(), "High-speed ULPI PHY init", .{});
 
         usb_config.mode_select = .ulpi;
@@ -327,7 +319,7 @@ fn phyHighSpeedInit(self: *Self) !void {
         log.debug(@src(), "High-speed UTMI+ PHY init", .{});
         usb_config.mode_select = .utmi_plus;
 
-        usb_config.phy_if_16 = switch (self.core_registers.hardware_config_4.utmi_physical_data_width) {
+        usb_config.phy_if_16 = switch (core.hardware_config_4.utmi_physical_data_width) {
             .width_8_bit => ._8_bit,
             .width_16_bit => ._16_bit,
             .width_32_bit => ._16_bit, // not sure about this
@@ -335,47 +327,45 @@ fn phyHighSpeedInit(self: *Self) !void {
     }
 
     // write config to register
-    self.core_registers.usb_config = usb_config;
+    core.usb_config = usb_config;
 
-    try self.coreReset();
+    try coreReset();
 
     // set turnaround time. can only be done after core reset
-    usb_config.usb_trdtim = switch (self.core_registers.hardware_config_4.utmi_physical_data_width) {
+    usb_config.usb_trdtim = switch (core.hardware_config_4.utmi_physical_data_width) {
         .width_16_bit => 5,
         else => 9,
     };
 
-    self.core_registers.usb_config = usb_config;
+    core.usb_config = usb_config;
 }
 
-fn phyFullSpeedInit(self: *Self) !void {
+fn phyFullSpeedInit() !void {
     log.debug(@src(), "Full-speed PHY init", .{});
 
-    var usb_config = self.core_registers.usb_config;
+    var usb_config = core.usb_config;
     usb_config.phy_sel = 1;
-    self.core_registers.usb_config = usb_config;
+    core.usb_config = usb_config;
 
-    try self.coreReset();
+    try coreReset();
 
     // set turnaround time. can only be done after core reset
     usb_config.usb_trdtim = 5;
-    self.core_registers.usb_config = usb_config;
+    core.usb_config = usb_config;
 }
 
-fn initializeControllerCore(self: *Self) !void {
-    if (self.isPhyHighSpeedSupported()) {
-        try self.phyHighSpeedInit();
+fn initializeControllerCore() !void {
+    if (isPhyHighSpeedSupported()) {
+        try phyHighSpeedInit();
     } else {
-        try self.phyFullSpeedInit();
+        try phyFullSpeedInit();
     }
 
-    self.num_host_channels = self.core_registers.hardware_config_2.num_host_channels;
+    num_host_channels = core.hardware_config_2.num_host_channels;
 
-    self.power_and_clock_control.* = @bitCast(@as(u32, 0));
+    power.* = @bitCast(@as(u32, 0));
 
-    try self.configPhyClockSpeed();
-
-    //    self.host_registers.config.fs_ls_support_only = 1;
+    try configPhyClockSpeed();
 
     const rx_words: u32 = 1024; // Size of Rx FIFO in 4-byte words
     const tx_words: u32 = 1024; // Size of Non-periodic Tx FIFO in 4-byte words
@@ -383,22 +373,22 @@ fn initializeControllerCore(self: *Self) !void {
 
     // Configure FIFO sizes. Required because the defaults do not work correctly.
 
-    self.core_registers.rx_fifo_size = @bitCast(rx_words);
-    self.core_registers.nonperiodic_tx_fifo_size = @bitCast((tx_words << 16) | rx_words);
-    self.core_registers.host_periodic_tx_fifo_size = @bitCast((ptx_words << 16) | (rx_words + tx_words));
+    core.rx_fifo_size = @bitCast(rx_words);
+    core.nonperiodic_tx_fifo_size = @bitCast((tx_words << 16) | rx_words);
+    core.host_periodic_tx_fifo_size = @bitCast((ptx_words << 16) | (rx_words + tx_words));
 
-    try self.flushTxFifo(0x10);
-    try self.flushRxFifo();
+    try txFifoFlush(0x10);
+    try rxFifoFlush();
 
-    var ahb = self.core_registers.ahb_config;
+    var ahb = core.ahb_config;
     ahb.dma_enable = 1;
     ahb.dma_remainder_mode = .incremental;
     ahb.wait_for_axi_writes = 1;
     ahb.max_axi_burst = 0;
-    self.core_registers.ahb_config = ahb;
+    core.ahb_config = ahb;
 
-    var usb_config = self.core_registers.usb_config;
-    switch (self.core_registers.hardware_config_2.operating_mode) {
+    var usb_config = core.usb_config;
+    switch (core.hardware_config_2.operating_mode) {
         .hnp_srp_capable_otg => {
             usb_config.hnp_capable = 1;
             usb_config.srp_capable = 1;
@@ -416,126 +406,110 @@ fn initializeControllerCore(self: *Self) !void {
             usb_config.srp_capable = 0;
         },
     }
-    self.core_registers.usb_config = usb_config;
+    core.usb_config = usb_config;
 }
 
-fn coreReset(self: *Self) !void {
+fn coreReset() !void {
     // log.debug(@src(), "core controller reset", .{});
 
     // trigger the soft reset
-    self.core_registers.reset.soft_reset = 1;
+    core.reset.soft_reset = 1;
 
     // wait up to 10 ms for reset to finish
     const reset_end = time.deadlineMillis(10);
 
-    while (time.ticks() < reset_end and self.core_registers.reset.soft_reset != 0) {}
+    while (time.ticks() < reset_end and core.reset.soft_reset != 0) {}
 
-    if (self.core_registers.reset.soft_reset != 0) {
+    if (core.reset.soft_reset != 0) {
         return Error.InitializationFailure;
     }
 
     // wait for AHB master to go idle
     const ahb_idle_wait_end = time.deadlineMillis(10);
 
-    while (time.ticks() < ahb_idle_wait_end and self.core_registers.reset.ahb_master_idle == 0) {}
+    while (time.ticks() < ahb_idle_wait_end and core.reset.ahb_master_idle == 0) {}
 
-    if (self.core_registers.reset.ahb_master_idle != 1) {
+    if (core.reset.ahb_master_idle != 1) {
         return Error.InitializationFailure;
     }
 }
 
-fn initializeInterrupts(self: *Self) !void {
+fn initializeInterrupts() !void {
     // Clear pending interrupts
     const clear_all: InterruptStatus = @bitCast(@as(u32, 0xffff_ffff));
-    self.core_registers.core_interrupt_status = clear_all;
+    core.core_interrupt_status = clear_all;
 
     // Clear the channel interrupts mask and any pending interrupt bits
-    self.host_registers.all_channel_interrupts_mask = @bitCast(@as(u32, 0));
-    self.host_registers.all_channel_interrupts = @bitCast(clear_all);
+    host.all_channel_interrupts_mask = @bitCast(@as(u32, 0));
+    host.all_channel_interrupts = @bitCast(clear_all);
 
     // Connect interrupt handler & enable interrupts on the ARM PE
-    self.intc.connect(self.irq_id, &self.irq_handler, self);
-    self.intc.enable(self.irq_id);
+    intc.connect(irq_id, &irq_handler, &.{});
+    intc.enable(irq_id);
 
     // Enable only host channel and port interrupts
     var enabled: InterruptMask = @bitCast(@as(u32, 0));
     enabled.host_channel = 1;
     enabled.port = 1;
-    self.core_registers.core_interrupt_mask = enabled;
+    core.core_interrupt_mask = enabled;
 
     // Enable interrupts for the host controller (this is the DWC side)
-    self.core_registers.ahb_config.global_interrupt_enable = 1;
+    core.ahb_config.global_interrupt_enable = 1;
 
     log.debug(@src(), "initializeInterrupts: mask = 0x{x:0>8}, status = 0x{x:0>8}", .{
-        @as(u32, @bitCast(self.core_registers.core_interrupt_mask)),
-        @as(u32, @bitCast(self.core_registers.core_interrupt_status)),
+        @as(u32, @bitCast(core.core_interrupt_mask)),
+        @as(u32, @bitCast(core.core_interrupt_status)),
     });
 }
 
-fn configPhyClockSpeed(self: *Self) !void {
-    const core_config = self.core_registers.usb_config;
-    const hw2 = self.core_registers.hardware_config_2;
+fn configPhyClockSpeed() !void {
+    const core_config = core.usb_config;
+    const hw2 = core.hardware_config_2;
     if (hw2.high_speed_physical_type == .ulpi and hw2.full_speed_physical_type == .dedicated and core_config.ulpi_fsls == 1) {
-        self.host_registers.config.clock_rate = .clock_48_mhz;
+        host.config.clock_rate = .clock_48_mhz;
     } else {
-        self.host_registers.config.clock_rate = .clock_30_60_mhz;
+        host.config.clock_rate = .clock_30_60_mhz;
     }
 }
 
-fn flushTxFifo(self: *Self, fifo_num: u5) !void {
+fn txFifoFlush(fifo_num: u5) !void {
     const flush: Reset = .{
         .tx_fifo_flush = 1,
         .tx_fifo_flush_num = fifo_num,
     };
-    self.core_registers.reset = flush;
+    core.reset = flush;
 
     const flush_wait_end = time.deadlineMillis(100);
-    while (self.core_registers.reset.tx_fifo_flush == 1 and time.ticks() < flush_wait_end) {}
+    while (core.reset.tx_fifo_flush == 1 and time.ticks() < flush_wait_end) {}
 
     // TODO return error if timeout hit without seeing tx_fifo_flush
     // go low.
 }
 
-fn flushRxFifo(self: *Self) !void {
+fn rxFifoFlush() !void {
     const flush: Reset = .{
         .rx_fifo_flush = 1,
     };
-    self.core_registers.reset = flush;
+    core.reset = flush;
     const flush_wait_end = time.deadlineMillis(100);
-    while (self.core_registers.reset.rx_fifo_flush == 1 and time.ticks() < flush_wait_end) {}
+    while (core.reset.rx_fifo_flush == 1 and time.ticks() < flush_wait_end) {}
 
     // TODO return error if timeout hit without seeing rx_fifo_flush
     // go low.
 }
 
-fn haltAllChannels(self: *Self) !void {
-    for (0..self.num_host_channels) |chid| {
-        var char = self.channels[chid].registers.channel_character;
-        char.enable = true;
-        char.disable = true;
-        char.endpoint_direction = .in;
-        self.registers.channel_character = char;
-
-        // wait until we see enable go low
-        const enable_wait_end = time.deadlineMillis(100);
-        while (self.channels[chid].regisers.channel_character.enable == 1 and time.ticks() < enable_wait_end) {}
-    }
-}
-
 // ----------------------------------------------------------------------
 // Interrupt handling
 // ----------------------------------------------------------------------
-fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
+fn irqHandle(_: *InterruptController, _: IrqId, _: ?*anyopaque) void {
     _ = atomic.atomicReset(&schedule.resdefer, 1);
 
-    var self: *Self = @ptrCast(@alignCast(private));
-
-    const intr_status = self.core_registers.core_interrupt_status;
+    const intr_status = core.core_interrupt_status;
 
     // check if one of the channels raised the interrupt
     if (intr_status.host_channel == 1) {
-        const all_intrs = self.host_registers.all_channel_interrupts;
-        //        self.host_registers.all_channel_interrupts = all_intrs;
+        const all_intrs = host.all_channel_interrupts;
+        //        host.all_channel_interrupts = all_intrs;
         log.debug(@src(), "irq handle: host channel ints 0x{x:0>8}", .{@as(u32, @bitCast(all_intrs))});
 
         // Find the channel that has something to say
@@ -544,7 +518,7 @@ fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
         // instead of looping over all 16 channels.
         for (0..dwc_max_channels) |chid| {
             if ((all_intrs & channel_mask) != 0) {
-                self.channels[chid].channelInterrupt2(self);
+                channels[chid].channelInterrupt2();
             }
             channel_mask <<= 1;
         }
@@ -553,11 +527,11 @@ fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
     // check if the host port raised the interrupt
     if (intr_status.port == 1) {
         // pass it on to the root hub
-        self.root_hub.hubHandlePortInterrupt();
+        root_hub.hubHandlePortInterrupt();
     }
 
     // clear the interrupt bits
-    self.core_registers.core_interrupt_status = intr_status;
+    core.core_interrupt_status = intr_status;
 
     const prior = atomic.atomicDec(&schedule.resdefer);
     if (prior > 1) {
@@ -570,50 +544,57 @@ fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
     }
 }
 
-pub fn dumpStatus(self: *Self) void {
+pub fn dumpStatus() void {
     log.info(@src(), "{s: >28}", .{"Core registers"});
     dumpRegisterPair(
         "otg_control",
-        @bitCast(self.core_registers.otg_control),
+        @bitCast(core.otg_control),
         "ahb_config",
-        @bitCast(self.core_registers.ahb_config),
+        @bitCast(core.ahb_config),
     );
     dumpRegisterPair(
         "usb_config",
-        @bitCast(self.core_registers.usb_config),
+        @bitCast(core.usb_config),
         "reset",
-        @bitCast(self.core_registers.reset),
+        @bitCast(core.reset),
     );
     dumpRegisterPair(
         "hw_config_1",
-        @bitCast(self.core_registers.hardware_config_1),
+        @bitCast(core.hardware_config_1),
         "hw_config_2",
-        @bitCast(self.core_registers.hardware_config_2),
+        @bitCast(core.hardware_config_2),
     );
     dumpRegisterPair(
         "interrupt_status",
-        @bitCast(self.core_registers.core_interrupt_status),
+        @bitCast(core.core_interrupt_status),
         "interrupt_mask",
-        @bitCast(self.core_registers.core_interrupt_mask),
+        @bitCast(core.core_interrupt_mask),
     );
     dumpRegisterPair(
         "rx_status",
-        @bitCast(self.core_registers.rx_status_read),
+        @bitCast(core.rx_status_read),
         "rx_fifo_size",
-        @bitCast(self.core_registers.rx_fifo_size),
+        @bitCast(core.rx_fifo_size),
     );
     dumpRegisterPair(
         "nonperiodic_tx_fifo_size",
-        @bitCast(self.core_registers.nonperiodic_tx_fifo_size),
+        @bitCast(core.nonperiodic_tx_fifo_size),
         "nonperiodic_tx_status",
-        @bitCast(self.core_registers.nonperiodic_tx_status),
+        @bitCast(core.nonperiodic_tx_status),
     );
 
     log.info(@src(), "", .{});
     log.info(@src(), "{s: >28}", .{"Host registers"});
-    dumpRegisterPair("port", @bitCast(self.host_registers.port), "config", @bitCast(self.host_registers.config));
-    dumpRegisterPair("frame_interval", @bitCast(self.host_registers.frame_interval), "frame_num", @bitCast(self.host_registers.frame_num));
-    dumpRegisterPair("all_channel_interrupts", @bitCast(self.host_registers.all_channel_interrupts), "all_channel_interrupts_mask", @bitCast(self.host_registers.all_channel_interrupts_mask));
+    dumpRegisterPair("port", @bitCast(host.port), "config", @bitCast(host.config));
+    dumpRegisterPair("frame_interval", @bitCast(host.frame_interval), "frame_num", @bitCast(host.frame_num));
+    dumpRegisterPair("all_channel_interrupts", @bitCast(host.all_channel_interrupts), "all_channel_interrupts_mask", @bitCast(host.all_channel_interrupts_mask));
+}
+
+pub fn channelStatus(chid: u64) void {
+    log.info(@src(), "{s: >28}", .{"Channel registers"});
+    dumpRegisterPair("characteristics", @bitCast(channels[chid].registers.channel_character), "split_control", @bitCast(channels[chid].registers.split_control));
+    dumpRegisterPair("interrupt", @bitCast(channels[chid].registers.channel_int), "int. mask", @bitCast(channels[chid].registers.channel_int_mask));
+    dumpRegisterPair("transfer", @bitCast(channels[chid].registers.transfer), "dma addr", @bitCast(channels[chid].registers.channel_dma_addr));
 }
 
 pub fn dumpRegisterPair(f1: []const u8, v1: u32, f2: []const u8, v2: u32) void {
@@ -627,35 +608,20 @@ fn dumpRegister(field_name: []const u8, v: u32) void {
 // ----------------------------------------------------------------------
 // Channel handling
 // ----------------------------------------------------------------------
-fn channelAllocate(self: *Self) !*Channel {
-    const chid = try self.channel_assignments.allocate();
-    errdefer self.channel_assignments.free(chid);
+fn channelAllocate() !*Channel {
+    const chid = try channel_assignments.allocate();
+    errdefer channel_assignments.free(chid);
 
-    if (chid >= self.num_host_channels) {
+    if (chid >= num_host_channels) {
         return error.NoAvailableChannel;
     }
 
-    const ch = &self.channels[chid];
+    const ch = &channels[chid];
     return ch;
 }
 
-pub fn channelFree(self: *Self, channel: *Channel) void {
-    self.channel_assignments.free(channel.id);
-}
-
-fn channelInterruptEnable(self: *Self, channel: Channel.ChannelId) void {
-    _ = channel;
-    _ = self;
-    // log.debug(@src(),"interrupt enable channel {d}", .{channel});
-
-}
-
-fn channelInterruptDisable(self: *Self, channel: Channel.ChannelId) void {
-    // log.debug(@src(),"interrupt disable channel {d}", .{channel});
-
-    self.all_channel_intmask_lock.acquire();
-    defer self.all_channel_intmask_lock.release();
-    self.host_registers.all_channel_interrupts_mask &= ~(@as(u32, 1) << channel);
+pub fn channelFree(channel: *Channel) void {
+    channel_assignments.free(channel.id);
 }
 
 // ----------------------------------------------------------------------
@@ -670,13 +636,12 @@ pub fn isAligned(ptr: [*]u8) bool {
 // ----------------------------------------------------------------------
 
 // this is called from application threads
-pub fn perform(self: *Self, xfer: *TransferRequest) !void {
+pub fn perform(_: *Self, xfer: *TransferRequest) !void {
     // put the transfer in the pending_transfers list.
-    try self.transfer_mailbox.send(xfer);
+    try transfer_mailbox.send(xfer);
 }
 
-fn calculatePacketCount(self: *Self, input_size_in: TransferBytes, ep_dir: u1, ep_mps: u16) TransferSize {
-    _ = self;
+fn calculatePacketCount(input_size_in: TransferBytes, ep_dir: u1, ep_mps: u16) TransferSize {
     var input_size = input_size_in;
     var num_packets: u32 = (input_size + ep_mps - 1) / ep_mps;
 
@@ -701,7 +666,7 @@ fn calculatePacketCount(self: *Self, input_size_in: TransferBytes, ep_dir: u1, e
 }
 
 /// Start or restart a transfer on a channel of the HCD
-pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferRequest) void {
+pub fn channelStartTransfer(channel: *Channel, req: *TransferRequest) void {
     var characteristics: ChannelCharacteristics = @bitCast(@as(u32, 0));
     var split_control: SplitControl = @bitCast(@as(u32, 0));
     var transfer: TransferSize = @bitCast(@as(u32, 0));
@@ -811,7 +776,7 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
         debugLogTransfer(req, "starting transaction");
     }
 
-    transfer = self.calculatePacketCount(input_size, characteristics.endpoint_direction, characteristics.max_packet_size);
+    transfer = calculatePacketCount(input_size, characteristics.endpoint_direction, characteristics.max_packet_size);
     transfer.packet_id = next_pid;
 
     characteristics.device_address = req.device.?.address;
@@ -924,14 +889,14 @@ pub fn channelStartTransfer(self: *Self, channel: *Channel, req: *TransferReques
     channel.registers.transfer = transfer;
 
     // enable the channel
-    self.channelStartTransaction(channel, req);
+    channelStartTransaction(channel, req);
 }
 
 // requires the following registers were already configured:
 // - channel characteristics
 // - transfer size
 // - dma address
-pub fn channelStartTransaction(self: *Self, channel: *Channel, req: *TransferRequest) void {
+pub fn channelStartTransaction(channel: *Channel, req: *TransferRequest) void {
     const im = cpu.disable();
     defer cpu.restore(im);
 
@@ -945,14 +910,14 @@ pub fn channelStartTransaction(self: *Self, channel: *Channel, req: *TransferReq
     channel.registers.split_control = split_control;
 
     // set odd frame and enable
-    const next_frame = (self.host_registers.frame_num.number & 0xffff) + 1;
+    const next_frame = (host.frame_num.number & 0xffff) + 1;
 
     if (split_control.complete_split == 0) {
         req.csplit_retries = 0;
     }
 
     channel.registers.channel_int_mask = .{ .halt = 1 };
-    self.host_registers.all_channel_interrupts_mask |= @as(u32, 1) << channel.id;
+    host.all_channel_interrupts_mask |= @as(u32, 1) << channel.id;
 
     var channel_char = channel.registers.channel_character;
     channel_char.odd_frame = @truncate(next_frame & 1);
@@ -968,11 +933,10 @@ pub fn channelStartTransaction(self: *Self, channel: *Channel, req: *TransferReq
 // ----------------------------------------------------------------------
 
 const DeferredTransferArgs = struct {
-    host: *Self,
     req: *TransferRequest,
 };
 
-pub fn deferTransfer(self: *Self, req: *TransferRequest) !void {
+pub fn deferTransfer(req: *TransferRequest) !void {
     debugLogTransfer(req, "deferring");
 
     // first time through, allocate a semaphore
@@ -990,7 +954,6 @@ pub fn deferTransfer(self: *Self, req: *TransferRequest) !void {
     // if the request is deferred more than once, the thread is reused
     if (req.deferrer_thread == null) {
         var args: DeferredTransferArgs = .{
-            .host = self,
             .req = req,
         };
         req.deferrer_thread = try schedule.spawn(deferredTransfer, "dwc defer", &args);
@@ -1004,15 +967,17 @@ pub fn deferTransfer(self: *Self, req: *TransferRequest) !void {
 fn deferredTransfer(args_ptr: *anyopaque) void {
     const args: *DeferredTransferArgs = @ptrCast(@alignCast(args_ptr));
     const req = args.req;
-    const host = args.host;
 
     var interval_ms: u32 = 0;
 
-    if (req.device.?.speed == UsbSpeed.High) {
-        interval_ms = (@as(u32, 1) << @as(u5, @truncate(req.endpoint_desc.?.interval)) - 1) /
+    var dev = req.device orelse return;
+    var ep = req.endpoint_desc orelse return;
+
+    if (dev.speed == UsbSpeed.High) {
+        interval_ms = (@as(u32, 1) << @as(u5, @truncate(ep.interval)) - 1) /
             USB_UFRAMES_PER_MS;
     } else {
-        interval_ms = req.endpoint_desc.?.interval / USB_FRAMES_PER_MS;
+        interval_ms = ep.interval / USB_FRAMES_PER_MS;
     }
 
     // temporary while testing
@@ -1035,8 +1000,8 @@ fn deferredTransfer(args_ptr: *anyopaque) void {
             // TODO something
         };
 
-        if (host.channelAllocate()) |channel| {
-            host.channelStartTransfer(channel, req);
+        if (channelAllocate()) |channel| {
+            channelStartTransfer(channel, req);
         } else |err| {
             log.err(@src(), "channel allocate error: {any}", .{err});
         }
@@ -1064,38 +1029,46 @@ fn debugLogTransfer(req: *TransferRequest, msg: []const u8) void {
 // Main driver thread
 // ----------------------------------------------------------------------
 
-fn signalShutdown(self: *Self) void {
-    self.shutdown_signal.signal();
+fn signalShutdown() void {
+    shutdown_signal.signal();
 }
 
-fn isShuttingDown(self: *Self) bool {
-    return self.shutdown_signal.isSignalled();
+fn isShuttingDown() bool {
+    return shutdown_signal.isSignalled();
+}
+
+fn nextRequest() ?*TransferRequest {
+    var req = transfer_mailbox.receive() catch |err| {
+        log.err(@src(), "transfer_mailbox receive error: {any}", .{err});
+        return null;
+    };
+    if (req.device == null) {
+        log.err(@src(), "malformed xfer, no device given.", .{});
+        return null;
+    }
+    return req;
+}
+
+fn channelForRequest(req: *TransferRequest) ?*Channel {
+    var channel = channelAllocate() catch |err| {
+        log.err(@src(), "channel allocate error: {any}", .{err});
+        req.complete(TransferRequest.CompletionStatus.failed);
+        return null;
+    };
+    return channel;
 }
 
 /// Driver thread proc
-pub fn dwcDriverLoop(args: *anyopaque) void {
-    const self: *Self = @alignCast(@ptrCast(args));
-
-    while (!self.isShuttingDown()) {
-        var xfer = self.transfer_mailbox.receive() catch |err| {
-            log.err(@src(), "transfer_mailbox receive error: {any}", .{err});
-            continue;
-        };
-
-        var dev = xfer.device orelse {
-            log.err(@src(), "malformed xfer, no device given.", .{});
-            continue;
-        };
+pub fn dwcDriverLoop(_: *anyopaque) void {
+    while (!isShuttingDown()) {
+        var xfer = nextRequest() orelse continue;
+        var dev = xfer.device orelse continue;
 
         if (dev.isRootHub()) {
-            self.root_hub.hubHandleTransfer(xfer);
+            root_hub.hubHandleTransfer(xfer);
         } else {
-            var channel = self.channelAllocate() catch |err| {
-                log.err(@src(), "channel allocate error: {any}", .{err});
-                continue;
-            };
-
-            self.channelStartTransfer(channel, xfer);
+            var channel = channelForRequest(xfer) orelse continue;
+            channelStartTransfer(channel, xfer);
         }
     }
 }
