@@ -216,7 +216,7 @@ fn writeByteNTimes(self: *const Logger, byte: u8, n: usize) void {
 fn writeBytesNTimes(self: *const Logger, bytes: []const u8, n: usize) void {
     _ = self;
     for (0..n) |_| {
-        _ = root.printf("%s", bytes);
+        _ = root.printf("%s", bytes.ptr);
     }
 }
 
