@@ -20,11 +20,11 @@ pub fn build(b: *std.Build) !void {
 
     const allocator = arena.allocator();
 
-    const target = std.zig.CrossTarget{
+    const target = b.resolveTargetQuery(.{
         .cpu_arch = Target.Cpu.Arch.aarch64,
         .os_tag = Target.Os.Tag.freestanding,
         .abi = Target.Abi.none,
-    };
+    });
 
     const testname = b.option([]const u8, "testname", "Name of the in-kernel test to build and run") orelse "";
 
@@ -53,7 +53,7 @@ pub fn build(b: *std.Build) !void {
         .link_libc = false,
     });
 
-    compile_kernel.addOptions("config", options);
+    compile_kernel.root_module.addOptions("config", options);
     compile_kernel.addIncludePath(.{ .path = "include" });
     compile_kernel.addCSourceFile(.{ .file = .{ .path = "src/printf.c" }, .flags = &[_][]const u8{} });
     compile_kernel.addCSourceFile(.{ .file = .{ .path = "src/disassemble.c" }, .flags = &[_][]const u8{} });
@@ -67,13 +67,13 @@ pub fn build(b: *std.Build) !void {
 
     b.installArtifact(compile_kernel);
 
-    const extract_image = b.addObjCopy(compile_kernel.getOutputSource(), .{
+    const extract_image = b.addObjCopy(compile_kernel.getEmittedBin(), .{
         .format = std.Build.Step.ObjCopy.RawFormat.bin,
     });
 
     extract_image.step.dependOn(&compile_kernel.step);
 
-    const install_elf = b.addInstallFile(compile_kernel.getOutputSource(), elf_name);
+    const install_elf = b.addInstallFile(compile_kernel.getEmittedBin(), elf_name);
     b.getInstallStep().dependOn(&install_elf.step);
 
     const build_symbols = buildSymbolTable(b, compile_kernel, extract_image);
@@ -84,14 +84,15 @@ pub fn build(b: *std.Build) !void {
     b.getInstallStep().dependOn(&install_image.step);
 }
 
-fn buildSymbolTable(b: *std.Build, compile_kernel: *std.Build.CompileStep, extract_image: *std.Build.Step.ObjCopy) *std.Build.Step.Run {
+fn buildSymbolTable(b: *std.Build, compile_kernel: *std.Build.Step.Compile, extract_image: *std.Build.Step.ObjCopy) *std.Build.Step.Run {
     const tool = b.addExecutable(.{
+        .target = b.host,
         .name = "build-symbtab",
         .root_source_file = .{ .path = "tools/build-symtab/src/main.zig" },
     });
 
     const run_tool = b.addRunArtifact(tool);
-    run_tool.addFileArg(compile_kernel.getOutputSource());
+    run_tool.addFileArg(compile_kernel.getEmittedBin());
     run_tool.addFileArg(extract_image.getOutput());
     return run_tool;
 }
