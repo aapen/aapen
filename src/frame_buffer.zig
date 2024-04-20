@@ -23,7 +23,7 @@ const character_count = character_rom.len;
 const character_rombits: [character_rom.len]CharBits = init: {
     @setEvalBranchQuota(character_rom.len);
     var initial_value: [character_rom.len]CharBits = undefined;
-    inline for (0..character_count) |i| {
+    for (0..character_count) |i| {
         initial_value[i] = @bitCast(@bitReverse(character_rom[i]));
     }
     break :init initial_value;
