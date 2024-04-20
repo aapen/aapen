@@ -6,7 +6,7 @@ const ExpressionContext = expressions.ExpressionContext;
 // This is specific to the target platform
 const options = expressions.ExpressionOptions{
     .addr_size = @sizeOf(u64),
-    .endian = std.builtin.Endian.Little,
+    .endian = std.builtin.Endian.little,
     .call_frame_context = false,
 };
 

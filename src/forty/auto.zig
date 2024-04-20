@@ -154,7 +154,7 @@ fn ParameterTuple(comptime f: std.builtin.Type.Fn) type {
     }
     return @Type(.{ .Struct = .{
         .is_tuple = true,
-        .layout = .Auto,
+        .layout = .auto,
         .decls = &.{},
         .fields = &tuple_fields,
     } });
