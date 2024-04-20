@@ -18,7 +18,7 @@ pub fn init(start: u64, end: u64) Allocator {
     memory.init(start, end);
 
     allocator = .{
-        .ptr = &.{},
+        .ptr = undefined,
         .vtable = &vtable,
     };
 

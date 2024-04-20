@@ -643,7 +643,7 @@ pub fn initialize(alloc: Allocator) !void {
 
     hubs_with_pending_status_change = 0;
     hub_status_change_semaphore = try semaphore.create(1);
-    hub_thread = try schedule.spawn(hubThread, "hub thread", &.{});
+    hub_thread = try schedule.spawn(hubThread, "hub thread", schedule.no_args);
 }
 
 fn hubThread(_: *anyopaque) void {
