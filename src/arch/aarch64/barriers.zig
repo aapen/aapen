@@ -13,11 +13,11 @@ pub const BarrierType = struct {
     pub const OSHLD = "OSHLD";
 };
 
-pub fn dmb(comptime ty: [*:0]const u8) void {
+pub fn dmb(comptime ty: []const u8) void {
     asm volatile ("dmb " ++ ty);
 }
 
-pub fn dsb(comptime ty: [*:0]const u8) void {
+pub fn dsb(comptime ty: []const u8) void {
     asm volatile ("dsb " ++ ty);
 }
 
