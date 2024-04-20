@@ -287,7 +287,7 @@ var input_buffer_storage: [INPUT_BUFFER_SIZE]u8 = undefined;
 var input_buffer: RingBuffer = undefined;
 
 fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
-    var self: *Self = @ptrCast(@alignCast(private));
+    const self: *Self = @ptrCast(@alignCast(private));
 
     if (self.registers.raw_interrupt_status.receive_interrupt_status == 1) {
         const ch = self.registers.data.data;

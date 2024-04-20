@@ -64,7 +64,7 @@ pub fn init(prefix: []const u8, level: Level) *Logger {
         return existing_logger;
     }
 
-    var self: *Logger = create();
+    const self: *Logger = create();
     self.* = .{
         .prefix = prefix,
         .level = level,

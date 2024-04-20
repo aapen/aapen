@@ -179,6 +179,6 @@ pub fn receive(self: *Self, target_address: u8, buffer: [*]u8, count: u32) u32 {
 }
 
 pub fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
-    var self: *Self = @ptrCast(@alignCast(private));
+    const self: *Self = @ptrCast(@alignCast(private));
     _ = self;
 }
