@@ -610,7 +610,7 @@ pub const Hub = struct {
 };
 
 fn statusChangeCompletion(req: *TransferRequest) void {
-    const self: *Hub = @fieldParentPtr(Hub, "status_change_request", req);
+    const self: *Hub = @fieldParentPtr("status_change_request", req);
     log.debug(@src(), "hub {d} finished interrupt transfer, {any}", .{ self.index, req.status });
     if (req.status == .ok) {
         hubs_with_pending_status_change |= @as(u32, 1) << @truncate(self.index);
