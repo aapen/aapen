@@ -76,7 +76,6 @@ const USB_FRAMES_PER_MS = usb.FRAMES_PER_MS;
 const USB_UFRAMES_PER_MS = usb.UFRAMES_PER_MS;
 
 const reg = @import("dwc/registers.zig");
-const Channel = @import("dwc/channel.zig");
 const RootHub = @import("dwc/root_hub.zig");
 
 const usb_dwc_base = memory_map.peripheral_base + 0x980000;
@@ -153,9 +152,11 @@ const UsbTransferMailbox = Mailbox(*TransferRequest);
 
 const empty_slice: []u8 = &[_]u8{};
 
-var core: *volatile CoreRegisters = undefined;
-var host: *volatile HostRegisters = undefined;
-var power: *volatile PowerAndClock = undefined;
+const register_base: u64 = root.HAL.peripheral_base + 0x980_000;
+const core: *volatile CoreRegisters = @ptrFromInt(register_base);
+const host: *volatile HostRegisters = @ptrFromInt(register_base + 0x400);
+const channel_base: u64 = register_base + 0x500;
+const power: *volatile PowerAndClock = @ptrFromInt(register_base + 0xe00);
 var power_controller: *PowerController = undefined;
 
 var driver_thread: schedule.TID = schedule.NO_TID;
@@ -168,10 +169,6 @@ var num_host_channels: u4 = 0;
 var interrupt_controller: *InterruptController = undefined;
 var irq_id: IrqId = 0;
 var irq_handler: IrqHandler = irqHandle;
-
-var channel_assignments: HcdChannels = .{};
-var channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels;
-var channel_buffers: [dwc_max_channels][1024]u8 align(DMA_ALIGNMENT) = [_][1024]u8{.{0} ** 1024} ** dwc_max_channels;
 
 // ----------------------------------------------------------------------
 // Forty interop
@@ -188,7 +185,6 @@ pub fn defineModule(forth: *Forth) !void {
 // ----------------------------------------------------------------------
 pub fn init(
     allocator: Allocator,
-    register_base: u64,
     intc: *InterruptController,
     ii: IrqId,
     power_ctrl: *PowerController,
@@ -198,9 +194,6 @@ pub fn init(
     const self = try allocator.create(Self);
     self.* = .{};
 
-    core = @ptrFromInt(register_base);
-    host = @ptrFromInt(register_base + 0x400);
-    power = @ptrFromInt(register_base + 0xe00);
     power_controller = power_ctrl;
 
     root_hub.init(host);
@@ -208,12 +201,13 @@ pub fn init(
     interrupt_controller = intc;
     irq_id = ii;
 
-    const channel_registers: u64 = register_base + 0x500;
-
-    for (0..dwc_max_channels) |chid| {
-        const registers: u64 = channel_registers + (@sizeOf(ChannelRegisters) * chid);
-        channels[chid].init(chid, @ptrFromInt(registers), &channel_buffers[chid]);
-    }
+    // for (0..dwc_max_channels) |chid| {
+    //     channels[chid].init(
+    //         chid,
+    //         channelRegisters(@truncate(chid)),
+    //         &channel_buffers[chid],
+    //     );
+    // }
 
     try transfer_mailbox.init(allocator, 1024);
 
@@ -263,10 +257,11 @@ fn powerOff() !void {
 fn verifyHostControllerDevice() !void {
     const id = core.vendor_id;
 
+    log.info(@src(), "Core registers at 0x{x:0>8}", .{@intFromPtr(core)});
     log.info(@src(), "DWC2 OTG core rev: {x}.{x:0>3}", .{ id.device_series, id.device_minor_rev });
 
     if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
-        log.warn(@src(), " gsnpsid = {x:0>8}\nvendor = {x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
+        log.warn(@src(), " gsnpsid = 0x{x:0>8}, vendor = 0x{x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });
         return error.IncorrectDevice;
     }
 
@@ -517,7 +512,7 @@ fn irqHandle(_: *InterruptController, _: IrqId, _: ?*anyopaque) void {
         // instead of looping over all 16 channels.
         for (0..dwc_max_channels) |chid| {
             if ((all_intrs & channel_mask) != 0) {
-                channels[chid].channelInterrupt2();
+                channelInterrupt(@truncate(chid));
             }
             channel_mask <<= 1;
         }
@@ -561,9 +556,9 @@ pub fn dumpStatus() void {
 
 pub fn channelStatus(chid: u64) void {
     log.info(@src(), "{s: >28}", .{"Channel registers"});
-    dumpRegisterPair("characteristics", @bitCast(channels[chid].registers.channel_character), "split_control", @bitCast(channels[chid].registers.split_control));
-    dumpRegisterPair("interrupt", @bitCast(channels[chid].registers.channel_int), "int. mask", @bitCast(channels[chid].registers.channel_int_mask));
-    dumpRegisterPair("transfer", @bitCast(channels[chid].registers.transfer), "dma addr", @bitCast(channels[chid].registers.channel_dma_addr));
+    dumpRegisterPair("characteristics", @bitCast(channel_registers[chid].channel_character), "split_control", @bitCast(channel_registers[chid].split_control));
+    dumpRegisterPair("interrupt", @bitCast(channel_registers[chid].channel_int), "int. mask", @bitCast(channel_registers[chid].channel_int_mask));
+    dumpRegisterPair("transfer", @bitCast(channel_registers[chid].transfer), "dma addr", @bitCast(channel_registers[chid].channel_dma_addr));
 }
 
 pub fn dumpRegisterPair(f1: []const u8, v1: u32, f2: []const u8, v2: u32) void {
@@ -577,7 +572,34 @@ fn dumpRegister(field_name: []const u8, v: u32) void {
 // ----------------------------------------------------------------------
 // Channel handling
 // ----------------------------------------------------------------------
-fn channelAllocate() !*Channel {
+
+var channel_assignments: HcdChannels = .{};
+//var channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels;
+var channel_buffers: [dwc_max_channels][1024]u8 align(DMA_ALIGNMENT) = [_][1024]u8{.{0} ** 1024} ** dwc_max_channels;
+
+const ChannelId = u5;
+
+var active_transfer: [dwc_max_channels]?*TransferRequest = init: {
+    var initial_value: [dwc_max_channels]?*TransferRequest = undefined;
+    for (0..dwc_max_channels) |chid| {
+        initial_value[chid] = null;
+    }
+    break :init initial_value;
+};
+
+var channel_registers: [dwc_max_channels]*volatile ChannelRegisters = init: {
+    var initial_value: [dwc_max_channels]*volatile ChannelRegisters = undefined;
+    for (0..dwc_max_channels) |chid| {
+        initial_value[chid] = channelRegisters(chid);
+    }
+    break :init initial_value;
+};
+
+fn channelRegisters(chid: ChannelId) *volatile ChannelRegisters {
+    return @ptrFromInt(channel_base + (@sizeOf(ChannelRegisters) * @as(usize, chid)));
+}
+
+fn channelAllocate() !ChannelId {
     const chid = try channel_assignments.allocate();
     errdefer channel_assignments.free(chid);
 
@@ -585,11 +607,11 @@ fn channelAllocate() !*Channel {
         return error.NoAvailableChannel;
     }
 
-    return &channels[chid];
+    return chid;
 }
 
-pub fn channelFree(channel: *Channel) void {
-    channel_assignments.free(channel.id);
+pub fn channelFree(channel: ChannelId) void {
+    channel_assignments.free(channel);
 }
 
 // ----------------------------------------------------------------------
@@ -634,7 +656,7 @@ fn calculatePacketCount(input_size_in: TransferBytes, ep_dir: u1, ep_mps: u16) T
 }
 
 /// Start or restart a transfer on a channel of the HCD
-pub fn channelStartTransfer(channel: *Channel, req: *TransferRequest) void {
+pub fn channelStartTransfer(id: ChannelId, req: *TransferRequest) void {
     var characteristics: ChannelCharacteristics = @bitCast(@as(u32, 0));
     var split_control: SplitControl = @bitCast(@as(u32, 0));
     var transfer: TransferSize = @bitCast(@as(u32, 0));
@@ -782,17 +804,19 @@ pub fn channelStartTransfer(channel: *Channel, req: *TransferRequest) void {
     //     };
     // }
 
+    const registers = channel_registers[id];
+
     if (data == null) {
-        channel.registers.channel_dma_addr = 0;
+        registers.channel_dma_addr = 0;
     } else if (isAligned(data.?)) {
-        channel.registers.channel_dma_addr = @truncate(@intFromPtr(data.?));
+        registers.channel_dma_addr = @truncate(@intFromPtr(data.?));
     } else {
-        channel.registers.channel_dma_addr = @truncate(@intFromPtr(channel.aligned_buffer.ptr));
+        registers.channel_dma_addr = @truncate(@intFromPtr(&channel_buffers[id]));
 
         // the aligned buffer is a fixed size, so it might not be big
         // enough to hold the entire transmission. we will do as much
         // as possible
-        const buflen = channel.aligned_buffer.len;
+        const buflen = channel_buffers[id].len;
         if (transfer.size > buflen) {
             const max_full_packets = buflen - (buflen % characteristics.max_packet_size);
             transfer.size = @truncate(max_full_packets);
@@ -801,12 +825,12 @@ pub fn channelStartTransfer(channel: *Channel, req: *TransferRequest) void {
 
         // if we are sending data, copy it into the aligned buffer
         if (characteristics.endpoint_direction == 0) {
-            @memcpy(channel.aligned_buffer[0..transfer.size], data.?);
+            @memcpy(channel_buffers[id][0..transfer.size], data.?);
         }
     }
 
-    if (channel.registers.channel_dma_addr != 0 and req.size > 0) {
-        synchronize.dataCacheRangeCleanAndInvalidate(channel.registers.channel_dma_addr, req.size);
+    if (registers.channel_dma_addr != 0 and req.size > 0) {
+        synchronize.dataCacheRangeCleanAndInvalidate(registers.channel_dma_addr, req.size);
     }
 
     // It's OK if this doesn't match the DMA address selected
@@ -814,8 +838,8 @@ pub fn channelStartTransfer(channel: *Channel, req: *TransferRequest) void {
     // send or receive
     req.cur_data_ptr = data;
 
-    if (channel.registers.channel_dma_addr & (DMA_ALIGNMENT - 1) != 0) {
-        log.warn(@src(), "data ptr 0x{x:0>8} misaligned by 0x{x} bytes", .{ channel.registers.channel_dma_addr, (channel.registers.channel_dma_addr & (DMA_ALIGNMENT - 1)) });
+    if (registers.channel_dma_addr & (DMA_ALIGNMENT - 1) != 0) {
+        log.warn(@src(), "data ptr 0x{x:0>8} misaligned by 0x{x} bytes", .{ registers.channel_dma_addr, (registers.channel_dma_addr & (DMA_ALIGNMENT - 1)) });
     }
 
     // const mps = characteristics.max_packet_size;
@@ -829,7 +853,7 @@ pub fn channelStartTransfer(channel: *Channel, req: *TransferRequest) void {
     req.attempted_bytes_remaining = transfer.size;
     req.attempted_packets_remaining = transfer.packet_count;
 
-    channel.active_transfer = req;
+    active_transfer[id] = req;
 
     log.debug(@src(), "Setting up transactions on channel {d}:\n" ++
         "\t\tdma_addr=0x{x:0>8}, " ++
@@ -837,8 +861,8 @@ pub fn channelStartTransfer(channel: *Channel, req: *TransferRequest) void {
         "endpoint_number={d}, endpoint_direction={d},\n" ++
         "\t\tlow_speed={d}, endpoint_type={d}, device_address={d},\n\t\t" ++
         "size={d}, packet_count={d}, packet_id={d}, split_enable={d}, complete_split={}", .{
-        channel.id,
-        channel.registers.channel_dma_addr,
+        id,
+        registers.channel_dma_addr,
         characteristics.max_packet_size,
         characteristics.endpoint_number,
         characteristics.endpoint_direction,
@@ -852,30 +876,32 @@ pub fn channelStartTransfer(channel: *Channel, req: *TransferRequest) void {
         req.complete_split,
     });
 
-    channel.registers.channel_character = characteristics;
-    channel.registers.split_control = split_control;
-    channel.registers.transfer = transfer;
+    registers.channel_character = characteristics;
+    registers.split_control = split_control;
+    registers.transfer = transfer;
 
     // enable the channel
-    channelStartTransaction(channel, req);
+    channelStartTransaction(id, req);
 }
 
 // requires the following registers were already configured:
 // - channel characteristics
 // - transfer size
 // - dma address
-pub fn channelStartTransaction(channel: *Channel, req: *TransferRequest) void {
+pub fn channelStartTransaction(id: ChannelId, req: *TransferRequest) void {
     const im = cpu.disable();
     defer cpu.restore(im);
 
+    const registers = channel_registers[id];
+
     // Clear pending interrupts
-    channel.registers.channel_int_mask = @bitCast(@as(u32, 0));
-    channel.registers.channel_int = @bitCast(@as(u32, 0xffff_ffff));
+    registers.channel_int_mask = @bitCast(@as(u32, 0));
+    registers.channel_int = @bitCast(@as(u32, 0xffff_ffff));
 
     // is this the completion part of a split transaction?
-    var split_control = channel.registers.split_control;
+    var split_control = registers.split_control;
     split_control.complete_split = if (req.complete_split) 1 else 0;
-    channel.registers.split_control = split_control;
+    registers.split_control = split_control;
 
     // set odd frame and enable
     const next_frame = (host.frame_num.number & 0xffff) + 1;
@@ -884,16 +910,16 @@ pub fn channelStartTransaction(channel: *Channel, req: *TransferRequest) void {
         req.csplit_retries = 0;
     }
 
-    channel.registers.channel_int_mask = .{ .halt = 1 };
-    host.all_channel_interrupts_mask |= @as(u32, 1) << channel.id;
+    registers.channel_int_mask = .{ .halt = 1 };
+    host.all_channel_interrupts_mask |= @as(u32, 1) << id;
 
-    var channel_char = channel.registers.channel_character;
+    var channel_char = registers.channel_character;
     channel_char.odd_frame = @truncate(next_frame & 1);
     channel_char.enable = 1;
     //    channel_char.disable = 0;
-    channel.registers.channel_character = channel_char;
+    registers.channel_character = channel_char;
 
-    log.debug(@src(), "channel {d} characteristics {x:0>8}", .{ channel.id, @as(u32, @bitCast(channel.registers.channel_character)) });
+    log.debug(@src(), "channel {d} characteristics {x:0>8}", .{ id, @as(u32, @bitCast(registers.channel_character)) });
 }
 
 // ----------------------------------------------------------------------
@@ -968,8 +994,8 @@ fn deferredTransfer(args_ptr: *anyopaque) void {
             // TODO something
         };
 
-        if (channelAllocate()) |channel| {
-            channelStartTransfer(channel, req);
+        if (channelAllocate()) |chid| {
+            channelStartTransfer(chid, req);
         } else |err| {
             log.err(@src(), "channel allocate error: {any}", .{err});
         }
@@ -1017,13 +1043,12 @@ fn nextRequest() ?*TransferRequest {
     return req;
 }
 
-fn channelForRequest(req: *TransferRequest) ?*Channel {
-    var channel = channelAllocate() catch |err| {
+fn channelForRequest(req: *TransferRequest) ?ChannelId {
+    return channelAllocate() catch |err| {
         log.err(@src(), "channel allocate error: {any}", .{err});
         req.complete(TransferRequest.CompletionStatus.failed);
         return null;
     };
-    return channel;
 }
 
 /// Driver thread proc
@@ -1037,6 +1062,260 @@ pub fn dwcDriverLoop(_: *anyopaque) void {
         } else {
             var channel = channelForRequest(xfer) orelse continue;
             channelStartTransfer(channel, xfer);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// scratch area - integrate this into the 'channel handling' section later
+// ----------------------------------------------------------------------
+const InterruptReason = enum {
+    transfer_failed,
+    transfer_needs_restart,
+    transaction_needs_restart,
+    transfer_needs_defer,
+    transfer_completed,
+};
+
+fn channelInterrupt(id: ChannelId) void {
+    const req: *TransferRequest = active_transfer[id] orelse {
+        log.debug(@src(), "channel {d} received a spurious interrupt.", .{id});
+        return;
+    };
+
+    const registers = channel_registers[id];
+    const int_status: ChannelInterrupt = registers.channel_int;
+    var interrupt_reason: InterruptReason = undefined;
+
+    var buf = std.mem.zeroes([128]u8);
+    const l = int_status.debugDecode(&buf);
+    log.debug(@src(), "channel {d} interrupt{s}, characteristics 0x{x:0>8}, transfer 0x{x:0>8}, dma_addr 0x{x:0>8}", .{
+        id,
+        buf[0..l],
+        @as(u32, @bitCast(registers.channel_character)),
+        @as(u32, @bitCast(registers.transfer)),
+        registers.channel_dma_addr,
+    });
+
+    if (int_status.stall == 1 or int_status.ahb_error == 1 or int_status.transaction_error == 1 or
+        int_status.babble_error == 1 or int_status.excessive_transmission == 1 or
+        int_status.frame_list_rollover == 1 or
+        (int_status.nyet == 1 and !req.complete_split) or
+        (int_status.data_toggle_error == 1 and registers.channel_character.endpoint_direction == EndpointDirection.out))
+    {
+        log.err(@src(), "channel {d} transfer error (interrupts = 0x{x:0>8},  packet count = {d})", .{ id, @as(u32, @bitCast(int_status)), registers.transfer.packet_count });
+
+        dumpStatus();
+        channelStatus(id);
+
+        interrupt_reason = .transfer_failed;
+    } else if (int_status.frame_overrun == 1) {
+        // log.debug(@src(),"channel {d} frame overrun. restarting transaction", .{id});
+        interrupt_reason = .transaction_needs_restart;
+    } else if (int_status.nyet == 1) {
+        // log.debug(@src(),"channel {d} received nyet from device; split retry needed", .{id});
+        req.csplit_retries += 1;
+        if (req.csplit_retries > 10) {
+            // log.debug(@src(),"channel {d} restarting split transaction (CSPLIT tried {d} times)", .{ id, req.csplit_retries });
+            req.complete_split = false;
+        }
+        interrupt_reason = .transaction_needs_restart;
+    } else if (int_status.nak == 1) {
+        // log.debug(@src(),"channel {d} received nak from
+        // device; deferring transfer", .{id});
+        req.nak_count += 1;
+
+        if (req.nak_count > 5) {
+            // temporary while testing
+            interrupt_reason = .transfer_failed;
+        } else {
+            interrupt_reason = .transfer_needs_defer;
+            req.complete_split = false;
+        }
+    } else {
+        interrupt_reason = channelHaltedNormal(id, req, int_status);
+    }
+
+    log.debug(@src(), "channel {d} interrupt_reason {s}", .{ id, @tagName(interrupt_reason) });
+
+    var completion: TransferRequest.CompletionStatus = undefined;
+
+    switch (interrupt_reason) {
+        .transfer_completed => completion = .ok,
+        .transfer_failed => completion = .failed,
+        .transfer_needs_defer => {},
+        .transfer_needs_restart => {
+            channelStartTransfer(id, req);
+            return;
+        },
+        .transaction_needs_restart => {
+            channelStartTransaction(id, req);
+            return;
+        },
+    }
+
+    // transfer either finished, encountered an error, or needs to be
+    // retried later.
+
+    // This is some odd cleanup... we're telling the host to
+    // deallocate this channel. (We don't want to keep the channel reserved
+    // while deferring a retry. Some other transfer might need the channel.)
+    req.next_data_pid = registers.transfer.packet_id;
+
+    registers.channel_int_mask = @bitCast(@as(u32, 0));
+    registers.channel_int = @bitCast(@as(u32, 0xffff_ffff));
+
+    active_transfer[id] = null;
+    channelFree(id);
+
+    if (!req.isControlRequest() or req.control_phase == TransferRequest.control_data_phase) {
+        req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr.?) - @intFromPtr(req.data));
+    }
+
+    if (interrupt_reason == .transfer_needs_defer) {
+        if (deferTransfer(req)) {
+            return;
+        } else |_| {
+            completion = .failed;
+        }
+    }
+
+    req.complete(completion);
+}
+
+fn channelHaltedNormal(id: ChannelId, req: *TransferRequest, ints: ChannelInterrupt) InterruptReason {
+    const registers = channel_registers[id];
+    const packets_remaining = registers.transfer.packet_count;
+    const packets_transferred = req.attempted_packets_remaining - packets_remaining;
+    const bytes_remaining = registers.transfer.size;
+    _ = bytes_remaining;
+
+    // log.debug(@src(),"channel {d} reports packets_remaining {d}", .{ id, packets_remaining });
+    // log.debug(@src(),"channel {d} packets remaining {d} of {d}, so packets transferred {d}", .{ id, packets_remaining, req.attempted_packets_remaining, packets_transferred });
+
+    if (packets_transferred != 0) {
+        var bytes_transferred: TransferBytes = 0;
+        const char = registers.channel_character;
+        const max_packet_size = char.max_packet_size;
+        const dir = char.endpoint_direction;
+        const ty = char.endpoint_type;
+
+        if (dir == EndpointDirection.in) {
+            if (registers.transfer.size > req.attempted_bytes_remaining) {
+                log.err(@src(), "Transfer size seems wrong 0x{x} (attempted was 0x{x})", .{ registers.transfer.size, req.attempted_bytes_remaining });
+
+                // High bit is set, do we have a negative number?
+                log.sliceDump(@src(), &channel_buffers[id]);
+
+                bytes_transferred = req.attempted_bytes_remaining;
+            } else {
+                bytes_transferred = req.attempted_bytes_remaining - registers.transfer.size;
+            }
+
+            if (bytes_transferred > 0 and req.cur_data_ptr != null and !isAligned(req.cur_data_ptr.?)) {
+                // we're reading into a different buffer than the
+                // original caller provided. copy the results from our
+                // DMA aligned buffer to the one the caller can see
+                const start_pos = req.attempted_size - req.attempted_bytes_remaining;
+                @memcpy(req.cur_data_ptr.?, channel_buffers[id][start_pos .. start_pos + bytes_transferred]);
+            }
+        } else {
+            // hardware doesn't properly update transfer registers'
+            // size field for OUT transfers
+            if (packets_transferred > 1) {
+                bytes_transferred += max_packet_size * (packets_transferred - 1);
+            }
+
+            if (packets_remaining == 0 and
+                (req.attempted_size % max_packet_size != 0 or req.attempted_size == 0))
+            {
+                bytes_transferred += req.attempted_size % max_packet_size;
+            } else {
+                bytes_transferred += max_packet_size;
+            }
+        }
+
+        // log.debug(@src(),"channel {d} calculated {d} bytes transferred", .{ self.id, bytes_transferred });
+
+        req.attempted_packets_remaining -= packets_transferred;
+        req.attempted_bytes_remaining -= bytes_transferred;
+
+        if (req.cur_data_ptr != null) {
+            req.cur_data_ptr.? += bytes_transferred;
+        }
+
+        //        log.debug(@src(),"channel {d} packets remaining {d}, bytes remaining {d}", .{ id, req.attempted_packets_remaining, req.attempted_bytes_remaining });
+
+        // is the transfer completed?
+        if (req.attempted_packets_remaining == 0 or
+            (dir == EndpointDirection.in and
+            bytes_transferred < packets_transferred * max_packet_size))
+        {
+            if (ints.transfer_complete == 0) {
+                log.err(@src(), "channel {d} expected transfer_completed flag but was not observed.", .{id});
+                return .transfer_failed;
+            }
+
+            if (req.short_attempt and
+                req.attempted_bytes_remaining == 0 and
+                ty != TransferType.interrupt)
+            {
+                log.debug(@src(), "channel {d} starting next part of {d} byte transfer, after short attempt of {d} bytes", .{ id, req.size, req.attempted_size });
+                req.complete_split = false;
+                req.next_data_pid = registers.transfer.packet_id;
+                if (!req.isControlRequest() or
+                    req.control_phase == TransferRequest.control_data_phase)
+                {
+                    req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr.?) - @intFromPtr(req.data));
+                }
+                return .transfer_needs_restart;
+            }
+
+            if (req.isControlRequest() and req.control_phase < 2) {
+                req.complete_split = false;
+                if (req.control_phase == TransferRequest.control_data_phase) {
+                    req.actual_size = @truncate(@intFromPtr(req.cur_data_ptr.?) - @intFromPtr(req.data));
+                }
+
+                req.control_phase += 1;
+
+                if (req.control_phase == TransferRequest.control_data_phase and req.size == 0) {
+                    req.control_phase += 1;
+                }
+                return .transfer_needs_restart;
+            }
+
+            log.debug(@src(), "channel {d} transfer completed", .{id});
+            return .transfer_completed;
+        } else {
+            // transfer not complete, start the next transaction
+            if (registers.split_control.split_enable == 1) {
+                req.complete_split = !req.complete_split;
+            }
+
+            log.debug(@src(), "channel {d} will continue transfer", .{id});
+            return .transaction_needs_restart;
+        }
+    } else {
+        // no packets transferred. also not an error. indicates that
+        // the start_split packet was acknowledged.
+        if (ints.ack == 1 and
+            registers.split_control.split_enable == 1 and
+            !req.complete_split)
+        {
+            // Start CSPLIT
+            req.complete_split = true;
+            log.debug(@src(), "channel {d} must continue transfer (complete_split = {})", .{ id, req.complete_split });
+            schedule.sleep(50) catch |err| {
+                log.err(@src(), "Can't sleep, clown'll eat me. {any}", .{err});
+            };
+            return .transaction_needs_restart;
+        } else if (req.isControlRequest() and req.control_phase == TransferRequest.control_status_phase) {
+            log.debug(@src(), "channel {d} status phase completed", .{id});
+            return .transfer_completed;
+        } else {
+            log.err(@src(), "channel {d} no packets transferred", .{id});
+            return .transfer_failed;
         }
     }
 }
