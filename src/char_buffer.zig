@@ -11,12 +11,17 @@ const Readline = @import("readline.zig");
 const RichChar = @import("rich_char.zig").RichChar;
 
 const Rectangle = @import("rectangle.zig").Rectangle;
-const Point = @import("point.zig").Point;
+//const Point = @import("point.zig").Point;
 
 pub const DEFAULT_FOREGROUND: u8 = 0x01;
 pub const DEFAULT_BACKGROUND: u8 = 0x00;
 
 const Self = @This();
+
+const Point = struct {
+    x: u64,
+    y: u64,
+};
 
 pub fn defineModule(forth: *Forth, cb: *Self) !void {
     try forth.defineStruct("CharBuffer", Self, .{ .declarations = true, .recursive = true });

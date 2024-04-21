@@ -18,12 +18,12 @@ pub fn testBody() !void {
 }
 
 fn expectCount(cnt: semaphore.SemaphoreCount, s: SID) !void {
-    expectEqual(cnt, try semaphore.count(s));
+    expectEqual(@src(), cnt, try semaphore.count(s));
 }
 
 fn semaphoreCreate() !SID {
     const s = try semaphore.create(1);
-    expect(s > 0);
+    expect(@src(), s > 0);
     try expectCount(1, s);
     return s;
 }
@@ -60,8 +60,8 @@ fn downTheSemaphore(args_o: *anyopaque) void {
 
     // const count_before: semaphore.SemaphoreCount = semaphore.count(args.s) catch -1;
     // _ = printf("downTheSemaphore(%d): count is %d\n", args.s, count_before);
-
     // _ = printf("downTheSemaphore(%d): wait\n", args.s);
+
     semaphore.wait(args.s) catch |err| {
         _ = printf("downTheSemaphore(%d): wait error %s\n", args.s, @errorName(err).ptr);
     };
@@ -69,6 +69,7 @@ fn downTheSemaphore(args_o: *anyopaque) void {
     expectCount(0, args.s) catch |err| {
         _ = printf("downTheSemaphore(%d): count error %s\n", args.s, @errorName(err).ptr);
     };
+
     // const count_after: semaphore.SemaphoreCount = semaphore.count(args.s) catch -1;
     // _ = printf("downTheSemaphore(%d): count is %d\n", args.s, count_after);
 }
@@ -78,8 +79,8 @@ fn upTheSemaphore(args_o: *anyopaque) void {
 
     // const count_before: semaphore.SemaphoreCount = semaphore.count(args.s) catch -1;
     // _ = printf("upTheSemaphore(%d): count is %d\n", args.s, count_before);
+    // _ = printf("upTheSemaphore(%d): sleep(%d)\n", args.s, @as(u16, SIGNAL_DELAY));
 
-    _ = printf("upTheSemaphore(%d): sleep(%d)\n", args.s, @as(u16, SIGNAL_DELAY));
     schedule.sleep(SIGNAL_DELAY) catch |err| {
         _ = printf("upTheSemaphore(%d): sleep error %s\n", args.s, @errorName(err).ptr);
     };

@@ -31,9 +31,11 @@ pub fn locateTest(comptime testname: []const u8) fn (*anyopaque) void {
             _ = printf("=== %s\n", testname.ptr);
 
             test_fn() catch |err| {
-                helpers.expect(false);
+                helpers.expect(@src(), false);
                 _ = printf("%s\n", @errorName(err).ptr);
             };
+
+            helpers.exitWithTestResult();
         }
     };
     return Runner.execute;

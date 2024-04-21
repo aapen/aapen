@@ -477,7 +477,24 @@ fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
 }
 
 pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
-    if (req.endpoint_desc == null) {
+    if (req.endpoint_desc) |ep| {
+        switch (ep.attributes.endpoint_type) {
+            TransferType.interrupt => {
+                // this is an interrupt transfer request for the status change endpoint.
+                Host.log.debug(@src(), "hubHandleTransfer: holding status change request a status change occurs", .{});
+                self.root_hub_status_change_transfer = req;
+
+                // we might have previously gotten a status change that we
+                // need to report right now
+                if (@as(u16, @bitCast(self.root_hub_port_status.port_change)) != 0) {
+                    self.hubNotifyPortChange();
+                }
+            },
+            else => {
+                req.complete(.unsupported_request);
+            },
+        }
+    } else {
         Host.log.debug(@src(), "hubHandleTransfer: processing control message", .{});
 
         // this is a control request to the default endpoint.
@@ -495,15 +512,5 @@ pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
             }
         }
         Host.log.debug(@src(), "unhandled request: type 0x{x}, req 0x{x}", .{ @as(u8, @bitCast(req.setup_data.request_type)), request });
-    } else {
-        // this is an interrupt transfer request for the status change endpoint.
-        Host.log.debug(@src(), "hubHandleTransfer: holding status change request a status change occurs", .{});
-        self.root_hub_status_change_transfer = req;
-
-        // we might have previously gotten a status change that we
-        // need to report right now
-        if (@as(u16, @bitCast(self.root_hub_port_status.port_change)) != 0) {
-            self.hubNotifyPortChange();
-        }
     }
 }

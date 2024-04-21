@@ -96,7 +96,7 @@ fn unhandledExceptionDisplay(context: *ExceptionContext, entry_type: u64) void {
 
     if (!(comptime std.mem.eql(u8, config.testname, ""))) {
         const helpers = @import("../../test/helpers.zig");
-        helpers.expect(false);
+        helpers.expect(@src(), false);
         helpers.exitWithTestResult();
     }
 }

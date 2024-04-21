@@ -72,7 +72,7 @@ pub fn wordDump(forth: *Forth, _: *Header) ForthError!void {
 pub fn wordTDump(forth: *Forth, _: *Header) ForthError!void {
     const len = try forth.stack.pop();
     const iAddr = try forth.stack.pop();
-    const addr: [*]u8 = @ptrFromInt(iAddr);
+    const addr: [*]allowzero u8 = @ptrFromInt(iAddr);
 
     var offset: usize = 0;
     while (offset < len) {

@@ -41,14 +41,19 @@ var any_test_error = false;
 // returning a Zig error so we can report multiple test failures in a
 // single execution.
 
-pub fn expect(ok: bool) void {
+fn emitLoc(loc: std.builtin.SourceLocation) void {
+    _ = printf("%s:%d: ", loc.file.ptr, loc.line);
+}
+
+pub fn expect(loc: std.builtin.SourceLocation, ok: bool) void {
     if (!ok) {
+        emitLoc(loc);
         _ = printf("error\n");
         any_test_error = true;
     }
 }
 
-pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
+pub fn expectEqual(loc: std.builtin.SourceLocation, expected: anytype, actual: @TypeOf(expected)) void {
     switch (@typeInfo(@TypeOf(actual))) {
         .NoReturn,
         .Opaque,
@@ -63,6 +68,7 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
 
         .Type => {
             if (actual != expected) {
+                emitLoc(loc);
                 _ = printf("expected type %s, found type %s\n", @typeName(expected).ptr, @typeName(actual).ptr);
                 any_test_error = true;
             }
@@ -70,6 +76,7 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
 
         .Bool => {
             if (actual != expected) {
+                emitLoc(loc);
                 _ = printf("expected %d, found %d\n", expected, actual);
                 any_test_error = true;
             }
@@ -85,6 +92,7 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
             if (actual != expected) {
                 var buf_act: [256]u8 = undefined;
                 const b = std.fmt.bufPrint(&buf_act, "expected {}, found {}", .{ expected, actual }) catch "";
+                emitLoc(loc);
                 _ = printf("%s\n", b.ptr);
                 any_test_error = true;
             }
@@ -94,6 +102,7 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
         .ErrorSet,
         => {
             if (actual != expected) {
+                emitLoc(loc);
                 _ = printf("expected fn differs from actual\n");
                 any_test_error = true;
             }
@@ -103,16 +112,19 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
             switch (pointer.size) {
                 .One, .Many, .C => {
                     if (actual != expected) {
+                        emitLoc(loc);
                         _ = printf("expected 0x%08x, found 0x%08x\n", expected, actual);
                         any_test_error = true;
                     }
                 },
                 .Slice => {
                     if (actual.ptr != expected.ptr) {
+                        emitLoc(loc);
                         _ = printf("expected slice ptr 0x%08x, found 0x%08x\n", expected.ptr, actual.ptr);
                         any_test_error = true;
                     }
                     if (actual.len != expected.len) {
+                        emitLoc(loc);
                         _ = printf("expected slice len %d, found %d\n", expected.len, actual.len);
                         any_test_error = true;
                     }
@@ -126,6 +138,7 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
             var i: usize = 0;
             while (i < info.len) : (i += 1) {
                 if (!std.meta.eql(expected[i], actual[i])) {
+                    emitLoc(loc);
                     _ = printf(
                         "index %d incorrect. expected %d, found %d\n",
                         i,
@@ -139,7 +152,7 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
 
         .Struct => |structType| {
             inline for (structType.fields) |field| {
-                try expectEqual(@field(expected, field.name), @field(actual, field.name));
+                try expectEqual(loc, @field(expected, field.name), @field(actual, field.name));
             }
         },
 
@@ -153,12 +166,12 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
             const expectedTag = @as(Tag, expected);
             const actualTag = @as(Tag, actual);
 
-            try expectEqual(expectedTag, actualTag);
+            try expectEqual(loc, expectedTag, actualTag);
 
             // we only reach this loop if the tags are equal
             inline for (std.meta.fields(@TypeOf(actual))) |fld| {
                 if (std.mem.eql(u8, fld.name, @tagName(actualTag))) {
-                    try expectEqual(@field(expected, fld.name), @field(actual, fld.name));
+                    try expectEqual(loc, @field(expected, fld.name), @field(actual, fld.name));
                     return;
                 }
             }
@@ -172,14 +185,15 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
         .Optional => {
             if (expected) |expected_payload| {
                 if (actual) |actual_payload| {
-                    try expectEqual(expected_payload, actual_payload);
+                    try expectEqual(loc, expected_payload, actual_payload);
                 } else {
+                    emitLoc(loc);
                     _ = printf("expected some, found null\n");
                     any_test_error = true;
                 }
             } else {
-                if (actual) |actual_payload| {
-                    _ = actual_payload;
+                if (actual) |_| {
+                    emitLoc(loc);
                     _ = printf("expected null, found some\n");
                     any_test_error = true;
                 }
@@ -189,25 +203,26 @@ pub fn expectEqual(expected: anytype, actual: @TypeOf(expected)) void {
         .ErrorUnion => {
             if (expected) |expected_payload| {
                 if (actual) |actual_payload| {
-                    try expectEqual(expected_payload, actual_payload);
+                    try expectEqual(loc, expected_payload, actual_payload);
                 } else |actual_err| {
+                    emitLoc(loc);
                     _ = printf("expected result, found error %s\n", expected_payload, @errorName(actual_err));
                     any_test_error = true;
                 }
             } else |expected_err| {
-                if (actual) |actual_payload| {
-                    _ = actual_payload;
+                if (actual) |_| {
+                    emitLoc(loc);
                     _ = printf("expected error %s, found result\n", @errorName(expected_err));
                     any_test_error = true;
                 } else |actual_err| {
-                    try expectEqual(expected_err, actual_err);
+                    try expectEqual(loc, expected_err, actual_err);
                 }
             }
         },
     }
 }
 
-pub fn expectEqualSlices(comptime T: type, expected: []const T, actual: []const T) void {
+pub fn expectEqualSlices(loc: std.builtin.SourceLocation, comptime T: type, expected: []const T, actual: []const T) void {
     if (expected.ptr == actual.ptr and expected.len == actual.len) {
         return;
     }
@@ -221,6 +236,7 @@ pub fn expectEqualSlices(comptime T: type, expected: []const T, actual: []const 
         break :diff_index if (expected.len == actual.len) return else shortest;
     };
 
+    emitLoc(loc);
     _ = printf("slices differ. first difference occurs at index %d (0x%X)\n", diff_index, diff_index);
 
     // TODO: Should this be configurable by the caller?
@@ -344,12 +360,14 @@ fn SliceDiffer(comptime T: type) type {
     };
 }
 
-pub fn expectError(expected_error: anyerror, actual_error_union: anytype) void {
+pub fn expectError(loc: std.builtin.SourceLocation, expected_error: anyerror, actual_error_union: anytype) void {
     if (actual_error_union) |_| {
+        emitLoc(loc);
         _ = printf("expected error %s, found result\n", @errorName(expected_error).ptr);
         any_test_error = true;
     } else |actual_error| {
         if (expected_error != actual_error) {
+            emitLoc(loc);
             _ = printf("expected error %s, found error %s\n", @errorName(expected_error).ptr, @errorName(actual_error).ptr);
             any_test_error = true;
         }

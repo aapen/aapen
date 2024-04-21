@@ -12,25 +12,24 @@ pub fn testBody() !void {
 }
 
 fn assertToPrintable() void {
-    expectEqual(@as(u8, ' '), string.toPrintable(' '));
-    expectEqual(@as(u8, 'a'), string.toPrintable('a'));
-    expectEqual(@as(u8, '.'), string.toPrintable(4));
+    expectEqual(@src(), @as(u8, ' '), string.toPrintable(' '));
+    expectEqual(@src(), @as(u8, 'a'), string.toPrintable('a'));
+    expectEqual(@src(), @as(u8, '.'), string.toPrintable(4));
 }
 
 fn assertStreq() void {
-    expect(string.streql("abc", "abc"));
-    expect(string.streql("a", "a"));
-    expect(string.streql("", ""));
-
-    expect(!string.streql("x", ""));
-    expect(!string.streql("", "x"));
-    expect(!string.streql("ab", "qq"));
-    expect(!string.streql("abc", "abx"));
+    expect(@src(), string.streql("abc", "abc"));
+    expect(@src(), string.streql("a", "a"));
+    expect(@src(), string.streql("", ""));
+    expect(@src(), !string.streql("x", ""));
+    expect(@src(), !string.streql("", "x"));
+    expect(@src(), !string.streql("ab", "qq"));
+    expect(@src(), !string.streql("abc", "abx"));
 }
 
 fn assertStrlen() void {
-    expect(string.strlen("abc") == 3);
-    expect(string.strlen("ab") == 2);
-    expect(string.strlen("a") == 1);
-    expect(string.strlen("") == 0);
+    expect(@src(), string.strlen("abc") == 3);
+    expect(@src(), string.strlen("ab") == 2);
+    expect(@src(), string.strlen("a") == 1);
+    expect(@src(), string.strlen("") == 0);
 }

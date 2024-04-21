@@ -43,6 +43,7 @@ pub const DeviceAddress = device.DeviceAddress;
 pub const DeviceClass = device.DeviceClass;
 pub const DeviceConfiguration = device.DeviceConfiguration;
 pub const DeviceDriver = device.DeviceDriver;
+pub const DeviceState = device.DeviceState;
 pub const DeviceStatus = device.DeviceStatus;
 pub const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 pub const FIRST_DEDICATED_ADDRESS = device.FIRST_DEDICATED_ADDRESS;
@@ -203,7 +204,7 @@ pub fn registerDriver(device_driver: *const DeviceDriver) !void {
     }
 
     if (!already_registered) {
-        log.info(@src(), "registering {s}", .{device_driver.name});
+        log.debug(@src(), "registering {s}", .{device_driver.name});
         try drivers.append(device_driver);
     }
 }

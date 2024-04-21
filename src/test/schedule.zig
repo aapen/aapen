@@ -23,7 +23,7 @@ fn stackManagement() !void {
 
     // Aarch64 stack must be 8-byte aligned.
     const stack_alignment = stack_addr & 0x07;
-    expectEqual(@as(u64, 0), stack_alignment);
+    expectEqual(@src(), @as(u64, 0), stack_alignment);
 
     const stack_top = schedule.stackSetup(stack_addr, stack_size, 0x12345678, 0xdeadbeef, 0x00abacab);
     _ = stack_top;
@@ -39,18 +39,14 @@ fn threadCreate() !void {
 
     const thread_id = try schedule.create(@intFromPtr(&exitImmediately), schedule.INITIAL_STACK_SIZE, 2 * schedule.DEFAULT_PRIORITY, "test", @intFromPtr(&rendezvous));
 
-    // _ = printf("threadCreate: tid = %d\n", thread_id);
-
     const end_ticks = time.deadlineMillis(100);
 
     try schedule.ready(thread_id, true);
 
-    // _ = printf("threadCreate: after call to ready\n");
-
     while (atomic.atomicFetch(&counter) == 0) {
         if (time.ticks() > end_ticks) {
             _ = printf("timeout waiting for thread to start\n");
-            expect(false);
+            expect(@src(), false);
             return;
         }
     }
@@ -64,13 +60,15 @@ fn exitImmediately(args: *TArgs) void {
 }
 
 fn threadSleep() !void {
-    const start_sleep = (time.seconds_since_boot * time.QUANTA_PER_SECOND + time.quanta_since_boot);
+    time.init();
+
+    const start_sleep = (time.seconds_since_boot * time.quanta_per_second + time.quanta_since_boot);
 
     try schedule.sleep(1000);
 
-    const end_sleep = (time.seconds_since_boot * time.QUANTA_PER_SECOND + time.quanta_since_boot);
+    const end_sleep = (time.seconds_since_boot * time.quanta_per_second + time.quanta_since_boot);
 
-    _ = printf("threadSleep: start = %d, end = %d (slept for %d)", start_sleep, end_sleep, (end_sleep - start_sleep));
+    // _ = printf("threadSleep: start = %d, end = %d (slept for %d)", start_sleep, end_sleep, (end_sleep - start_sleep));
 
-    expect(end_sleep >= (start_sleep + 995) and end_sleep <= (start_sleep + 1005));
+    expect(@src(), end_sleep >= (start_sleep + 995) and end_sleep <= (start_sleep + 1005));
 }
