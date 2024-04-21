@@ -222,7 +222,7 @@ fn getStringDescriptors() !void {
     const str_slice = try string2.asSlice(helpers.allocator);
     defer helpers.allocator.free(str_slice);
 
-    expectEqualSlices(@src(), u8, "USB", str_slice[0..3]);
+    expectEqualSlices(@src(), u8, "Aapen USB", str_slice[0..9]);
 }
 
 fn getStringDescriptorShortBuffer() !void {
