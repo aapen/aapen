@@ -165,7 +165,7 @@ var transfer_mailbox: UsbTransferMailbox = undefined;
 var root_hub: RootHub = .{};
 var num_host_channels: u4 = 0;
 
-var intc: *InterruptController = undefined;
+var interrupt_controller: *InterruptController = undefined;
 var irq_id: IrqId = 0;
 var irq_handler: IrqHandler = irqHandle;
 
@@ -189,7 +189,7 @@ pub fn defineModule(forth: *Forth) !void {
 pub fn init(
     allocator: Allocator,
     register_base: u64,
-    interrupt_controller: *InterruptController,
+    intc: *InterruptController,
     ii: IrqId,
     power_ctrl: *PowerController,
 ) !*Self {
@@ -205,7 +205,7 @@ pub fn init(
 
     root_hub.init(host);
 
-    intc = interrupt_controller;
+    interrupt_controller = intc;
     irq_id = ii;
 
     const channel_registers: u64 = register_base + 0x500;
@@ -372,7 +372,6 @@ fn initializeControllerCore() !void {
     const ptx_words: u32 = 1024; // Size of Periodic Tx FIFO in 4-byte words
 
     // Configure FIFO sizes. Required because the defaults do not work correctly.
-
     core.rx_fifo_size = @bitCast(rx_words);
     core.nonperiodic_tx_fifo_size = @bitCast((tx_words << 16) | rx_words);
     core.host_periodic_tx_fifo_size = @bitCast((ptx_words << 16) | (rx_words + tx_words));
@@ -444,8 +443,8 @@ fn initializeInterrupts() !void {
     host.all_channel_interrupts = @bitCast(clear_all);
 
     // Connect interrupt handler & enable interrupts on the ARM PE
-    intc.connect(irq_id, &irq_handler, &.{});
-    intc.enable(irq_id);
+    interrupt_controller.connect(irq_id, &irq_handler, &.{});
+    interrupt_controller.enable(irq_id);
 
     // Enable only host channel and port interrupts
     var enabled: InterruptMask = @bitCast(@as(u32, 0));
@@ -546,42 +545,12 @@ fn irqHandle(_: *InterruptController, _: IrqId, _: ?*anyopaque) void {
 
 pub fn dumpStatus() void {
     log.info(@src(), "{s: >28}", .{"Core registers"});
-    dumpRegisterPair(
-        "otg_control",
-        @bitCast(core.otg_control),
-        "ahb_config",
-        @bitCast(core.ahb_config),
-    );
-    dumpRegisterPair(
-        "usb_config",
-        @bitCast(core.usb_config),
-        "reset",
-        @bitCast(core.reset),
-    );
-    dumpRegisterPair(
-        "hw_config_1",
-        @bitCast(core.hardware_config_1),
-        "hw_config_2",
-        @bitCast(core.hardware_config_2),
-    );
-    dumpRegisterPair(
-        "interrupt_status",
-        @bitCast(core.core_interrupt_status),
-        "interrupt_mask",
-        @bitCast(core.core_interrupt_mask),
-    );
-    dumpRegisterPair(
-        "rx_status",
-        @bitCast(core.rx_status_read),
-        "rx_fifo_size",
-        @bitCast(core.rx_fifo_size),
-    );
-    dumpRegisterPair(
-        "nonperiodic_tx_fifo_size",
-        @bitCast(core.nonperiodic_tx_fifo_size),
-        "nonperiodic_tx_status",
-        @bitCast(core.nonperiodic_tx_status),
-    );
+    dumpRegisterPair("otg_control", @bitCast(core.otg_control), "ahb_config", @bitCast(core.ahb_config));
+    dumpRegisterPair("usb_config", @bitCast(core.usb_config), "reset", @bitCast(core.reset));
+    dumpRegisterPair("hw_config_1", @bitCast(core.hardware_config_1), "hw_config_2", @bitCast(core.hardware_config_2));
+    dumpRegisterPair("interrupt_status", @bitCast(core.core_interrupt_status), "interrupt_mask", @bitCast(core.core_interrupt_mask));
+    dumpRegisterPair("rx_status", @bitCast(core.rx_status_read), "rx_fifo_size", @bitCast(core.rx_fifo_size));
+    dumpRegisterPair("nonperiodic_tx_fifo_size", @bitCast(core.nonperiodic_tx_fifo_size), "nonperiodic_tx_status", @bitCast(core.nonperiodic_tx_status));
 
     log.info(@src(), "", .{});
     log.info(@src(), "{s: >28}", .{"Host registers"});
@@ -616,8 +585,7 @@ fn channelAllocate() !*Channel {
         return error.NoAvailableChannel;
     }
 
-    const ch = &channels[chid];
-    return ch;
+    return &channels[chid];
 }
 
 pub fn channelFree(channel: *Channel) void {
