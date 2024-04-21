@@ -40,7 +40,7 @@ fn createIntBox(allocator: Allocator) !void {
 }
 
 fn expectCount(ex: IntBox.MailboxCapacity) !void {
-    expectEqual(ex, mbox.count);
+    expectEqual(@src(), ex, mbox.count);
 }
 
 fn sendBasicMessages() !void {
@@ -51,10 +51,10 @@ fn sendBasicMessages() !void {
 }
 
 fn receiveBasicMessages() !void {
-    expectEqual(@as(u32, 12345), try mbox.receive());
-    expectEqual(@as(u32, 9999), try mbox.receive());
-    expectEqual(@as(u32, 0), try mbox.receive());
-    expectEqual(@as(u32, 42), try mbox.receive());
+    expectEqual(@src(), @as(u32, 12345), try mbox.receive());
+    expectEqual(@src(), @as(u32, 9999), try mbox.receive());
+    expectEqual(@src(), @as(u32, 0), try mbox.receive());
+    expectEqual(@src(), @as(u32, 42), try mbox.receive());
 }
 
 fn sendAndReceiveWithBlocking() !void {
@@ -67,7 +67,7 @@ fn sendAndReceiveWithBlocking() !void {
 
     while (time.ticks() < deadline and state < 2) {}
 
-    expectEqual(@as(u64, 2), state);
+    expectEqual(@src(), @as(u64, 2), state);
 }
 
 fn sendManyMessages(args: *anyopaque) void {
@@ -89,7 +89,7 @@ fn receiveManyMessages(args: *anyopaque) void {
     const state: *u64 = @alignCast(@ptrCast(args));
     for (0..90) |i| {
         const v = mbox.receive() catch 0;
-        expectEqual(@as(u32, @truncate(i)), v);
+        expectEqual(@src(), @as(u32, @truncate(i)), v);
     }
 
     _ = atomic.atomicInc(state);

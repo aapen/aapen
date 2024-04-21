@@ -15,18 +15,18 @@ pub fn testBody() !void {
 }
 
 fn assertEventSize() void {
-    expectEqual(64, @bitSizeOf(Event));
+    expectEqual(@src(), 64, @bitSizeOf(Event));
 }
 
 fn assertEventTypePosition() void {
     const ev: Event = .{};
-    expectEqual(0, ev.type);
+    expectEqual(@src(), 0, ev.type);
 
     const ev2: Event = .{ .type = EventType.Key, .subtype = EventSubtype.Key.Pressed };
-    expectEqual(2, ev2.type);
-    expectEqual(1, ev2.subtype);
+    expectEqual(@src(), 2, ev2.type);
+    expectEqual(@src(), 1, ev2.subtype);
 
     const evbytes = std.mem.asBytes(&ev2);
-    expectEqual(@as(u8, 2), evbytes[0]);
-    expectEqual(@as(u8, 1), evbytes[1]);
+    expectEqual(@src(), @as(u8, 2), evbytes[0]);
+    expectEqual(@src(), @as(u8, 1), evbytes[1]);
 }

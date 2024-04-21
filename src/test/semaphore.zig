@@ -18,7 +18,7 @@ pub fn testBody() !void {
 }
 
 fn expectCount(cnt: semaphore.SemaphoreCount, s: SID) !void {
-    expectEqual(cnt, try semaphore.count(s));
+    expectEqual(@src(), cnt, try semaphore.count(s));
 }
 
 fn semaphoreCreate() !SID {

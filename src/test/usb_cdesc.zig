@@ -30,12 +30,12 @@ fn parseHubConfiguration(allocator: Allocator) !void {
 
     const dev = try DeviceConfiguration.initFromBytes(allocator, &as_bytes);
 
-    expectEqual(@as(u8, 1), dev.configuration_descriptor.interface_count);
+    expectEqual(@src(), @as(u8, 1), dev.configuration_descriptor.interface_count);
     expect(@src(), dev.interfaces[0] != null);
-    expectEqual(@as(u8, 1), dev.interfaces[0].?.endpoint_count);
+    expectEqual(@src(), @as(u8, 1), dev.interfaces[0].?.endpoint_count);
     expect(@src(), dev.endpoints[0][0] != null);
-    expectEqual(@as(u8, 0x81), dev.endpoints[0][0].?.endpoint_address);
-    expectEqual(TransferType.interrupt, dev.endpoints[0][0].?.attributes.endpoint_type);
+    expectEqual(@src(), @as(u8, 0x81), dev.endpoints[0][0].?.endpoint_address);
+    expectEqual(@src(), TransferType.interrupt, dev.endpoints[0][0].?.attributes.endpoint_type);
 }
 
 fn parseQemuKeyboardConfiguration(allocator: Allocator) !void {
@@ -47,5 +47,5 @@ fn parseQemuKeyboardConfiguration(allocator: Allocator) !void {
 
     const dev = try DeviceConfiguration.initFromBytes(allocator, &as_bytes);
 
-    expectEqual(@as(u8, 1), dev.configuration_descriptor.interface_count);
+    expectEqual(@src(), @as(u8, 1), dev.configuration_descriptor.interface_count);
 }

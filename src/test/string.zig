@@ -12,9 +12,9 @@ pub fn testBody() !void {
 }
 
 fn assertToPrintable() void {
-    expectEqual(@as(u8, ' '), string.toPrintable(' '));
-    expectEqual(@as(u8, 'a'), string.toPrintable('a'));
-    expectEqual(@as(u8, '.'), string.toPrintable(4));
+    expectEqual(@src(), @as(u8, ' '), string.toPrintable(' '));
+    expectEqual(@src(), @as(u8, 'a'), string.toPrintable('a'));
+    expectEqual(@src(), @as(u8, '.'), string.toPrintable(4));
 }
 
 fn assertStreq() void {

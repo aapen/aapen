@@ -23,7 +23,7 @@ fn stackManagement() !void {
 
     // Aarch64 stack must be 8-byte aligned.
     const stack_alignment = stack_addr & 0x07;
-    expectEqual(@as(u64, 0), stack_alignment);
+    expectEqual(@src(), @as(u64, 0), stack_alignment);
 
     const stack_top = schedule.stackSetup(stack_addr, stack_size, 0x12345678, 0xdeadbeef, 0x00abacab);
     _ = stack_top;

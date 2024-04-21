@@ -27,18 +27,18 @@ fn basicStackOperation() !void {
         try rstack.push(@as(u16, @intCast(i)));
     }
 
-    expectEqual(@as(usize, 7), dstack.depth());
-    expectEqual(@as(usize, 7), rstack.depth());
+    expectEqual(@src(), @as(usize, 7), dstack.depth());
+    expectEqual(@src(), @as(usize, 7), rstack.depth());
 
     while (!dstack.isEmpty()) {
         _ = try dstack.pop();
     }
 
-    expectEqual(@as(usize, 0), dstack.depth());
+    expectEqual(@src(), @as(usize, 0), dstack.depth());
 
     while (!rstack.isEmpty()) {
         _ = try rstack.pop();
     }
 
-    expectEqual(@as(usize, 0), rstack.depth());
+    expectEqual(@src(), @as(usize, 0), rstack.depth());
 }

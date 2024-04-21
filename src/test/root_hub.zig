@@ -74,7 +74,7 @@ fn expectTransferCompletionStatus(expected_status: TransferCompletionStatus, xfe
     hub.init(&regs);
 
     hub.hubHandleTransfer(xfer);
-    expectEqual(expected_status, xfer.status);
+    expectEqual(@src(), expected_status, xfer.status);
 }
 
 fn supportedTransferTypes() !void {
@@ -140,14 +140,14 @@ fn getDeviceDescriptor() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 
     const device_descriptor = std.mem.bytesAsValue(DeviceDescriptor, xfer.data[0..@sizeOf(DeviceDescriptor)]);
 
-    expectEqual(DescriptorType.device, device_descriptor.header.descriptor_type);
-    expectEqual(DeviceClass.hub, device_descriptor.device_class);
-    expectEqual(@as(u8, 0), device_descriptor.device_subclass);
-    expectEqual(@as(u8, 1), device_descriptor.device_protocol);
+    expectEqual(@src(), DescriptorType.device, device_descriptor.header.descriptor_type);
+    expectEqual(@src(), DeviceClass.hub, device_descriptor.device_class);
+    expectEqual(@src(), @as(u8, 0), device_descriptor.device_subclass);
+    expectEqual(@src(), @as(u8, 1), device_descriptor.device_protocol);
     expect(@src(), device_descriptor.configuration_count >= 1);
     expect(@src(), device_descriptor.max_packet_size >= 8);
 }
@@ -160,7 +160,7 @@ fn getDeviceDescriptorShortBuffer() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(u19, short_buffer_len), xfer.actual_size);
+    expectEqual(@src(), @as(u19, short_buffer_len), xfer.actual_size);
 }
 
 fn getConfigurationDescriptor() !void {
@@ -171,7 +171,7 @@ fn getConfigurationDescriptor() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 
     var config = try DeviceConfiguration.initFromBytes(helpers.allocator, &buffer);
     defer {
@@ -179,14 +179,14 @@ fn getConfigurationDescriptor() !void {
         helpers.allocator.destroy(config);
     }
 
-    expectEqual(DescriptorType.configuration, config.configuration_descriptor.header.descriptor_type);
+    expectEqual(@src(), DescriptorType.configuration, config.configuration_descriptor.header.descriptor_type);
     expect(@src(), config.configuration_descriptor.interface_count >= 1);
 
-    expectEqual(DescriptorType.interface, config.interfaces[0].?.header.descriptor_type);
-    expectEqual(InterfaceClass.hub, config.interfaces[0].?.interface_class);
+    expectEqual(@src(), DescriptorType.interface, config.interfaces[0].?.header.descriptor_type);
+    expectEqual(@src(), InterfaceClass.hub, config.interfaces[0].?.interface_class);
     expect(@src(), config.interfaces[0].?.endpoint_count >= 1);
 
-    expectEqual(DescriptorType.endpoint, config.endpoints[0][0].?.header.descriptor_type);
+    expectEqual(@src(), DescriptorType.endpoint, config.endpoints[0][0].?.header.descriptor_type);
     expect(@src(), config.endpoints[0][0].?.max_packet_size >= 4);
 }
 
@@ -198,7 +198,7 @@ fn getConfigurationDescriptorShortBuffer() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getStringDescriptors() !void {
@@ -211,7 +211,7 @@ fn getStringDescriptors() !void {
 
     const string = @as(*align(2) StringDescriptor, @ptrCast(@alignCast(xfer.data[0..buffer_size])));
 
-    expectEqualSlices(u16, &.{0x0409}, string.body[0..1]);
+    expectEqualSlices(@src(), u16, &.{0x0409}, string.body[0..1]);
 
     // check string at index 2
     xfer = TransferFactory.initStringDescriptorTransfer(&nulldev, 2, LangID.none, &buffer);
@@ -222,7 +222,7 @@ fn getStringDescriptors() !void {
     const str_slice = try string2.asSlice(helpers.allocator);
     defer helpers.allocator.free(str_slice);
 
-    expectEqualSlices(u8, "USB", str_slice[0..3]);
+    expectEqualSlices(@src(), u8, "USB", str_slice[0..3]);
 }
 
 fn getStringDescriptorShortBuffer() !void {
@@ -233,7 +233,7 @@ fn getStringDescriptorShortBuffer() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getStatus() !void {
@@ -244,7 +244,7 @@ fn getStatus() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn setConfiguration() !void {
@@ -263,7 +263,7 @@ fn getConfiguration() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(u8, buffer_size), xfer.data[0]);
+    expectEqual(@src(), @as(u8, buffer_size), xfer.data[0]);
 }
 
 fn getDescriptor() !void {
@@ -274,12 +274,12 @@ fn getDescriptor() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 
     const hub_descriptor = std.mem.bytesAsValue(HubDescriptor, xfer.data[0..@sizeOf(HubDescriptor)]);
 
-    expectEqual(DescriptorType.hub, hub_descriptor.header.descriptor_type);
-    expectEqual(@as(u8, 1), hub_descriptor.number_ports);
+    expectEqual(@src(), DescriptorType.hub, hub_descriptor.header.descriptor_type);
+    expectEqual(@src(), @as(u8, 1), hub_descriptor.number_ports);
 }
 
 fn getHubStatus() !void {
@@ -290,7 +290,7 @@ fn getHubStatus() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getPortStatus() !void {
@@ -301,7 +301,7 @@ fn getPortStatus() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getPortPowerStatus() !bool {
@@ -312,7 +312,7 @@ fn getPortPowerStatus() !bool {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 
     const port_status = std.mem.bytesAsValue(PortStatus, xfer.data[0..@sizeOf(PortStatus)]);
 
@@ -326,7 +326,7 @@ fn setPortFeature() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn setPortFeatureReset() !void {
@@ -336,7 +336,7 @@ fn setPortFeatureReset() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn setAddress() !void {
@@ -346,7 +346,7 @@ fn setAddress() !void {
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn setHubFeature() !void {
