@@ -42,9 +42,6 @@ pub fn build(b: *std.Build) !void {
     const img_name = try fmt.allocPrint(allocator, "{s}.img", .{bin_basename});
     defer allocator.free(img_name);
 
-    const symtab_name = try fmt.allocPrint(allocator, "{s}-symtab.img", .{bin_basename});
-    defer allocator.free(symtab_name);
-
     const compile_kernel = b.addExecutable(.{
         .name = elf_name,
         .target = target,
@@ -76,11 +73,14 @@ pub fn build(b: *std.Build) !void {
     const install_elf = b.addInstallFile(compile_kernel.getOutputSource(), elf_name);
     b.getInstallStep().dependOn(&install_elf.step);
 
-    const build_symbols = buildSymbolTable(b, compile_kernel, extract_image);
-    b.getInstallStep().dependOn(&build_symbols.step);
-
     const install_image = b.addInstallFile(extract_image.getOutputSource(), img_name);
-    install_image.step.dependOn(&build_symbols.step);
+
+    if (!isTestBuild(testname)) {
+        const build_symbols = buildSymbolTable(b, compile_kernel, extract_image);
+        b.getInstallStep().dependOn(&build_symbols.step);
+        install_image.step.dependOn(&build_symbols.step);
+    }
+
     b.getInstallStep().dependOn(&install_image.step);
 }
 
@@ -94,4 +94,8 @@ fn buildSymbolTable(b: *std.Build, compile_kernel: *std.Build.CompileStep, extra
     run_tool.addFileArg(compile_kernel.getOutputSource());
     run_tool.addFileArg(extract_image.getOutput());
     return run_tool;
+}
+
+fn isTestBuild(testname: []const u8) bool {
+    return testname.len > 0;
 }

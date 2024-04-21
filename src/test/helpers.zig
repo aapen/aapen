@@ -41,9 +41,9 @@ var any_test_error = false;
 // returning a Zig error so we can report multiple test failures in a
 // single execution.
 
-pub fn expect(ok: bool) void {
+pub fn expect(loc: std.builtin.SourceLocation, ok: bool) void {
     if (!ok) {
-        _ = printf("error\n");
+        _ = printf("%s:%d: error\n", loc.file.ptr, loc.line);
         any_test_error = true;
     }
 }

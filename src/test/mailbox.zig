@@ -74,7 +74,7 @@ fn sendManyMessages(args: *anyopaque) void {
     const state: *u64 = @alignCast(@ptrCast(args));
     for (0..90) |v| {
         mbox.send(@truncate(v)) catch {
-            expect(false);
+            expect(@src(), false);
         };
     }
 

@@ -153,7 +153,7 @@ pub const TransferRequest = struct {
         }
     }
 
-    pub fn isControlRequest(self: *TransferRequest) bool {
+    pub fn isControlRequest(self: *const TransferRequest) bool {
         return self.endpoint_desc == null or (self.endpoint_desc.?.attributes.endpoint_type == TransferType.control);
     }
 
@@ -167,17 +167,6 @@ pub const TransferRequest = struct {
         if (self.completion) |c| {
             c(self);
         }
-    }
-
-    pub fn getTransactionPid(self: *TransferRequest) u4 {
-        // this probably needs to be extended to account for the
-        // transfer type
-        return switch (self.state) {
-            .token => PID2.token_setup,
-            .data => PID2.data_data1,
-            .handshake => PID2.handshake_ack,
-            .complete => PID2.handshake_nak,
-        };
     }
 };
 

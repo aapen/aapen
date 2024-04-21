@@ -3,9 +3,14 @@ const expect = helpers.expect;
 const expectEqual = helpers.expectEqual;
 const expectError = helpers.expectError;
 
+const device = @import("../usb/device.zig");
+const Device = device.Device;
+const DeviceState = device.DeviceState;
+const UsbSpeed = device.UsbSpeed;
+
 const transfer = @import("../usb/transfer.zig");
 const SetupPacket = transfer.SetupPacket;
-const Transfer = transfer.Transfer;
+const Transfer = transfer.TransferRequest;
 
 const request = @import("../usb/request.zig");
 const RequestTypeRecipient = request.RequestTypeRecipient;
@@ -13,114 +18,10 @@ const RequestTypeDirection = request.RequestTypeDirection;
 const RequestTypeType = request.RequestTypeType;
 
 pub fn testBody() !void {
-    assertControlTransferStartsWithToken();
-    assertControlTransferWithDataHasThreePhases();
-    assertControlTransferWithoutDataHasTwoPhases();
-    assertCompletionHandlerCalledWhenTransferSucceeds();
-    assertCompletionHandlerCalledWhenTransferFails();
-}
-
-fn assertControlTransferStartsWithToken() void {
-    const buffer_size = 18;
-    var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, 0x06, 0, 0, buffer_size);
-    const xfer = Transfer.initControl(pkt, &buffer);
-
-    expectEqual(Transfer.State.token, xfer.state);
-}
-
-fn assertControlTransferWithDataHasThreePhases() void {
-    const buffer_size = 18;
-    var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.device_to_host, 0x06, 0, 0, buffer_size);
-    var xfer = Transfer.initControl(pkt, &buffer);
-
-    expectEqual(Transfer.State.token, xfer.state);
-
-    xfer.transferCompleteTransaction(.ok);
-
-    expectEqual(Transfer.State.data, xfer.state);
-
-    xfer.transferCompleteTransaction(.ok);
-
-    expectEqual(Transfer.State.handshake, xfer.state);
-
-    xfer.transferCompleteTransaction(.ok);
-
-    expectEqual(Transfer.State.complete, xfer.state);
-    expectEqual(Transfer.CompletionStatus.ok, xfer.status);
-}
-
-fn assertControlTransferWithoutDataHasTwoPhases() void {
-    const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device, 0x05, 1, 0, buffer_size);
-    var xfer = Transfer.initControl(pkt, &buffer);
-
-    expectEqual(Transfer.State.token, xfer.state);
-
-    xfer.transferCompleteTransaction(.ok);
-
-    expectEqual(Transfer.State.handshake, xfer.state);
-
-    xfer.transferCompleteTransaction(.ok);
-
-    expectEqual(Transfer.State.complete, xfer.state);
-    expectEqual(Transfer.CompletionStatus.ok, xfer.status);
-}
-
-fn assertCompletionHandlerCalledWhenTransferSucceeds() void {
-    const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device, 0x05, 1, 0, buffer_size);
-    var xfer = Transfer.initControl(pkt, &buffer);
-
-    const Callback = struct {
-        var was_called: bool = false;
-
-        fn invoke(_: *Transfer) void {
-            was_called = true;
-        }
-    };
-    xfer.completion = &Callback.invoke;
-
-    expectEqual(Transfer.State.token, xfer.state);
-
-    xfer.transferCompleteTransaction(.ok);
-
-    expectEqual(Transfer.State.handshake, xfer.state);
-
-    xfer.transferCompleteTransaction(.ok);
-
-    expectEqual(Transfer.State.complete, xfer.state);
-    expectEqual(Transfer.CompletionStatus.ok, xfer.status);
-    expect(Callback.was_called);
-}
-
-fn assertCompletionHandlerCalledWhenTransferFails() void {
-    const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    const pkt = SetupPacket.init(RequestTypeRecipient.device, RequestTypeType.standard, RequestTypeDirection.host_to_device, 0x05, 1, 0, buffer_size);
-    var xfer = Transfer.initControl(pkt, &buffer);
-
-    const Callback = struct {
-        var was_called: bool = false;
-
-        fn invoke(_: *Transfer) void {
-            was_called = true;
-        }
-    };
-    xfer.completion = &Callback.invoke;
-
-    expectEqual(Transfer.State.token, xfer.state);
-
-    xfer.transferCompleteTransaction(.ok);
-
-    expectEqual(Transfer.State.handshake, xfer.state);
-
-    xfer.transferCompleteTransaction(.timeout);
-
-    expectEqual(Transfer.State.complete, xfer.state);
-    expectEqual(Transfer.CompletionStatus.timeout, xfer.status);
-    expect(Callback.was_called);
+    // these tests all relied on a state machine implementation that
+    // used to be in Transfer structs.
+    //
+    // at some point I expect to re-introduce the state machine to
+    // clarify behavior that is currently muddled in drivers/dwc_otg_usb.zig
+    // and the interrupt handler in drivers/dwc/channel.zig
 }

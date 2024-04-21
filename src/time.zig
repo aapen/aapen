@@ -43,7 +43,7 @@ pub fn init() void {
     quantum = ticks_per_second / quanta_per_second;
 
     log = Logger.init("time", .info);
-    log.info(@src(), "clock frequency = {d} Hz\tquantum = {d}", .{ ticks_per_second, quantum });
+    log.debug(@src(), "clock frequency = {d} Hz\tquantum = {d}", .{ ticks_per_second, quantum });
 
     quanta_since_boot = 0;
     seconds_since_boot = 0;

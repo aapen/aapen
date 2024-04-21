@@ -39,7 +39,7 @@ fn memgetSingle() !void {
     const size: usize = 128;
 
     const block: u64 = try memory.get(size);
-    expect(block > 0);
+    expect(@src(), block > 0);
     // _ = printf("requested %d:  received it at 0x%08x\n", size, block);
     // memory.dumpFreelist();
 }
@@ -53,7 +53,7 @@ fn memgetRepeatSmallBlocks() !void {
         _ = i;
         // _ = printf("... %d ", i);
         const block: u64 = try memory.get(size);
-        expect(block > 0);
+        expect(@src(), block > 0);
         // _ = printf("requested %d:  received it at 0x%08x\n", size, block);
         // memory.dumpFreelist();
     }

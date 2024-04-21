@@ -20,6 +20,20 @@ const initEndpointDescriptorTransfer = transfer_factory.initEndpointDescriptorTr
 const initGetHubDescriptorTransfer = transfer_factory.initGetHubDescriptorTransfer;
 const initInterruptTransfer = transfer_factory.initInterruptTransfer;
 
+var nulldev: usb.Device = .{
+    .address = 0,
+    .speed = usb.UsbSpeed.High,
+    .parent = null,
+    .parent_port = 0,
+    .tt = null,
+    .device_descriptor = undefined,
+    .configuration = undefined,
+    .product = @constCast("nothing"),
+    .state = usb.DeviceState.attached,
+    .driver = null,
+    .driver_private = undefined,
+};
+
 pub fn testBody() !void {
     descriptorQuery();
     deviceDescriptor();
@@ -28,62 +42,62 @@ pub fn testBody() !void {
 fn descriptorQuery() void {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initDescriptorTransfer(DescriptorType.device, 0, 0, &buffer);
-    expectEqual(TransferType.control, xfer.endpoint_type);
-    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup.request);
+    const xfer = initDescriptorTransfer(&nulldev, DescriptorType.device, 0, 0, &buffer);
+    expect(@src(), xfer.isControlRequest());
+    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }
 
 fn deviceDescriptor() void {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initDeviceDescriptorTransfer(0, 0, &buffer);
-    expectEqual(TransferType.control, xfer.endpoint_type);
-    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup.request);
+    const xfer = initDeviceDescriptorTransfer(&nulldev, 0, 0, &buffer);
+    expect(@src(), xfer.isControlRequest());
+    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }
 
 fn configurationDescriptor() void {
     const buffer_size = 2;
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initConfigurationDescriptorTransfer(0, &buffer);
-    expectEqual(TransferType.control, xfer.endpoint_type);
-    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup.request);
+    const xfer = initConfigurationDescriptorTransfer(&nulldev, 0, &buffer);
+    expect(@src(), xfer.isControlRequest());
+    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }
 
 fn stringDescriptor() void {
     const buffer_size = @sizeOf(StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initStringDescriptorTransfer(0, LangID.none, &buffer);
-    expectEqual(TransferType.control, xfer.endpoint_type);
-    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup.request);
+    const xfer = initStringDescriptorTransfer(&nulldev, 0, LangID.none, &buffer);
+    expect(@src(), xfer.isControlRequest());
+    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }
 
 fn interfaceDescriptor() void {
     const buffer_size = @sizeOf(StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initInterfaceDescriptorTransfer(0, &buffer);
-    expectEqual(TransferType.control, xfer.endpoint_type);
-    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup.request);
+    const xfer = initInterfaceDescriptorTransfer(&nulldev, 0, &buffer);
+    expect(@src(), xfer.isControlRequest());
+    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }
 
 fn endpointDescriptor() void {
     const buffer_size = @sizeOf(StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initEndpointDescriptorTransfer(0, &buffer);
-    expectEqual(TransferType.control, xfer.endpoint_type);
-    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup.request);
+    const xfer = initEndpointDescriptorTransfer(&nulldev, 0, &buffer);
+    expect(@src(), xfer.isControlRequest());
+    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }
 
 fn hubDescriptor() void {
     const buffer_size = @sizeOf(StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initGetHubDescriptorTransfer(0, &buffer);
-    expectEqual(TransferType.control, xfer.endpoint_type);
-    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup.request);
+    const xfer = initGetHubDescriptorTransfer(&nulldev, 0, &buffer);
+    expect(@src(), xfer.isControlRequest());
+    expectEqual(StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }
 
 fn interruptTransfer() void {
     const buffer_size = 1;
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initInterruptTransfer(&buffer);
+    const xfer = initInterruptTransfer(&nulldev, &buffer);
     expectEqual(TransferType.interrupt, xfer.endpoint_type);
 }
