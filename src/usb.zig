@@ -23,16 +23,7 @@ const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
 pub usingnamespace @import("usb/spec.zig");
-
-const descriptor = @import("usb/descriptor.zig");
-pub const DescriptorIndex = descriptor.DescriptorIndex;
-pub const Descriptor = descriptor.Descriptor;
-pub const DeviceDescriptor = descriptor.DeviceDescriptor;
-pub const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
-pub const InterfaceDescriptor = descriptor.InterfaceDescriptor;
-pub const IsoSynchronizationType = descriptor.IsoSynchronizationType;
-pub const EndpointDescriptor = descriptor.EndpointDescriptor;
-pub const StringDescriptor = descriptor.StringDescriptor;
+pub usingnamespace @import("usb/descriptor.zig");
 
 const device = @import("usb/device.zig");
 pub const Device = device.Device;
@@ -47,10 +38,6 @@ pub const UsbSpeed = device.UsbSpeed;
 pub const FRAMES_PER_MS = device.FRAMES_PER_MS;
 pub const UFRAMES_PER_MS = device.UFRAMES_PER_MS;
 
-const endpoint = @import("usb/endpoint.zig");
-pub const EndpointDirection = endpoint.EndpointDirection;
-pub const EndpointNumber = endpoint.EndpointNumber;
-
 const hid_keyboard = @import("usb/hid_keyboard.zig");
 
 const hub = @import("usb/hub.zig");
@@ -64,7 +51,6 @@ pub const PortFeature = hub.PortFeature;
 pub const PortStatus = hub.PortStatus;
 pub const HubDescriptor = hub.HubDescriptor;
 pub const ClassRequest = hub.ClassRequest;
-//pub const FeatureSelector = hub.FeatureSelector;
 pub const TTDirection = hub.TTDirection;
 
 const request = @import("usb/request.zig");
@@ -88,7 +74,6 @@ pub const PacketSize = transfer.PacketSize;
 pub const PID2 = transfer.PID2;
 pub const SetupPacket = transfer.SetupPacket;
 pub const TransferRequest = transfer.TransferRequest;
-pub const TransferBytes = transfer.TransferBytes;
 pub const TransferCompletionStatus = transfer.TransferRequest.CompletionStatus;
 pub const TransferType = transfer.TransferType;
 
@@ -276,7 +261,7 @@ pub fn attachDevice(devid: Self.DeviceAddress, speed: UsbSpeed, parent_hub: ?*Hu
     try deviceSetAddress(dev, devid);
 
     // now read the real descriptor
-    try deviceDescriptorRead(dev, @sizeOf(DeviceDescriptor));
+    try deviceDescriptorRead(dev, @sizeOf(Self.DeviceDescriptor));
 
     log.debug(@src(), "reading configuration descriptor", .{});
     try deviceConfigurationDescriptorRead(dev);
@@ -406,7 +391,7 @@ pub fn controlMessage(
     return st;
 }
 
-pub fn deviceDescriptorRead(dev: *Device, maxlen: TransferBytes) !void {
+pub fn deviceDescriptorRead(dev: *Device, maxlen: Self.TransferBytes) !void {
     log.debug(@src(), "[{d}:{d}] read device descriptor (maxlen {d} bytes)", .{ dev.address, 0, maxlen });
     const buffer: []u8 = std.mem.asBytes(&dev.device_descriptor);
     const readlen = @min(maxlen, buffer.len);
@@ -446,7 +431,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
     log.debug(@src(), "[{d}:{d}] configuration descriptor read", .{ dev.address, 0 });
     // first transfer returns the configuration descriptor which
     // includes the total length of the whole configuration tree
-    var desc: ConfigurationDescriptor = undefined;
+    var desc: Self.ConfigurationDescriptor = undefined;
 
     const result = try controlMessage(
         dev,

@@ -12,8 +12,12 @@ pub const ID = u16;
 pub const DescriptorIndex = u8;
 pub const DeviceAddress = u7;
 pub const DeviceStatus = u16;
+pub const EndpointNumber = u4;
 pub const LangId = u16;
+pub const PacketSize = u11;
 pub const StringIndex = u8;
+pub const TransferBytes = u19;
+pub const TransferPackets = u10;
 
 // ----------------------------------------------------------------------
 // Specified values
@@ -67,6 +71,10 @@ pub const USB_DEVICE_WIRELESS_CONTROLLER               : u8 = 0xe0;
 pub const USB_DEVICE_MISCELLANEOUS                     : u8 = 0xef;
 pub const USB_DEVICE_APPLICATION_SPECIFIC              : u8 = 0xfe;
 pub const USB_DEVICE_VENDOR_SPECIFIC                   : u8 = 0xff;
+
+// Endpoint directions
+pub const USB_ENDPOINT_DIRECTION_OUT                   : u1 = 0b0;
+pub const USB_ENDPOINT_DIRECTION_IN                    : u1 = 0b1;
 
 // Standard request codes
 pub const USB_REQUEST_GET_STATUS                       : u8 = 0x00;

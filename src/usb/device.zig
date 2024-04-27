@@ -4,30 +4,20 @@ const bufPrint = std.fmt.bufPrint;
 
 const root = @import("root");
 
-const descriptor = @import("descriptor.zig");
-const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
-const DeviceDescriptor = descriptor.DeviceDescriptor;
-const EndpointDescriptor = descriptor.EndpointDescriptor;
-const HidDescriptor = descriptor.HidDescriptor;
-const InterfaceDescriptor = descriptor.InterfaceDescriptor;
-const StringDescriptor = descriptor.StringDescriptor;
-
 const Error = @import("status.zig").Error;
 
 const transaction_translator = @import("transaction_translator.zig");
 const TT = transaction_translator.TransactionTranslator;
 
-const transfer = @import("transfer.zig");
-const setup = transfer.setup;
-const SetupPacket = transfer.SetupPacket;
-const TransferType = transfer.TransferType;
-
-const TransferFactory = @import("transfer_factory.zig");
-
 const usb = @import("../usb.zig");
+const ConfigurationDescriptor = usb.ConfigurationDescriptor;
+const DeviceDescriptor = usb.DeviceDescriptor;
+const EndpointDescriptor = usb.EndpointDescriptor;
+const HidDescriptor = usb.HidDescriptor;
 const Hub = usb.Hub;
+const InterfaceDescriptor = usb.InterfaceDescriptor;
+const StringDescriptor = usb.StringDescriptor;
 
-//pub const DeviceAddress = usb.DeviceAddress;
 pub const DEFAULT_ADDRESS: usb.DeviceAddress = 0;
 pub const FIRST_DEDICATED_ADDRESS = 1;
 

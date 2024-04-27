@@ -36,9 +36,6 @@ const DeviceAddress = device.DeviceAddress;
 const DeviceDriver = device.DeviceDriver;
 const UsbSpeed = device.UsbSpeed;
 
-const endpoint = @import("endpoint.zig");
-const EndpointNumber = endpoint.EndpointNumber;
-
 const Error = @import("status.zig").Error;
 
 const request = @import("request.zig");
@@ -172,7 +169,7 @@ pub const TTDirection = struct {
 };
 
 const ClearTTBufferValue = packed struct {
-    endpoint_number: EndpointNumber,
+    endpoint_number: usb.EndpointNumber,
     device_address: DeviceAddress,
     endpoint_type: TransferType,
     _reserved: u2 = 0,
@@ -276,7 +273,7 @@ pub const Hub = struct {
         if (dev.device_descriptor.device_class != usb.USB_DEVICE_HUB or
             dev.configuration.configuration_descriptor.interface_count != 1 or
             dev.configuration.interfaces[0].?.endpoint_count != 1 or
-            dev.configuration.endpoints[0][0].?.attributes.endpoint_type != TransferType.interrupt)
+            !dev.configuration.endpoints[0][0].?.isType(TransferType.interrupt))
         {
             return Error.DeviceUnsupported;
         }

@@ -99,10 +99,7 @@ const root_hub_configuration: RootHubConfiguration = .{
         .interface_count = 1,
         .configuration_value = 1,
         .configuration = 0,
-        .attributes = .{
-            .remote_wakeup = 0,
-            .self_powered = 1,
-        },
+        .attributes = 0xc0, // self-powered, no remote wakeup
         .power_max = 1,
     },
     .interface = .{
@@ -120,11 +117,7 @@ const root_hub_configuration: RootHubConfiguration = .{
         .length = EndpointDescriptor.STANDARD_LENGTH,
         .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0x81, // Endpoint 1, direction IN
-        .attributes = .{
-            .endpoint_type = TransferType.interrupt,
-            .iso_synch_type = usb.USB_ISOCHRONOUS_SYNCHRONIZATION_NONE,
-            .usage_type = usb.USB_ISOCHRONOUS_USAGE_DATA,
-        },
+        .attributes = TransferType.interrupt,
         .max_packet_size = 0x04,
         .interval = 0x0c,
     },
@@ -460,7 +453,7 @@ fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
 
 pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
     if (req.endpoint_desc) |ep| {
-        switch (ep.attributes.endpoint_type) {
+        switch (ep.getType()) {
             TransferType.interrupt => {
                 // this is an interrupt transfer request for the status change endpoint.
                 Host.log.debug(@src(), "hubHandleTransfer: holding status change request a status change occurs", .{});

@@ -79,11 +79,7 @@ fn supportedTransferTypes() !void {
         .length = EndpointDescriptor.STANDARD_LENGTH,
         .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0,
-        .attributes = .{
-            .endpoint_type = TransferType.isochronous,
-            .iso_synch_type = 0,
-            .usage_type = 0,
-        },
+        .attributes = TransferType.isochronous,
         .max_packet_size = 8,
         .interval = 1,
     };
@@ -99,11 +95,7 @@ fn supportedTransferTypes() !void {
         .length = EndpointDescriptor.STANDARD_LENGTH,
         .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0,
-        .attributes = .{
-            .endpoint_type = TransferType.bulk,
-            .iso_synch_type = 0,
-            .usage_type = 0,
-        },
+        .attributes = TransferType.bulk,
         .max_packet_size = 8,
         .interval = 1,
     };

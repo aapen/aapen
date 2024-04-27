@@ -9,10 +9,6 @@ const DeviceAddress = device.DeviceAddress;
 const Device = device.Device;
 const UsbSpeed = device.UsbSpeed;
 
-const endpoint = @import("endpoint.zig");
-const EndpointDirection = endpoint.EndpointDirection;
-const EndpointNumber = endpoint.EndpointNumber;
-
 const request = @import("request.zig");
 const RequestType = request.RequestType;
 const RequestTypeDirection = request.RequestTypeDirection;
@@ -153,7 +149,7 @@ pub const TransferRequest = struct {
     }
 
     pub fn isControlRequest(self: *const TransferRequest) bool {
-        return self.endpoint_desc == null or (self.endpoint_desc.?.attributes.endpoint_type == TransferType.control);
+        return self.endpoint_desc == null or (self.endpoint_desc.?.isType(TransferType.control));
     }
 
     pub fn complete(self: *TransferRequest, txn_status: CompletionStatus) void {

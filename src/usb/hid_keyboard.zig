@@ -37,9 +37,6 @@ const Device = device.Device;
 const DeviceDriver = device.DeviceDriver;
 const HidSubclass = device.HidSubclass;
 
-const endpoint = @import("endpoint.zig");
-const EndpointDirection = endpoint.EndpointDirection;
-
 const request = @import("request.zig");
 const request_interface_class_out = request.interface_class_out;
 

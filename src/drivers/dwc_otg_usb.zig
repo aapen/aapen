@@ -53,7 +53,6 @@ const Device = usb.Device;
 const DeviceAddress = usb.DeviceAddress;
 const DeviceConfiguration = usb.DeviceConfiguration;
 const EndpointDescriptor = usb.EndpointDescriptor;
-const EndpointDirection = usb.EndpointDirection;
 const EndpointNumber = usb.EndpointNumber;
 const Hub = usb.Hub;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
@@ -641,7 +640,7 @@ fn calculatePacketCount(input_size_in: TransferBytes, ep_dir: u1, ep_mps: u16) T
         num_packets = 1;
     }
 
-    if (ep_dir == EndpointDirection.in) {
+    if (ep_dir == usb.USB_ENDPOINT_DIRECTION_IN) {
         input_size = @truncate(num_packets * ep_mps);
     }
 
@@ -664,7 +663,7 @@ pub fn channelStartTransfer(id: ChannelId, req: *TransferRequest) void {
 
     if (req.endpoint_desc) |ep| {
         characteristics.endpoint_number = @truncate(ep.endpoint_address & 0xf);
-        characteristics.endpoint_type = ep.attributes.endpoint_type;
+        characteristics.endpoint_type = ep.getType();
         characteristics.max_packet_size = @truncate(ep.max_packet_size & 0x7ff);
         characteristics.packets_per_frame = 1;
         if (req.device != null and req.device.?.speed == UsbSpeed.High) {
@@ -689,7 +688,7 @@ pub fn channelStartTransfer(id: ChannelId, req: *TransferRequest) void {
         switch (req.control_phase) {
             TransferRequest.control_setup_phase => {
                 debugLogTransfer(req, "starting SETUP transaction");
-                characteristics.endpoint_direction = EndpointDirection.out;
+                characteristics.endpoint_direction = usb.USB_ENDPOINT_DIRECTION_OUT;
                 data = @ptrCast(&req.setup_data);
                 input_size = @sizeOf(SetupPacket);
                 next_pid = DwcTransferSizePid.setup;
@@ -718,12 +717,12 @@ pub fn channelStartTransfer(id: ChannelId, req: *TransferRequest) void {
             else => {
                 debugLogTransfer(req, "starting STATUS transaction");
 
-                if (req.setup_data.request_type.transfer_direction == EndpointDirection.out or
+                if (req.setup_data.request_type.transfer_direction == usb.USB_ENDPOINT_DIRECTION_OUT or
                     req.setup_data.data_size == 0)
                 {
-                    characteristics.endpoint_direction = EndpointDirection.in;
+                    characteristics.endpoint_direction = usb.USB_ENDPOINT_DIRECTION_IN;
                 } else {
-                    characteristics.endpoint_direction = EndpointDirection.out;
+                    characteristics.endpoint_direction = usb.USB_ENDPOINT_DIRECTION_OUT;
                 }
                 data = null;
                 input_size = 0;
@@ -1006,7 +1005,7 @@ fn debugLogTransfer(req: *TransferRequest, msg: []const u8) void {
 
     if (req.endpoint_desc) |ep| {
         endpoint_number = ep.endpoint_address;
-        switch (ep.attributes.endpoint_type) {
+        switch (ep.getType()) {
             0b00 => transfer_type = "control",
             0b01 => transfer_type = "isochronous",
             0b10 => transfer_type = "bulk",
@@ -1099,7 +1098,7 @@ fn channelInterrupt(id: ChannelId) void {
         int_status.babble_error == 1 or int_status.excessive_transmission == 1 or
         int_status.frame_list_rollover == 1 or
         (int_status.nyet == 1 and !req.complete_split) or
-        (int_status.data_toggle_error == 1 and registers.channel_character.endpoint_direction == EndpointDirection.out))
+        (int_status.data_toggle_error == 1 and registers.channel_character.endpoint_direction == usb.USB_ENDPOINT_DIRECTION_OUT))
     {
         log.err(@src(), "channel {d} transfer error (interrupts = 0x{x:0>8},  packet count = {d})", .{ id, @as(u32, @bitCast(int_status)), registers.transfer.packet_count });
 
@@ -1198,7 +1197,7 @@ fn channelHaltedNormal(id: ChannelId, req: *TransferRequest, ints: ChannelInterr
         const dir = char.endpoint_direction;
         const ty = char.endpoint_type;
 
-        if (dir == EndpointDirection.in) {
+        if (dir == usb.USB_ENDPOINT_DIRECTION_IN) {
             if (registers.transfer.size > req.attempted_bytes_remaining) {
                 log.err(@src(), "Transfer size seems wrong 0x{x} (attempted was 0x{x})", .{ registers.transfer.size, req.attempted_bytes_remaining });
 
@@ -1246,7 +1245,7 @@ fn channelHaltedNormal(id: ChannelId, req: *TransferRequest, ints: ChannelInterr
 
         // is the transfer completed?
         if (req.attempted_packets_remaining == 0 or
-            (dir == EndpointDirection.in and
+            (dir == usb.USB_ENDPOINT_DIRECTION_IN and
             bytes_transferred < packets_transferred * max_packet_size))
         {
             if (ints.transfer_complete == 0) {

@@ -2,6 +2,8 @@ const std = @import("std");
 const usb = @import("../usb.zig");
 
 pub const DeviceDescriptor = extern struct {
+    pub const STANDARD_LENGTH = 18;
+
     length: u8,
     descriptor_type: u8,
     usb_standard_compliance: usb.BCD,
@@ -19,9 +21,6 @@ pub const DeviceDescriptor = extern struct {
 };
 
 pub const ConfigurationDescriptor = packed struct {
-    // Zig's @sizeOf() rounds up to natural alignment (in this case
-    // 10) so we use this constant for the length defined by the
-    // standard
     pub const STANDARD_LENGTH = 9;
 
     length: u8,
@@ -30,19 +29,23 @@ pub const ConfigurationDescriptor = packed struct {
     interface_count: u8,
     configuration_value: u8,
     configuration: usb.StringIndex,
-    attributes: packed struct {
-        _reserved_0: u5 = 0, // 0..5
-        remote_wakeup: u1 = 0, // 5
-        self_powered: u1 = 0, // 6
-        _reserved_1: u1 = 1, // unused since USB 2.0
-    },
+    attributes: u8,
     power_max: u8,
 };
 
+pub const HidDescriptor = extern struct {
+    length: u8,
+    descriptor_type: u8,
+    hid_specification: usb.BCD,
+    country_code: u8,
+    descriptor_count: u8,
+    class_descriptor_type: u8,
+    class_descriptor_length: u16,
+    optional_descriptor_type: u8,
+    optional_descriptor_length: u16,
+};
+
 pub const InterfaceDescriptor = packed struct {
-    // Zig's @sizeOf() rounds up to natural alignment (in this case
-    // 10) so we use this constant for the length defined by the
-    // standard
     pub const STANDARD_LENGTH = 9;
 
     length: u8,
@@ -62,20 +65,12 @@ pub const InterfaceDescriptor = packed struct {
 };
 
 pub const EndpointDescriptor = packed struct {
-    // Zig's @sizeOf() rounds up to natural alignment (in this case
-    // 8) so we use this constant for the length defined by the
-    // standard
     pub const STANDARD_LENGTH = 7;
 
     length: u8,
     descriptor_type: u8,
     endpoint_address: u8,
-    attributes: packed struct {
-        endpoint_type: u2, // 0..1
-        iso_synch_type: u2, // 2..3
-        usage_type: u2, // 4..5
-        _reserved_0: u2 = 0,
-    },
+    attributes: u8,
     max_packet_size: u16,
     interval: u8, // polling interval in frames
 
@@ -84,8 +79,12 @@ pub const EndpointDescriptor = packed struct {
         return @truncate((self.endpoint_address >> 7) & 0x1);
     }
 
+    pub fn getType(self: *const EndpointDescriptor) u2 {
+        return @truncate(self.attributes & 0x03);
+    }
+
     pub fn isType(self: *const EndpointDescriptor, ty: u2) bool {
-        return self.attributes.endpoint_type == ty;
+        return self.getType() == ty;
     }
 };
 
@@ -120,16 +119,4 @@ pub const StringDescriptor = extern struct {
         }
         return result;
     }
-};
-
-pub const HidDescriptor = extern struct {
-    length: u8,
-    descriptor_type: u8,
-    hid_specification: usb.BCD,
-    country_code: u8,
-    descriptor_count: u8,
-    class_descriptor_type: u8,
-    class_descriptor_length: u16,
-    optional_descriptor_type: u8,
-    optional_descriptor_length: u16,
 };
