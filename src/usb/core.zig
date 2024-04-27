@@ -125,7 +125,7 @@ pub fn controlMessage(
     return st;
 }
 
-pub fn deviceDescriptorRead(dev: *device.Device, maxlen: transfer.TransferBytes) !void {
+pub fn deviceDescriptorRead(dev: *device.Device, maxlen: spec.TransferBytes) !void {
     log.debug(@src(), "[{d}:{d}] read device descriptor (maxlen {d} bytes)", .{ dev.address, 0, maxlen });
     const buffer: []u8 = std.mem.asBytes(&dev.device_descriptor);
     const readlen = @min(maxlen, buffer.len);

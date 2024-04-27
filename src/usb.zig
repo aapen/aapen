@@ -19,54 +19,29 @@ pub var log: *Logger = undefined;
 
 const time = @import("time.zig");
 
+const semaphore = @import("semaphore.zig");
+const SID = semaphore.SID;
+
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
-const core = @import("usb/core.zig");
+//const core = @import("usb/core.zig");
 
 pub usingnamespace @import("usb/spec.zig");
 pub usingnamespace @import("usb/core.zig");
 pub usingnamespace @import("usb/descriptor.zig");
 pub usingnamespace @import("usb/device.zig");
+pub usingnamespace @import("usb/request.zig");
+pub usingnamespace @import("usb/status.zig");
+pub usingnamespace @import("usb/transfer.zig");
 
 const hid_keyboard = @import("usb/hid_keyboard.zig");
 
 const hub = @import("usb/hub.zig");
-pub const Characteristics = hub.Characteristics;
-pub const ChangeStatusP = hub.ChangeStatusP;
-pub const OvercurrentStatusP = hub.OvercurrentStatusP;
-pub const Hub = hub.Hub;
-pub const HubFeature = hub.HubFeature;
-pub const HubStatus = hub.HubStatus;
-pub const PortFeature = hub.PortFeature;
-pub const PortStatus = hub.PortStatus;
 pub const HubDescriptor = hub.HubDescriptor;
-pub const ClassRequest = hub.ClassRequest;
-pub const TTDirection = hub.TTDirection;
-
-const request = @import("usb/request.zig");
-pub const Request = request.Request;
-pub const RequestType = request.RequestType;
-pub const RequestTypeDirection = request.RequestTypeDirection;
-pub const RequestTypeType = request.RequestTypeType;
-pub const RequestTypeRecipient = request.RequestTypeRecipient;
-pub const request_device_standard_in = request.device_standard_in;
-pub const request_device_standard_out = request.device_standard_out;
-
-const semaphore = @import("semaphore.zig");
-const SID = semaphore.SID;
-
-const status = @import("usb/status.zig");
-pub const Error = status.Error;
-
-const transfer = @import("usb/transfer.zig");
-pub const DEFAULT_MAX_PACKET_SIZE = transfer.DEFAULT_MAX_PACKET_SIZE;
-pub const PacketSize = transfer.PacketSize;
-pub const PID2 = transfer.PID2;
-pub const SetupPacket = transfer.SetupPacket;
-pub const TransferRequest = transfer.TransferRequest;
-pub const TransferCompletionStatus = transfer.TransferRequest.CompletionStatus;
-pub const TransferType = transfer.TransferType;
+pub const HubStatus = hub.HubStatus;
+pub const PortStatus = hub.PortStatus;
+pub const PortFeature = hub.PortFeature;
 
 pub const TransferFactory = @import("usb/transfer_factory.zig");
 
@@ -116,7 +91,7 @@ pub fn init() !void {
 
     allocator = root.kernel_allocator;
     drivers = Drivers.init(allocator);
-    core.initCore(allocator);
+    Self.initCore(allocator);
 
     drivers_lock = TicketLock.initWithTargetLevel("usb drivers", true, .FIQ);
     bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
@@ -200,7 +175,7 @@ pub fn allocateDevice(parent: ?*Self.Device) !Self.DeviceAddress {
         }
     }
 
-    return Error.TooManyDevices;
+    return error.TooManyDevices;
 }
 
 pub fn freeDevice(devid: Self.DeviceAddress) void {
@@ -219,7 +194,7 @@ pub fn freeDevice(devid: Self.DeviceAddress) void {
     dev.in_use = false;
 }
 
-pub fn attachDevice(devid: Self.DeviceAddress, speed: Self.UsbSpeed, parent_hub: ?*Hub, parent_port: ?*Hub.Port) !void {
+pub fn attachDevice(devid: Self.DeviceAddress, speed: Self.UsbSpeed, parent_hub: ?*hub.Hub, parent_port: ?*hub.Hub.Port) !void {
     var dev = &devices[devid - 1];
 
     // assume the speed detected by the hub this device is attached to
@@ -240,7 +215,7 @@ pub fn attachDevice(devid: Self.DeviceAddress, speed: Self.UsbSpeed, parent_hub:
 
     // when attaching a device, it will be in the default state:
     // responding to address 0, endpoint 0
-    try core.deviceDescriptorRead(dev, 8);
+    try Self.deviceDescriptorRead(dev, 8);
 
     log.debug(@src(), "device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
 
@@ -250,17 +225,17 @@ pub fn attachDevice(devid: Self.DeviceAddress, speed: Self.UsbSpeed, parent_hub:
     }
 
     log.debug(@src(), "assigning address {d}", .{devid});
-    try core.deviceSetAddress(dev, devid);
+    try Self.deviceSetAddress(dev, devid);
 
     // now read the real descriptor
-    try core.deviceDescriptorRead(dev, @sizeOf(Self.DeviceDescriptor));
+    try Self.deviceDescriptorRead(dev, @sizeOf(Self.DeviceDescriptor));
 
     log.debug(@src(), "reading configuration descriptor", .{});
-    try core.deviceConfigurationDescriptorRead(dev);
+    try Self.deviceConfigurationDescriptorRead(dev);
 
     const use_config = dev.configuration.configuration_descriptor.configuration_value;
     //    log.debug(@src(), "setting device to use configuration {d}", .{use_config});
-    try core.deviceSetConfiguration(dev, use_config);
+    try Self.deviceSetConfiguration(dev, use_config);
 
     var buf: [512]u8 = [_]u8{0} ** 512;
     log.debug(@src(), "attaching {s}", .{dev.description(&buf) catch ""});

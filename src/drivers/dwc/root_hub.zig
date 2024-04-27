@@ -12,21 +12,18 @@ const DeviceConfiguration = usb.DeviceConfiguration;
 const DeviceDescriptor = usb.DeviceDescriptor;
 const DeviceStatus = usb.DeviceStatus;
 const EndpointDescriptor = usb.EndpointDescriptor;
-const HubClassRequest = usb.hub.ClassRequest;
-const HubDescriptor = usb.HubDescriptor;
-const HubStatus = usb.HubStatus;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
 const IsoSynchronizationType = usb.IsoSynchronizationType;
-const PortFeature = usb.PortFeature;
-const PortStatus = usb.PortStatus;
 const RequestTypeRecipient = usb.RequestTypeRecipient;
 const RequestTypeType = usb.RequestTypeType;
 const StringDescriptor = usb.StringDescriptor;
 const TransferRequest = usb.TransferRequest;
 const TransferBytes = usb.TransferBytes;
-const TransferStatus = usb.TransferCompletionStatus;
+const TransferStatus = usb.TransferRequest.CompletionStatus;
 const TransferFactory = usb.TransferFactory;
 const TransferType = usb.TransferType;
+
+//const hub = @import("../../usb/hub.zig");
 
 const reg = @import("registers.zig");
 const HostPortStatusAndControl = reg.HostPortStatusAndControl;
@@ -40,8 +37,8 @@ const Self = @This();
 host_registers: ?*volatile reg.HostRegisters = null,
 
 root_hub_device_status: DeviceStatus = undefined,
-root_hub_hub_status: HubStatus = undefined,
-root_hub_port_status: PortStatus = undefined,
+root_hub_hub_status: usb.HubStatus = undefined,
+root_hub_port_status: usb.PortStatus = undefined,
 root_hub_status_change_transfer: ?*TransferRequest = null,
 
 pub fn init(self: *Self, registers: *volatile HostRegisters) void {
@@ -151,13 +148,13 @@ const root_hub_strings = &[_]StringDescriptor{
 };
 
 const RootHubDescriptor = extern struct {
-    base: HubDescriptor,
+    base: usb.HubDescriptor,
     extra_data: [2]u8,
 };
 
 const root_hub_hub_descriptor: RootHubDescriptor = .{
     .base = .{
-        .length = @sizeOf(HubDescriptor) + 2,
+        .length = @sizeOf(usb.HubDescriptor) + 2,
         .descriptor_type = usb.USB_DESCRIPTOR_TYPE_HUB,
         .number_ports = 1,
         .characteristics = @bitCast(@as(u16, 0)),
@@ -417,8 +414,8 @@ fn hubSetPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
     const feature = req.setup_data.value;
 
     switch (feature) {
-        PortFeature.port_power => return self.hostPortPowerOn(),
-        PortFeature.port_reset => return self.hostPortReset(),
+        usb.PortFeature.port_power => return self.hostPortPowerOn(),
+        usb.PortFeature.port_reset => return self.hostPortReset(),
         else => {
             Host.log.warn(@src(), "hubSetPortFeature: port feature {d} not supported", .{feature});
             return .unsupported_request;
@@ -438,11 +435,11 @@ fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
     Host.log.debug(@src(), "hubClearPortFeature: feature {d}", .{feature});
 
     switch (feature) {
-        PortFeature.c_port_connection => self.root_hub_port_status.port_change.connected_changed = 0,
-        PortFeature.c_port_enable => self.root_hub_port_status.port_change.enabled_changed = 0,
-        PortFeature.c_port_suspend => self.root_hub_port_status.port_change.suspended_changed = 0,
-        PortFeature.c_port_over_current => self.root_hub_port_status.port_change.overcurrent_changed = 0,
-        PortFeature.c_port_reset => self.root_hub_port_status.port_change.reset_changed = 0,
+        usb.PortFeature.c_port_connection => self.root_hub_port_status.port_change.connected_changed = 0,
+        usb.PortFeature.c_port_enable => self.root_hub_port_status.port_change.enabled_changed = 0,
+        usb.PortFeature.c_port_suspend => self.root_hub_port_status.port_change.suspended_changed = 0,
+        usb.PortFeature.c_port_over_current => self.root_hub_port_status.port_change.overcurrent_changed = 0,
+        usb.PortFeature.c_port_reset => self.root_hub_port_status.port_change.reset_changed = 0,
         else => {
             Host.log.warn(@src(), "hubClearPortFeature: feature {d} not supported", .{feature});
             return .unsupported_request;

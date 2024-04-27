@@ -20,10 +20,13 @@ const TID = schedule.TID;
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
 
+const spec = @import("spec.zig");
+const TransferBytes = spec.TransferBytes;
+
 const status = @import("status.zig");
 const TransactionStatus = status.TransactionStatus;
 
-pub const TransferBytes = u19;
+//pub const TransferBytes = u19;
 pub const TransferPackets = u10;
 pub const PacketSize = u11;
 pub const DEFAULT_MAX_PACKET_SIZE = 8;
