@@ -2,8 +2,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const device = @import("device.zig");
-const DeviceClass = device.DeviceClass;
-const StandardDeviceRequests = device.StandardDeviceRequests;
 
 const transfer = @import("transfer.zig");
 const setup = transfer.setup;
@@ -43,18 +41,6 @@ pub const DeviceDescriptor = extern struct {
         usb.log.debug(@src(), "  usb_standard_compliance = 0x{x}", .{self.usb_standard_compliance});
         usb.log.debug(@src(), "  configuration_count = 0x{d}", .{self.configuration_count});
         usb.log.debug(@src(), "]", .{});
-    }
-
-    pub fn fromSlice(buffer: []u8) !*DeviceDescriptor {
-        const maybe_device_descriptor: *DeviceDescriptor = @ptrCast(@alignCast(buffer.ptr));
-        if (maybe_device_descriptor.length != @sizeOf(DeviceDescriptor)) {
-            return Error.LengthMismatch;
-        }
-
-        if (maybe_device_descriptor.descriptor_type != usb.USB_DESCRIPTOR_TYPE_DEVICE)
-            return Error.UnexpectedType;
-
-        return maybe_device_descriptor;
     }
 };
 
@@ -108,7 +94,8 @@ pub const InterfaceDescriptor = packed struct {
     interface_string: usb.StringIndex,
 
     pub fn isHid(self: *const InterfaceDescriptor) bool {
-        return self.interface_class == DeviceClass.hid and (self.interface_subclass == 0x00 or self.interface_subclass == 0x01);
+        return self.interface_class == usb.USB_DEVICE_HID and
+            (self.interface_subclass == 0x00 or self.interface_subclass == 0x01);
     }
 
     pub fn dump(self: *const InterfaceDescriptor) void {

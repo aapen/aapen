@@ -48,46 +48,6 @@ pub const UsbSpeed = enum {
     Super,
 };
 
-pub const StandardDeviceRequests = struct {
-    pub const get_status: u8 = 0x00;
-    pub const clear_feature: u8 = 0x01;
-    pub const set_feature: u8 = 0x03;
-    pub const set_address: u8 = 0x05;
-    pub const get_descriptor: u8 = 0x06;
-    pub const set_descriptor: u8 = 0x07;
-    pub const get_configuration: u8 = 0x08;
-    pub const set_configuration: u8 = 0x09;
-};
-
-/// See https://www.usb.org/defined-class-codes
-pub const DeviceClass = struct {
-    pub const interface_specific: u8 = 0x00;
-    pub const audio: u8 = 0x01;
-    pub const cdc_control: u8 = 0x02;
-    pub const hid: u8 = 0x03;
-    pub const physical: u8 = 0x05;
-    pub const image: u8 = 0x06;
-    pub const printer: u8 = 0x07;
-    pub const mass_storage: u8 = 0x08;
-    pub const hub: u8 = 0x09;
-    pub const cdc_data: u8 = 0x0a;
-    pub const smart_card: u8 = 0x0b;
-    pub const content_security: u8 = 0x0d;
-    pub const video: u8 = 0x0e;
-    pub const personal_healthcare: u8 = 0x0f;
-    pub const audio_video: u8 = 0x10;
-    pub const billboard: u8 = 0x11;
-    pub const type_c_bridge: u8 = 0x12;
-    pub const bulk_display: u8 = 0x13;
-    pub const mctp_over_usb: u8 = 0x14;
-    pub const i3c: u8 = 0x3c;
-    pub const diagnostic: u8 = 0xdc;
-    pub const wireless_controller: u8 = 0xe0;
-    pub const miscellaneous: u8 = 0xef;
-    pub const application_specific: u8 = 0xfe;
-    pub const vendor_specific: u8 = 0xff;
-};
-
 pub const HubProtocol = struct {
     pub const full_speed_hub: u8 = 0x00;
     pub const high_speed_hub_single_tt: u8 = 0x01;
@@ -229,19 +189,21 @@ pub const Device = struct {
         }
 
         return switch (class) {
-            0 => "Unspecified",
-            DeviceClass.audio => "Audio",
-            DeviceClass.cdc_control => "Communications and CDC control",
-            DeviceClass.hid => "HID (Human interface device)",
-            DeviceClass.image => "Image",
-            DeviceClass.printer => "Printer",
-            DeviceClass.mass_storage => "Mass storage",
-            DeviceClass.hub => "Hub",
-            DeviceClass.video => "Video",
-            DeviceClass.wireless_controller => "Wireless controller",
-            DeviceClass.miscellaneous => "Miscellaneous",
-            DeviceClass.vendor_specific => "Vendor specific",
-            else => "Unknown",
+            // zig fmt: off
+            0                                  => "Unspecified",
+            usb.USB_DEVICE_AUDIO               => "Audio",
+            usb.USB_DEVICE_CDC_CONTROL         => "Communications and CDC control",
+            usb.USB_DEVICE_HID                 => "HID (Human interface device)",
+            usb.USB_DEVICE_IMAGE               => "Image",
+            usb.USB_DEVICE_PRINTER             => "Printer",
+            usb.USB_DEVICE_MASS_STORAGE        => "Mass storage",
+            usb.USB_DEVICE_HUB                 => "Hub",
+            usb.USB_DEVICE_VIDEO               => "Video",
+            usb.USB_DEVICE_WIRELESS_CONTROLLER => "Wireless controller",
+            usb.USB_DEVICE_MISCELLANEOUS       => "Miscellaneous",
+            usb.USB_DEVICE_VENDOR_SPECIFIC     => "Vendor specific",
+            else                               => "Unknown",
+            // zig fmt: on
         };
     }
 

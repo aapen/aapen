@@ -13,6 +13,7 @@ pub const DescriptorIndex = u8;
 pub const DeviceAddress = u7;
 pub const DeviceStatus = u16;
 pub const LangId = u16;
+pub const StringIndex = u8;
 
 // ----------------------------------------------------------------------
 // Specified values
@@ -39,6 +40,33 @@ pub const USB_DESCRIPTOR_TYPE_HID                      : u8 = 0x21;
 pub const USB_DESCRIPTOR_TYPE_CLASS_INTERFACE          : u8 = 0x24;
 pub const USB_DESCRIPTOR_TYPE_CLASS_ENDPOINT           : u8 = 0x25;
 pub const USB_DESCRIPTOR_TYPE_HUB                      : u8 = 0x29;
+
+// Device classes
+pub const USB_DEVICE_INTERFACE_SPECIFIC   : u8 = 0x00;
+pub const USB_DEVICE_AUDIO                : u8 = 0x01;
+pub const USB_DEVICE_CDC_CONTROL          : u8 = 0x02;
+pub const USB_DEVICE_HID                  : u8 = 0x03;
+pub const USB_DEVICE_PHYSICAL             : u8 = 0x05;
+pub const USB_DEVICE_IMAGE                : u8 = 0x06;
+pub const USB_DEVICE_PRINTER              : u8 = 0x07;
+pub const USB_DEVICE_MASS_STORAGE         : u8 = 0x08;
+pub const USB_DEVICE_HUB                  : u8 = 0x09;
+pub const USB_DEVICE_CDC_DATA             : u8 = 0x0a;
+pub const USB_DEVICE_SMART_CARD           : u8 = 0x0b;
+pub const USB_DEVICE_CONTENT_SECURITY     : u8 = 0x0d;
+pub const USB_DEVICE_VIDEO                : u8 = 0x0e;
+pub const USB_DEVICE_PERSONAL_HEALTHCARE  : u8 = 0x0f;
+pub const USB_DEVICE_AUDIO_VIDEO          : u8 = 0x10;
+pub const USB_DEVICE_BILLBOARD            : u8 = 0x11;
+pub const USB_DEVICE_TYPE_C_BRIDGE        : u8 = 0x12;
+pub const USB_DEVICE_BULK_DISPLAY         : u8 = 0x13;
+pub const USB_DEVICE_MCTP_OVER_USB        : u8 = 0x14;
+pub const USB_DEVICE_I3C                  : u8 = 0x3c;
+pub const USB_DEVICE_DIAGNOSTIC           : u8 = 0xdc;
+pub const USB_DEVICE_WIRELESS_CONTROLLER  : u8 = 0xe0;
+pub const USB_DEVICE_MISCELLANEOUS        : u8 = 0xef;
+pub const USB_DEVICE_APPLICATION_SPECIFIC : u8 = 0xfe;
+pub const USB_DEVICE_VENDOR_SPECIFIC      : u8 = 0xff;
 
 // Standard request codes
 pub const USB_REQUEST_GET_STATUS                       : u8 = 0x00;

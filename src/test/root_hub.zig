@@ -9,7 +9,6 @@ const expectError = helpers.expectError;
 
 const usb = @import("../usb.zig");
 const ConfigurationDescriptor = usb.ConfigurationDescriptor;
-const DeviceClass = usb.DeviceClass;
 const DeviceConfiguration = usb.DeviceConfiguration;
 const DeviceDescriptor = usb.DeviceDescriptor;
 const EndpointDescriptor = usb.EndpointDescriptor;
@@ -145,7 +144,7 @@ fn getDeviceDescriptor() !void {
     const device_descriptor = std.mem.bytesAsValue(DeviceDescriptor, xfer.data[0..@sizeOf(DeviceDescriptor)]);
 
     expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_DEVICE, device_descriptor.descriptor_type);
-    expectEqual(@src(), DeviceClass.hub, device_descriptor.device_class);
+    expectEqual(@src(), usb.USB_DEVICE_HUB, device_descriptor.device_class);
     expectEqual(@src(), @as(u8, 0), device_descriptor.device_subclass);
     expectEqual(@src(), @as(u8, 1), device_descriptor.device_protocol);
     expect(@src(), device_descriptor.configuration_count >= 1);

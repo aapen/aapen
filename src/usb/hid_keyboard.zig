@@ -34,7 +34,6 @@ const InterfaceDescriptor = descriptor.InterfaceDescriptor;
 
 const device = @import("device.zig");
 const Device = device.Device;
-const DeviceClass = device.DeviceClass;
 const DeviceDriver = device.DeviceDriver;
 const HidClassRequest = device.HidClassRequest;
 const HidProtocol = device.HidProtocol;

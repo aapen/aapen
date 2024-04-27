@@ -33,10 +33,8 @@ const DescriptorIndex = descriptor.DescriptorIndex;
 const device = @import("device.zig");
 const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;
-const DeviceClass = device.DeviceClass;
 const DeviceDriver = device.DeviceDriver;
 const HubProtocol = device.HubProtocol;
-const StandardDeviceRequests = device.StandardDeviceRequests;
 const UsbSpeed = device.UsbSpeed;
 
 const endpoint = @import("endpoint.zig");
@@ -291,7 +289,7 @@ pub const Hub = struct {
     pub fn deviceBind(self: *Hub, dev: *Device) !void {
         // The device should already have it's device descriptor and
         // configuration descriptor populated.
-        if (dev.device_descriptor.device_class != DeviceClass.hub or
+        if (dev.device_descriptor.device_class != usb.USB_DEVICE_HUB or
             dev.configuration.configuration_descriptor.interface_count != 1 or
             dev.configuration.interfaces[0].?.endpoint_count != 1 or
             dev.configuration.endpoints[0][0].?.attributes.endpoint_type != TransferType.interrupt)
@@ -707,7 +705,7 @@ fn hubThread(_: *anyopaque) void {
 }
 
 pub fn hubDriverCanBind(dev: *Device) bool {
-    return dev.device_descriptor.device_class == DeviceClass.hub;
+    return dev.device_descriptor.device_class == usb.USB_DEVICE_HUB;
 }
 
 pub fn hubDriverDeviceBind(dev: *Device) Error!void {

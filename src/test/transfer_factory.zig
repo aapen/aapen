@@ -4,7 +4,6 @@ const expectEqual = helpers.expectEqual;
 const expectError = helpers.expectError;
 
 const usb = @import("../usb.zig");
-const StandardDeviceRequests = usb.StandardDeviceRequests;
 const StringDescriptor = usb.StringDescriptor;
 const TransferType = usb.TransferType;
 
@@ -42,7 +41,7 @@ fn descriptorQuery() void {
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initDescriptorTransfer(&nulldev, usb.USB_DESCRIPTOR_TYPE_DEVICE, 0, 0, &buffer);
     expect(@src(), xfer.isControlRequest());
-    expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
+    expectEqual(@src(), usb.USB_REQUEST_GET_DESCRIPTOR, xfer.setup_data.request);
 }
 
 fn deviceDescriptor() void {
@@ -50,7 +49,7 @@ fn deviceDescriptor() void {
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initDeviceDescriptorTransfer(&nulldev, 0, 0, &buffer);
     expect(@src(), xfer.isControlRequest());
-    expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
+    expectEqual(@src(), usb.USB_REQUEST_GET_DESCRIPTOR, xfer.setup_data.request);
 }
 
 fn configurationDescriptor() void {
@@ -58,7 +57,7 @@ fn configurationDescriptor() void {
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initConfigurationDescriptorTransfer(&nulldev, 0, &buffer);
     expect(@src(), xfer.isControlRequest());
-    expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
+    expectEqual(@src(), usb.USB_REQUEST_GET_DESCRIPTOR, xfer.setup_data.request);
 }
 
 fn stringDescriptor() void {
@@ -66,7 +65,7 @@ fn stringDescriptor() void {
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initStringDescriptorTransfer(&nulldev, 0, usb.USB_LANGID_NONE, &buffer);
     expect(@src(), xfer.isControlRequest());
-    expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
+    expectEqual(@src(), usb.USB_REQUEST_GET_DESCRIPTOR, xfer.setup_data.request);
 }
 
 fn interfaceDescriptor() void {
@@ -74,7 +73,7 @@ fn interfaceDescriptor() void {
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initInterfaceDescriptorTransfer(&nulldev, 0, &buffer);
     expect(@src(), xfer.isControlRequest());
-    expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
+    expectEqual(@src(), usb.USB_REQUEST_GET_DESCRIPTOR, xfer.setup_data.request);
 }
 
 fn endpointDescriptor() void {
@@ -82,7 +81,7 @@ fn endpointDescriptor() void {
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initEndpointDescriptorTransfer(&nulldev, 0, &buffer);
     expect(@src(), xfer.isControlRequest());
-    expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
+    expectEqual(@src(), usb.USB_REQUEST_GET_DESCRIPTOR, xfer.setup_data.request);
 }
 
 fn hubDescriptor() void {
@@ -90,7 +89,7 @@ fn hubDescriptor() void {
     var buffer: [buffer_size]u8 = undefined;
     const xfer = initGetHubDescriptorTransfer(&nulldev, 0, &buffer);
     expect(@src(), xfer.isControlRequest());
-    expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
+    expectEqual(@src(), usb.USB_REQUEST_GET_DESCRIPTOR, xfer.setup_data.request);
 }
 
 fn interruptTransfer() void {

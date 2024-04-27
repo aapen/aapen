@@ -8,7 +8,6 @@ const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 const DeviceAddress = device.DeviceAddress;
 const Device = device.Device;
 const UsbSpeed = device.UsbSpeed;
-const StandardDeviceRequests = device.StandardDeviceRequests;
 
 const endpoint = @import("endpoint.zig");
 const EndpointDirection = endpoint.EndpointDirection;
