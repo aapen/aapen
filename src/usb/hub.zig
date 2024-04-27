@@ -34,7 +34,6 @@ const device = @import("device.zig");
 const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;
 const DeviceDriver = device.DeviceDriver;
-const HubProtocol = device.HubProtocol;
 const UsbSpeed = device.UsbSpeed;
 
 const endpoint = @import("endpoint.zig");
@@ -319,9 +318,9 @@ pub const Hub = struct {
         });
 
         switch (dev.device_descriptor.device_protocol) {
-            HubProtocol.full_speed_hub => {},
-            HubProtocol.high_speed_hub_single_tt,
-            HubProtocol.high_speed_hub_multiple_tt,
+            usb.USB_HUB_PROTOCOL_FULL_SPEED => {},
+            usb.USB_HUB_PROTOCOL_HIGH_SPEED_SINGLE_TT,
+            usb.USB_HUB_PROTOCOL_HIGH_SPEED_MULTIPLE_TT,
             => self.tt = .{ .hub = self.device },
             else => {},
         }

@@ -35,8 +35,6 @@ const InterfaceDescriptor = descriptor.InterfaceDescriptor;
 const device = @import("device.zig");
 const Device = device.Device;
 const DeviceDriver = device.DeviceDriver;
-const HidClassRequest = device.HidClassRequest;
-const HidProtocol = device.HidProtocol;
 const HidSubclass = device.HidSubclass;
 
 const endpoint = @import("endpoint.zig");
@@ -315,8 +313,8 @@ pub const usage: [256]Usage = init: {
 // ----------------------------------------------------------------------
 fn isKeyboard(iface: *InterfaceDescriptor) bool {
     return iface.isHid() and
-        iface.interface_protocol == HidProtocol.keyboard and
-        (iface.interface_subclass == 0 or iface.interface_subclass == 1);
+        iface.interface_protocol == usb.HID_PROTOCOL_KEYBOARD and
+        (iface.interface_subclass == 0 or iface.interface_subclass == usb.HID_SUBCLASS_BOOT);
 }
 
 pub fn hidKeyboardDriverCanBind(dev: *Device) bool {
@@ -363,7 +361,7 @@ pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
 
         const status = usb.controlMessage(
             dev,
-            HidClassRequest.set_protocol, // request
+            usb.HID_REQUEST_SET_PROTOCOL, // request
             request_interface_class_out, // request type
             0, // value - id of hid boot protocol
             @truncate(i), // index - interface to use

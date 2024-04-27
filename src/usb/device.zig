@@ -27,11 +27,11 @@ const TransferFactory = @import("transfer_factory.zig");
 const usb = @import("../usb.zig");
 const Hub = usb.Hub;
 
-pub const DeviceAddress = u7;
-pub const DEFAULT_ADDRESS: DeviceAddress = 0;
+//pub const DeviceAddress = usb.DeviceAddress;
+pub const DEFAULT_ADDRESS: usb.DeviceAddress = 0;
 pub const FIRST_DEDICATED_ADDRESS = 1;
 
-pub const MAX_ADDRESS: DeviceAddress = 63;
+pub const MAX_ADDRESS: usb.DeviceAddress = 63;
 pub const MAX_INTERFACES: usize = 8;
 pub const MAX_ENDPOINTS: usize = 8;
 pub const FRAMES_PER_MS: u32 = 8;
@@ -48,33 +48,6 @@ pub const UsbSpeed = enum {
     Super,
 };
 
-pub const HubProtocol = struct {
-    pub const full_speed_hub: u8 = 0x00;
-    pub const high_speed_hub_single_tt: u8 = 0x01;
-    pub const high_speed_hub_multiple_tt: u8 = 0x02;
-};
-
-pub const HidSubclass = struct {
-    pub const boot: u8 = 0x01;
-};
-
-/// See https://www.usb.org/sites/default/files/documents/hid1_11.pdf,
-/// page 9
-pub const HidProtocol = struct {
-    pub const none: u8 = 0x00;
-    pub const keyboard: u8 = 0x01;
-    pub const mouse: u8 = 0x02;
-};
-
-pub const HidClassRequest = struct {
-    pub const get_report: u8 = 0x01;
-    pub const get_idle: u8 = 0x02;
-    pub const get_protocol: u8 = 0x03;
-    pub const set_report: u8 = 0x09;
-    pub const set_idle: u8 = 0x0a;
-    pub const set_protocol: u8 = 0x0b;
-};
-
 pub const DeviceState = enum {
     unconfigured,
     attached,
@@ -84,7 +57,7 @@ pub const DeviceState = enum {
 pub const Device = struct {
     in_use: bool = false,
     depth: u8 = 0,
-    address: DeviceAddress,
+    address: usb.DeviceAddress,
     speed: UsbSpeed,
 
     /// Hub this is attached to. Null means this is the root hub.

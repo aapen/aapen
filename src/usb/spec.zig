@@ -42,31 +42,31 @@ pub const USB_DESCRIPTOR_TYPE_CLASS_ENDPOINT           : u8 = 0x25;
 pub const USB_DESCRIPTOR_TYPE_HUB                      : u8 = 0x29;
 
 // Device classes
-pub const USB_DEVICE_INTERFACE_SPECIFIC   : u8 = 0x00;
-pub const USB_DEVICE_AUDIO                : u8 = 0x01;
-pub const USB_DEVICE_CDC_CONTROL          : u8 = 0x02;
-pub const USB_DEVICE_HID                  : u8 = 0x03;
-pub const USB_DEVICE_PHYSICAL             : u8 = 0x05;
-pub const USB_DEVICE_IMAGE                : u8 = 0x06;
-pub const USB_DEVICE_PRINTER              : u8 = 0x07;
-pub const USB_DEVICE_MASS_STORAGE         : u8 = 0x08;
-pub const USB_DEVICE_HUB                  : u8 = 0x09;
-pub const USB_DEVICE_CDC_DATA             : u8 = 0x0a;
-pub const USB_DEVICE_SMART_CARD           : u8 = 0x0b;
-pub const USB_DEVICE_CONTENT_SECURITY     : u8 = 0x0d;
-pub const USB_DEVICE_VIDEO                : u8 = 0x0e;
-pub const USB_DEVICE_PERSONAL_HEALTHCARE  : u8 = 0x0f;
-pub const USB_DEVICE_AUDIO_VIDEO          : u8 = 0x10;
-pub const USB_DEVICE_BILLBOARD            : u8 = 0x11;
-pub const USB_DEVICE_TYPE_C_BRIDGE        : u8 = 0x12;
-pub const USB_DEVICE_BULK_DISPLAY         : u8 = 0x13;
-pub const USB_DEVICE_MCTP_OVER_USB        : u8 = 0x14;
-pub const USB_DEVICE_I3C                  : u8 = 0x3c;
-pub const USB_DEVICE_DIAGNOSTIC           : u8 = 0xdc;
-pub const USB_DEVICE_WIRELESS_CONTROLLER  : u8 = 0xe0;
-pub const USB_DEVICE_MISCELLANEOUS        : u8 = 0xef;
-pub const USB_DEVICE_APPLICATION_SPECIFIC : u8 = 0xfe;
-pub const USB_DEVICE_VENDOR_SPECIFIC      : u8 = 0xff;
+pub const USB_DEVICE_INTERFACE_SPECIFIC                : u8 = 0x00;
+pub const USB_DEVICE_AUDIO                             : u8 = 0x01;
+pub const USB_DEVICE_CDC_CONTROL                       : u8 = 0x02;
+pub const USB_DEVICE_HID                               : u8 = 0x03;
+pub const USB_DEVICE_PHYSICAL                          : u8 = 0x05;
+pub const USB_DEVICE_IMAGE                             : u8 = 0x06;
+pub const USB_DEVICE_PRINTER                           : u8 = 0x07;
+pub const USB_DEVICE_MASS_STORAGE                      : u8 = 0x08;
+pub const USB_DEVICE_HUB                               : u8 = 0x09;
+pub const USB_DEVICE_CDC_DATA                          : u8 = 0x0a;
+pub const USB_DEVICE_SMART_CARD                        : u8 = 0x0b;
+pub const USB_DEVICE_CONTENT_SECURITY                  : u8 = 0x0d;
+pub const USB_DEVICE_VIDEO                             : u8 = 0x0e;
+pub const USB_DEVICE_PERSONAL_HEALTHCARE               : u8 = 0x0f;
+pub const USB_DEVICE_AUDIO_VIDEO                       : u8 = 0x10;
+pub const USB_DEVICE_BILLBOARD                         : u8 = 0x11;
+pub const USB_DEVICE_TYPE_C_BRIDGE                     : u8 = 0x12;
+pub const USB_DEVICE_BULK_DISPLAY                      : u8 = 0x13;
+pub const USB_DEVICE_MCTP_OVER_USB                     : u8 = 0x14;
+pub const USB_DEVICE_I3C                               : u8 = 0x3c;
+pub const USB_DEVICE_DIAGNOSTIC                        : u8 = 0xdc;
+pub const USB_DEVICE_WIRELESS_CONTROLLER               : u8 = 0xe0;
+pub const USB_DEVICE_MISCELLANEOUS                     : u8 = 0xef;
+pub const USB_DEVICE_APPLICATION_SPECIFIC              : u8 = 0xfe;
+pub const USB_DEVICE_VENDOR_SPECIFIC                   : u8 = 0xff;
 
 // Standard request codes
 pub const USB_REQUEST_GET_STATUS                       : u8 = 0x00;
@@ -127,6 +127,12 @@ pub const USB_LANGID_EN_MY                             : LangId = 0x4409; // Mal
 pub const USB_LANGID_EN_SG                             : LangId = 0x4809; // Singapore
 pub const USB_LANGID_EN_AE                             : LangId = 0x4c09; // United Arab Emirates
 
+// Hub protocols
+pub const USB_HUB_PROTOCOL_FULL_SPEED                  : u8 = 0x00;
+pub const USB_HUB_PROTOCOL_HIGH_SPEED_SINGLE_TT        : u8 = 0x01;
+pub const USB_HUB_PROTOCOL_HIGH_SPEED_MULTIPLE_TT      : u8 = 0x02;
+
+
 /// See USB 2.0 specification, revision 2.0, section 11.24.2
 pub const HUB_REQUEST_GET_STATUS                       : u8 = USB_REQUEST_GET_STATUS;
 pub const HUB_REQUEST_CLEAR_FEATURE                    : u8 = USB_REQUEST_CLEAR_FEATURE;
@@ -138,6 +144,16 @@ pub const HUB_REQUEST_RESET_TT                         : u8 = 0x09;
 pub const HUB_REQUEST_GET_TT_STATE                     : u8 = 0x0a;
 pub const HUB_REQUEST_STOP_TT                          : u8 = 0x0b;
 pub const HUB_REQUEST_SET_HUB_DEPTH                    : u8 = 0x0C;
+
+// HID classes - we don't need these at the moment
+
+// HID subclasses
+pub const HID_SUBCLASS_BOOT                            : u8 = 0x01;
+
+// HID protocols
+pub const HID_PROTOCOL_NONE                            : u8 = 0x00;
+pub const HID_PROTOCOL_KEYBOARD                        : u8 = 0x01;
+pub const HID_PROTOCOL_MOUSE                           : u8 = 0x02;
 
 // HID Standard requests
 pub const HID_REQUEST_GET_REPORT                       : u8 = 0x01;
