@@ -31,7 +31,6 @@ pub const DeviceDescriptor = descriptor.DeviceDescriptor;
 pub const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
 pub const InterfaceDescriptor = descriptor.InterfaceDescriptor;
 pub const IsoSynchronizationType = descriptor.IsoSynchronizationType;
-pub const IsoUsageType = descriptor.IsoUsageType;
 pub const EndpointDescriptor = descriptor.EndpointDescriptor;
 pub const StringDescriptor = descriptor.StringDescriptor;
 pub const StringIndex = descriptor.StringIndex;

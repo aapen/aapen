@@ -13,14 +13,6 @@ const TransferType = transfer.TransferType;
 
 const usb = @import("../usb.zig");
 
-/// Index of a string descriptor
-pub const StringIndex = u8;
-
-pub const BCD = u16;
-
-/// Assigned ID number
-pub const ID = u16;
-
 const Error = error{
     LengthMismatch,
     UnexpectedType,
@@ -29,17 +21,17 @@ const Error = error{
 pub const DeviceDescriptor = extern struct {
     length: u8,
     descriptor_type: u8,
-    usb_standard_compliance: BCD = 0,
+    usb_standard_compliance: usb.BCD = 0,
     device_class: u8 = 0,
     device_subclass: u8 = 0,
     device_protocol: u8 = 0,
     max_packet_size: u8 = 0,
-    vendor: ID = 0,
-    product: ID = 0,
-    device_release: BCD = 0,
-    manufacturer_name: StringIndex = 0,
-    product_name: StringIndex = 0,
-    serial_number: StringIndex = 0,
+    vendor: usb.ID = 0,
+    product: usb.ID = 0,
+    device_release: usb.BCD = 0,
+    manufacturer_name: usb.StringIndex = 0,
+    product_name: usb.StringIndex = 0,
+    serial_number: usb.StringIndex = 0,
     configuration_count: u8 = 0,
 
     pub fn dump(self: *const DeviceDescriptor) void {
@@ -77,7 +69,7 @@ pub const ConfigurationDescriptor = packed struct {
     total_length: u16,
     interface_count: u8,
     configuration_value: u8,
-    configuration: StringIndex,
+    configuration: usb.StringIndex,
     attributes: packed struct {
         _reserved_0: u5 = 0, // 0..5
         remote_wakeup: u1 = 0, // 5
@@ -113,7 +105,7 @@ pub const InterfaceDescriptor = packed struct {
     interface_class: u8,
     interface_subclass: u8,
     interface_protocol: u8,
-    interface_string: StringIndex,
+    interface_string: usb.StringIndex,
 
     pub fn isHid(self: *const InterfaceDescriptor) bool {
         return self.interface_class == DeviceClass.hid and (self.interface_subclass == 0x00 or self.interface_subclass == 0x01);
@@ -128,20 +120,6 @@ pub const InterfaceDescriptor = packed struct {
         usb.log.debug(@src(), "  interface string = {d}", .{self.interface_string});
         usb.log.debug(@src(), "]", .{});
     }
-};
-
-pub const IsoSynchronizationType = struct {
-    pub const none: u2 = 0b00;
-    pub const asynchronous: u2 = 0b01;
-    pub const adaptive: u2 = 0b10;
-    pub const synchronous: u2 = 0b11;
-};
-
-pub const IsoUsageType = struct {
-    pub const data: u2 = 0b00;
-    pub const feedback: u2 = 0b01;
-    pub const explicit_feedback: u2 = 0b10;
-    pub const reserved: u2 = 0b11;
 };
 
 pub const EndpointDescriptor = packed struct {
@@ -217,7 +195,7 @@ pub const StringDescriptor = extern struct {
 pub const HidDescriptor = extern struct {
     length: u8,
     descriptor_type: u8,
-    hid_specification: BCD,
+    hid_specification: usb.BCD,
     country_code: u8,
     descriptor_count: u8,
     class_descriptor_type: u8,
