@@ -52,7 +52,6 @@ const ConfigurationDescriptor = usb.ConfigurationDescriptor;
 const Device = usb.Device;
 const DeviceAddress = usb.DeviceAddress;
 const DeviceConfiguration = usb.DeviceConfiguration;
-const DeviceDescriptor = usb.DeviceDescriptor;
 const EndpointDescriptor = usb.EndpointDescriptor;
 const EndpointDirection = usb.EndpointDirection;
 const EndpointNumber = usb.EndpointNumber;

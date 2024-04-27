@@ -1,36 +1,21 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-
-const device = @import("device.zig");
-
-const transfer = @import("transfer.zig");
-const setup = transfer.setup;
-const SetupPacket = transfer.SetupPacket;
-const Transfer = transfer.TransferRequest;
-const TransferType = transfer.TransferType;
-
 const usb = @import("../usb.zig");
-
-const Error = error{
-    LengthMismatch,
-    UnexpectedType,
-};
 
 pub const DeviceDescriptor = extern struct {
     length: u8,
     descriptor_type: u8,
-    usb_standard_compliance: usb.BCD = 0,
-    device_class: u8 = 0,
-    device_subclass: u8 = 0,
-    device_protocol: u8 = 0,
-    max_packet_size: u8 = 0,
-    vendor: usb.ID = 0,
-    product: usb.ID = 0,
-    device_release: usb.BCD = 0,
-    manufacturer_name: usb.StringIndex = 0,
-    product_name: usb.StringIndex = 0,
-    serial_number: usb.StringIndex = 0,
-    configuration_count: u8 = 0,
+    usb_standard_compliance: usb.BCD,
+    device_class: u8,
+    device_subclass: u8,
+    device_protocol: u8,
+    max_packet_size: u8,
+    vendor: usb.ID,
+    product: usb.ID,
+    device_release: usb.BCD,
+    manufacturer_name: usb.StringIndex,
+    product_name: usb.StringIndex,
+    serial_number: usb.StringIndex,
+    configuration_count: u8,
 
     pub fn dump(self: *const DeviceDescriptor) void {
         usb.log.debug(@src(), "DeviceDescriptor [", .{});
@@ -165,7 +150,7 @@ pub const StringDescriptor = extern struct {
     // find the length then another to read the actual contents.
     body: [31]u16 align(1),
 
-    pub fn asSlice(self: *const StringDescriptor, allocator: Allocator) ![]u8 {
+    pub fn asSlice(self: *const StringDescriptor, allocator: std.mem.Allocator) ![]u8 {
         const actual_length = (self.length - 2) / 2;
         const result = try allocator.alloc(u8, actual_length);
         @memset(result, 0);
