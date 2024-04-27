@@ -6,7 +6,6 @@ const DeviceClass = device.DeviceClass;
 const StandardDeviceRequests = device.StandardDeviceRequests;
 
 const interface = @import("interface.zig");
-const InterfaceClass = interface.InterfaceClass;
 
 const transfer = @import("transfer.zig");
 const setup = transfer.setup;
@@ -20,41 +19,9 @@ const usb = @import("../usb.zig");
 pub const StringIndex = u8;
 
 pub const BCD = u16;
-pub const SpecRelease = struct {
-    pub const usb1_0: BCD = 0x0100;
-    pub const usb1_1: BCD = 0x0110;
-    pub const usb2_0: BCD = 0x0200;
-};
 
 /// Assigned ID number
 pub const ID = u16;
-
-/// Index of a descriptor
-pub const DescriptorIndex = u8;
-
-pub const DEFAULT_DESCRIPTOR_INDEX = 0;
-
-pub const DescriptorType = struct {
-    // not for use
-    pub const unknown: u8 = 0;
-
-    // general
-    pub const device: u8 = 1;
-    pub const configuration: u8 = 2;
-    pub const string: u8 = 3;
-    pub const interface: u8 = 4;
-    pub const endpoint: u8 = 5;
-
-    // hid
-    pub const hid: u8 = 0x21;
-
-    // class
-    pub const class_interface: u8 = 0x24;
-    pub const class_endpoint: u8 = 0x25;
-
-    // device
-    pub const hub: u8 = 0x29;
-};
 
 pub const Header = packed struct {
     length: u8,
@@ -98,7 +65,7 @@ pub const DeviceDescriptor = extern struct {
             return Error.LengthMismatch;
         }
 
-        if (maybe_device_descriptor.header.descriptor_type != DescriptorType.device)
+        if (maybe_device_descriptor.header.descriptor_type != usb.USB_DESCRIPTOR_TYPE_DEVICE)
             return Error.UnexpectedType;
 
         return maybe_device_descriptor;

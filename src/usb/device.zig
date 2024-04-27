@@ -6,7 +6,6 @@ const root = @import("root");
 
 const descriptor = @import("descriptor.zig");
 const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
-const DescriptorType = descriptor.DescriptorType;
 const DeviceDescriptor = descriptor.DeviceDescriptor;
 const EndpointDescriptor = descriptor.EndpointDescriptor;
 const HidDescriptor = descriptor.HidDescriptor;
@@ -14,9 +13,6 @@ const InterfaceDescriptor = descriptor.InterfaceDescriptor;
 const StringDescriptor = descriptor.StringDescriptor;
 
 const Error = @import("status.zig").Error;
-
-const LangID = @import("language.zig").LangID;
-const DEFAULT_LANG = LangID.en_US;
 
 const transaction_translator = @import("transaction_translator.zig");
 const TT = transaction_translator.TransactionTranslator;
@@ -30,7 +26,6 @@ const TransferFactory = @import("transfer_factory.zig");
 
 const usb = @import("../usb.zig");
 const Hub = usb.Hub;
-const InterfaceClass = usb.InterfaceClass;
 
 pub const DeviceAddress = u7;
 pub const DEFAULT_ADDRESS: DeviceAddress = 0;
@@ -207,7 +202,7 @@ pub const Device = struct {
 
         var desc: StringDescriptor = undefined;
 
-        if (usb.deviceGetStringDescriptor(self, self.device_descriptor.product_name, DEFAULT_LANG, std.mem.asBytes(&desc))) {
+        if (usb.deviceGetStringDescriptor(self, self.device_descriptor.product_name, usb.USB_LANGID_EN_US, std.mem.asBytes(&desc))) {
             if (desc.asSlice(usb.allocator)) |s| {
                 self.product = s;
             } else |err| {
@@ -226,7 +221,7 @@ pub const Device = struct {
         if (class == 0) {
             for (0..self.configuration.configuration_descriptor.interface_count) |i| {
                 if (self.configuration.interfaces[i]) |iface| {
-                    if (iface.interface_class != InterfaceClass.reserved) {
+                    if (iface.interface_class != usb.USB_INTERFACE_CLASS_RESERVED) {
                         class = iface.interface_class;
                     }
                 }
@@ -350,7 +345,7 @@ pub const DeviceConfiguration = struct {
             .tree = configuration_tree,
         };
 
-        try state.expect(DescriptorType.configuration);
+        try state.expect(usb.USB_DESCRIPTOR_TYPE_CONFIGURATION);
 
         const partial_copy = try state.copy(ConfigurationDescriptor, self.allocator);
         self.configuration_descriptor = partial_copy.*;
@@ -359,7 +354,7 @@ pub const DeviceConfiguration = struct {
         const expect_interfaces = self.configuration_descriptor.interface_count;
 
         for (0..expect_interfaces) |iface_num| {
-            try state.expect(DescriptorType.interface);
+            try state.expect(usb.USB_DESCRIPTOR_TYPE_INTERFACE);
             const iface = try state.copy(InterfaceDescriptor, self.allocator);
             errdefer self.allocator.destroy(iface);
             self.interfaces[iface_num] = iface;
@@ -367,7 +362,7 @@ pub const DeviceConfiguration = struct {
             // question: is the HID descriptor _mandatory_ when the
             // interface class is 0x03?
             if (iface.isHid()) {
-                if (state.expect(DescriptorType.hid)) {
+                if (state.expect(usb.USB_DESCRIPTOR_TYPE_HID)) {
                     // For now, assume that the HID descriptor is
                     // optional and if the type doesn't match, then
                     // jump to parsing endpoint descriptors.
@@ -382,7 +377,7 @@ pub const DeviceConfiguration = struct {
 
             const expect_endpoints = iface.endpoint_count;
             for (0..expect_endpoints) |endpoint_num| {
-                try state.expect(DescriptorType.endpoint);
+                try state.expect(usb.USB_DESCRIPTOR_TYPE_ENDPOINT);
                 const endpoint = try state.copy(EndpointDescriptor, self.allocator);
                 errdefer self.allocator.destroy(endpoint);
                 self.endpoints[iface_num][endpoint_num] = endpoint;

@@ -4,8 +4,6 @@ const expectEqual = helpers.expectEqual;
 const expectError = helpers.expectError;
 
 const usb = @import("../usb.zig");
-const DescriptorType = usb.DescriptorType;
-const LangID = usb.LangID;
 const StandardDeviceRequests = usb.StandardDeviceRequests;
 const StringDescriptor = usb.StringDescriptor;
 const TransferType = usb.TransferType;
@@ -42,7 +40,7 @@ pub fn testBody() !void {
 fn descriptorQuery() void {
     const buffer_size = 18;
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initDescriptorTransfer(&nulldev, DescriptorType.device, 0, 0, &buffer);
+    const xfer = initDescriptorTransfer(&nulldev, usb.USB_DESCRIPTOR_TYPE_DEVICE, 0, 0, &buffer);
     expect(@src(), xfer.isControlRequest());
     expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }
@@ -66,7 +64,7 @@ fn configurationDescriptor() void {
 fn stringDescriptor() void {
     const buffer_size = @sizeOf(StringDescriptor);
     var buffer: [buffer_size]u8 = undefined;
-    const xfer = initStringDescriptorTransfer(&nulldev, 0, LangID.none, &buffer);
+    const xfer = initStringDescriptorTransfer(&nulldev, 0, usb.USB_LANGID_NONE, &buffer);
     expect(@src(), xfer.isControlRequest());
     expectEqual(@src(), StandardDeviceRequests.get_descriptor, xfer.setup_data.request);
 }

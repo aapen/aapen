@@ -22,10 +22,10 @@ const time = @import("time.zig");
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
+pub usingnamespace @import("usb/spec.zig");
+
 const descriptor = @import("usb/descriptor.zig");
 pub const DescriptorIndex = descriptor.DescriptorIndex;
-pub const DEFAULT_DESCRIPTOR_INDEX = descriptor.DEFAULT_DESCRIPTOR_INDEX;
-pub const DescriptorType = descriptor.DescriptorType;
 pub const Descriptor = descriptor.Descriptor;
 pub const DeviceDescriptor = descriptor.DeviceDescriptor;
 pub const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
@@ -39,12 +39,10 @@ pub const StringIndex = descriptor.StringIndex;
 
 const device = @import("usb/device.zig");
 pub const Device = device.Device;
-pub const DeviceAddress = device.DeviceAddress;
 pub const DeviceClass = device.DeviceClass;
 pub const DeviceConfiguration = device.DeviceConfiguration;
 pub const DeviceDriver = device.DeviceDriver;
 pub const DeviceState = device.DeviceState;
-pub const DeviceStatus = device.DeviceStatus;
 pub const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 pub const FIRST_DEDICATED_ADDRESS = device.FIRST_DEDICATED_ADDRESS;
 pub const MAX_ADDRESS = device.MAX_ADDRESS;
@@ -76,13 +74,6 @@ pub const HubDescriptor = hub.HubDescriptor;
 pub const ClassRequest = hub.ClassRequest;
 //pub const FeatureSelector = hub.FeatureSelector;
 pub const TTDirection = hub.TTDirection;
-
-const interface = @import("usb/interface.zig");
-pub const InterfaceClass = interface.InterfaceClass;
-pub const StandardInterfaceRequests = interface.StandardInterfaceRequests;
-
-const language = @import("usb/language.zig");
-pub const LangID = language.LangID;
 
 const request = @import("usb/request.zig");
 pub const Request = request.Request;
@@ -220,12 +211,12 @@ fn initializeDrivers() !void {
     }
 }
 
-pub fn allocateDevice(parent: ?*Device) !DeviceAddress {
+pub fn allocateDevice(parent: ?*Device) !Self.DeviceAddress {
     bus_lock.acquire();
     defer bus_lock.release();
 
     for (0..MAX_DEVICES) |i| {
-        const addr: DeviceAddress = @truncate(i);
+        const addr: Self.DeviceAddress = @truncate(i);
         if (!devices[addr].in_use) {
             var dev = &devices[addr];
             dev.in_use = true;
@@ -243,7 +234,7 @@ pub fn allocateDevice(parent: ?*Device) !DeviceAddress {
     return Error.TooManyDevices;
 }
 
-pub fn freeDevice(devid: DeviceAddress) void {
+pub fn freeDevice(devid: Self.DeviceAddress) void {
     bus_lock.acquire();
     defer bus_lock.release();
 
@@ -259,7 +250,7 @@ pub fn freeDevice(devid: DeviceAddress) void {
     dev.in_use = false;
 }
 
-pub fn attachDevice(devid: DeviceAddress, speed: UsbSpeed, parent_hub: ?*Hub, parent_port: ?*Hub.Port) !void {
+pub fn attachDevice(devid: Self.DeviceAddress, speed: UsbSpeed, parent_hub: ?*Hub, parent_port: ?*Hub.Port) !void {
     var dev = &devices[devid - 1];
 
     // assume the speed detected by the hub this device is attached to
@@ -435,8 +426,8 @@ pub fn deviceDescriptorRead(dev: *Device, maxlen: TransferBytes) !void {
         dev,
         StandardDeviceRequests.get_descriptor, //req
         request_device_standard_in, // req type
-        @as(u16, DescriptorType.device) << 8, // value
-        LangID.none, // index
+        @as(u16, Self.USB_DESCRIPTOR_TYPE_DEVICE) << 8, // value
+        Self.USB_LANGID_NONE, // index
         buffer[0..readlen], // data
     );
     if (result == .failed) {
@@ -444,7 +435,7 @@ pub fn deviceDescriptorRead(dev: *Device, maxlen: TransferBytes) !void {
     }
 }
 
-pub fn deviceSetAddress(dev: *Device, address: DeviceAddress) !void {
+pub fn deviceSetAddress(dev: *Device, address: Self.DeviceAddress) !void {
     log.debug(@src(), "[{d}:{d}] set address {d}", .{ dev.address, 0, address });
 
     const result = try controlMessage(
@@ -473,7 +464,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
         dev,
         StandardDeviceRequests.get_descriptor, // req
         request_device_standard_in, // req type
-        @as(u16, DescriptorType.configuration) << 8, // value
+        @as(u16, Self.USB_DESCRIPTOR_TYPE_CONFIGURATION) << 8, // value
         0, // index
         std.mem.asBytes(&desc),
     );
@@ -492,7 +483,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
         dev,
         StandardDeviceRequests.get_descriptor, // req
         request_device_standard_in, // req type
-        @as(u16, DescriptorType.configuration) << 8, // value
+        @as(u16, Self.USB_DESCRIPTOR_TYPE_CONFIGURATION) << 8, // value
         0, // index
         configuration,
     );
@@ -525,7 +516,7 @@ pub fn deviceGetStringDescriptor(dev: *Device, index: StringIndex, lang_id: u16,
         dev,
         StandardDeviceRequests.get_descriptor, // req
         request_device_standard_in, // req type
-        @as(u16, DescriptorType.string) << 8 | index,
+        @as(u16, Self.USB_DESCRIPTOR_TYPE_STRING) << 8 | index,
         lang_id,
         buffer,
     );

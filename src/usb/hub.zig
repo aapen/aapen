@@ -29,7 +29,6 @@ const delayMillis = time.delayMillis;
 const descriptor = @import("descriptor.zig");
 const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
 const DescriptorIndex = descriptor.DescriptorIndex;
-const DescriptorType = descriptor.DescriptorType;
 const Header = descriptor.Header;
 
 const device = @import("device.zig");
@@ -354,7 +353,7 @@ pub const Hub = struct {
             self.device,
             ClassRequest.get_descriptor,
             device_class_in,
-            @as(u16, DescriptorType.hub) << 8 | 0,
+            @as(u16, usb.USB_DESCRIPTOR_TYPE_HUB) << 8 | 0,
             0,
             std.mem.asBytes(&self.descriptor),
         );

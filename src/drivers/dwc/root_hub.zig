@@ -8,7 +8,6 @@ const delayMillis = time.delayMillis;
 const usb = @import("../../usb.zig");
 const ClassRequest = usb.ClassRequest;
 const ConfigurationDescriptor = usb.ConfigurationDescriptor;
-const DescriptorType = usb.DescriptorType;
 const DeviceClass = usb.DeviceClass;
 const DeviceConfiguration = usb.DeviceConfiguration;
 const DeviceDescriptor = usb.DeviceDescriptor;
@@ -17,11 +16,9 @@ const EndpointDescriptor = usb.EndpointDescriptor;
 const HubClassRequest = usb.hub.ClassRequest;
 const HubDescriptor = usb.HubDescriptor;
 const HubStatus = usb.HubStatus;
-const InterfaceClass = usb.InterfaceClass;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
 const IsoSynchronizationType = usb.IsoSynchronizationType;
 const IsoUsageType = usb.IsoUsageType;
-const LangID = usb.LangID;
 const PortFeature = usb.PortFeature;
 const PortStatus = usb.PortStatus;
 const RequestTypeRecipient = usb.RequestTypeRecipient;
@@ -77,7 +74,7 @@ pub fn init(self: *Self, registers: *volatile HostRegisters) void {
 const root_hub_device_descriptor: DeviceDescriptor = .{
     .header = .{
         .length = @sizeOf(DeviceDescriptor),
-        .descriptor_type = DescriptorType.device,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_DEVICE,
     },
     .usb_standard_compliance = 0x200,
     .device_class = DeviceClass.hub,
@@ -103,7 +100,7 @@ const root_hub_configuration: RootHubConfiguration = .{
     .configuration = .{
         .header = .{
             .length = ConfigurationDescriptor.STANDARD_LENGTH,
-            .descriptor_type = DescriptorType.configuration,
+            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_CONFIGURATION,
         },
         .total_length = @sizeOf(RootHubConfiguration),
         .interface_count = 1,
@@ -118,12 +115,12 @@ const root_hub_configuration: RootHubConfiguration = .{
     .interface = .{
         .header = .{
             .length = InterfaceDescriptor.STANDARD_LENGTH,
-            .descriptor_type = DescriptorType.interface,
+            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_INTERFACE,
         },
         .interface_number = 0,
         .alternate_setting = 0,
         .endpoint_count = 1,
-        .interface_class = InterfaceClass.hub,
+        .interface_class = usb.USB_INTERFACE_CLASS_HUB,
         .interface_subclass = 0,
         .interface_protocol = 1, // full speed hub
         .interface_string = 0,
@@ -131,7 +128,7 @@ const root_hub_configuration: RootHubConfiguration = .{
     .endpoint = .{
         .header = .{
             .length = EndpointDescriptor.STANDARD_LENGTH,
-            .descriptor_type = DescriptorType.endpoint,
+            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         },
         .endpoint_address = 0x81, // Endpoint 1, direction IN
         .attributes = .{
@@ -153,7 +150,7 @@ fn mkStringDescriptor(comptime payload: []const u16) StringDescriptor {
     return .{
         .header = .{
             .length = @sizeOf(usb.Header) + 2 * payload.len,
-            .descriptor_type = DescriptorType.string,
+            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_STRING,
         },
         .body = body,
     };
@@ -182,7 +179,7 @@ const root_hub_hub_descriptor: RootHubDescriptor = .{
     .base = .{
         .header = .{
             .length = @sizeOf(HubDescriptor) + 2,
-            .descriptor_type = DescriptorType.hub,
+            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_HUB,
         },
         .number_ports = 1,
         .characteristics = @bitCast(@as(u16, 0)),
@@ -322,18 +319,18 @@ const Handler = struct { u2, ?u8, ?u5, *const fn (self: *Self, req: *TransferReq
 // null means "don't care", ignore this field when dispatching.
 
 const handlers: []const Handler = &.{
-    .{ RequestTypeType.standard, StandardDeviceRequests.get_status, null, hubGetDeviceStatus },
-    .{ RequestTypeType.standard, StandardDeviceRequests.set_address, null, hubSetAddress },
-    .{ RequestTypeType.standard, StandardDeviceRequests.get_descriptor, null, hubGetDescriptor },
-    .{ RequestTypeType.standard, StandardDeviceRequests.get_configuration, null, hubGetConfiguration },
-    .{ RequestTypeType.standard, StandardDeviceRequests.set_configuration, null, hubSetConfiguration },
-    .{ RequestTypeType.class, ClassRequest.get_descriptor, RequestTypeRecipient.device, hubGetHubDescriptor },
-    .{ RequestTypeType.class, ClassRequest.get_status, RequestTypeRecipient.device, hubGetHubStatus },
-    .{ RequestTypeType.class, ClassRequest.get_status, RequestTypeRecipient.other, hubGetPortStatus },
-    .{ RequestTypeType.class, ClassRequest.set_feature, RequestTypeRecipient.device, hubSetHubFeature },
-    .{ RequestTypeType.class, ClassRequest.set_feature, RequestTypeRecipient.other, hubSetPortFeature },
-    .{ RequestTypeType.class, ClassRequest.clear_feature, RequestTypeRecipient.device, hubClearHubFeature },
-    .{ RequestTypeType.class, ClassRequest.clear_feature, RequestTypeRecipient.other, hubClearPortFeature },
+    .{ RequestTypeType.standard, usb.USB_REQUEST_GET_STATUS, null, hubGetDeviceStatus },
+    .{ RequestTypeType.standard, usb.USB_REQUEST_SET_ADDRESS, null, hubSetAddress },
+    .{ RequestTypeType.standard, usb.USB_REQUEST_GET_DESCRIPTOR, null, hubGetDescriptor },
+    .{ RequestTypeType.standard, usb.USB_REQUEST_GET_CONFIGURATION, null, hubGetConfiguration },
+    .{ RequestTypeType.standard, usb.USB_REQUEST_SET_CONFIGURATION, null, hubSetConfiguration },
+    .{ RequestTypeType.class, usb.HUB_REQUEST_GET_DESCRIPTOR, RequestTypeRecipient.device, hubGetHubDescriptor },
+    .{ RequestTypeType.class, usb.HUB_REQUEST_GET_STATUS, RequestTypeRecipient.device, hubGetHubStatus },
+    .{ RequestTypeType.class, usb.HUB_REQUEST_GET_STATUS, RequestTypeRecipient.other, hubGetPortStatus },
+    .{ RequestTypeType.class, usb.HUB_REQUEST_SET_FEATURE, RequestTypeRecipient.device, hubSetHubFeature },
+    .{ RequestTypeType.class, usb.HUB_REQUEST_SET_FEATURE, RequestTypeRecipient.other, hubSetPortFeature },
+    .{ RequestTypeType.class, usb.HUB_REQUEST_CLEAR_FEATURE, RequestTypeRecipient.device, hubClearHubFeature },
+    .{ RequestTypeType.class, usb.HUB_REQUEST_CLEAR_FEATURE, RequestTypeRecipient.other, hubClearPortFeature },
 };
 
 fn replyWithStructure(req: *TransferRequest, v: *const anyopaque, size: usize) TransferStatus {
@@ -381,9 +378,9 @@ fn hubSetAddress(_: *Self, _: *TransferRequest) TransferStatus {
 fn hubGetDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     const descriptor_type = req.setup_data.value >> 8;
     switch (descriptor_type) {
-        DescriptorType.device => return self.hubGetDeviceDescriptor(req),
-        DescriptorType.configuration => return self.hubGetConfigurationDescriptor(req),
-        DescriptorType.string => return self.hubGetStringDescriptor(req),
+        usb.USB_DESCRIPTOR_TYPE_DEVICE => return self.hubGetDeviceDescriptor(req),
+        usb.USB_DESCRIPTOR_TYPE_CONFIGURATION => return self.hubGetConfigurationDescriptor(req),
+        usb.USB_DESCRIPTOR_TYPE_STRING => return self.hubGetStringDescriptor(req),
         else => {
             Host.log.warn(@src(), "hubGetDescriptor: descriptor type {d} not supported", .{descriptor_type});
             return .unsupported_request;
