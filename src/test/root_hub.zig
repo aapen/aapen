@@ -77,7 +77,8 @@ fn expectTransferCompletionStatus(expected_status: TransferCompletionStatus, xfe
 
 fn supportedTransferTypes() !void {
     var endpoint_iso: EndpointDescriptor = .{
-        .header = undefined,
+        .length = EndpointDescriptor.STANDARD_LENGTH,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0,
         .attributes = .{
             .endpoint_type = TransferType.isochronous,
@@ -96,7 +97,8 @@ fn supportedTransferTypes() !void {
     };
 
     var endpoint_bulk: EndpointDescriptor = .{
-        .header = undefined,
+        .length = EndpointDescriptor.STANDARD_LENGTH,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0,
         .attributes = .{
             .endpoint_type = TransferType.bulk,
@@ -142,7 +144,7 @@ fn getDeviceDescriptor() !void {
 
     const device_descriptor = std.mem.bytesAsValue(DeviceDescriptor, xfer.data[0..@sizeOf(DeviceDescriptor)]);
 
-    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_DEVICE, device_descriptor.header.descriptor_type);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_DEVICE, device_descriptor.descriptor_type);
     expectEqual(@src(), DeviceClass.hub, device_descriptor.device_class);
     expectEqual(@src(), @as(u8, 0), device_descriptor.device_subclass);
     expectEqual(@src(), @as(u8, 1), device_descriptor.device_protocol);
@@ -177,14 +179,14 @@ fn getConfigurationDescriptor() !void {
         helpers.allocator.destroy(config);
     }
 
-    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_CONFIGURATION, config.configuration_descriptor.header.descriptor_type);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_CONFIGURATION, config.configuration_descriptor.descriptor_type);
     expect(@src(), config.configuration_descriptor.interface_count >= 1);
 
-    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_INTERFACE, config.interfaces[0].?.header.descriptor_type);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_INTERFACE, config.interfaces[0].?.descriptor_type);
     expectEqual(@src(), usb.USB_INTERFACE_CLASS_HUB, config.interfaces[0].?.interface_class);
     expect(@src(), config.interfaces[0].?.endpoint_count >= 1);
 
-    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_ENDPOINT, config.endpoints[0][0].?.header.descriptor_type);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_ENDPOINT, config.endpoints[0][0].?.descriptor_type);
     expect(@src(), config.endpoints[0][0].?.max_packet_size >= 4);
 }
 
@@ -224,7 +226,7 @@ fn getStringDescriptors() !void {
 }
 
 fn getStringDescriptorShortBuffer() !void {
-    const buffer_size = @sizeOf(usb.Header) + 4;
+    const buffer_size = 6;
     var buffer: [buffer_size]u8 = undefined;
 
     var xfer = TransferFactory.initStringDescriptorTransfer(&nulldev, 1, usb.USB_LANGID_NONE, &buffer);
@@ -276,7 +278,7 @@ fn getDescriptor() !void {
 
     const hub_descriptor = std.mem.bytesAsValue(HubDescriptor, xfer.data[0..@sizeOf(HubDescriptor)]);
 
-    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_HUB, hub_descriptor.header.descriptor_type);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_HUB, hub_descriptor.descriptor_type);
     expectEqual(@src(), @as(u8, 1), hub_descriptor.number_ports);
 }
 

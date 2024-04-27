@@ -5,8 +5,6 @@ const device = @import("device.zig");
 const DeviceClass = device.DeviceClass;
 const StandardDeviceRequests = device.StandardDeviceRequests;
 
-const interface = @import("interface.zig");
-
 const transfer = @import("transfer.zig");
 const setup = transfer.setup;
 const SetupPacket = transfer.SetupPacket;
@@ -23,18 +21,14 @@ pub const BCD = u16;
 /// Assigned ID number
 pub const ID = u16;
 
-pub const Header = packed struct {
-    length: u8,
-    descriptor_type: u8,
-};
-
 const Error = error{
     LengthMismatch,
     UnexpectedType,
 };
 
 pub const DeviceDescriptor = extern struct {
-    header: Header,
+    length: u8,
+    descriptor_type: u8,
     usb_standard_compliance: BCD = 0,
     device_class: u8 = 0,
     device_subclass: u8 = 0,
@@ -61,11 +55,11 @@ pub const DeviceDescriptor = extern struct {
 
     pub fn fromSlice(buffer: []u8) !*DeviceDescriptor {
         const maybe_device_descriptor: *DeviceDescriptor = @ptrCast(@alignCast(buffer.ptr));
-        if (maybe_device_descriptor.header.length != @sizeOf(DeviceDescriptor)) {
+        if (maybe_device_descriptor.length != @sizeOf(DeviceDescriptor)) {
             return Error.LengthMismatch;
         }
 
-        if (maybe_device_descriptor.header.descriptor_type != usb.USB_DESCRIPTOR_TYPE_DEVICE)
+        if (maybe_device_descriptor.descriptor_type != usb.USB_DESCRIPTOR_TYPE_DEVICE)
             return Error.UnexpectedType;
 
         return maybe_device_descriptor;
@@ -78,7 +72,8 @@ pub const ConfigurationDescriptor = packed struct {
     // standard
     pub const STANDARD_LENGTH = 9;
 
-    header: Header,
+    length: u8,
+    descriptor_type: u8,
     total_length: u16,
     interface_count: u8,
     configuration_value: u8,
@@ -110,7 +105,8 @@ pub const InterfaceDescriptor = packed struct {
     // standard
     pub const STANDARD_LENGTH = 9;
 
-    header: Header,
+    length: u8,
+    descriptor_type: u8,
     interface_number: u8,
     alternate_setting: u8,
     endpoint_count: u8,
@@ -154,7 +150,8 @@ pub const EndpointDescriptor = packed struct {
     // standard
     pub const STANDARD_LENGTH = 7;
 
-    header: Header,
+    length: u8,
+    descriptor_type: u8,
     endpoint_address: u8,
     attributes: packed struct {
         endpoint_type: u2, // 0..1
@@ -185,9 +182,10 @@ pub const EndpointDescriptor = packed struct {
 };
 
 pub const StringDescriptor = extern struct {
-    header: Header,
+    length: u8,
+    descriptor_type: u8,
 
-    // For string descriptor 0, the remaining bytes (header.length - 2)
+    // For string descriptor 0, the remaining bytes (length - 2)
     // contain an array of u16's with the language codes of each
     // language this string is available in. The index of the
     // desired language in the array will be the `index` field in a request
@@ -203,7 +201,7 @@ pub const StringDescriptor = extern struct {
     body: [31]u16 align(1),
 
     pub fn asSlice(self: *const StringDescriptor, allocator: Allocator) ![]u8 {
-        const actual_length = (self.header.length - @sizeOf(Header)) / 2;
+        const actual_length = (self.length - 2) / 2;
         const result = try allocator.alloc(u8, actual_length);
         @memset(result, 0);
 
@@ -217,7 +215,8 @@ pub const StringDescriptor = extern struct {
 };
 
 pub const HidDescriptor = extern struct {
-    header: Header,
+    length: u8,
+    descriptor_type: u8,
     hid_specification: BCD,
     country_code: u8,
     descriptor_count: u8,

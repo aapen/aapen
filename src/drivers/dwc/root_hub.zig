@@ -72,10 +72,8 @@ pub fn init(self: *Self, registers: *volatile HostRegisters) void {
 // Static data
 // ----------------------------------------------------------------------
 const root_hub_device_descriptor: DeviceDescriptor = .{
-    .header = .{
-        .length = @sizeOf(DeviceDescriptor),
-        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_DEVICE,
-    },
+    .length = @sizeOf(DeviceDescriptor),
+    .descriptor_type = usb.USB_DESCRIPTOR_TYPE_DEVICE,
     .usb_standard_compliance = 0x200,
     .device_class = DeviceClass.hub,
     .device_subclass = 0,
@@ -98,10 +96,8 @@ const RootHubConfiguration = packed struct {
 
 const root_hub_configuration: RootHubConfiguration = .{
     .configuration = .{
-        .header = .{
-            .length = ConfigurationDescriptor.STANDARD_LENGTH,
-            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_CONFIGURATION,
-        },
+        .length = ConfigurationDescriptor.STANDARD_LENGTH,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_CONFIGURATION,
         .total_length = @sizeOf(RootHubConfiguration),
         .interface_count = 1,
         .configuration_value = 1,
@@ -113,10 +109,8 @@ const root_hub_configuration: RootHubConfiguration = .{
         .power_max = 1,
     },
     .interface = .{
-        .header = .{
-            .length = InterfaceDescriptor.STANDARD_LENGTH,
-            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_INTERFACE,
-        },
+        .length = InterfaceDescriptor.STANDARD_LENGTH,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_INTERFACE,
         .interface_number = 0,
         .alternate_setting = 0,
         .endpoint_count = 1,
@@ -126,10 +120,8 @@ const root_hub_configuration: RootHubConfiguration = .{
         .interface_string = 0,
     },
     .endpoint = .{
-        .header = .{
-            .length = EndpointDescriptor.STANDARD_LENGTH,
-            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
-        },
+        .length = EndpointDescriptor.STANDARD_LENGTH,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0x81, // Endpoint 1, direction IN
         .attributes = .{
             .endpoint_type = TransferType.interrupt,
@@ -148,10 +140,8 @@ fn mkStringDescriptor(comptime payload: []const u16) StringDescriptor {
     @memcpy(body[0..payload.len], payload);
 
     return .{
-        .header = .{
-            .length = @sizeOf(usb.Header) + 2 * payload.len,
-            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_STRING,
-        },
+        .length = 2 + (2 * payload.len),
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_STRING,
         .body = body,
     };
 }
@@ -177,10 +167,8 @@ const RootHubDescriptor = extern struct {
 
 const root_hub_hub_descriptor: RootHubDescriptor = .{
     .base = .{
-        .header = .{
-            .length = @sizeOf(HubDescriptor) + 2,
-            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_HUB,
-        },
+        .length = @sizeOf(HubDescriptor) + 2,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_HUB,
         .number_ports = 1,
         .characteristics = @bitCast(@as(u16, 0)),
         .power_on_to_power_good = 0,
@@ -364,7 +352,7 @@ fn hubGetStringDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     }
 
     const string = &root_hub_strings[descriptor_index];
-    return replyWithStructure(req, string, string.header.length);
+    return replyWithStructure(req, string, string.length);
 }
 
 fn hubGetDeviceStatus(self: *Self, req: *TransferRequest) TransferStatus {

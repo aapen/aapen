@@ -29,7 +29,6 @@ const delayMillis = time.delayMillis;
 const descriptor = @import("descriptor.zig");
 const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
 const DescriptorIndex = descriptor.DescriptorIndex;
-const Header = descriptor.Header;
 
 const device = @import("device.zig");
 const Device = device.Device;
@@ -74,7 +73,8 @@ const usb = @import("../usb.zig");
 // ----------------------------------------------------------------------
 
 pub const HubDescriptor = extern struct {
-    header: Header,
+    length: u8,
+    descriptor_type: u8,
     number_ports: u8,
     characteristics: Characteristics,
     power_on_to_power_good: u8, // in 2 millisecond intervals
