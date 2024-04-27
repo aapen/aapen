@@ -56,9 +56,6 @@ const endpoint = @import("usb/endpoint.zig");
 pub const EndpointDirection = endpoint.EndpointDirection;
 pub const EndpointNumber = endpoint.EndpointNumber;
 
-const function = @import("usb/function.zig");
-pub const MAX_FUNCTIONS = function.MAX_FUNCTIONS;
-
 const hid_keyboard = @import("usb/hid_keyboard.zig");
 
 const hub = @import("usb/hub.zig");
