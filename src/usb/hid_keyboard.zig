@@ -35,7 +35,6 @@ const InterfaceDescriptor = descriptor.InterfaceDescriptor;
 const device = @import("device.zig");
 const Device = device.Device;
 const DeviceDriver = device.DeviceDriver;
-const HidSubclass = device.HidSubclass;
 
 const request = @import("request.zig");
 const request_interface_class_out = request.interface_class_out;

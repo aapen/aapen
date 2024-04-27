@@ -119,4 +119,12 @@ pub const StringDescriptor = extern struct {
         }
         return result;
     }
+
+    pub fn intoSlice(self: *const StringDescriptor, dest: []u8) []u8 {
+        const actual_length = @min((self.length - 2) / 2, dest.len);
+        for (0..actual_length) |i| {
+            dest[i] = @truncate(self.body[i]);
+        }
+        return dest[0..actual_length];
+    }
 };
