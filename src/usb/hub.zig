@@ -8,6 +8,8 @@ const Allocator = std.mem.Allocator;
 const arch = @import("../architecture.zig");
 const cpu = arch.cpu;
 
+const ChannelSet = @import("../channel_set.zig");
+
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
 
@@ -271,27 +273,19 @@ pub const Hub = struct {
 
     in_use: bool = false,
     index: u5 = undefined,
-    device: *Device,
-    descriptor: HubDescriptor,
-    port_count: u8,
-    ports: []Port,
-    status_change_buffer: [8]u8,
-    status_change_request: TransferRequest,
-    tt: TransactionTranslator,
+    device: *Device = undefined,
+    descriptor: HubDescriptor = undefined,
+    port_count: u8 = 0,
+    ports: []Port = undefined,
+    status_change_buffer: [8]u8 = [_]u8{0} ** 8,
+    status_change_request: TransferRequest = undefined,
+    tt: TransactionTranslator = .{ .hub = null, .think_time = 0 },
 
     error_count: u64 = 0,
 
-    pub fn init(self: *Hub, table_index: u5) void {
-        self.* = .{
-            .in_use = false,
+    pub fn init(table_index: u5) Hub {
+        return .{
             .index = table_index,
-            .device = undefined,
-            .descriptor = undefined,
-            .port_count = 0,
-            .ports = undefined,
-            .status_change_buffer = [_]u8{0} ** 8,
-            .status_change_request = undefined,
-            .tt = .{ .hub = null, .think_time = 0 },
         };
     }
 
@@ -620,7 +614,17 @@ fn statusChangeCompletion(req: *TransferRequest) void {
     }
 }
 
-var hubs: [MAX_HUBS]Hub = undefined;
+const HubAlloc = ChannelSet.init("hub devices", u5, MAX_HUBS);
+
+var hubs: [MAX_HUBS]Hub = init: {
+    var initial_value: [MAX_HUBS]Hub = undefined;
+    for (&initial_value, 0..) |*h, idx| {
+        h.* = Hub.init(@truncate(idx));
+    }
+    break :init initial_value;
+};
+var hubs_allocated: HubAlloc = .{};
+
 var hubs_lock: TicketLock = undefined;
 var hub_thread: TID = undefined;
 var allocator: Allocator = undefined;
@@ -628,14 +632,21 @@ var shutdown_signal: OneShot = .{};
 var hub_status_change_semaphore: SID = undefined;
 var hubs_with_pending_status_change: u32 = 0;
 
+fn hubClassAlloc() !*Hub {
+    const hub_id = try hubs_allocated.allocate();
+    hubs[hub_id].in_use = true;
+    return &hubs[hub_id];
+}
+
+fn hubClassFree(hub: *Hub) void {
+    hub.in_use = false;
+    hubs_allocated.free(hub.index);
+}
+
 pub fn initialize(alloc: Allocator) !void {
     log = Logger.init("usb_hub", .info);
 
     allocator = alloc;
-
-    for (0..MAX_HUBS) |i| {
-        hubs[i].init(@truncate(i));
-    }
 
     hubs_lock = TicketLock.initWithTargetLevel("usb hubs", true, .FIQ);
 
@@ -704,25 +715,25 @@ pub fn hubDriverDeviceBind(dev: *Device) Error!void {
     hubs_lock.acquire();
     defer hubs_lock.release();
 
-    for (0..MAX_HUBS) |i| {
-        if (!hubs[i].in_use) {
-            var hub = &hubs[i];
-            hub.in_use = true;
-            errdefer hub.in_use = false;
+    var next_hub = hubClassAlloc() catch {
+        log.err(@src(), "too many hubs attached", .{});
+        return error.TooManyHubs;
+    };
+    errdefer hubClassFree(next_hub);
 
-            if (hub.deviceBind(dev)) {
-                return;
-            } else |e| {
-                log.debug(@src(), "hub {d} error binding device: {any}", .{ hub.index, e });
-                return e;
-            }
-        }
-    }
-    return Error.TooManyHubs;
+    return try next_hub.deviceBind(dev);
 }
 
 pub fn hubDriverDeviceUnbind(dev: *Device) void {
-    _ = dev;
+    hubs_lock.acquire();
+    defer hubs_lock.release();
+
+    for (&hubs) |*h| {
+        if (h.device == dev) {
+            hubClassFree(h);
+            return;
+        }
+    }
 }
 
 pub const driver: DeviceDriver = .{
