@@ -265,8 +265,6 @@ pub fn attachDevice(devid: Self.DeviceAddress, speed: UsbSpeed, parent_hub: ?*Hu
     // responding to address 0, endpoint 0
     try deviceDescriptorRead(dev, 8);
 
-    // dev.device_descriptor.dump();
-
     log.debug(@src(), "device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
 
     if (parent_hub) |h| {
@@ -282,8 +280,6 @@ pub fn attachDevice(devid: Self.DeviceAddress, speed: UsbSpeed, parent_hub: ?*Hu
 
     log.debug(@src(), "reading configuration descriptor", .{});
     try deviceConfigurationDescriptorRead(dev);
-
-    // dev.configuration.dump();
 
     const use_config = dev.configuration.configuration_descriptor.configuration_value;
     //    log.debug(@src(), "setting device to use configuration {d}", .{use_config});
@@ -485,7 +481,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *Device) !void {
     }
 
     dev.configuration = try DeviceConfiguration.initFromBytes(allocator, configuration);
-    dev.configuration.dump();
+    log.debug(@src(), "{any}", .{dev.configuration});
 }
 
 pub fn deviceSetConfiguration(dev: *Device, use_config: u8) !void {

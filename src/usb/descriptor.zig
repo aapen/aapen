@@ -16,17 +16,6 @@ pub const DeviceDescriptor = extern struct {
     product_name: usb.StringIndex,
     serial_number: usb.StringIndex,
     configuration_count: u8,
-
-    pub fn dump(self: *const DeviceDescriptor) void {
-        usb.log.debug(@src(), "DeviceDescriptor [", .{});
-        usb.log.debug(@src(), "  class-subclass-protocol = {d}-{d}-{d}", .{ self.device_class, self.device_subclass, self.device_protocol });
-        usb.log.debug(@src(), "  vendor = 0x{x:0>4}", .{self.vendor});
-        usb.log.debug(@src(), "  product = 0x{x:0>4}", .{self.product});
-        usb.log.debug(@src(), "  max_packet_size = 0x{d}", .{self.max_packet_size});
-        usb.log.debug(@src(), "  usb_standard_compliance = 0x{x}", .{self.usb_standard_compliance});
-        usb.log.debug(@src(), "  configuration_count = 0x{d}", .{self.configuration_count});
-        usb.log.debug(@src(), "]", .{});
-    }
 };
 
 pub const ConfigurationDescriptor = packed struct {
@@ -48,18 +37,6 @@ pub const ConfigurationDescriptor = packed struct {
         _reserved_1: u1 = 1, // unused since USB 2.0
     },
     power_max: u8,
-
-    pub fn dump(self: *const ConfigurationDescriptor) void {
-        usb.log.debug(@src(), "ConfigurationDescriptor [", .{});
-        usb.log.debug(@src(), "  total length = {d}", .{self.total_length});
-        usb.log.debug(@src(), "  interface count = {d}", .{self.interface_count});
-        usb.log.debug(@src(), "  configuration value = {d}", .{self.configuration_value});
-        usb.log.debug(@src(), "  configuration = {d}", .{self.configuration});
-        usb.log.debug(@src(), "  remote wakeup = {d}", .{self.attributes.remote_wakeup});
-        usb.log.debug(@src(), "  self powered = {d}", .{self.attributes.self_powered});
-        usb.log.debug(@src(), "  power max = {d} mA", .{self.power_max});
-        usb.log.debug(@src(), "]", .{});
-    }
 };
 
 pub const InterfaceDescriptor = packed struct {
@@ -81,16 +58,6 @@ pub const InterfaceDescriptor = packed struct {
     pub fn isHid(self: *const InterfaceDescriptor) bool {
         return self.interface_class == usb.USB_DEVICE_HID and
             (self.interface_subclass == 0x00 or self.interface_subclass == 0x01);
-    }
-
-    pub fn dump(self: *const InterfaceDescriptor) void {
-        usb.log.debug(@src(), "InterfaceDescriptor [", .{});
-        usb.log.debug(@src(), "  interface number = {d}", .{self.interface_number});
-        usb.log.debug(@src(), "  alternate_setting = {d}", .{self.alternate_setting});
-        usb.log.debug(@src(), "  endpoint count = {d}", .{self.endpoint_count});
-        usb.log.debug(@src(), "  class-subclass-protocol = {d}-{d}-{d}", .{ self.interface_class, self.interface_subclass, self.interface_protocol });
-        usb.log.debug(@src(), "  interface string = {d}", .{self.interface_string});
-        usb.log.debug(@src(), "]", .{});
     }
 };
 
@@ -119,15 +86,6 @@ pub const EndpointDescriptor = packed struct {
 
     pub fn isType(self: *const EndpointDescriptor, ty: u2) bool {
         return self.attributes.endpoint_type == ty;
-    }
-
-    pub fn dump(self: *const EndpointDescriptor) void {
-        usb.log.debug(@src(), "EndpointDescriptor [", .{});
-        usb.log.debug(@src(), "  endpoint_address = {d}", .{self.endpoint_address});
-        usb.log.debug(@src(), "  attributes = 0x{x}", .{@as(u8, @bitCast(self.attributes))});
-        usb.log.debug(@src(), "  max_packet_size = {d}", .{self.max_packet_size});
-        usb.log.debug(@src(), "  interval = {d}", .{self.interval});
-        usb.log.debug(@src(), "]", .{});
     }
 };
 
@@ -174,14 +132,4 @@ pub const HidDescriptor = extern struct {
     class_descriptor_length: u16,
     optional_descriptor_type: u8,
     optional_descriptor_length: u16,
-
-    pub fn dump(self: *const HidDescriptor) void {
-        usb.log.debug(@src(), "HidDescriptor [", .{});
-        usb.log.debug(@src(), "  hid_specification = 0x{x}", .{self.hid_specification});
-        usb.log.debug(@src(), "  country_code = {d}", .{self.country_code});
-        usb.log.debug(@src(), "  descriptor_count = {d}", .{self.descriptor_count});
-        usb.log.debug(@src(), "  class_descriptor_type = {d}", .{self.class_descriptor_type});
-        usb.log.debug(@src(), "  class_descriptor_length = {d}", .{self.class_descriptor_length});
-        usb.log.debug(@src(), "]", .{});
-    }
 };

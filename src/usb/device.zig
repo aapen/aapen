@@ -329,27 +329,6 @@ pub const DeviceConfiguration = struct {
 
         return res;
     }
-
-    pub fn dump(self: *const DeviceConfiguration) void {
-        usb.log.debug(@src(), "DeviceConfiguration [", .{});
-        self.configuration_descriptor.dump();
-        for (0..MAX_INTERFACES) |i| {
-            if (self.interfaces[i]) |iface| {
-                iface.dump();
-
-                if (self.hids[i]) |hid| {
-                    hid.dump();
-                }
-
-                for (0..MAX_ENDPOINTS) |e| {
-                    if (self.endpoints[i][e]) |endp| {
-                        endp.dump();
-                    }
-                }
-            }
-        }
-        usb.log.debug(@src(), "]", .{});
-    }
 };
 
 pub const DeviceDriver = struct {

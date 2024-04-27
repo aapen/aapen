@@ -86,21 +86,6 @@ pub const HubDescriptor = extern struct {
     // be set to all 1s.
 
     // we ignore both of those
-
-    pub fn dump(self: *const HubDescriptor) void {
-        log.debug(@src(), "HubDescriptor [", .{});
-        log.debug(@src(), "  ports = {d}", .{self.number_ports});
-        log.debug(@src(), "  characteristics = [", .{});
-        log.debug(@src(), "    power_switching_mode = 0x{x}", .{self.characteristics.power_switching_mode});
-        log.debug(@src(), "    compound = 0x{x}", .{self.characteristics.compound});
-        log.debug(@src(), "    overcurrent mode = 0x{x}", .{self.characteristics.overcurrent_protection_mode});
-        log.debug(@src(), "    tt_think_time = 0x{x}", .{self.characteristics.tt_think_time});
-        log.debug(@src(), "    port indicators = 0x{x}", .{self.characteristics.port_indicators});
-        log.debug(@src(), "  ]", .{});
-        log.debug(@src(), "  power on to power good = {d} ms", .{self.power_on_to_power_good});
-        log.debug(@src(), "  max current = {d} mA", .{self.controller_current});
-        log.debug(@src(), "]", .{});
-    }
 };
 
 /// See USB 2.0 specification, revision 2.0, section 11.24.2
@@ -308,7 +293,7 @@ pub const Hub = struct {
         log.debug(@src(), "deviceBind reading hub descriptor", .{});
         try self.hubDescriptorRead();
 
-        self.descriptor.dump();
+        log.debug(@src(), "{any}", .{self.descriptor});
 
         self.port_count = self.descriptor.number_ports;
 
@@ -588,12 +573,6 @@ pub const Hub = struct {
             log.err(@src(), "hub {d} error getting status of port {d}: {any}", .{ self.index, port.number, err });
             return;
         }
-    }
-
-    pub fn dump(self: *const Hub) void {
-        log.info(@src(), "Hub [", .{});
-        log.info(@src(), "  port count = {d}", .{self.port_count});
-        log.info(@src(), "]", .{});
     }
 };
 
