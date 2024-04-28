@@ -414,8 +414,8 @@ fn hubSetPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
     const feature = req.setup_data.value;
 
     switch (feature) {
-        usb.PortFeature.port_power => return self.hostPortPowerOn(),
-        usb.PortFeature.port_reset => return self.hostPortReset(),
+        usb.HUB_PORT_FEATURE_PORT_POWER => return self.hostPortPowerOn(),
+        usb.HUB_PORT_FEATURE_PORT_RESET => return self.hostPortReset(),
         else => {
             Host.log.warn(@src(), "hubSetPortFeature: port feature {d} not supported", .{feature});
             return .unsupported_request;
@@ -435,11 +435,15 @@ fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
     Host.log.debug(@src(), "hubClearPortFeature: feature {d}", .{feature});
 
     switch (feature) {
-        usb.PortFeature.c_port_connection => self.root_hub_port_status.port_change.connected_changed = 0,
-        usb.PortFeature.c_port_enable => self.root_hub_port_status.port_change.enabled_changed = 0,
-        usb.PortFeature.c_port_suspend => self.root_hub_port_status.port_change.suspended_changed = 0,
-        usb.PortFeature.c_port_over_current => self.root_hub_port_status.port_change.overcurrent_changed = 0,
-        usb.PortFeature.c_port_reset => self.root_hub_port_status.port_change.reset_changed = 0,
+        usb.HUB_PORT_FEATURE_C_PORT_CONNECTION => self.root_hub_port_status.port_change.connected_changed = 0,
+
+        usb.HUB_PORT_FEATURE_C_PORT_ENABLE => self.root_hub_port_status.port_change.enabled_changed = 0,
+
+        usb.HUB_PORT_FEATURE_C_PORT_SUSPEND => self.root_hub_port_status.port_change.suspended_changed = 0,
+
+        usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT => self.root_hub_port_status.port_change.overcurrent_changed = 0,
+
+        usb.HUB_PORT_FEATURE_C_PORT_RESET => self.root_hub_port_status.port_change.reset_changed = 0,
         else => {
             Host.log.warn(@src(), "hubClearPortFeature: feature {d} not supported", .{feature});
             return .unsupported_request;

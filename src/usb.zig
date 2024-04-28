@@ -4,7 +4,6 @@
 /// USB specification, and the hardware-agnostic portion of USB
 /// handling for the kernel.
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 
 const root = @import("root");
 const HCI = root.HAL.USBHCI;
@@ -25,8 +24,6 @@ const SID = semaphore.SID;
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
-//const core = @import("usb/core.zig");
-
 pub usingnamespace @import("usb/spec.zig");
 pub usingnamespace @import("usb/core.zig");
 pub usingnamespace @import("usb/descriptor.zig");
@@ -41,7 +38,6 @@ const hub = @import("usb/hub.zig");
 pub const HubDescriptor = hub.HubDescriptor;
 pub const HubStatus = hub.HubStatus;
 pub const PortStatus = hub.PortStatus;
-pub const PortFeature = hub.PortFeature;
 
 pub const TransferFactory = @import("usb/transfer_factory.zig");
 
@@ -60,7 +56,7 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineStruct("Device", Self.Device, .{});
 
     try hid_keyboard.defineModule(forth);
-    try root.HAL.USBHCI.defineModule(forth);
+    try HCI.defineModule(forth);
 }
 
 pub fn getDevice(id: u64) ?*Self.Device {
@@ -77,7 +73,7 @@ pub fn getDevice(id: u64) ?*Self.Device {
 const Drivers = std.ArrayList(*const Self.DeviceDriver);
 const MAX_DEVICES = 16;
 
-pub var allocator: Allocator = undefined;
+var allocator: std.mem.Allocator = undefined;
 pub var devices: [MAX_DEVICES]Self.Device = undefined;
 var drivers: Drivers = undefined;
 var drivers_lock: TicketLock = undefined;
@@ -203,9 +199,9 @@ pub fn attachDevice(devid: Self.DeviceAddress, speed: Self.UsbSpeed, parent_hub:
     // default to max packet size according to speed until we can read the device
     // descriptor to find the real max packet size.
     dev.device_descriptor.max_packet_size = switch (speed) {
-        Self.UsbSpeed.Super => 255, // super speed is supposed to have mps
-        // of 512, but we're re-using the descriptor's field which is
-        // a u8
+        // super speed is supposed to have mps of 512, but we're
+        // re-using the descriptor's field which is a u8
+        Self.UsbSpeed.Super => 255,
         Self.UsbSpeed.High => 64,
         Self.UsbSpeed.Full => 64,
         Self.UsbSpeed.Low => 8,

@@ -140,6 +140,9 @@ pub const USB_HUB_PROTOCOL_FULL_SPEED                  : u8 = 0x00;
 pub const USB_HUB_PROTOCOL_HIGH_SPEED_SINGLE_TT        : u8 = 0x01;
 pub const USB_HUB_PROTOCOL_HIGH_SPEED_MULTIPLE_TT      : u8 = 0x02;
 
+// Hub features
+pub const USB_HUB_FEATURE_C_LOCAL_POWER                : u16 = 0;
+pub const USB_HUB_FEATURE_C_OVERCURRENT                : u16 = 0;
 
 /// See USB 2.0 specification, revision 2.0, section 11.24.2
 pub const HUB_REQUEST_GET_STATUS                       : u8 = USB_REQUEST_GET_STATUS;
@@ -152,6 +155,27 @@ pub const HUB_REQUEST_RESET_TT                         : u8 = 0x09;
 pub const HUB_REQUEST_GET_TT_STATE                     : u8 = 0x0a;
 pub const HUB_REQUEST_STOP_TT                          : u8 = 0x0b;
 pub const HUB_REQUEST_SET_HUB_DEPTH                    : u8 = 0x0C;
+
+// Hub port features
+pub const HUB_PORT_FEATURE_PORT_CONNECTION             : u16 = 0;
+pub const HUB_PORT_FEATURE_PORT_ENABLE                 : u16 = 1;
+pub const HUB_PORT_FEATURE_PORT_SUSPEND                : u16 = 2;
+pub const HUB_PORT_FEATURE_PORT_OVER_CURRENT           : u16 = 3;
+pub const HUB_PORT_FEATURE_PORT_RESET                  : u16 = 4;
+pub const HUB_PORT_FEATURE_PORT_POWER                  : u16 = 8;
+pub const HUB_PORT_FEATURE_PORT_LOW_SPEED              : u16 = 9;
+pub const HUB_PORT_FEATURE_PORT_HIGH_SPEED             : u16 = 10;
+pub const HUB_PORT_FEATURE_C_PORT_CONNECTION           : u16 = 16;
+pub const HUB_PORT_FEATURE_C_PORT_ENABLE               : u16 = 17;
+pub const HUB_PORT_FEATURE_C_PORT_SUSPEND              : u16 = 18;
+pub const HUB_PORT_FEATURE_C_PORT_OVER_CURRENT         : u16 = 19;
+pub const HUB_PORT_FEATURE_C_PORT_RESET                : u16 = 20;
+pub const HUB_PORT_FEATURE_PORT_TEST                   : u16 = 21;
+pub const HUB_PORT_FEATURE_PORT_INDICATOR              : u16 = 22;
+
+// Hub power switching
+pub const HUB_POWER_SWITCHING_MODE_GANGED              : u2 = 0b00;
+pub const HUB_POWER_SWITCHING_MODE_INDIVIDUAL          : u2 = 0b01;
 
 // HID classes - we don't need these at the moment
 

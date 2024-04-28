@@ -13,7 +13,6 @@ const DeviceConfiguration = usb.DeviceConfiguration;
 const DeviceDescriptor = usb.DeviceDescriptor;
 const EndpointDescriptor = usb.EndpointDescriptor;
 const HubDescriptor = usb.HubDescriptor;
-const HubFeature = usb.HubFeature;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
 const LangID = usb.LangID;
 const PortStatus = usb.PortStatus;
@@ -341,12 +340,12 @@ fn setAddress() !void {
 }
 
 fn setHubFeature() !void {
-    var xfer = TransferFactory.initHubSetHubFeatureTransfer(&nulldev, HubFeature.c_hub_local_power);
+    var xfer = TransferFactory.initHubSetHubFeatureTransfer(&nulldev, usb.USB_HUB_FEATURE_C_LOCAL_POWER);
     expectTransferCompletionStatus(.unsupported_request, &xfer);
 }
 
 fn clearHubFeature() !void {
-    var xfer = TransferFactory.initHubClearHubFeatureTransfer(&nulldev, HubFeature.c_hub_local_power);
+    var xfer = TransferFactory.initHubClearHubFeatureTransfer(&nulldev, usb.USB_HUB_FEATURE_C_LOCAL_POWER);
     expectTransferCompletionStatus(.unsupported_request, &xfer);
 }
 
