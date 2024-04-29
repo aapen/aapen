@@ -408,10 +408,10 @@ pub const Hub = struct {
             self.portFeatureClear(port, usb.HUB_PORT_FEATURE_PORT_ENABLE) catch {};
         }
 
-        const new_device = try usb.allocateDevice(self.device);
+        const new_device = try usb.deviceAlloc(self.device);
         errdefer {
             log.err(@src(), "hub {d} failed to configure device {d} on port {d}, freeing it", .{ self.index, new_device, port.number });
-            usb.freeDevice(new_device);
+            usb.deviceFree(new_device);
         }
 
         const dev: *Device = &usb.devices[new_device];

@@ -11,6 +11,8 @@ const HCI = root.HAL.USBHCI;
 const arch = @import("architecture.zig");
 const cpu = arch.cpu;
 
+const ChannelSet = @import("channel_set.zig");
+
 const Forth = @import("forty/forth.zig").Forth;
 
 const Logger = @import("logger.zig");
@@ -71,10 +73,20 @@ pub fn getDevice(id: u64) ?*Self.Device {
 // Core subsystem
 // ----------------------------------------------------------------------
 const Drivers = std.ArrayList(*const Self.DeviceDriver);
+
 const MAX_DEVICES = 16;
+const DeviceAlloc = ChannelSet.init("devices", Self.DeviceAddress, MAX_DEVICES);
+
+pub var devices: [MAX_DEVICES]Self.Device = init: {
+    var initial_value: [MAX_DEVICES]Self.Device = undefined;
+    for (&initial_value) |*d| {
+        d.init();
+    }
+    break :init initial_value;
+};
+var devices_allocated: DeviceAlloc = .{};
 
 var allocator: std.mem.Allocator = undefined;
-pub var devices: [MAX_DEVICES]Self.Device = undefined;
 var drivers: Drivers = undefined;
 var drivers_lock: TicketLock = undefined;
 var root_hub: ?*Self.Device = undefined;
@@ -92,10 +104,6 @@ pub fn init() !void {
     drivers_lock = TicketLock.initWithTargetLevel("usb drivers", true, .FIQ);
     bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
 
-    for (0..MAX_DEVICES) |i| {
-        devices[i].init();
-    }
-
     try registerDriver(&hub.driver);
     try registerDriver(&hid_keyboard.driver);
 
@@ -107,18 +115,18 @@ pub fn initialize() !void {
     try root.hal.usb_hci.initialize();
     log.debug(@src(), "started host controller", .{});
 
-    const dev0 = try allocateDevice(null);
-    errdefer freeDevice(dev0);
+    const dev0 = try deviceAlloc(null);
+    errdefer deviceFree(dev0);
 
     log.debug(@src(), "attaching root hub", .{});
-    if (attachDevice(dev0, Self.UsbSpeed.Full, null, null)) {
-        log.debug(@src(), "usb initialized", .{});
-        root_hub = &devices[dev0];
-        return;
-    } else |err| {
+
+    attachDevice(dev0, Self.UsbSpeed.Full, null, null) catch |err| {
         log.err(@src(), "usb init failed: {any}", .{err});
         return err;
-    }
+    };
+
+    log.debug(@src(), "usb initialized", .{});
+    root_hub = &devices[dev0];
 }
 
 pub fn registerDriver(device_driver: *const Self.DeviceDriver) !void {
@@ -151,34 +159,27 @@ fn initializeDrivers() !void {
     }
 }
 
-pub fn allocateDevice(parent: ?*Self.Device) !Self.DeviceAddress {
+pub fn deviceAlloc(parent: ?*Self.Device) !Self.DeviceAddress {
     bus_lock.acquire();
     defer bus_lock.release();
 
-    for (0..MAX_DEVICES) |i| {
-        const addr: Self.DeviceAddress = @truncate(i);
-        if (!devices[addr].in_use) {
-            var dev = &devices[addr];
-            dev.in_use = true;
-            //            dev.speed = Self.UsbSpeed.High;
-
-            dev.parent = parent;
-            if (parent != null) {
-                dev.depth = parent.?.depth + 1;
-            }
-            dev.state = .attached;
-            return addr + 1;
-        }
+    const addr: Self.DeviceAddress = try devices_allocated.allocate();
+    var dev = &devices[addr];
+    dev.in_use = true;
+    dev.parent = parent;
+    if (parent != null) {
+        dev.depth = parent.?.depth + 1;
     }
-
-    return error.TooManyDevices;
+    dev.state = .attached;
+    return addr + 1;
 }
 
-pub fn freeDevice(devid: Self.DeviceAddress) void {
+pub fn deviceFree(devid: Self.DeviceAddress) void {
     bus_lock.acquire();
     defer bus_lock.release();
 
-    var dev = &devices[devid - 1];
+    const devindex = devid - 1;
+    var dev = &devices[devindex];
     dev.state = .detaching;
 
     if (dev.driver != null) {
@@ -188,6 +189,7 @@ pub fn freeDevice(devid: Self.DeviceAddress) void {
     dev.deinit();
     dev.state = .unconfigured;
     dev.in_use = false;
+    devices_allocated.free(devindex);
 }
 
 pub fn attachDevice(devid: Self.DeviceAddress, speed: Self.UsbSpeed, parent_hub: ?*hub.Hub, parent_port: ?*hub.Hub.Port) !void {
