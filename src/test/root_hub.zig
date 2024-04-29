@@ -16,11 +16,11 @@ const HubDescriptor = usb.HubDescriptor;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
 const LangID = usb.LangID;
 const PortStatus = usb.PortStatus;
-const PortFeature = usb.PortFeature;
+//const PortFeature = usb.PortFeature;
 const StringDescriptor = usb.StringDescriptor;
 const TransferRequest = usb.TransferRequest;
 const TransferBytes = usb.TransferBytes;
-const TransferCompletionStatus = usb.TransferCompletionStatus;
+const TransferCompletionStatus = usb.TransferRequest.CompletionStatus;
 const TransferFactory = usb.TransferFactory;
 const TransferType = usb.TransferType;
 
@@ -312,7 +312,7 @@ fn getPortPowerStatus() !bool {
 fn setPortFeature() !void {
     const buffer_size = 0;
 
-    var xfer = TransferFactory.initHubSetPortFeatureTransfer(&nulldev, PortFeature.port_power, 1, 0);
+    var xfer = TransferFactory.initHubSetPortFeatureTransfer(&nulldev, usb.HUB_PORT_FEATURE_PORT_POWER, 1, 0);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
@@ -322,7 +322,7 @@ fn setPortFeature() !void {
 fn setPortFeatureReset() !void {
     const buffer_size = 0;
 
-    var xfer = TransferFactory.initHubSetPortFeatureTransfer(&nulldev, PortFeature.port_reset, 1, 0);
+    var xfer = TransferFactory.initHubSetPortFeatureTransfer(&nulldev, usb.HUB_PORT_FEATURE_PORT_RESET, 1, 0);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
