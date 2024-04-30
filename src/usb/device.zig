@@ -6,9 +6,6 @@ const root = @import("root");
 
 const Error = @import("status.zig").Error;
 
-const transaction_translator = @import("transaction_translator.zig");
-const TT = transaction_translator.TransactionTranslator;
-
 const core = @import("core.zig");
 const hub = @import("hub.zig");
 const spec = @import("spec.zig");
@@ -51,7 +48,7 @@ pub const Device = struct {
     parent_port: u7,
 
     /// Transaction Translator to use for this device
-    tt: ?*TT,
+    tt: ?*TransactionTranslator,
 
     device_descriptor: spec.DeviceDescriptor,
     configuration: *DeviceConfiguration,
@@ -174,6 +171,11 @@ pub const Device = struct {
             return null;
         }
     }
+};
+
+pub const TransactionTranslator = struct {
+    hub: ?*Device = null, // the nearest upstream high speed hub
+    think_time: u32 = 0, // think time when starting split
 };
 
 /// This represents the parsed configuration tree

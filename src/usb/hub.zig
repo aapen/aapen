@@ -30,14 +30,12 @@ const device = @import("device.zig");
 const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;
 const DeviceDriver = device.DeviceDriver;
+const TransactionTranslator = device.TransactionTranslator;
 const UsbSpeed = device.UsbSpeed;
 
 const Error = @import("status.zig").Error;
 
 const spec = @import("spec.zig");
-
-const transaction_translator = @import("transaction_translator.zig");
-const TransactionTranslator = transaction_translator.TransactionTranslator;
 
 const transfer = @import("transfer.zig");
 const SetupPacket = transfer.SetupPacket;
