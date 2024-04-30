@@ -36,9 +36,6 @@ const device = @import("device.zig");
 const Device = device.Device;
 const DeviceDriver = device.DeviceDriver;
 
-const request = @import("request.zig");
-const request_interface_class_out = request.interface_class_out;
-
 const transfer = @import("transfer.zig");
 const TransferRequest = transfer.TransferRequest;
 const TransferType = transfer.TransferType;
@@ -358,7 +355,7 @@ pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
         const status = usb.controlMessage(
             dev,
             usb.HID_REQUEST_SET_PROTOCOL, // request
-            request_interface_class_out, // request type
+            usb.USB_REQUEST_TYPE_INTERFACE_CLASS_OUT, // request type
             0, // value - id of hid boot protocol
             @truncate(i), // index - interface to use
             &.{}, // data (not used for this transfer)

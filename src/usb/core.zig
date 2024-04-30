@@ -19,8 +19,6 @@ const descriptor = @import("descriptor.zig");
 
 const device = @import("device.zig");
 
-const request = @import("request.zig");
-
 const spec = @import("spec.zig");
 
 const status = @import("status.zig");
@@ -76,8 +74,8 @@ fn controlMessageDone(xfer: *transfer.TransferRequest) void {
 // ----------------------------------------------------------------------
 pub fn controlMessage(
     dev: *device.Device,
-    req_code: request.Request,
-    req_type: request.RequestType,
+    req_code: u8,
+    req_type: u8,
     val: u16,
     index: u16,
     data: []u8,
@@ -92,7 +90,14 @@ pub fn controlMessage(
 
     log.debug(@src(), "[{d}:{d}] completion semaphore id {d}", .{ dev.address, 0, sem });
 
-    const setup: transfer.SetupPacket = transfer.SetupPacket.init2(req_type, req_code, val, index, @truncate(data.len));
+    const setup: transfer.SetupPacket = .{
+        .request_type = req_type,
+        .request = req_code,
+        .value = val,
+        .index = index,
+        .data_size = @truncate(data.len),
+    };
+
     var req: *transfer.TransferRequest = try allocator.create(transfer.TransferRequest);
     req.initControlAllocated(dev, setup, data);
 
@@ -132,7 +137,7 @@ pub fn deviceDescriptorRead(dev: *device.Device, maxlen: spec.TransferBytes) !vo
     const result = try controlMessage(
         dev,
         spec.USB_REQUEST_GET_DESCRIPTOR, // req
-        request.device_standard_in, // req type
+        spec.USB_REQUEST_TYPE_DEVICE_STANDARD_IN, // req type
         @as(u16, spec.USB_DESCRIPTOR_TYPE_DEVICE) << 8, // value
         spec.USB_LANGID_NONE, // index
         buffer[0..readlen], // data
@@ -148,7 +153,7 @@ pub fn deviceSetAddress(dev: *device.Device, address: spec.DeviceAddress) !void 
     const result = try controlMessage(
         dev,
         spec.USB_REQUEST_SET_ADDRESS, // req
-        request.device_standard_out, // req type
+        spec.USB_REQUEST_TYPE_DEVICE_STANDARD_OUT, // req type
         address, // value
         0, // index (not used for this transfer)
         &.{}, // data (not used for this transfer)
@@ -170,7 +175,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *device.Device) !void {
     const result = try controlMessage(
         dev,
         spec.USB_REQUEST_GET_DESCRIPTOR,
-        request.device_standard_in, // req type
+        spec.USB_REQUEST_TYPE_DEVICE_STANDARD_IN, // req type
         @as(u16, spec.USB_DESCRIPTOR_TYPE_CONFIGURATION) << 8, // value
         0, // index
         std.mem.asBytes(&desc),
@@ -190,7 +195,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *device.Device) !void {
     const result2 = try controlMessage(
         dev,
         spec.USB_REQUEST_GET_DESCRIPTOR, // req
-        request.device_standard_in, // req type
+        spec.USB_REQUEST_TYPE_DEVICE_STANDARD_IN, // req type
         @as(u16, spec.USB_DESCRIPTOR_TYPE_CONFIGURATION) << 8, // value
         0, // index
         configuration,
@@ -210,7 +215,7 @@ pub fn deviceSetConfiguration(dev: *device.Device, use_config: u8) !void {
     _ = try controlMessage(
         dev,
         spec.USB_REQUEST_SET_CONFIGURATION, // req
-        request.device_standard_out, // req type
+        spec.USB_REQUEST_TYPE_DEVICE_STANDARD_OUT, // req type
         use_config, // value
         0, // index (not used for this transfer)
         &.{}, // data (not used for this transfer)
@@ -223,7 +228,7 @@ pub fn deviceGetStringDescriptor(dev: *device.Device, index: spec.StringIndex, l
     _ = try controlMessage(
         dev,
         spec.USB_REQUEST_GET_DESCRIPTOR, // req
-        request.device_standard_in, // req type
+        spec.USB_REQUEST_TYPE_DEVICE_STANDARD_IN, // req type
         @as(u16, spec.USB_DESCRIPTOR_TYPE_STRING) << 8 | index,
         lang_id,
         buffer,

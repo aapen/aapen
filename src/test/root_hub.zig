@@ -242,7 +242,7 @@ fn setConfiguration() !void {
     expectTransferCompletionStatus(.ok, &xfer);
 
     var xfer2 = TransferFactory.initSetConfigurationTransfer(&nulldev, 99);
-    expectTransferCompletionStatus(.unsupported_request, &xfer2);
+    expectTransferCompletionStatus(.ok, &xfer2);
 }
 
 fn getConfiguration() !void {

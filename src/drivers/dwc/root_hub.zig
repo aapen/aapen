@@ -289,24 +289,32 @@ fn hubNotifyPortChange(self: *Self) void {
 // ----------------------------------------------------------------------
 // Request Handling Behavior
 // ----------------------------------------------------------------------
-const Handler = struct { u2, ?u8, ?u5, *const fn (self: *Self, req: *TransferRequest) TransferStatus };
-
-// null means "don't care", ignore this field when dispatching.
+const Handler = struct { u8, u8, *const fn (self: *Self, req: *TransferRequest) TransferStatus };
 
 const handlers: []const Handler = &.{
-    .{ RequestTypeType.standard, usb.USB_REQUEST_GET_STATUS, null, hubGetDeviceStatus },
-    .{ RequestTypeType.standard, usb.USB_REQUEST_SET_ADDRESS, null, hubSetAddress },
-    .{ RequestTypeType.standard, usb.USB_REQUEST_GET_DESCRIPTOR, null, hubGetDescriptor },
-    .{ RequestTypeType.standard, usb.USB_REQUEST_GET_CONFIGURATION, null, hubGetConfiguration },
-    .{ RequestTypeType.standard, usb.USB_REQUEST_SET_CONFIGURATION, null, hubSetConfiguration },
-    .{ RequestTypeType.class, usb.HUB_REQUEST_GET_DESCRIPTOR, RequestTypeRecipient.device, hubGetHubDescriptor },
-    .{ RequestTypeType.class, usb.HUB_REQUEST_GET_STATUS, RequestTypeRecipient.device, hubGetHubStatus },
-    .{ RequestTypeType.class, usb.HUB_REQUEST_GET_STATUS, RequestTypeRecipient.other, hubGetPortStatus },
-    .{ RequestTypeType.class, usb.HUB_REQUEST_SET_FEATURE, RequestTypeRecipient.device, hubSetHubFeature },
-    .{ RequestTypeType.class, usb.HUB_REQUEST_SET_FEATURE, RequestTypeRecipient.other, hubSetPortFeature },
-    .{ RequestTypeType.class, usb.HUB_REQUEST_CLEAR_FEATURE, RequestTypeRecipient.device, hubClearHubFeature },
-    .{ RequestTypeType.class, usb.HUB_REQUEST_CLEAR_FEATURE, RequestTypeRecipient.other, hubClearPortFeature },
+    // zig fmt: off
+    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,   usb.USB_REQUEST_GET_STATUS,         hubGetDeviceStatus   },
+    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_OUT,  usb.USB_REQUEST_SET_ADDRESS,        no_op                },
+    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,   usb.USB_REQUEST_GET_DESCRIPTOR,     hubGetDescriptor     },
+    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,   usb.USB_REQUEST_GET_CONFIGURATION,  hubGetConfiguration  },
+    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_OUT,  usb.USB_REQUEST_SET_CONFIGURATION,  no_op                },
+    .{  usb.USB_REQUEST_TYPE_DEVICE_CLASS_IN,      usb.HUB_REQUEST_GET_DESCRIPTOR,     hubGetHubDescriptor  },
+    .{  usb.USB_REQUEST_TYPE_DEVICE_CLASS_IN,      usb.HUB_REQUEST_GET_STATUS,         hubGetHubStatus      },
+    .{  usb.USB_REQUEST_TYPE_DEVICE_CLASS_OUT,     usb.HUB_REQUEST_SET_FEATURE,        not_supported        },
+    .{  usb.USB_REQUEST_TYPE_DEVICE_CLASS_OUT,     usb.HUB_REQUEST_CLEAR_FEATURE,      not_supported        },
+    .{  usb.USB_REQUEST_TYPE_OTHER_CLASS_IN,       usb.HUB_REQUEST_GET_STATUS,         hubGetPortStatus     },
+    .{  usb.USB_REQUEST_TYPE_OTHER_CLASS_OUT,      usb.HUB_REQUEST_SET_FEATURE,        hubSetPortFeature    },
+    .{  usb.USB_REQUEST_TYPE_OTHER_CLASS_OUT,      usb.HUB_REQUEST_CLEAR_FEATURE,      hubClearPortFeature  },
+    // zig fmt: on
 };
+
+fn no_op(_: *Self, _: *TransferRequest) TransferStatus {
+    return .ok;
+}
+
+fn not_supported(_: *Self, _: *TransferRequest) TransferStatus {
+    return .unsupported_request;
+}
 
 fn replyWithStructure(req: *TransferRequest, v: *const anyopaque, size: usize) TransferStatus {
     const requested_length = req.setup_data.data_size;
@@ -314,24 +322,19 @@ fn replyWithStructure(req: *TransferRequest, v: *const anyopaque, size: usize) T
     Host.log.debug(@src(), "responding with {d} bytes from the structure", .{provided_length});
     @memcpy(req.data, @as([*]const u8, @ptrCast(v))[0..provided_length]);
 
-    //    @memcpy(req.data_buffer[0..provided_length], @as([*]const u8, @ptrCast(v))[0..provided_length]);
-
     req.actual_size = provided_length;
     return .ok;
 }
 
-fn hubGetDeviceDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
-    _ = self;
+fn hubGetDeviceDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
     return replyWithStructure(req, &root_hub_device_descriptor, @sizeOf(@TypeOf(root_hub_device_descriptor)));
 }
 
-fn hubGetConfigurationDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
-    _ = self;
+fn hubGetConfigurationDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
     return replyWithStructure(req, &root_hub_configuration, @sizeOf(@TypeOf(root_hub_configuration)));
 }
 
-fn hubGetStringDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
-    _ = self;
+fn hubGetStringDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
     const descriptor_index = req.setup_data.value & 0x0f;
     if (descriptor_index > root_hub_strings.len) {
         Host.log.warn(@src(), "hubGetStringDescriptor: descriptor_index {d} is greater than {d}", .{ descriptor_index, root_hub_strings.len });
@@ -344,10 +347,6 @@ fn hubGetStringDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
 
 fn hubGetDeviceStatus(self: *Self, req: *TransferRequest) TransferStatus {
     return replyWithStructure(req, &self.root_hub_device_status, @sizeOf(@TypeOf(self.root_hub_device_status)));
-}
-
-fn hubSetAddress(_: *Self, _: *TransferRequest) TransferStatus {
-    return .ok;
 }
 
 fn hubGetDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
@@ -363,28 +362,14 @@ fn hubGetDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
     }
 }
 
-fn hubGetConfiguration(self: *const Self, req: *TransferRequest) TransferStatus {
-    _ = self;
+fn hubGetConfiguration(_: *const Self, req: *TransferRequest) TransferStatus {
     if (req.setup_data.data_size >= 1) {
         req.data[0] = 1;
     }
     return .ok;
 }
 
-fn hubSetConfiguration(self: *Self, req: *TransferRequest) TransferStatus {
-    _ = self;
-    const requested_configuration = req.setup_data.value;
-    if (requested_configuration == 1) {
-        Host.log.debug(@src(), "hubSetConfiguration: using requested configuration {d}", .{requested_configuration});
-        return .ok;
-    } else {
-        Host.log.warn(@src(), "hubSetConfiguration: requested configuration {d} not supported", .{requested_configuration});
-        return .unsupported_request;
-    }
-}
-
-fn hubGetHubDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
-    _ = self;
+fn hubGetHubDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
     const descriptor_index = req.setup_data.value & 0x0f;
     if (descriptor_index == 0) {
         return replyWithStructure(req, &root_hub_hub_descriptor, @sizeOf(@TypeOf(root_hub_hub_descriptor)));
@@ -404,12 +389,6 @@ fn hubGetPortStatus(self: *Self, req: *TransferRequest) TransferStatus {
     return replyWithStructure(req, &self.root_hub_port_status, @sizeOf(@TypeOf(self.root_hub_port_status)));
 }
 
-fn hubSetHubFeature(self: *Self, _: *TransferRequest) TransferStatus {
-    _ = self;
-    Host.log.warn(@src(), "hubSetHubFeature: set hub feature not supported", .{});
-    return .unsupported_request;
-}
-
 fn hubSetPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
     const feature = req.setup_data.value;
 
@@ -421,12 +400,6 @@ fn hubSetPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
             return .unsupported_request;
         },
     }
-}
-
-fn hubClearHubFeature(self: *Self, _: *TransferRequest) TransferStatus {
-    _ = self;
-    Host.log.warn(@src(), "hubClearHubFeature: clear hub feature not supported", .{});
-    return .unsupported_request;
 }
 
 fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
@@ -471,22 +444,17 @@ pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
             },
         }
     } else {
+        // this is a control request to the default endpoint.
         Host.log.debug(@src(), "hubHandleTransfer: processing control message", .{});
 
-        // this is a control request to the default endpoint.
-        const req_type = req.setup_data.request_type.type;
-        const request = req.setup_data.request;
-        const recipient = req.setup_data.request_type.recipient;
-
         for (handlers) |h| {
-            if (req_type == h[0] and
-                (h[1] == null or h[1] == request) and
-                (h[2] == null or h[2] == recipient))
+            if (req.setup_data.request_type == h[0] and
+                req.setup_data.request == h[1])
             {
-                req.complete(h[3](self, req));
+                req.complete(h[2](self, req));
                 return;
             }
         }
-        Host.log.debug(@src(), "unhandled request: type 0x{x}, req 0x{x}", .{ @as(u8, @bitCast(req.setup_data.request_type)), request });
+        Host.log.debug(@src(), "unhandled request: type 0x{x}, req 0x{x}", .{ req.setup_data.request_type, req.setup_data.request });
     }
 }

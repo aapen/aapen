@@ -38,8 +38,6 @@ const UsbSpeed = device.UsbSpeed;
 
 const Error = @import("status.zig").Error;
 
-const request = @import("request.zig");
-
 const spec = @import("spec.zig");
 
 const transaction_translator = @import("transaction_translator.zig");
@@ -261,7 +259,7 @@ pub const Hub = struct {
     fn hubDescriptorRead(self: *Hub) !void {
         try self.hubControlMessage(
             spec.HUB_REQUEST_GET_DESCRIPTOR,
-            request.device_class_in,
+            spec.USB_REQUEST_TYPE_DEVICE_CLASS_IN,
             @as(u16, usb.USB_DESCRIPTOR_TYPE_HUB) << 8 | 0,
             0,
             std.mem.asBytes(&self.descriptor),
@@ -318,7 +316,7 @@ pub const Hub = struct {
         }
     }
 
-    fn hubControlMessage(self: *Hub, req: request.Request, req_type: request.RequestType, value: u16, index: u16, data: []u8) !void {
+    fn hubControlMessage(self: *Hub, req: u8, req_type: u8, value: u16, index: u16, data: []u8) !void {
         const result = usb.controlMessage(
             self.device,
             req,
@@ -340,7 +338,7 @@ pub const Hub = struct {
 
         self.hubControlMessage(
             spec.HUB_REQUEST_GET_STATUS,
-            request.other_class_in,
+            spec.USB_REQUEST_TYPE_OTHER_CLASS_IN,
             0,
             port.number,
             std.mem.asBytes(&port.status),
@@ -355,7 +353,7 @@ pub const Hub = struct {
 
         self.hubControlMessage(
             spec.HUB_REQUEST_SET_FEATURE,
-            request.other_class_out,
+            spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT,
             feature,
             port.number,
             &.{},
@@ -370,7 +368,7 @@ pub const Hub = struct {
 
         self.hubControlMessage(
             spec.HUB_REQUEST_CLEAR_FEATURE,
-            request.other_class_out,
+            spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT,
             feature,
             port.number,
             &.{},

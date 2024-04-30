@@ -9,12 +9,6 @@ const DeviceAddress = device.DeviceAddress;
 const Device = device.Device;
 const UsbSpeed = device.UsbSpeed;
 
-const request = @import("request.zig");
-const RequestType = request.RequestType;
-const RequestTypeDirection = request.RequestTypeDirection;
-const RequestTypeRecipient = request.RequestTypeRecipient;
-const RequestTypeType = request.RequestTypeType;
-
 const schedule = @import("../schedule.zig");
 const TID = schedule.TID;
 const semaphore = @import("../semaphore.zig");
@@ -194,37 +188,9 @@ pub const TransferType = struct {
 };
 
 pub const SetupPacket = extern struct {
-    request_type: RequestType,
+    request_type: u8,
     request: u8,
     value: u16,
     index: u16,
     data_size: u16,
-
-    pub fn init(
-        recip: u5,
-        rtt: u2,
-        dir: u1,
-        rq: u8,
-        value: u16,
-        index: u16,
-        data_size: u16,
-    ) SetupPacket {
-        return init2(request.RT(recip, rtt, dir), rq, value, index, data_size);
-    }
-
-    pub fn init2(
-        rt: RequestType,
-        rq: u8,
-        value: u16,
-        index: u16,
-        data_size: u16,
-    ) SetupPacket {
-        return .{
-            .request_type = rt,
-            .request = rq,
-            .value = value,
-            .index = index,
-            .data_size = data_size,
-        };
-    }
 };

@@ -700,7 +700,7 @@ pub fn channelStartTransfer(id: ChannelId, req: *TransferRequest) void {
             },
             TransferRequest.control_data_phase => {
                 debugLogTransfer(req, "starting DATA transaction");
-                characteristics.endpoint_direction = req.setup_data.request_type.transfer_direction;
+                characteristics.endpoint_direction = @truncate((req.setup_data.request_type >> 7) & 0b1);
                 data = req.data + req.actual_size;
                 input_size = @truncate(req.size - req.actual_size);
                 next_pid = if (req.actual_size == 0) DwcTransferSizePid.data1 else req.next_data_pid;
@@ -717,9 +717,8 @@ pub fn channelStartTransfer(id: ChannelId, req: *TransferRequest) void {
             else => {
                 debugLogTransfer(req, "starting STATUS transaction");
 
-                if (req.setup_data.request_type.transfer_direction == usb.USB_ENDPOINT_DIRECTION_OUT or
-                    req.setup_data.data_size == 0)
-                {
+                const dir = (req.setup_data.request_type >> 7) & 0b1;
+                if (dir == usb.USB_ENDPOINT_DIRECTION_OUT or req.setup_data.data_size == 0) {
                     characteristics.endpoint_direction = usb.USB_ENDPOINT_DIRECTION_IN;
                 } else {
                     characteristics.endpoint_direction = usb.USB_ENDPOINT_DIRECTION_OUT;
