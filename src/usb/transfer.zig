@@ -4,7 +4,6 @@ const device = @import("device.zig");
 const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 const DeviceAddress = device.DeviceAddress;
 const Device = device.Device;
-const UsbSpeed = device.UsbSpeed;
 
 const schedule = @import("../schedule.zig");
 const TID = schedule.TID;
@@ -13,13 +12,11 @@ const SID = semaphore.SID;
 
 const spec = @import("spec.zig");
 const TransferBytes = spec.TransferBytes;
+const TransferPackets = spec.TransferPackets;
 
 const status = @import("status.zig");
 const TransactionStatus = status.TransactionStatus;
 
-//pub const TransferBytes = u19;
-pub const TransferPackets = u10;
-pub const PacketSize = u11;
 pub const DEFAULT_MAX_PACKET_SIZE = 8;
 
 /// Describe a single USB transfer to perform. May be any type of
@@ -93,7 +90,8 @@ pub const TransferRequest = struct {
 
     semaphore: ?SID = semaphore.NO_SEM,
 
-    pub fn initControlAllocated(req: *TransferRequest, dev: *Device, setup: SetupPacket, buffer: []u8) void {
+    pub fn create(allocator: std.mem.Allocator, dev: *Device, setup: SetupPacket, buffer: []u8) !*TransferRequest {
+        const req = try allocator.create(TransferRequest);
         req.* = .{
             .actual_size = 0,
             .attempted_bytes_remaining = 0,
@@ -108,6 +106,7 @@ pub const TransferRequest = struct {
             .size = @truncate(buffer.len),
             .setup_data = setup,
         };
+        return req;
     }
 
     pub fn initControl(dev: *Device, setup_packet: SetupPacket, data_buffer: []u8) TransferRequest {
@@ -129,7 +128,7 @@ pub const TransferRequest = struct {
         };
     }
 
-    pub fn deinit(self: *TransferRequest) void {
+    pub fn deinit(self: *TransferRequest, allocator: std.mem.Allocator) void {
         if (self.deferrer_thread) |tid| {
             schedule.kill(tid);
         }
@@ -140,6 +139,8 @@ pub const TransferRequest = struct {
             };
             self.deferrer_thread_sem = null;
         }
+
+        allocator.destroy(self);
     }
 
     pub fn isControlRequest(self: *const TransferRequest) bool {
