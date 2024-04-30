@@ -39,8 +39,6 @@ pub const HubDescriptor = hub.HubDescriptor;
 pub const HubStatus = hub.HubStatus;
 pub const PortStatus = hub.PortStatus;
 
-pub const TransferFactory = @import("usb/transfer_factory.zig");
-
 const Self = @This();
 
 // ----------------------------------------------------------------------

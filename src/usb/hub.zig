@@ -45,8 +45,6 @@ const setup = transfer.setup;
 const TransferRequest = transfer.TransferRequest;
 const TransferType = transfer.TransferType;
 
-const TransferFactory = @import("transfer_factory.zig");
-
 const usb = @import("../usb.zig");
 
 // ----------------------------------------------------------------------
@@ -246,7 +244,7 @@ pub const Hub = struct {
         log.debug(@src(), "hub {d} starting interrupt transfer", .{self.index});
 
         dev.driver_private = self;
-        self.status_change_request = TransferFactory.initInterruptTransfer(dev, &self.status_change_buffer);
+        self.status_change_request = TransferRequest.initInterrupt(dev, &self.status_change_buffer);
         self.status_change_request.completion = statusChangeCompletion;
 
         try usb.transferSubmit(&self.status_change_request);

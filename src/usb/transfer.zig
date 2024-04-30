@@ -57,7 +57,7 @@ pub const TransferRequest = struct {
     // For IN endpoints, this will be filled in up to the length of
     // the buffer. For OUT endpoints, this holds the exact bytes to
     // transmit.
-    data: [*]u8,
+    data: [*]allowzero u8,
     size: TransferBytes = 0,
 
     // Setup data for a USB control request. Only used when the
