@@ -10,7 +10,6 @@ const transaction_translator = @import("transaction_translator.zig");
 const TT = transaction_translator.TransactionTranslator;
 
 const core = @import("core.zig");
-const descriptor = @import("descriptor.zig");
 const hub = @import("hub.zig");
 const spec = @import("spec.zig");
 
@@ -54,7 +53,7 @@ pub const Device = struct {
     /// Transaction Translator to use for this device
     tt: ?*TT,
 
-    device_descriptor: descriptor.DeviceDescriptor,
+    device_descriptor: spec.DeviceDescriptor,
     configuration: *DeviceConfiguration,
 
     product: []u8,
@@ -111,7 +110,7 @@ pub const Device = struct {
     }
 
     fn deviceProductName(self: *Device, buf: []u8) ![]u8 {
-        var desc: descriptor.StringDescriptor = undefined;
+        var desc: spec.StringDescriptor = undefined;
         try core.deviceGetStringDescriptor(self, self.device_descriptor.product_name, spec.USB_LANGID_EN_US, std.mem.asBytes(&desc));
         return desc.intoSlice(buf);
     }
@@ -152,7 +151,7 @@ pub const Device = struct {
         return self.configuration.configuration_descriptor.interface_count;
     }
 
-    pub fn interface(self: *const Device, i: usize) ?*descriptor.InterfaceDescriptor {
+    pub fn interface(self: *const Device, i: usize) ?*spec.InterfaceDescriptor {
         if (i < self.interfaceCount()) {
             return self.configuration.interfaces[i].?;
         } else {
@@ -184,10 +183,10 @@ pub const DeviceConfiguration = struct {
     };
 
     allocator: Allocator,
-    configuration_descriptor: descriptor.ConfigurationDescriptor,
-    interfaces: [MAX_INTERFACES]?*descriptor.InterfaceDescriptor,
-    hids: [MAX_INTERFACES]?*descriptor.HidDescriptor,
-    endpoints: [MAX_INTERFACES][MAX_ENDPOINTS]?*descriptor.EndpointDescriptor,
+    configuration_descriptor: spec.ConfigurationDescriptor,
+    interfaces: [MAX_INTERFACES]?*spec.InterfaceDescriptor,
+    hids: [MAX_INTERFACES]?*spec.HidDescriptor,
+    endpoints: [MAX_INTERFACES][MAX_ENDPOINTS]?*spec.EndpointDescriptor,
 
     pub fn initFromBytes(allocator: Allocator, configuration_tree: []const u8) !*DeviceConfiguration {
         var self = try allocator.create(DeviceConfiguration);
@@ -195,10 +194,10 @@ pub const DeviceConfiguration = struct {
 
         self.* = .{
             .allocator = allocator,
-            .configuration_descriptor = std.mem.zeroes(descriptor.ConfigurationDescriptor),
-            .interfaces = std.mem.zeroes([MAX_INTERFACES]?*descriptor.InterfaceDescriptor),
-            .hids = std.mem.zeroes([MAX_INTERFACES]?*descriptor.HidDescriptor),
-            .endpoints = std.mem.zeroes([MAX_INTERFACES][MAX_ENDPOINTS]?*descriptor.EndpointDescriptor),
+            .configuration_descriptor = std.mem.zeroes(spec.ConfigurationDescriptor),
+            .interfaces = std.mem.zeroes([MAX_INTERFACES]?*spec.InterfaceDescriptor),
+            .hids = std.mem.zeroes([MAX_INTERFACES]?*spec.HidDescriptor),
+            .endpoints = std.mem.zeroes([MAX_INTERFACES][MAX_ENDPOINTS]?*spec.EndpointDescriptor),
         };
 
         try self.parseConfiguration(configuration_tree);
@@ -250,7 +249,7 @@ pub const DeviceConfiguration = struct {
 
         try state.expect(spec.USB_DESCRIPTOR_TYPE_CONFIGURATION);
 
-        const partial_copy = try state.copy(descriptor.ConfigurationDescriptor, self.allocator);
+        const partial_copy = try state.copy(spec.ConfigurationDescriptor, self.allocator);
         self.configuration_descriptor = partial_copy.*;
         self.allocator.destroy(partial_copy);
 
@@ -258,7 +257,7 @@ pub const DeviceConfiguration = struct {
 
         for (0..expect_interfaces) |iface_num| {
             try state.expect(spec.USB_DESCRIPTOR_TYPE_INTERFACE);
-            const iface = try state.copy(descriptor.InterfaceDescriptor, self.allocator);
+            const iface = try state.copy(spec.InterfaceDescriptor, self.allocator);
             errdefer self.allocator.destroy(iface);
             self.interfaces[iface_num] = iface;
 
@@ -269,7 +268,7 @@ pub const DeviceConfiguration = struct {
                     // For now, assume that the HID descriptor is
                     // optional and if the type doesn't match, then
                     // jump to parsing endpoint descriptors.
-                    const hid = try state.copy(descriptor.HidDescriptor, self.allocator);
+                    const hid = try state.copy(spec.HidDescriptor, self.allocator);
                     errdefer self.allocator.destroy(hid);
                     self.hids[iface_num] = hid;
                 } else |_| {
@@ -281,7 +280,7 @@ pub const DeviceConfiguration = struct {
             const expect_endpoints = iface.endpoint_count;
             for (0..expect_endpoints) |endpoint_num| {
                 try state.expect(spec.USB_DESCRIPTOR_TYPE_ENDPOINT);
-                const endpoint = try state.copy(descriptor.EndpointDescriptor, self.allocator);
+                const endpoint = try state.copy(spec.EndpointDescriptor, self.allocator);
                 errdefer self.allocator.destroy(endpoint);
                 self.endpoints[iface_num][endpoint_num] = endpoint;
             }

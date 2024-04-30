@@ -26,10 +26,6 @@ const TID = schedule.TID;
 const time = @import("../time.zig");
 const delayMillis = time.delayMillis;
 
-const descriptor = @import("descriptor.zig");
-const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
-const DescriptorIndex = descriptor.DescriptorIndex;
-
 const device = @import("device.zig");
 const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;

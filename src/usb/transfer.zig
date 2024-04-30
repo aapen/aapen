@@ -1,8 +1,5 @@
 const std = @import("std");
 
-const descriptor = @import("descriptor.zig");
-const EndpointDescriptor = descriptor.EndpointDescriptor;
-
 const device = @import("device.zig");
 const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 const DeviceAddress = device.DeviceAddress;
@@ -55,7 +52,7 @@ pub const TransferRequest = struct {
     // Endpoint descriptor to communicate with on the device. This
     // should come from one of the endpoints in the Device struct. A
     // control transfer can leave this as null
-    endpoint_desc: ?*EndpointDescriptor = null,
+    endpoint_desc: ?*spec.EndpointDescriptor = null,
 
     // For IN endpoints, this will be filled in up to the length of
     // the buffer. For OUT endpoints, this holds the exact bytes to

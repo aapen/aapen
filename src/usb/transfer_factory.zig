@@ -3,8 +3,6 @@ const Allocator = std.mem.Allocator;
 
 const root = @import("root");
 
-const descriptor = @import("descriptor.zig");
-
 const device = @import("device.zig");
 const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;

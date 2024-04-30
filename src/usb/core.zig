@@ -15,8 +15,6 @@ const SID = semaphore.SID;
 const synchronize = @import("../synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
-const descriptor = @import("descriptor.zig");
-
 const device = @import("device.zig");
 
 const spec = @import("spec.zig");
@@ -170,7 +168,7 @@ pub fn deviceConfigurationDescriptorRead(dev: *device.Device) !void {
     log.debug(@src(), "[{d}:{d}] configuration descriptor read", .{ dev.address, 0 });
     // first transfer returns the configuration descriptor which
     // includes the total length of the whole configuration tree
-    var desc: descriptor.ConfigurationDescriptor = undefined;
+    var desc: spec.ConfigurationDescriptor = undefined;
 
     const result = try controlMessage(
         dev,
