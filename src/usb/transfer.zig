@@ -159,24 +159,6 @@ pub const TransferRequest = struct {
     }
 };
 
-pub const PID2 = struct {
-    pub const token_out: u4 = 0b0001;
-    pub const token_in: u4 = 0b1001;
-    pub const token_sof: u4 = 0b0101;
-    pub const token_setup: u4 = 0b1101;
-    pub const data_data0: u4 = 0b0011;
-    pub const data_data1: u4 = 0b1011;
-    pub const data_data2: u4 = 0b0111;
-    pub const data_mdata: u4 = 0b1111;
-    pub const handshake_ack: u4 = 0b0010;
-    pub const handshake_nak: u4 = 0b1010;
-    pub const handshake_stall: u4 = 0b1110;
-    pub const handshake_nyet: u4 = 0b0110;
-    pub const special_preamble_or_err: u4 = 0b1100;
-    pub const special_split: u4 = 0b1000;
-    pub const special_ping: u4 = 0b0100;
-};
-
 pub const TransferType = struct {
     pub const control: u2 = 0b00;
     pub const isochronous: u2 = 0b01;

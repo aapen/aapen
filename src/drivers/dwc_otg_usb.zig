@@ -57,7 +57,6 @@ const EndpointNumber = usb.EndpointNumber;
 const Hub = usb.Hub;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
 const PacketSize = usb.PacketSize;
-const PID = usb.PID2;
 const RequestTypeDirection = usb.RequestTypeDirection;
 const RequestTypeRecipient = usb.RequestTypeRecipient;
 const RequestTypeType = usb.RequestTypeType;
