@@ -47,111 +47,16 @@ const TransferType = transfer.TransferType;
 
 const usb = @import("../usb.zig");
 
-// ----------------------------------------------------------------------
-// Hub definitions from USB 2.0 spec
-// ----------------------------------------------------------------------
-
-pub const HubDescriptor = extern struct {
-    length: u8,
-    descriptor_type: u8,
-    number_ports: u8,
-    characteristics: Characteristics,
-    power_on_to_power_good: u8, // in 2 millisecond intervals
-    controller_current: u8, // in milliamps
-
-    // following controller_current is a variable # of bytes
-    // containing a bitmap for "device removable". there is one bit
-    // per number_ports, padded out to byte granularity
-
-    // following the device removable bitmap is _another_ bitmap for
-    // "port power control". it remains for compatibility but should
-    // be set to all 1s.
-
-    // we ignore both of those
-};
-
-pub const TtThinkTime = struct {
-    pub const tt_8: u2 = 0b00;
-    pub const tt_16: u2 = 0b01;
-    pub const tt_24: u2 = 0b10;
-    pub const tt_32: u2 = 0b11;
-};
-
-pub const Characteristics = packed struct {
-    power_switching_mode: u2, // 0..1
-    compound: u1, // 2
-    overcurrent_protection_mode: u2, // 3..4
-    tt_think_time: u2, // 5..6
-    port_indicators: u1, // 7
-    _reserved_0: u8 = 0, // 8..15
-};
-
-pub const TTDirection = struct {
-    pub const out: u1 = 0;
-    pub const in: u1 = 1;
-};
-
-const ClearTTBufferValue = packed struct {
-    endpoint_number: usb.EndpointNumber,
-    device_address: DeviceAddress,
-    endpoint_type: TransferType,
-    _reserved: u2 = 0,
-    direction: u1,
-};
-
-/// See USB 2.0 specification, revision 2.0, table 11-19
-pub const HubStatus = packed struct {
-    hub_status: packed struct {
-        local_power_source: u1 = 0,
-        overcurrent: u1 = 0,
-        _reserved: u14 = 0,
-    },
-    change_status: packed struct {
-        local_power_changed: u1 = 0,
-        overcurrent_changed: u1 = 0,
-        _reserved: u14 = 0,
-    },
-};
-
-pub const PortStatus = packed struct {
-    port_status: packed struct {
-        connected: u1 = 0, // 0
-        enabled: u1 = 0, // 1
-        suspended: u1 = 0, // 2 (reserved in USB 3.x)
-        overcurrent: u1 = 0, // 3
-        reset: u1 = 0, // 4
-        _reserved_0: u3 = 0, // 5..7 (port link state in USB 3.x)
-        power: u1 = 0, // 8
-        low_speed_device: u1 = 0, // 9
-        high_speed_device: u1 = 0, // 10
-        test_mode: u1 = 0, // 11
-        indicator_control: u1 = 0, // 12
-        _reserved_1: u3 = 0, // 13..15
-    },
-
-    port_change: packed struct {
-        connected_changed: u1 = 0, // 0
-        enabled_changed: u1 = 0, // 1 (reserved in USB 3.x)
-        suspended_changed: u1 = 0, // 2 (reserved in USB 3.x)
-        overcurrent_changed: u1 = 0, // 3
-        reset_changed: u1 = 0, // 4
-        _bh_reset_changed: u1 = 0, // 5 (only in USB 3.x)
-        _port_link_state_changed: u1 = 0, // 6 (only in USB 3.x)
-        _port_config_error: u1 = 0, // 7 (only in USB 3.x)
-        _reserved_0: u8 = 0, // 8..15
-    },
-
-    pub fn deviceSpeed(self: *const PortStatus) UsbSpeed {
-        if (self.port_status.low_speed_device == .low_speed) {
-            return UsbSpeed.Low;
-        } else if (self.port_status.high_speed_device == .high_speed) {
-            return UsbSpeed.High;
-        } else {
-            // This may not be correct for USB 3
-            return UsbSpeed.Full;
-        }
+pub fn deviceSpeed(self: *const usb.HubPortStatus) UsbSpeed {
+    if (self.port_status.low_speed_device == .low_speed) {
+        return UsbSpeed.Low;
+    } else if (self.port_status.high_speed_device == .high_speed) {
+        return UsbSpeed.High;
+    } else {
+        // This may not be correct for USB 3
+        return UsbSpeed.Full;
     }
-};
+}
 
 // some timing constants from the USB spec
 const RESET_TIMEOUT = 100;
@@ -167,7 +72,7 @@ pub const MAX_HUBS = 8;
 pub const Hub = struct {
     pub const Port = struct {
         number: u7,
-        status: PortStatus,
+        status: usb.HubPortStatus,
         device_speed: UsbSpeed,
         device: ?*Device,
     };
@@ -175,7 +80,7 @@ pub const Hub = struct {
     in_use: bool = false,
     index: u5 = undefined,
     device: *Device = undefined,
-    descriptor: HubDescriptor = undefined,
+    descriptor: usb.HubDescriptor = undefined,
     port_count: u8 = 0,
     ports: []Port = undefined,
     status_change_buffer: [8]u8 = [_]u8{0} ** 8,
@@ -232,10 +137,10 @@ pub const Hub = struct {
 
         const full_speed_bit_time = 666;
         self.tt.think_time = switch (self.descriptor.characteristics.tt_think_time) {
-            TtThinkTime.tt_8 => full_speed_bit_time,
-            TtThinkTime.tt_16 => full_speed_bit_time * 2,
-            TtThinkTime.tt_24 => full_speed_bit_time * 3,
-            TtThinkTime.tt_32 => full_speed_bit_time * 4,
+            usb.USB_HUB_TT_THINK_TIME_8 => full_speed_bit_time,
+            usb.USB_HUB_TT_THINK_TIME_16 => full_speed_bit_time * 2,
+            usb.USB_HUB_TT_THINK_TIME_24 => full_speed_bit_time * 3,
+            usb.USB_HUB_TT_THINK_TIME_32 => full_speed_bit_time * 4,
         };
 
         try self.initPorts();
@@ -391,7 +296,7 @@ pub const Hub = struct {
         log.debug(@src(), "hub {d} port {d} reset finished", .{ self.index, port.number });
     }
 
-    fn portAttachDevice(self: *Hub, port: *Port, portstatus: PortStatus) !void {
+    fn portAttachDevice(self: *Hub, port: *Port, portstatus: usb.HubPortStatus) !void {
         const port_reset_delay: u32 = if (self.device.isRootHub()) ROOT_RESET_DELAY else SHORT_RESET_DELAY;
 
         try self.portReset(port, port_reset_delay);
@@ -437,7 +342,7 @@ pub const Hub = struct {
         // TODO
     }
 
-    fn portConnectChange(self: *Hub, port: *Port, portstatus: PortStatus) !void {
+    fn portConnectChange(self: *Hub, port: *Port, portstatus: usb.HubPortStatus) !void {
         const connected: bool = (portstatus.port_status.connected == 1);
 
         // TODO  detach the old device

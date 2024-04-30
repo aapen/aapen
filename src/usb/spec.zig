@@ -293,8 +293,6 @@ const REQUEST_TYPE_RESERVED                            : u8 = 0x03 << 5;
 const REQUEST_DIRECTION_OUT                            : u8 = 0b0 << 7;
 const REQUEST_DIRECTION_IN                             : u8 = 0b1 << 7;
 
-// zig fmt: on
-
 pub const USB_REQUEST_TYPE_DEVICE_STANDARD_IN = REQUEST_RECIPIENT_DEVICE | REQUEST_TYPE_STANDARD | REQUEST_DIRECTION_IN;
 pub const USB_REQUEST_TYPE_DEVICE_STANDARD_OUT = REQUEST_RECIPIENT_DEVICE | REQUEST_TYPE_STANDARD | REQUEST_DIRECTION_OUT;
 pub const USB_REQUEST_TYPE_OTHER_CLASS_IN = REQUEST_RECIPIENT_OTHER | REQUEST_TYPE_CLASS | REQUEST_DIRECTION_IN;
@@ -303,6 +301,14 @@ pub const USB_REQUEST_TYPE_DEVICE_CLASS_IN = REQUEST_RECIPIENT_DEVICE | REQUEST_
 pub const USB_REQUEST_TYPE_DEVICE_CLASS_OUT = REQUEST_RECIPIENT_DEVICE | REQUEST_TYPE_CLASS | REQUEST_DIRECTION_OUT;
 pub const USB_REQUEST_TYPE_INTERFACE_CLASS_IN = REQUEST_RECIPIENT_INTERFACE | REQUEST_TYPE_CLASS | REQUEST_DIRECTION_IN;
 pub const USB_REQUEST_TYPE_INTERFACE_CLASS_OUT = REQUEST_RECIPIENT_INTERFACE | REQUEST_TYPE_CLASS | REQUEST_DIRECTION_OUT;
+
+// Transaction Translator think times
+pub const USB_HUB_TT_THINK_TIME_8                      : u2 = 0b00;
+pub const USB_HUB_TT_THINK_TIME_16                     : u2 = 0b01;
+pub const USB_HUB_TT_THINK_TIME_24                     : u2 = 0b10;
+pub const USB_HUB_TT_THINK_TIME_32                     : u2 = 0b11;
+
+// zig fmt: on
 
 // ----------------------------------------------------------------------
 // Specified structures
@@ -437,4 +443,75 @@ pub const StringDescriptor = extern struct {
         }
         return dest[0..actual_length];
     }
+};
+
+pub const HubDescriptor = extern struct {
+    pub const Characteristics = packed struct {
+        power_switching_mode: u2, // 0..1
+        compound: u1, // 2
+        overcurrent_protection_mode: u2, // 3..4
+        tt_think_time: u2, // 5..6
+        port_indicators: u1, // 7
+        _reserved_0: u8 = 0, // 8..15
+    };
+
+    length: u8,
+    descriptor_type: u8,
+    number_ports: u8,
+    characteristics: Characteristics,
+    power_on_to_power_good: u8, // in 2 millisecond intervals
+    controller_current: u8, // in milliamps
+
+    // following controller_current is a variable # of bytes
+    // containing a bitmap for "device removable". there is one bit
+    // per number_ports, padded out to byte granularity
+
+    // following the device removable bitmap is _another_ bitmap for
+    // "port power control". it remains for compatibility but should
+    // be set to all 1s.
+
+    // we ignore both of those
+};
+
+// See USB 2.0 specification, revision 2.0, table 11-19
+pub const HubStatus = packed struct {
+    hub_status: packed struct {
+        local_power_source: u1 = 0,
+        overcurrent: u1 = 0,
+        _reserved: u14 = 0,
+    },
+    change_status: packed struct {
+        local_power_changed: u1 = 0,
+        overcurrent_changed: u1 = 0,
+        _reserved: u14 = 0,
+    },
+};
+
+pub const HubPortStatus = packed struct {
+    port_status: packed struct {
+        connected: u1 = 0, // 0
+        enabled: u1 = 0, // 1
+        suspended: u1 = 0, // 2 (reserved in USB 3.x)
+        overcurrent: u1 = 0, // 3
+        reset: u1 = 0, // 4
+        _reserved_0: u3 = 0, // 5..7 (port link state in USB 3.x)
+        power: u1 = 0, // 8
+        low_speed_device: u1 = 0, // 9
+        high_speed_device: u1 = 0, // 10
+        test_mode: u1 = 0, // 11
+        indicator_control: u1 = 0, // 12
+        _reserved_1: u3 = 0, // 13..15
+    },
+
+    port_change: packed struct {
+        connected_changed: u1 = 0, // 0
+        enabled_changed: u1 = 0, // 1 (reserved in USB 3.x)
+        suspended_changed: u1 = 0, // 2 (reserved in USB 3.x)
+        overcurrent_changed: u1 = 0, // 3
+        reset_changed: u1 = 0, // 4
+        _bh_reset_changed: u1 = 0, // 5 (only in USB 3.x)
+        _port_link_state_changed: u1 = 0, // 6 (only in USB 3.x)
+        _port_config_error: u1 = 0, // 7 (only in USB 3.x)
+        _reserved_0: u8 = 0, // 8..15
+    },
 };

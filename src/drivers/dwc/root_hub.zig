@@ -38,7 +38,7 @@ host_registers: ?*volatile reg.HostRegisters = null,
 
 root_hub_device_status: DeviceStatus = undefined,
 root_hub_hub_status: usb.HubStatus = undefined,
-root_hub_port_status: usb.PortStatus = undefined,
+root_hub_port_status: usb.HubPortStatus = undefined,
 root_hub_status_change_transfer: ?*TransferRequest = null,
 
 pub fn init(self: *Self, registers: *volatile HostRegisters) void {

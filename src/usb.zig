@@ -35,9 +35,6 @@ pub usingnamespace @import("usb/transfer.zig");
 const hid_keyboard = @import("usb/hid_keyboard.zig");
 
 const hub = @import("usb/hub.zig");
-pub const HubDescriptor = hub.HubDescriptor;
-pub const HubStatus = hub.HubStatus;
-pub const PortStatus = hub.PortStatus;
 
 const Self = @This();
 
