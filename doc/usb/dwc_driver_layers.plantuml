@@ -2,56 +2,121 @@
 skinparam componentStyle rectangle
 
 package usb {
-        component usb_device [
-        usb/device.zig
-        Device (abstract),
-        Function detection and factory,
+        component usb.zig [
+        ""usb.zig""
+        Bus initialization
+        Driver registration
+        Device attachment
+        Address assignment
+        ]
+
+        component core.zig [
+        ""usb/core.zig""
+        Transfer Handling
+        ]
+
+        component device.zig [
+        ""usb/device.zig""
+        Device
+        Configuration parsing
+        Function detection and factory
         Endpoint detection
         ]
 
 
-        component usb_request [
-        usb/request.zig
-        USB Request
-        Requests, transfers
+        component transfer.zig [
+        ""usb/transfer.zig""
+        Transfer Request state tracking
         ]
+
+        component hub.zig [
+        ""usb/hub.zig""
+        Hub class driver
+        Device enumeration
+        ]
+
+        component hid_keyboard.zig [
+        ""usb/hid_keyboard.zig""
+        HID Keyboard class driver
+        Input polling thread
+        Key code mapping
+        ]
+
+        component spec.zig [
+        ""usb/spec.zig""
+        Constants and structs
+        from USB specification
+        ]
+
+        usb.zig -d-> core.zig
+        usb.zig -d-> device.zig
+        usb.zig -d-> hid_keyboard.zig
+        usb.zig -d-> hub.zig
+        usb.zig -d-> spec.zig
+        usb.zig -d-> transfer.zig
+        core.zig -> device.zig
+        core.zig -> hub.zig
+        core.zig -d-> spec.zig
+        core.zig -> transfer.zig
+        device.zig -> core.zig
+        device.zig -> hub.zig
+        device.zig -d-> spec.zig
+        hid_keyboard.zig -> device.zig
+        hid_keyboard.zig -> transfer.zig
+        hid_keyboard.zig -u-> usb.zig
+        hub.zig -> device.zig
+        hub.zig -d-> spec.zig
+        hub.zig -> transfer.zig
+        hub.zig -u-> usb.zig
+        transfer.zig -d-> spec.zig
+        transfer.zig -> device.zig
 }
 
 package drivers {
-        package dwc {
+        package dwc_otg_usb {
                 component dwc_hcd [
-                drivers/dwc/hcd.zig
+                ""drivers/dwc_otg_usb.zig""
                 Host Controller Driver
-                API exposed to the OS.
                 Handles transfers. Does not expose
                 channels or transactions.
-                If queueing is required, it will be here.
-                ]
-
-                component dwc_cil [
-                drivers/dwc/cil.zig
-                Core Interface Layer
                 Channels, transactions,
                 interrupt handling
                 ]
-
                 component dwc_reg [
-                drivers/dwc/registers.zig
+                ""drivers/dwc/registers.zig""
                 Register definitions
+                ]
+                component root_hub [
+                ""drivers/dwc/root_hub.zig""
+                Wrap DWC2 port to act like a USB hub
                 ]
         }
         package xhci {
                 component xhci_hcd [
-                HCD for xHCI
-                (Structure TBD)
+                **TBD**
                 ]
         }
+
+        dwc_hcd -d-> dwc_reg
+        dwc_hcd -d-> root_hub
+        root_hub -d-> dwc_reg
 }
 
-usb_device -d-> usb_request
-usb_request -d-> dwc_hcd : RPi3
-usb_request -d-> xhci_hcd : RPi4 and later
-dwc_hcd -d-> dwc_cil
-dwc_cil -d-> dwc_reg
+package hal {
+        component raspi3 [
+        ""hal/raspi3.zig""
+        ]
+
+        component raspi4 [
+        ""hal/raspi4.zig""
+        ]
+}
+
+core.zig -d-> hal
+usb.zig -d-> hal
+raspi3 -d-> dwc_otg_usb
+raspi4 -d-> xhci
+root_hub -u-> usb.zig
+dwc_otg_usb -u-> usb.zig
 
 @enduml
