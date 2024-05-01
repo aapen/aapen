@@ -181,14 +181,6 @@ pub fn init(
     interrupt_controller = intc;
     irq_id = ii;
 
-    // for (0..dwc_max_channels) |chid| {
-    //     channels[chid].init(
-    //         chid,
-    //         channelRegisters(@truncate(chid)),
-    //         &channel_buffers[chid],
-    //     );
-    // }
-
     try transfer_mailbox.init(allocator, 1024);
 
     return self;
@@ -554,7 +546,6 @@ fn dumpRegister(field_name: []const u8, v: u32) void {
 // ----------------------------------------------------------------------
 
 var channel_assignments: HcdChannels = .{};
-//var channels: [dwc_max_channels]Channel = [_]Channel{.{}} ** dwc_max_channels;
 var channel_buffers: [dwc_max_channels][1024]u8 align(DMA_ALIGNMENT) = [_][1024]u8{.{0} ** 1024} ** dwc_max_channels;
 
 const ChannelId = u5;
