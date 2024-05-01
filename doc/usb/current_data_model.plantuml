@@ -2,6 +2,7 @@
 
 package USB {
         class Core {
+                transferSubmit(req: *TransferRequest) !void
         }
 
         class Device {
@@ -63,6 +64,14 @@ package USB {
         index of port on parent hub
         end note
 
+note bottom of TransferRequest
+Caller constructs TransferRequest
+with *Device & *EndpointDescriptor
+end note
+
+note right of Core::"transferSubmit(req: *TransferRequest) !void"
+Entry point for callers to send or receive
+end note
 }
 
 package DWC2 {
