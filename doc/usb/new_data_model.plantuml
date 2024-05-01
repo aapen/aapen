@@ -1,0 +1,136 @@
+@startuml
+
+package DWC2 {
+        class HCD {
+        }
+
+        class FakeRootHub {
+        }
+
+        class Channel {
+                ep0_state: ControlStage
+                in_use: bool
+                wait: semaphore
+        }
+}
+
+package USB {
+        class URB {
+                data_toggle
+                completion_callback
+                timeout: ?u8
+        }
+        note top: Replaces TransferRequest
+        URB -u-> HubPort : hport
+        URB -d-> EndpointDescriptor : ep
+
+        class Endpoint {
+        }
+        URB -d-> Endpoint : ep
+        Endpoint *-d-> EndpointDescriptor : ep_desc
+
+        class InterfaceAlternate {
+        }
+        InterfaceAlternate *-d-> InterfaceDescriptor : intf_desc
+        InterfaceAlternate *-d-> "MAX_ENDPOINTS" Endpoint : ep
+
+        class Interface {
+                device_name: []u8
+        }
+        Interface -u-> Driver : class_driver
+        Interface *-d-> "MAX_INTF_ALTS" InterfaceAlternate : altsetting
+        
+        enum Speed {
+                Low
+                High
+                Full
+                Super
+        }
+
+        class Core {
+                submitUrb(urb: *Urb) !void
+        }
+        Core *-d-> Hub : root_hub
+
+        class Hub {
+                connected: bool
+                is_root: bool
+                address: u7
+        }
+
+        Hub *-r-> HubDescriptor : hub_desc
+        Hub o-d-> "MAX_PORTS" HubPort : child
+        Hub -d-> HubPort : parent
+        Hub -d-> EndpointDescriptor : interrupt_in
+        Hub *-d-> URB: interrupt_in_urb
+
+        class HubPort {
+                connected: bool
+                port: u8
+                device_address: u7
+       }
+
+        HubPort -r-> Speed : speed
+        HubPort -u-> Hub : parent
+        HubPort *-d-> DeviceDescriptor : device_desc
+        HubPort *-d-> ConfigurationDescriptor : config_desc
+        HubPort *-d-> "MAX_INTERFACES" Interface : interfaces
+        HubPort o-d-> SetupPacket : setup
+        HubPort *-d-> EndpointDescriptor : ep0
+        HubPort *-d-> URB: ep0_urb
+
+        class InterfaceDescriptor {
+                class
+                subclass
+                protocol
+        }
+
+        class Hid {
+        }
+        Hid -> HubPort : hport
+        Hid -> EndpointDescriptor : interrupt_in
+        Hid -> EndpointDescriptor : interrupt_out
+        Hid *-> URB : interrupt_in_urb
+        Hid *-> URB : interrupt_out_urb
+
+        class EndpointDescriptor {
+                endpoint_address : u8
+                attributes : u8
+        }
+
+        enum EndpointType {
+                control
+                interrupt
+                bulk
+                isochronous
+        }
+        EndpointDescriptor -d-> EndpointType
+
+        class Driver {
+        }
+
+        note left of HubPort::ep0_urb
+        Pre-allocated URB for control transfers
+        end note
+
+        note right of EndpointDescriptor::attributes
+        Includes direction and type
+        end note
+}
+
+HCD -d-> FakeRootHub
+HCD -d-> Channel
+
+FakeRootHub --> URB : suspended interrupt transfer
+
+Core -r-> HCD
+Core -l-> "1..*" Driver : drivers
+
+Channel -l-> URB : current_urb
+
+note as N1
+This is not implemented yet. It is a prospective redesign
+to make state handling of requests cleaner.
+end note
+
+@enduml
