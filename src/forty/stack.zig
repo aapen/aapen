@@ -39,6 +39,12 @@ pub fn Stack(comptime T: type) type {
             return self.contents.pop();
         }
 
+        pub fn dropN(self: *Self, count: usize) !void {
+            for (0..count) |_| {
+                _ = try self.pop();
+            }
+        }
+
         pub inline fn isEmpty(self: *Self) bool {
             return self.contents.items.len == 0;
         }
