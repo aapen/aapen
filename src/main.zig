@@ -187,10 +187,6 @@ fn startForty(_: *anyopaque) void {
                 debug.kernelError("Debug define module", err);
             };
 
-            syscall.defineModule(interp) catch |err| {
-                debug.kernelError("Syscall define module", err);
-            };
-
             HAL.defineModule(interp, hal) catch |err| {
                 debug.kernelError("HAL define module", err);
             };

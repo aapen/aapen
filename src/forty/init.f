@@ -1,8 +1,20 @@
 (Simple console control)
 
+: emit 1 syscall drop ;
 : cr 0x0a emit ;
 : cls 0x0c emit ;
 : p ( n -- : Print the top of the stack followed by a newline) . cr ;
+
+: not0 0 = not ;
+
+: s. ( a -- : Print null terminated string at a )
+  while dup @b not0
+  do
+    dup @b emit
+    1 +
+  done
+  drop
+;
 
 ( Input and output base words )
 

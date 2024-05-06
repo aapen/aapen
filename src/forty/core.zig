@@ -5,6 +5,8 @@ const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
 const schedule = @import("../schedule.zig");
+const syscall = @import("../syscall.zig");
+
 const string = @import("string.zig");
 const parser = @import("parser.zig");
 
@@ -80,11 +82,11 @@ pub fn wordSetMemory(forth: *Forth, _: *Header) ForthError!void {
 }
 
 /// a -- ()
-pub fn wordEmit(forth: *Forth, _: *Header) ForthError!void {
-    const a = try forth.stack.pop();
-    const ch: u8 = @intCast(a);
-    try forth.emit(ch);
-}
+// pub fn wordEmit(forth: *Forth, _: *Header) ForthError!void {
+//     const a = try forth.stack.pop();
+//     const ch: u8 = @intCast(a);
+//     try forth.emit(ch);
+// }
 
 // -- ch
 pub fn wordKey(forth: *Forth, _: *Header) ForthError!void {
@@ -142,11 +144,11 @@ pub fn wordSDecimalDot(forth: *Forth, _: *Header) ForthError!void {
 }
 
 /// saddr --
-pub fn wordSDot(forth: *Forth, _: *Header) ForthError!void {
-    const i = try forth.stack.pop();
-    const p_string: [*:0]u8 = @ptrFromInt(i);
-    try forth.print("{s}", .{p_string});
-}
+// pub fn wordSDot(forth: *Forth, _: *Header) ForthError!void {
+//     const i = try forth.stack.pop();
+//     const p_string: [*:0]u8 = @ptrFromInt(i);
+//     try forth.print("{s}", .{p_string});
+// }
 
 /// saddr saddr --
 pub fn wordSEqual(forth: *Forth, _: *Header) ForthError!void {
@@ -561,10 +563,11 @@ pub fn defineCore(forth: *Forth) !void {
 
     // IO
     _ = try forth.definePrimitiveDesc("hello", " -- :Hello world!", &wordHello, false);
-    _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
+    //    _ = try forth.definePrimitiveDesc("emit", "ch -- :Emit a char", &wordEmit, false);
     _ = try forth.definePrimitiveDesc("key", " -- ch :Read a key", &wordKey, false);
     _ = try forth.definePrimitiveDesc("key?", " -- n: Check for a key press", &wordKeyMaybe, false);
     _ = try forth.definePrimitiveDesc("sleep", " n -- : Pause for some milliseconds", &wordSleep, false);
+    _ = try forth.definePrimitiveDesc("syscall", "... n -- n : Invoke syscall n", &syscall.wordSyscall, false);
 
     // Basic Forth words.
     _ = try forth.definePrimitiveDesc("exec", "pHeader -- <Results>", &wordExec, false);
@@ -596,7 +599,7 @@ pub fn defineCore(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("~", "n -- :print tos as i64 to serial", &wordSerialDot, false);
     _ = try forth.definePrimitiveDesc("#.", "n -- :print tos as u64 in decimal", &wordDecimalDot, false);
     _ = try forth.definePrimitiveDesc("h.", "n -- :print tos as u64 in decimal", &wordHexDot, false);
-    _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, false);
+    //    _ = try forth.definePrimitiveDesc("s.", "s -- :print tos as a string", &wordSDot, false);
     _ = try forth.definePrimitiveDesc("s~", "s -- :print tos as a string to serial port", &wordSerialSDot, false);
     _ = try forth.definePrimitiveDesc("s=", "s s -- b :string contents equality", &wordSEqual, false);
     _ = try forth.definePrimitiveDesc("+", "n n -- n :u64 addition", &wordAdd, false);
