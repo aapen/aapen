@@ -66,6 +66,64 @@ const SHORT_RESET_DELAY = 10;
 // Local implementation
 // ----------------------------------------------------------------------
 pub const MAX_HUBS = 8;
+pub const MAX_INTERFACES = 8;
+pub const MAX_INTERFACE_ALTERNATES = 8;
+pub const MAX_ENDPOINTS = 4;
+
+pub const Endpoint = struct {
+    ep_desc: spec.EndpointDescriptor,
+};
+
+pub const InterfaceAlternate = struct {
+    interface_descriptor: spec.InterfaceDescriptor,
+    ep: [MAX_ENDPOINTS]Endpoint,
+};
+
+pub const Interface = struct {
+    class_driver: *usb.DeviceDriver,
+    device_name: []u8,
+    alternate: [MAX_INTERFACE_ALTERNATES]InterfaceAlternate,
+};
+
+pub const HubPort = struct {
+    // Connecting to the hub tree
+    parent: *Hub,
+    port: u7,
+
+    // About the device connected to this port
+    connected: bool,
+    device_address: u7,
+    device_desc: spec.DeviceDescriptor,
+    config_desc: spec.ConfigurationDescriptor,
+    interfaces: [MAX_INTERFACES]Interface,
+
+    // Reserved space for activities
+    setup: SetupPacket,
+    ep0: spec.EndpointDescriptor,
+    // ep0_urb: URB,
+
+    pub fn init(parent: *Hub, port_number: u7) HubPort {
+        var self: HubPort = .{
+            .parent = parent,
+            .port = port_number,
+            .connected = false,
+            .device_address = 0,
+            .device_desc = std.mem.zeroes(spec.DeviceDescriptor),
+            .config_desc = std.mem.zeroes(spec.ConfigurationDescriptor),
+            .interfaces = undefined,
+            .setup = std.mem.zeroes(SetupPacket),
+            .ep0 = std.mem.zeroes(spec.EndpointDescriptor),
+        };
+
+        return self;
+    }
+
+    pub fn create(alloc: Allocator, parent: *Hub, port_number: u7) !*HubPort {
+        var hp = try alloc.create(HubPort);
+        hp.* = init(parent, port_number);
+        return hp;
+    }
+};
 
 pub const Hub = struct {
     pub const Port = struct {
@@ -81,6 +139,7 @@ pub const Hub = struct {
     descriptor: usb.HubDescriptor = undefined,
     port_count: u8 = 0,
     ports: []Port = undefined,
+    ports2: []HubPort = undefined,
     status_change_buffer: [8]u8 = [_]u8{0} ** 8,
     status_change_request: TransferRequest = undefined,
     tt: TransactionTranslator = .{ .hub = null, .think_time = 0 },
@@ -142,6 +201,7 @@ pub const Hub = struct {
         };
 
         try self.initPorts();
+        try self.initPorts2();
         try self.powerOnPorts();
 
         log.debug(@src(), "hub {d} starting interrupt transfer", .{self.index});
@@ -172,6 +232,13 @@ pub const Hub = struct {
                 .device_speed = .High,
                 .device = null,
             };
+        }
+    }
+
+    fn initPorts2(self: *Hub) !void {
+        self.ports2 = try allocator.alloc(HubPort, self.port_count);
+        for (1..self.port_count + 1) |i| {
+            self.ports2[i - 1] = HubPort.init(self, @truncate(i));
         }
     }
 

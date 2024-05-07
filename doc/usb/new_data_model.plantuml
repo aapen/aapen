@@ -26,7 +26,6 @@ package USB {
 
         class Endpoint {
         }
-        URB -d-> Endpoint : ep
         Endpoint *-d-> EndpointDescriptor : ep_desc
 
         class InterfaceAlternate {
