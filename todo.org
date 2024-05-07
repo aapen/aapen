@@ -75,7 +75,7 @@ Stage 2 (the chainboot) downloaded automatically by minipush.rb
 Stage 3 (the real kernel) loaded via gdb (connected via openocd)
 ** CANCELED Use Python and the Python binding to libfdt to parse .dtb files?                                :CANCELED:
 Not needed, we're parsing the real thing.
-** TODO Better in-kernel debugging
+** DONE Better in-kernel debugging
 Problem statement: we can print stack traces but cannot display the function names.
 Options considered:
 - Use Zig's built-in DwarfInfo functions: doesn't work because it relies on a complete filesystem implementation and the ability to memory-map files. Cannot be separated into "walk the binary" versus "load the binary" parts.
@@ -171,9 +171,9 @@ Memory:
 ** TODO Initialize video system on RPi 400
 ** TODO Clear screen on RPi 400
 * Milestone: USB keyboard working
-** NEXT Write DWC OTG USB driver for RPi3
-** TODO Read from USB keyboard input under QEMU
-** TODO Read from USB on RPi3 hardware
+** DONE Write DWC OTG USB driver for RPi3
+** DONE Read from USB keyboard input under QEMU
+** NEXT Read from USB on RPi3 hardware
 ** TODO Write PCI driver for RPi4
 ** TODO Write xHCI driver for RPi4 
 ** TODO Read from USB on RPi4 hardware
