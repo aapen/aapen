@@ -10,6 +10,7 @@ const disassemble = @import("disassemble.zig");
 const event = @import("event.zig");
 const memory = @import("memory.zig");
 const heap = @import("heap.zig");
+const syscall = @import("syscall.zig");
 const time = @import("time.zig");
 
 const InputBuffer = @import("input_buffer.zig");
