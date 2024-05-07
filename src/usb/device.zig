@@ -4,44 +4,21 @@ const bufPrint = std.fmt.bufPrint;
 
 const root = @import("root");
 
-const descriptor = @import("descriptor.zig");
-const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
-const DescriptorType = descriptor.DescriptorType;
-const DeviceDescriptor = descriptor.DeviceDescriptor;
-const EndpointDescriptor = descriptor.EndpointDescriptor;
-const HidDescriptor = descriptor.HidDescriptor;
-const InterfaceDescriptor = descriptor.InterfaceDescriptor;
-const StringDescriptor = descriptor.StringDescriptor;
-
 const Error = @import("status.zig").Error;
 
-const LangID = @import("language.zig").LangID;
-const DEFAULT_LANG = LangID.en_US;
+const core = @import("core.zig");
+const hub = @import("hub.zig");
+const spec = @import("spec.zig");
 
-const transaction_translator = @import("transaction_translator.zig");
-const TT = transaction_translator.TransactionTranslator;
-
-const transfer = @import("transfer.zig");
-const setup = transfer.setup;
-const SetupPacket = transfer.SetupPacket;
-const TransferType = transfer.TransferType;
-
-const TransferFactory = @import("transfer_factory.zig");
-
-const usb = @import("../usb.zig");
-const InterfaceClass = usb.InterfaceClass;
-
-pub const DeviceAddress = u7;
-pub const DEFAULT_ADDRESS: DeviceAddress = 0;
+pub const DEFAULT_ADDRESS: spec.DeviceAddress = 0;
 pub const FIRST_DEDICATED_ADDRESS = 1;
 
-pub const MAX_ADDRESS: DeviceAddress = 63;
+pub const MAX_ADDRESS: spec.DeviceAddress = 63;
 pub const MAX_INTERFACES: usize = 8;
 pub const MAX_ENDPOINTS: usize = 8;
 pub const FRAMES_PER_MS: u32 = 8;
 pub const UFRAMES_PER_MS: u32 = 8;
 
-pub const DeviceStatus = u16;
 pub const STATUS_SELF_POWERED: u32 = 0b01;
 pub const STATUS_REMOTE_WAKEUP: u32 = 0b10;
 
@@ -50,73 +27,6 @@ pub const UsbSpeed = enum {
     Full,
     High,
     Super,
-};
-
-pub const StandardDeviceRequests = struct {
-    pub const get_status: u8 = 0x00;
-    pub const clear_feature: u8 = 0x01;
-    pub const set_feature: u8 = 0x03;
-    pub const set_address: u8 = 0x05;
-    pub const get_descriptor: u8 = 0x06;
-    pub const set_descriptor: u8 = 0x07;
-    pub const get_configuration: u8 = 0x08;
-    pub const set_configuration: u8 = 0x09;
-};
-
-/// See https://www.usb.org/defined-class-codes
-pub const DeviceClass = struct {
-    pub const interface_specific: u8 = 0x00;
-    pub const audio: u8 = 0x01;
-    pub const cdc_control: u8 = 0x02;
-    pub const hid: u8 = 0x03;
-    pub const physical: u8 = 0x05;
-    pub const image: u8 = 0x06;
-    pub const printer: u8 = 0x07;
-    pub const mass_storage: u8 = 0x08;
-    pub const hub: u8 = 0x09;
-    pub const cdc_data: u8 = 0x0a;
-    pub const smart_card: u8 = 0x0b;
-    pub const content_security: u8 = 0x0d;
-    pub const video: u8 = 0x0e;
-    pub const personal_healthcare: u8 = 0x0f;
-    pub const audio_video: u8 = 0x10;
-    pub const billboard: u8 = 0x11;
-    pub const type_c_bridge: u8 = 0x12;
-    pub const bulk_display: u8 = 0x13;
-    pub const mctp_over_usb: u8 = 0x14;
-    pub const i3c: u8 = 0x3c;
-    pub const diagnostic: u8 = 0xdc;
-    pub const wireless_controller: u8 = 0xe0;
-    pub const miscellaneous: u8 = 0xef;
-    pub const application_specific: u8 = 0xfe;
-    pub const vendor_specific: u8 = 0xff;
-};
-
-pub const HubProtocol = struct {
-    pub const full_speed_hub: u8 = 0x00;
-    pub const high_speed_hub_single_tt: u8 = 0x01;
-    pub const high_speed_hub_multiple_tt: u8 = 0x02;
-};
-
-pub const HidSubclass = struct {
-    pub const boot: u8 = 0x01;
-};
-
-/// See https://www.usb.org/sites/default/files/documents/hid1_11.pdf,
-/// page 9
-pub const HidProtocol = struct {
-    pub const none: u8 = 0x00;
-    pub const keyboard: u8 = 0x01;
-    pub const mouse: u8 = 0x02;
-};
-
-pub const HidClassRequest = struct {
-    pub const get_report: u8 = 0x01;
-    pub const get_idle: u8 = 0x02;
-    pub const get_protocol: u8 = 0x03;
-    pub const set_report: u8 = 0x09;
-    pub const set_idle: u8 = 0x0a;
-    pub const set_protocol: u8 = 0x0b;
 };
 
 pub const DeviceState = enum {
@@ -128,7 +38,7 @@ pub const DeviceState = enum {
 pub const Device = struct {
     in_use: bool = false,
     depth: u8 = 0,
-    address: DeviceAddress,
+    address: spec.DeviceAddress,
     speed: UsbSpeed,
 
     /// Hub this is attached to. Null means this is the root hub.
@@ -138,9 +48,9 @@ pub const Device = struct {
     parent_port: u7,
 
     /// Transaction Translator to use for this device
-    tt: ?*TT,
+    tt: ?*TransactionTranslator,
 
-    device_descriptor: DeviceDescriptor,
+    device_descriptor: spec.DeviceDescriptor,
     configuration: *DeviceConfiguration,
 
     product: []u8,
@@ -170,19 +80,16 @@ pub const Device = struct {
         };
     }
 
-    pub fn deinit(self: *Device) void {
-        // release any dynamically allocated memory
-        if (self.product.len > 0) {
-            usb.allocator.free(self.product);
-        }
-    }
+    pub fn deinit(_: *Device) void {}
 
     pub fn isRootHub(self: *Device) bool {
         return self.parent == null;
     }
 
-    pub fn description(self: *Device, buffer: []u8) []u8 {
+    pub fn description(self: *Device, buffer: []u8) ![]u8 {
         const usb_standard = self.device_descriptor.usb_standard_compliance;
+        var pname_buf: [31]u8 = undefined;
+        const pname = try self.deviceProductName(&pname_buf);
 
         return bufPrint(
             buffer,
@@ -192,31 +99,17 @@ pub const Device = struct {
                 (usb_standard >> 8) & 0xff,
                 (usb_standard >> 4) & 0xf,
                 self.deviceClassString(),
-                self.deviceProductName(),
+                pname,
                 self.device_descriptor.vendor,
                 self.device_descriptor.product,
             },
         ) catch "";
     }
 
-    fn deviceProductName(self: *Device) []const u8 {
-        if (self.product.len > 0) {
-            return self.product;
-        }
-
-        var desc: StringDescriptor = undefined;
-
-        if (usb.deviceGetStringDescriptor(self, self.device_descriptor.product_name, DEFAULT_LANG, std.mem.asBytes(&desc))) {
-            if (desc.asSlice(usb.allocator)) |s| {
-                self.product = s;
-            } else |err| {
-                usb.log.err(@src(), "error extracting product name, err {any}", .{err});
-            }
-        } else |err| {
-            usb.log.err(@src(), "error fetching product name, index {d}, err {any}", .{ self.device_descriptor.product_name, err });
-        }
-
-        return self.product;
+    fn deviceProductName(self: *Device, buf: []u8) ![]u8 {
+        var desc: spec.StringDescriptor = undefined;
+        try core.deviceGetStringDescriptor(self, self.device_descriptor.product_name, spec.USB_LANGID_EN_US, std.mem.asBytes(&desc));
+        return desc.intoSlice(buf);
     }
 
     fn deviceClassString(self: *const Device) []const u8 {
@@ -225,7 +118,7 @@ pub const Device = struct {
         if (class == 0) {
             for (0..self.configuration.configuration_descriptor.interface_count) |i| {
                 if (self.configuration.interfaces[i]) |iface| {
-                    if (iface.interface_class != InterfaceClass.reserved) {
+                    if (iface.interface_class != spec.USB_INTERFACE_CLASS_RESERVED) {
                         class = iface.interface_class;
                     }
                 }
@@ -233,19 +126,21 @@ pub const Device = struct {
         }
 
         return switch (class) {
-            0 => "Unspecified",
-            DeviceClass.audio => "Audio",
-            DeviceClass.cdc_control => "Communications and CDC control",
-            DeviceClass.hid => "HID (Human interface device)",
-            DeviceClass.image => "Image",
-            DeviceClass.printer => "Printer",
-            DeviceClass.mass_storage => "Mass storage",
-            DeviceClass.hub => "Hub",
-            DeviceClass.video => "Video",
-            DeviceClass.wireless_controller => "Wireless controller",
-            DeviceClass.miscellaneous => "Miscellaneous",
-            DeviceClass.vendor_specific => "Vendor specific",
-            else => "Unknown",
+            // zig fmt: off
+            0                                   => "Unspecified",
+            spec.USB_DEVICE_AUDIO               => "Audio",
+            spec.USB_DEVICE_CDC_CONTROL         => "Communications and CDC control",
+            spec.USB_DEVICE_HID                 => "HID (Human interface device)",
+            spec.USB_DEVICE_IMAGE               => "Image",
+            spec.USB_DEVICE_PRINTER             => "Printer",
+            spec.USB_DEVICE_MASS_STORAGE        => "Mass storage",
+            spec.USB_DEVICE_HUB                 => "Hub",
+            spec.USB_DEVICE_VIDEO               => "Video",
+            spec.USB_DEVICE_WIRELESS_CONTROLLER => "Wireless controller",
+            spec.USB_DEVICE_MISCELLANEOUS       => "Miscellaneous",
+            spec.USB_DEVICE_VENDOR_SPECIFIC     => "Vendor specific",
+            else                                => "Unknown",
+            // zig fmt: on
         };
     }
 
@@ -253,7 +148,7 @@ pub const Device = struct {
         return self.configuration.configuration_descriptor.interface_count;
     }
 
-    pub fn interface(self: *const Device, i: usize) ?*InterfaceDescriptor {
+    pub fn interface(self: *const Device, i: usize) ?*spec.InterfaceDescriptor {
         if (i < self.interfaceCount()) {
             return self.configuration.interfaces[i].?;
         } else {
@@ -278,6 +173,11 @@ pub const Device = struct {
     }
 };
 
+pub const TransactionTranslator = struct {
+    hub: ?*Device = null, // the nearest upstream high speed hub
+    think_time: u32 = 0, // think time when starting split
+};
+
 /// This represents the parsed configuration tree
 pub const DeviceConfiguration = struct {
     const ParseError = error{
@@ -285,10 +185,10 @@ pub const DeviceConfiguration = struct {
     };
 
     allocator: Allocator,
-    configuration_descriptor: ConfigurationDescriptor,
-    interfaces: [MAX_INTERFACES]?*InterfaceDescriptor,
-    hids: [MAX_INTERFACES]?*HidDescriptor,
-    endpoints: [MAX_INTERFACES][MAX_ENDPOINTS]?*EndpointDescriptor,
+    configuration_descriptor: spec.ConfigurationDescriptor,
+    interfaces: [MAX_INTERFACES]?*spec.InterfaceDescriptor,
+    hids: [MAX_INTERFACES]?*spec.HidDescriptor,
+    endpoints: [MAX_INTERFACES][MAX_ENDPOINTS]?*spec.EndpointDescriptor,
 
     pub fn initFromBytes(allocator: Allocator, configuration_tree: []const u8) !*DeviceConfiguration {
         var self = try allocator.create(DeviceConfiguration);
@@ -296,10 +196,10 @@ pub const DeviceConfiguration = struct {
 
         self.* = .{
             .allocator = allocator,
-            .configuration_descriptor = std.mem.zeroes(ConfigurationDescriptor),
-            .interfaces = std.mem.zeroes([MAX_INTERFACES]?*InterfaceDescriptor),
-            .hids = std.mem.zeroes([MAX_INTERFACES]?*HidDescriptor),
-            .endpoints = std.mem.zeroes([MAX_INTERFACES][MAX_ENDPOINTS]?*EndpointDescriptor),
+            .configuration_descriptor = std.mem.zeroes(spec.ConfigurationDescriptor),
+            .interfaces = std.mem.zeroes([MAX_INTERFACES]?*spec.InterfaceDescriptor),
+            .hids = std.mem.zeroes([MAX_INTERFACES]?*spec.HidDescriptor),
+            .endpoints = std.mem.zeroes([MAX_INTERFACES][MAX_ENDPOINTS]?*spec.EndpointDescriptor),
         };
 
         try self.parseConfiguration(configuration_tree);
@@ -349,28 +249,28 @@ pub const DeviceConfiguration = struct {
             .tree = configuration_tree,
         };
 
-        try state.expect(DescriptorType.configuration);
+        try state.expect(spec.USB_DESCRIPTOR_TYPE_CONFIGURATION);
 
-        const partial_copy = try state.copy(ConfigurationDescriptor, self.allocator);
+        const partial_copy = try state.copy(spec.ConfigurationDescriptor, self.allocator);
         self.configuration_descriptor = partial_copy.*;
         self.allocator.destroy(partial_copy);
 
         const expect_interfaces = self.configuration_descriptor.interface_count;
 
         for (0..expect_interfaces) |iface_num| {
-            try state.expect(DescriptorType.interface);
-            const iface = try state.copy(InterfaceDescriptor, self.allocator);
+            try state.expect(spec.USB_DESCRIPTOR_TYPE_INTERFACE);
+            const iface = try state.copy(spec.InterfaceDescriptor, self.allocator);
             errdefer self.allocator.destroy(iface);
             self.interfaces[iface_num] = iface;
 
             // question: is the HID descriptor _mandatory_ when the
             // interface class is 0x03?
             if (iface.isHid()) {
-                if (state.expect(DescriptorType.hid)) {
+                if (state.expect(spec.USB_DESCRIPTOR_TYPE_HID)) {
                     // For now, assume that the HID descriptor is
                     // optional and if the type doesn't match, then
                     // jump to parsing endpoint descriptors.
-                    const hid = try state.copy(HidDescriptor, self.allocator);
+                    const hid = try state.copy(spec.HidDescriptor, self.allocator);
                     errdefer self.allocator.destroy(hid);
                     self.hids[iface_num] = hid;
                 } else |_| {
@@ -381,8 +281,8 @@ pub const DeviceConfiguration = struct {
 
             const expect_endpoints = iface.endpoint_count;
             for (0..expect_endpoints) |endpoint_num| {
-                try state.expect(DescriptorType.endpoint);
-                const endpoint = try state.copy(EndpointDescriptor, self.allocator);
+                try state.expect(spec.USB_DESCRIPTOR_TYPE_ENDPOINT);
+                const endpoint = try state.copy(spec.EndpointDescriptor, self.allocator);
                 errdefer self.allocator.destroy(endpoint);
                 self.endpoints[iface_num][endpoint_num] = endpoint;
             }
@@ -397,27 +297,6 @@ pub const DeviceConfiguration = struct {
         @memcpy(std.mem.asBytes(res)[0..unaligned_buffer.len], unaligned_buffer[0..]);
 
         return res;
-    }
-
-    pub fn dump(self: *const DeviceConfiguration) void {
-        usb.log.debug(@src(), "DeviceConfiguration [", .{});
-        self.configuration_descriptor.dump();
-        for (0..MAX_INTERFACES) |i| {
-            if (self.interfaces[i]) |iface| {
-                iface.dump();
-
-                if (self.hids[i]) |hid| {
-                    hid.dump();
-                }
-
-                for (0..MAX_ENDPOINTS) |e| {
-                    if (self.endpoints[i][e]) |endp| {
-                        endp.dump();
-                    }
-                }
-            }
-        }
-        usb.log.debug(@src(), "]", .{});
     }
 };
 

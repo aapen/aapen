@@ -8,6 +8,8 @@ const Allocator = std.mem.Allocator;
 const arch = @import("../architecture.zig");
 const cpu = arch.cpu;
 
+const ChannelSet = @import("../channel_set.zig");
+
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
 
@@ -24,39 +26,16 @@ const TID = schedule.TID;
 const time = @import("../time.zig");
 const delayMillis = time.delayMillis;
 
-const descriptor = @import("descriptor.zig");
-const ConfigurationDescriptor = descriptor.ConfigurationDescriptor;
-const DescriptorIndex = descriptor.DescriptorIndex;
-const DescriptorType = descriptor.DescriptorType;
-const Header = descriptor.Header;
-
 const device = @import("device.zig");
 const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;
-const DeviceClass = device.DeviceClass;
 const DeviceDriver = device.DeviceDriver;
-const HubProtocol = device.HubProtocol;
-const StandardDeviceRequests = device.StandardDeviceRequests;
+const TransactionTranslator = device.TransactionTranslator;
 const UsbSpeed = device.UsbSpeed;
-
-const endpoint = @import("endpoint.zig");
-const EndpointNumber = endpoint.EndpointNumber;
 
 const Error = @import("status.zig").Error;
 
-const request = @import("request.zig");
-const RequestTypeDirection = request.RequestTypeDirection;
-const RequestTypeRecipient = request.RequestTypeRecipient;
-const RequestTypeType = request.RequestTypeType;
-const device_standard_in = request.device_standard_in;
-const device_standard_out = request.device_standard_out;
-const device_class_in = request.device_class_in;
-const device_class_out = request.device_class_out;
-const other_class_in = request.other_class_in;
-const other_class_out = request.other_class_out;
-
-const transaction_translator = @import("transaction_translator.zig");
-const TransactionTranslator = transaction_translator.TransactionTranslator;
+const spec = @import("spec.zig");
 
 const transfer = @import("transfer.zig");
 const SetupPacket = transfer.SetupPacket;
@@ -64,191 +43,18 @@ const setup = transfer.setup;
 const TransferRequest = transfer.TransferRequest;
 const TransferType = transfer.TransferType;
 
-const TransferFactory = @import("transfer_factory.zig");
-
 const usb = @import("../usb.zig");
 
-// ----------------------------------------------------------------------
-// Hub definitions from USB 2.0 spec
-// ----------------------------------------------------------------------
-
-pub const HubDescriptor = extern struct {
-    header: Header,
-    number_ports: u8,
-    characteristics: Characteristics,
-    power_on_to_power_good: u8, // in 2 millisecond intervals
-    controller_current: u8, // in milliamps
-
-    // following controller_current is a variable # of bytes
-    // containing a bitmap for "device removable". there is one bit
-    // per number_ports, padded out to byte granularity
-
-    // following the device removable bitmap is _another_ bitmap for
-    // "port power control". it remains for compatibility but should
-    // be set to all 1s.
-
-    // we ignore both of those
-
-    pub fn dump(self: *const HubDescriptor) void {
-        log.debug(@src(), "HubDescriptor [", .{});
-        log.debug(@src(), "  ports = {d}", .{self.number_ports});
-        log.debug(@src(), "  characteristics = [", .{});
-        log.debug(@src(), "    power_switching_mode = 0x{x}", .{self.characteristics.power_switching_mode});
-        log.debug(@src(), "    compound = 0x{x}", .{self.characteristics.compound});
-        log.debug(@src(), "    overcurrent mode = 0x{x}", .{self.characteristics.overcurrent_protection_mode});
-        log.debug(@src(), "    tt_think_time = 0x{x}", .{self.characteristics.tt_think_time});
-        log.debug(@src(), "    port indicators = 0x{x}", .{self.characteristics.port_indicators});
-        log.debug(@src(), "  ]", .{});
-        log.debug(@src(), "  power on to power good = {d} ms", .{self.power_on_to_power_good});
-        log.debug(@src(), "  max current = {d} mA", .{self.controller_current});
-        log.debug(@src(), "]", .{});
+pub fn deviceSpeed(self: *const usb.HubPortStatus) UsbSpeed {
+    if (self.port_status.low_speed_device == .low_speed) {
+        return UsbSpeed.Low;
+    } else if (self.port_status.high_speed_device == .high_speed) {
+        return UsbSpeed.High;
+    } else {
+        // This may not be correct for USB 3
+        return UsbSpeed.Full;
     }
-};
-
-/// See USB 2.0 specification, revision 2.0, section 11.24.2
-pub const ClassRequest = struct {
-    pub const get_status: u8 = 0x00;
-    pub const clear_feature: u8 = 0x01;
-    pub const set_feature: u8 = 0x03;
-    pub const get_descriptor: u8 = 0x06;
-    pub const set_descriptor: u8 = 0x07;
-    pub const clear_tt_buffer: u8 = 0x08;
-    pub const reset_tt: u8 = 0x09;
-    pub const get_tt_state: u8 = 0x0a;
-    pub const stop_tt: u8 = 0x0b;
-};
-
-pub const HubFeature = struct {
-    pub const c_hub_local_power: u16 = 0;
-    pub const c_hub_over_current: u16 = 1;
-};
-
-pub const PortFeature = struct {
-    pub const port_connection: u16 = 0;
-    pub const port_enable: u16 = 1;
-    pub const port_suspend: u16 = 2;
-    pub const port_over_current: u16 = 3;
-    pub const port_reset: u16 = 4;
-    pub const port_power: u16 = 8;
-    pub const port_low_speed: u16 = 9;
-    pub const port_high_speed: u16 = 10;
-    pub const c_port_connection: u16 = 16;
-    pub const c_port_enable: u16 = 17;
-    pub const c_port_suspend: u16 = 18;
-    pub const c_port_over_current: u16 = 19;
-    pub const c_port_reset: u16 = 20;
-    pub const port_test: u16 = 21;
-    pub const port_indicator: u16 = 22;
-};
-
-/// See USB 2.0 specification, revision 2.0, section 11.23.2.1
-pub const PowerSwitching = struct {
-    pub const ganged: u2 = 0b00;
-    pub const individual: u2 = 0b01;
-};
-
-pub const Compound = struct {
-    pub const not_compound: u1 = 0b0;
-    pub const compound: u1 = 0b1;
-};
-
-pub const OvercurrentProtection = struct {
-    pub const global: u2 = 0b00;
-    pub const individual: u2 = 0b01;
-    pub const none: u2 = 0b10;
-    pub const none_2: u2 = 0b11;
-};
-
-pub const TtThinkTime = struct {
-    pub const tt_8: u2 = 0b00;
-    pub const tt_16: u2 = 0b01;
-    pub const tt_24: u2 = 0b10;
-    pub const tt_32: u2 = 0b11;
-};
-
-pub const PortIndicators = struct {
-    pub const not_supported: u1 = 0b0;
-    pub const supported: u1 = 0b1;
-};
-
-pub const Characteristics = packed struct {
-    pub const power_switching_ganged: u2 = 0b00;
-    pub const power_switching_individual: u2 = 0b01;
-
-    power_switching_mode: u2, // 0..1
-    compound: u1, // 2
-    overcurrent_protection_mode: u2, // 3..4
-    tt_think_time: u2, // 5..6
-    port_indicators: u1, // 7
-    _reserved_0: u8 = 0, // 8..15
-};
-
-pub const TTDirection = struct {
-    pub const out: u1 = 0;
-    pub const in: u1 = 1;
-};
-
-const ClearTTBufferValue = packed struct {
-    endpoint_number: EndpointNumber,
-    device_address: DeviceAddress,
-    endpoint_type: TransferType,
-    _reserved: u2 = 0,
-    direction: u1,
-};
-
-/// See USB 2.0 specification, revision 2.0, table 11-19
-pub const HubStatus = packed struct {
-    hub_status: packed struct {
-        local_power_source: u1 = 0,
-        overcurrent: u1 = 0,
-        _reserved: u14 = 0,
-    },
-    change_status: packed struct {
-        local_power_changed: u1 = 0,
-        overcurrent_changed: u1 = 0,
-        _reserved: u14 = 0,
-    },
-};
-
-pub const PortStatus = packed struct {
-    port_status: packed struct {
-        connected: u1 = 0, // 0
-        enabled: u1 = 0, // 1
-        suspended: u1 = 0, // 2 (reserved in USB 3.x)
-        overcurrent: u1 = 0, // 3
-        reset: u1 = 0, // 4
-        _reserved_0: u3 = 0, // 5..7 (port link state in USB 3.x)
-        power: u1 = 0, // 8
-        low_speed_device: u1 = 0, // 9
-        high_speed_device: u1 = 0, // 10
-        test_mode: u1 = 0, // 11
-        indicator_control: u1 = 0, // 12
-        _reserved_1: u3 = 0, // 13..15
-    },
-
-    port_change: packed struct {
-        connected_changed: u1 = 0, // 0
-        enabled_changed: u1 = 0, // 1 (reserved in USB 3.x)
-        suspended_changed: u1 = 0, // 2 (reserved in USB 3.x)
-        overcurrent_changed: u1 = 0, // 3
-        reset_changed: u1 = 0, // 4
-        _bh_reset_changed: u1 = 0, // 5 (only in USB 3.x)
-        _port_link_state_changed: u1 = 0, // 6 (only in USB 3.x)
-        _port_config_error: u1 = 0, // 7 (only in USB 3.x)
-        _reserved_0: u8 = 0, // 8..15
-    },
-
-    pub fn deviceSpeed(self: *const PortStatus) UsbSpeed {
-        if (self.port_status.low_speed_device == .low_speed) {
-            return UsbSpeed.Low;
-        } else if (self.port_status.high_speed_device == .high_speed) {
-            return UsbSpeed.High;
-        } else {
-            // This may not be correct for USB 3
-            return UsbSpeed.Full;
-        }
-    }
-};
+}
 
 // some timing constants from the USB spec
 const RESET_TIMEOUT = 100;
@@ -262,46 +68,38 @@ const SHORT_RESET_DELAY = 10;
 pub const MAX_HUBS = 8;
 
 pub const Hub = struct {
-    const Port = struct {
+    pub const Port = struct {
         number: u7,
-        status: PortStatus,
+        status: usb.HubPortStatus,
         device_speed: UsbSpeed,
         device: ?*Device,
     };
 
     in_use: bool = false,
     index: u5 = undefined,
-    device: *Device,
-    descriptor: HubDescriptor,
-    port_count: u8,
-    ports: []Port,
-    status_change_buffer: [8]u8,
-    status_change_request: TransferRequest,
-    tt: TransactionTranslator,
+    device: *Device = undefined,
+    descriptor: usb.HubDescriptor = undefined,
+    port_count: u8 = 0,
+    ports: []Port = undefined,
+    status_change_buffer: [8]u8 = [_]u8{0} ** 8,
+    status_change_request: TransferRequest = undefined,
+    tt: TransactionTranslator = .{ .hub = null, .think_time = 0 },
 
     error_count: u64 = 0,
 
-    pub fn init(self: *Hub, table_index: u5) void {
-        self.* = .{
-            .in_use = false,
+    pub fn init(table_index: u5) Hub {
+        return .{
             .index = table_index,
-            .device = undefined,
-            .descriptor = undefined,
-            .port_count = 0,
-            .ports = undefined,
-            .status_change_buffer = [_]u8{0} ** 8,
-            .status_change_request = undefined,
-            .tt = .{ .hub = null, .think_time = 0 },
         };
     }
 
     pub fn deviceBind(self: *Hub, dev: *Device) !void {
         // The device should already have it's device descriptor and
         // configuration descriptor populated.
-        if (dev.device_descriptor.device_class != DeviceClass.hub or
+        if (dev.device_descriptor.device_class != usb.USB_DEVICE_HUB or
             dev.configuration.configuration_descriptor.interface_count != 1 or
             dev.configuration.interfaces[0].?.endpoint_count != 1 or
-            dev.configuration.endpoints[0][0].?.attributes.endpoint_type != TransferType.interrupt)
+            !dev.configuration.endpoints[0][0].?.isType(TransferType.interrupt))
         {
             return Error.DeviceUnsupported;
         }
@@ -318,29 +116,29 @@ pub const Hub = struct {
         log.debug(@src(), "deviceBind reading hub descriptor", .{});
         try self.hubDescriptorRead();
 
-        self.descriptor.dump();
+        log.debug(@src(), "{any}", .{self.descriptor});
 
         self.port_count = self.descriptor.number_ports;
 
         log.debug(@src(), "deviceBind attaching {s}USB hub with {d} ports", .{
-            if (self.descriptor.characteristics.compound == Compound.compound) "compound device " else "",
+            if (self.descriptor.characteristics.compound == 1) "compound device " else "",
             self.port_count,
         });
 
         switch (dev.device_descriptor.device_protocol) {
-            HubProtocol.full_speed_hub => {},
-            HubProtocol.high_speed_hub_single_tt,
-            HubProtocol.high_speed_hub_multiple_tt,
+            usb.USB_HUB_PROTOCOL_FULL_SPEED => {},
+            usb.USB_HUB_PROTOCOL_HIGH_SPEED_SINGLE_TT,
+            usb.USB_HUB_PROTOCOL_HIGH_SPEED_MULTIPLE_TT,
             => self.tt = .{ .hub = self.device },
             else => {},
         }
 
         const full_speed_bit_time = 666;
         self.tt.think_time = switch (self.descriptor.characteristics.tt_think_time) {
-            TtThinkTime.tt_8 => full_speed_bit_time,
-            TtThinkTime.tt_16 => full_speed_bit_time * 2,
-            TtThinkTime.tt_24 => full_speed_bit_time * 3,
-            TtThinkTime.tt_32 => full_speed_bit_time * 4,
+            usb.USB_HUB_TT_THINK_TIME_8 => full_speed_bit_time,
+            usb.USB_HUB_TT_THINK_TIME_16 => full_speed_bit_time * 2,
+            usb.USB_HUB_TT_THINK_TIME_24 => full_speed_bit_time * 3,
+            usb.USB_HUB_TT_THINK_TIME_32 => full_speed_bit_time * 4,
         };
 
         try self.initPorts();
@@ -349,25 +147,20 @@ pub const Hub = struct {
         log.debug(@src(), "hub {d} starting interrupt transfer", .{self.index});
 
         dev.driver_private = self;
-        self.status_change_request = TransferFactory.initInterruptTransfer(dev, &self.status_change_buffer);
+        self.status_change_request = TransferRequest.initInterrupt(dev, &self.status_change_buffer);
         self.status_change_request.completion = statusChangeCompletion;
 
         try usb.transferSubmit(&self.status_change_request);
     }
 
     fn hubDescriptorRead(self: *Hub) !void {
-        const result = try usb.controlMessage(
-            self.device,
-            ClassRequest.get_descriptor,
-            device_class_in,
-            @as(u16, DescriptorType.hub) << 8 | 0,
+        try self.hubControlMessage(
+            spec.HUB_REQUEST_GET_DESCRIPTOR,
+            spec.USB_REQUEST_TYPE_DEVICE_CLASS_IN,
+            @as(u16, usb.USB_DESCRIPTOR_TYPE_HUB) << 8 | 0,
             0,
             std.mem.asBytes(&self.descriptor),
         );
-
-        if (result != .ok) {
-            return Error.TransferFailed;
-        }
     }
 
     fn initPorts(self: *Hub) !void {
@@ -391,7 +184,7 @@ pub const Hub = struct {
     fn decidePowerOnStrategy(self: *Hub) PowerOnStrategy {
         if (self.descriptor.controller_current == 0) {
             return .unpowered;
-        } else if (self.descriptor.characteristics.power_switching_mode == Characteristics.power_switching_ganged) {
+        } else if (self.descriptor.characteristics.power_switching_mode == usb.HUB_POWER_SWITCHING_MODE_GANGED) {
             return .powered_ganged;
         } else {
             return .powered_individual;
@@ -405,78 +198,90 @@ pub const Hub = struct {
                 log.debug(@src(), "powering on {d} ports", .{self.port_count});
 
                 for (self.ports) |*port| {
-                    self.portFeatureSet(port, PortFeature.port_power) catch |err| {
-                        log.err(@src(), "hub {d} failed to power on port {d}: {any}", .{ self.index, port.number, err });
-                    };
+                    self.portFeatureSet(port, usb.HUB_PORT_FEATURE_PORT_POWER) catch return;
                 }
 
                 delayMillis(2 * self.descriptor.power_on_to_power_good);
             },
             .powered_ganged => {
                 log.debug(@src(), "powering on all ports", .{});
-                self.portFeatureSet(&self.ports[0], PortFeature.port_power) catch |err| {
-                    log.err(@src(), "hub {d} failed to power on ports: {any}", .{ self.index, err });
+                self.portFeatureSet(&self.ports[0], usb.HUB_PORT_FEATURE_PORT_POWER) catch |err| {
+                    log.err(@src(), "hub {d} ganged ports failed to power on: {any}", .{ self.index, err });
                 };
                 delayMillis(2 * self.descriptor.power_on_to_power_good);
             },
         }
     }
 
-    fn portStatusGet(self: *Hub, port: *Port) !void {
-        log.debug(@src(), "hub {d} portStatusGet port {d}", .{ self.index, port.number });
-
-        const result = try usb.controlMessage(
+    fn hubControlMessage(self: *Hub, req: u8, req_type: u8, value: u16, index: u16, data: []u8) !void {
+        const result = usb.controlMessage(
             self.device,
-            ClassRequest.get_status,
-            other_class_in,
+            req,
+            req_type,
+            value,
+            index,
+            data,
+        ) catch {
+            return error.TransferFailed;
+        };
+
+        if (result != .ok) {
+            return error.TransferFailed;
+        }
+    }
+
+    fn portStatusGet(self: *Hub, port: *Port) !void {
+        log.debug(@src(), "hub {d} port {d} statusGet", .{ self.index, port.number });
+
+        self.hubControlMessage(
+            spec.HUB_REQUEST_GET_STATUS,
+            spec.USB_REQUEST_TYPE_OTHER_CLASS_IN,
             0,
             port.number,
             std.mem.asBytes(&port.status),
-        );
-        if (result != .ok) {
-            return Error.TransferFailed;
-        }
+        ) catch |err| {
+            log.err(@src(), "hub {d} port {d} statusGet error: {any}", .{ self.index, port.number, err });
+            return err;
+        };
     }
 
     fn portFeatureSet(self: *Hub, port: *Port, feature: u16) !void {
-        log.debug(@src(), "hub {d} portFeatureSet port {d} with feature {any}", .{ self.index, port.number, feature });
-        const result = try usb.controlMessage(
-            self.device,
-            ClassRequest.set_feature,
-            other_class_out,
+        log.debug(@src(), "hub {d} port {d} featureSet {d}", .{ self.index, port.number, feature });
+
+        self.hubControlMessage(
+            spec.HUB_REQUEST_SET_FEATURE,
+            spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT,
             feature,
             port.number,
             &.{},
-        );
-        if (result != .ok) {
-            return Error.TransferFailed;
-        }
+        ) catch |err| {
+            log.err(@src(), "hub {d} port {d} featureSet error: {any}", .{ self.index, port.number, err });
+            return err;
+        };
     }
 
     fn portFeatureClear(self: *Hub, port: *Port, feature: u16) !void {
-        log.debug(@src(), "hub {d} portFeatureClear port {d} with feature {any}", .{ self.index, port.number, feature });
-        const result = try usb.controlMessage(
-            self.device,
-            ClassRequest.clear_feature,
-            other_class_out,
+        log.debug(@src(), "hub {d} port {d} featureClear {d}", .{ self.index, port.number, feature });
+
+        self.hubControlMessage(
+            spec.HUB_REQUEST_CLEAR_FEATURE,
+            spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT,
             feature,
             port.number,
             &.{},
-        );
-        if (result != .ok) {
-            return Error.TransferFailed;
-        }
+        ) catch |err| {
+            log.err(@src(), "hub {d} port {d} featureClear error: {any}", .{ self.index, port.number, err });
+            return err;
+        };
     }
 
-    fn portReset(self: *Hub, port: *Port, delay: u32) !void {
-        log.debug(@src(), "hub {d} portReset {d}", .{ self.index, port.number });
+    pub fn portReset(self: *Hub, port: *Port, delay: u32) !void {
+        log.debug(@src(), "hub {d} port {d} initiate reset", .{ self.index, port.number });
 
-        try self.portFeatureSet(port, PortFeature.port_reset);
+        self.portFeatureSet(port, usb.HUB_PORT_FEATURE_PORT_RESET) catch return;
 
         const deadline = time.deadlineMillis(PORT_RESET_TIMEOUT);
-        while (port.status.port_status.reset == 1 and
-            time.ticks() < deadline)
-        {
+        while (port.status.port_status.reset == 1 and time.ticks() < deadline) {
             try schedule.sleep(delay);
             try self.portStatusGet(port);
         }
@@ -485,27 +290,28 @@ pub const Hub = struct {
             return Error.ResetTimeout;
         }
         try schedule.sleep(30);
-        log.debug(@src(), "hub {d} portReset {d} finished", .{ self.index, port.number });
+
+        log.debug(@src(), "hub {d} port {d} reset finished", .{ self.index, port.number });
     }
 
-    fn portAttachDevice(self: *Hub, port: *Port, portstatus: PortStatus) !void {
+    fn portAttachDevice(self: *Hub, port: *Port, portstatus: usb.HubPortStatus) !void {
         const port_reset_delay: u32 = if (self.device.isRootHub()) ROOT_RESET_DELAY else SHORT_RESET_DELAY;
 
         try self.portReset(port, port_reset_delay);
         errdefer {
             log.err(@src(), "hub {d} failed to attach device, disabling port {d}", .{ self.index, port.number });
-            self.portFeatureClear(port, PortFeature.port_enable) catch {};
+            self.portFeatureClear(port, usb.HUB_PORT_FEATURE_PORT_ENABLE) catch {};
         }
 
-        const new_device = try usb.allocateDevice(self.device);
+        const new_device = try usb.deviceAlloc(self.device);
         errdefer {
             log.err(@src(), "hub {d} failed to configure device {d} on port {d}, freeing it", .{ self.index, new_device, port.number });
-            usb.freeDevice(new_device);
+            usb.deviceFree(new_device);
         }
 
         const dev: *Device = &usb.devices[new_device];
 
-        //        try self.portStatusGet(port);
+        try self.portStatusGet(port);
         log.debug(@src(), "hub {d} port {d} reports speed is {s}", .{
             self.index,
             port.number,
@@ -522,9 +328,7 @@ pub const Hub = struct {
 
         log.debug(@src(), "hub {d} {s}-speed device connected to port {d}", .{ self.index, @tagName(dev.speed), port.number });
 
-        dev.parent_port = port.number;
-
-        try usb.attachDevice(new_device, dev.speed);
+        try usb.attachDevice(new_device, dev.speed, self, port);
 
         port.device = dev;
     }
@@ -536,93 +340,93 @@ pub const Hub = struct {
         // TODO
     }
 
-    fn portConnectChange(self: *Hub, port: *Port, portstatus: PortStatus) !void {
+    fn portConnectChange(self: *Hub, port: *Port, portstatus: usb.HubPortStatus) !void {
         const connected: bool = (portstatus.port_status.connected == 1);
 
         // TODO  detach the old device
         if (port.device) |old_dev| {
-            try self.portDetachDevice(port, old_dev);
+            self.portDetachDevice(port, old_dev) catch |err| {
+                log.err(@src(), "hub {d} port {d} detach device error {any}", .{
+                    self.index,
+                    port.number,
+                    err,
+                });
+                return err;
+            };
         }
 
         // attach the new device
         if (connected) {
-            try self.portAttachDevice(port, portstatus);
+            self.portAttachDevice(port, portstatus) catch |err| {
+                log.err(@src(), "hub {d} port {d} attach device error {any}", .{
+                    self.index,
+                    port.number,
+                    err,
+                });
+                return err;
+            };
         }
     }
 
     fn portStatusChanged(self: *Hub, port: *Port) void {
-        log.debug(@src(), "hub {d} portStatusChanged: checking status for port {d}", .{ self.index, port.number });
+        self.portStatusGet(port) catch return;
 
-        if (self.portStatusGet(port)) {
-            log.debug(@src(), "hub {d} portStatusChanged port {d} status = 0x{x:0>4}, change = 0x{x:0>4}", .{
-                self.index,
-                port.number,
-                @as(u16, @bitCast(port.status.port_status)),
-                @as(u16, @bitCast(port.status.port_change)),
-            });
+        log.debug(@src(), "hub {d} portStatusChanged port {d} status = 0x{x:0>4}, change = 0x{x:0>4}", .{
+            self.index,
+            port.number,
+            @as(u16, @bitCast(port.status.port_status)),
+            @as(u16, @bitCast(port.status.port_change)),
+        });
 
-            if (port.status.port_change.connected_changed == 1) {
-                // maybe device connect or disconnect
-                self.portFeatureClear(port, PortFeature.c_port_connection) catch |err| {
-                    log.err(@src(), "hub {d} attempt to clear PortFeature.c_port_connection on {d}: {any}", .{ self.index, port.number, err });
-                };
-
-                self.portConnectChange(port, port.status) catch |err| {
-                    log.err(@src(), "hub {d} port connect change error {any}", .{ self.index, err });
-                };
-            }
-
-            if (port.status.port_change.enabled_changed == 1) {
-                log.debug(@src(), "hub {d} portStatusChanged: port {d} has enabled_changed == 1", .{ self.index, port.number });
-                self.portFeatureClear(port, PortFeature.c_port_enable) catch |err| {
-                    log.err(@src(), "hub {d} attempt to clear PortFeature.c_port_enable on {d}: {any}", .{ self.index, port.number, err });
-                };
-            }
-
-            if (port.status.port_change.reset_changed == 1) {
-                self.portFeatureClear(port, PortFeature.c_port_reset) catch |err| {
-                    log.err(@src(), "hub {d} attempt to clear PortFeature.c_port_reset on {d}: {any}", .{ self.index, port.number, err });
-                };
-            }
-
-            if (port.status.port_change.suspended_changed == 1) {
-                self.portFeatureClear(port, PortFeature.c_port_suspend) catch |err| {
-                    log.err(@src(), "hub {d} attempt to clear PortFeature.c_port_suspend on {d}: {any}", .{ self.index, port.number, err });
-                };
-            }
-
-            if (port.status.port_change.overcurrent_changed == 1) {
-                self.portFeatureClear(port, PortFeature.c_port_over_current) catch |err| {
-                    log.err(@src(), "hub {d} attempt to clear PortFeature.c_port_over_current on {d}: {any}", .{ self.index, port.number, err });
-                };
-            }
-        } else |err| {
-            log.err(@src(), "hub {d} error getting status of port {d}: {any}", .{ self.index, port.number, err });
-            return;
+        if (port.status.port_change.connected_changed == 1) {
+            self.portFeatureClear(port, usb.HUB_PORT_FEATURE_C_PORT_CONNECTION) catch {};
+            self.portConnectChange(port, port.status) catch {};
         }
-    }
 
-    pub fn dump(self: *const Hub) void {
-        log.info(@src(), "Hub [", .{});
-        log.info(@src(), "  port count = {d}", .{self.port_count});
-        log.info(@src(), "]", .{});
+        if (port.status.port_change.enabled_changed == 1) {
+            self.portFeatureClear(port, usb.HUB_PORT_FEATURE_C_PORT_ENABLE) catch {};
+        }
+
+        if (port.status.port_change.reset_changed == 1) {
+            self.portFeatureClear(port, usb.HUB_PORT_FEATURE_C_PORT_RESET) catch {};
+        }
+
+        if (port.status.port_change.suspended_changed == 1) {
+            self.portFeatureClear(port, usb.HUB_PORT_FEATURE_C_PORT_SUSPEND) catch {};
+        }
+
+        if (port.status.port_change.overcurrent_changed == 1) {
+            self.portFeatureClear(port, usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT) catch {};
+        }
     }
 };
 
 fn statusChangeCompletion(req: *TransferRequest) void {
     const self: *Hub = @fieldParentPtr(Hub, "status_change_request", req);
     log.debug(@src(), "hub {d} finished interrupt transfer, {any}", .{ self.index, req.status });
-    if (req.status == .ok) {
-        hubs_with_pending_status_change |= @as(u32, 1) << @truncate(self.index);
-        semaphore.signal(hub_status_change_semaphore) catch |err| {
-            log.err(@src(), "hub status change semaphore signal error: {any}", .{err});
-        };
-    } else {
+
+    if (req.status != .ok) {
         log.warn(@src(), "hub {d} interrupt transfer returned {any}", .{ self.index, req.status });
+        return;
     }
+
+    hubs_with_pending_status_change |= @as(u32, 1) << @truncate(self.index);
+    semaphore.signal(hub_status_change_semaphore) catch |err| {
+        log.err(@src(), "hub status change semaphore signal error: {any}", .{err});
+    };
 }
 
-var hubs: [MAX_HUBS]Hub = undefined;
+const HubAlloc = ChannelSet.init("hub devices", u5, MAX_HUBS);
+
+var hubs: [MAX_HUBS]Hub = init: {
+    var initial_value: [MAX_HUBS]Hub = undefined;
+    for (&initial_value, 0..) |*h, idx| {
+        h.* = Hub.init(@truncate(idx));
+    }
+    break :init initial_value;
+};
+var hubs_allocated: HubAlloc = .{};
+
 var hubs_lock: TicketLock = undefined;
 var hub_thread: TID = undefined;
 var allocator: Allocator = undefined;
@@ -630,14 +434,21 @@ var shutdown_signal: OneShot = .{};
 var hub_status_change_semaphore: SID = undefined;
 var hubs_with_pending_status_change: u32 = 0;
 
+fn hubClassAlloc() !*Hub {
+    const hub_id = try hubs_allocated.allocate();
+    hubs[hub_id].in_use = true;
+    return &hubs[hub_id];
+}
+
+fn hubClassFree(hub: *Hub) void {
+    hub.in_use = false;
+    hubs_allocated.free(hub.index);
+}
+
 pub fn initialize(alloc: Allocator) !void {
     log = Logger.init("usb_hub", .info);
 
     allocator = alloc;
-
-    for (0..MAX_HUBS) |i| {
-        hubs[i].init(@truncate(i));
-    }
 
     hubs_lock = TicketLock.initWithTargetLevel("usb hubs", true, .FIQ);
 
@@ -699,32 +510,32 @@ fn hubThread(_: *anyopaque) void {
 }
 
 pub fn hubDriverCanBind(dev: *Device) bool {
-    return dev.device_descriptor.device_class == DeviceClass.hub;
+    return dev.device_descriptor.device_class == usb.USB_DEVICE_HUB;
 }
 
 pub fn hubDriverDeviceBind(dev: *Device) Error!void {
     hubs_lock.acquire();
     defer hubs_lock.release();
 
-    for (0..MAX_HUBS) |i| {
-        if (!hubs[i].in_use) {
-            var hub = &hubs[i];
-            hub.in_use = true;
-            errdefer hub.in_use = false;
+    var next_hub = hubClassAlloc() catch {
+        log.err(@src(), "too many hubs attached", .{});
+        return error.TooManyHubs;
+    };
+    errdefer hubClassFree(next_hub);
 
-            if (hub.deviceBind(dev)) {
-                return;
-            } else |e| {
-                log.debug(@src(), "hub {d} error binding device: {any}", .{ hub.index, e });
-                return e;
-            }
-        }
-    }
-    return Error.TooManyHubs;
+    return try next_hub.deviceBind(dev);
 }
 
 pub fn hubDriverDeviceUnbind(dev: *Device) void {
-    _ = dev;
+    hubs_lock.acquire();
+    defer hubs_lock.release();
+
+    for (&hubs) |*h| {
+        if (h.device == dev) {
+            hubClassFree(h);
+            return;
+        }
+    }
 }
 
 pub const driver: DeviceDriver = .{

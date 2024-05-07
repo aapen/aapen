@@ -18,7 +18,7 @@ TEST_KERNEL_ELF = zig-out/kernel-$(BOARD).elf
 
 # temporarily removing 'queue' from KERNEL_UNIT_TESTS because it
 # doesn't exit correctly.
-KERNEL_UNIT_TESTS = atomic bcd confirm_qemu console_output event heap mailbox root_hub schedule semaphore stack string synchronize transfer transfer_factory usb_cdesc
+KERNEL_UNIT_TESTS = atomic bcd confirm_qemu console_output event heap mailbox root_hub schedule semaphore stack string synchronize transfer usb_cdesc
 KERNEL_UNIT_TEST_TARGETS = $(addprefix kernel_test_, $(KERNEL_UNIT_TESTS))
 
 CORE_COUNT      = 4

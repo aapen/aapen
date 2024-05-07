@@ -8,25 +8,6 @@ const expectEqualSlices = helpers.expectEqualSlices;
 const expectError = helpers.expectError;
 
 const usb = @import("../usb.zig");
-const ConfigurationDescriptor = usb.ConfigurationDescriptor;
-const DescriptorType = usb.DescriptorType;
-const DeviceClass = usb.DeviceClass;
-const DeviceConfiguration = usb.DeviceConfiguration;
-const DeviceDescriptor = usb.DeviceDescriptor;
-const EndpointDescriptor = usb.EndpointDescriptor;
-const HubDescriptor = usb.HubDescriptor;
-const HubFeature = usb.HubFeature;
-const InterfaceClass = usb.InterfaceClass;
-const InterfaceDescriptor = usb.InterfaceDescriptor;
-const LangID = usb.LangID;
-const PortStatus = usb.PortStatus;
-const PortFeature = usb.PortFeature;
-const StringDescriptor = usb.StringDescriptor;
-const TransferRequest = usb.TransferRequest;
-const TransferBytes = usb.TransferBytes;
-const TransferCompletionStatus = usb.TransferCompletionStatus;
-const TransferFactory = usb.TransferFactory;
-const TransferType = usb.TransferType;
 
 const reg = @import("../drivers/dwc/registers.zig");
 const HostPortStatusAndControl = reg.HostPortStatusAndControl;
@@ -68,7 +49,7 @@ fn fakeRegisters() reg.HostRegisters {
     };
 }
 
-fn expectTransferCompletionStatus(expected_status: TransferCompletionStatus, xfer: *TransferRequest) void {
+fn expectTransferCompletionStatus(expected_status: usb.TransferRequest.CompletionStatus, xfer: *usb.TransferRequest) void {
     var regs: HostRegisters = fakeRegisters();
     var hub: RootHub = .{};
     hub.init(&regs);
@@ -78,37 +59,31 @@ fn expectTransferCompletionStatus(expected_status: TransferCompletionStatus, xfe
 }
 
 fn supportedTransferTypes() !void {
-    var endpoint_iso: EndpointDescriptor = .{
-        .header = undefined,
+    var endpoint_iso: usb.EndpointDescriptor = .{
+        .length = usb.EndpointDescriptor.STANDARD_LENGTH,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0,
-        .attributes = .{
-            .endpoint_type = TransferType.isochronous,
-            .iso_synch_type = 0,
-            .usage_type = 0,
-        },
+        .attributes = usb.TransferType.isochronous,
         .max_packet_size = 8,
         .interval = 1,
     };
     var data: [*]u8 = &[_]u8{};
 
-    var iso: TransferRequest = .{
+    var iso: usb.TransferRequest = .{
         .endpoint_desc = &endpoint_iso,
         .setup_data = undefined,
         .data = data,
     };
 
-    var endpoint_bulk: EndpointDescriptor = .{
-        .header = undefined,
+    var endpoint_bulk: usb.EndpointDescriptor = .{
+        .length = usb.EndpointDescriptor.STANDARD_LENGTH,
+        .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0,
-        .attributes = .{
-            .endpoint_type = TransferType.bulk,
-            .iso_synch_type = 0,
-            .usage_type = 0,
-        },
+        .attributes = usb.TransferType.bulk,
         .max_packet_size = 8,
         .interval = 1,
     };
-    var bulk: TransferRequest = .{
+    var bulk: usb.TransferRequest = .{
         .endpoint_desc = &endpoint_bulk,
         .setup_data = undefined,
         .data = data,
@@ -132,20 +107,176 @@ var nulldev: usb.Device = .{
     .driver_private = undefined,
 };
 
+fn descriptorTransfer(descriptor_type: u8, descriptor_index: u8, index: u16, data_buffer: []u8) usb.TransferRequest {
+    const length: u16 = @truncate(data_buffer.len);
+    const val: u16 = @as(u16, descriptor_type) << 8 | @as(u8, descriptor_index);
+    return .{
+        .device = &nulldev,
+        .data = data_buffer.ptr,
+        .size = @truncate(data_buffer.len),
+        .setup_data = .{
+            .request = usb.USB_REQUEST_GET_DESCRIPTOR,
+            .request_type = usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,
+            .value = val,
+            .index = index,
+            .data_size = length,
+        },
+    };
+}
+
+fn deviceDescriptorTransfer(descriptor_index: u8, lang_id: u16, data_buffer: []u8) usb.TransferRequest {
+    return descriptorTransfer(usb.USB_DESCRIPTOR_TYPE_DEVICE, descriptor_index, lang_id, data_buffer);
+}
+
+fn configurationDescriptorTransfer(descriptor_index: u8, data_buffer: []u8) usb.TransferRequest {
+    return descriptorTransfer(usb.USB_DESCRIPTOR_TYPE_CONFIGURATION, descriptor_index, 0, data_buffer);
+}
+
+fn stringDescriptorTransfer(descriptor_index: u8, lang_id: u16, data_buffer: []u8) usb.TransferRequest {
+    return descriptorTransfer(usb.USB_DESCRIPTOR_TYPE_STRING, descriptor_index, lang_id, data_buffer);
+}
+
+fn setAddressTransfer(device_address: usb.DeviceAddress) usb.TransferRequest {
+    return .{
+        .device = &nulldev,
+        .data = @ptrFromInt(0),
+        .size = 0,
+        .setup_data = .{
+            .request = usb.USB_REQUEST_SET_ADDRESS,
+            .request_type = usb.USB_REQUEST_TYPE_DEVICE_STANDARD_OUT,
+            .value = device_address,
+            .index = 0,
+            .data_size = 0,
+        },
+    };
+}
+
+fn getHubDescriptorTransfer(descriptor_index: u8, data_buffer: []u8) usb.TransferRequest {
+    var t = descriptorTransfer(usb.USB_DESCRIPTOR_TYPE_HUB, descriptor_index, 0, data_buffer);
+    t.setup_data.request_type = usb.USB_REQUEST_TYPE_DEVICE_CLASS_IN;
+    return t;
+}
+
+fn setConfigurationTransfer(config: u16) usb.TransferRequest {
+    return .{
+        .device = &nulldev,
+        .data = @ptrFromInt(0),
+        .size = 0,
+        .setup_data = .{
+            .request = usb.USB_REQUEST_SET_CONFIGURATION,
+            .request_type = usb.USB_REQUEST_TYPE_DEVICE_STANDARD_OUT,
+            .value = config,
+            .index = 0,
+            .data_size = 0,
+        },
+    };
+}
+
+fn getConfigurationTransfer(data_buffer: []u8) usb.TransferRequest {
+    return .{
+        .device = &nulldev,
+        .data = data_buffer.ptr,
+        .size = @truncate(data_buffer.len),
+        .setup_data = .{
+            .request = usb.USB_REQUEST_GET_CONFIGURATION,
+            .request_type = usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,
+            .value = 0,
+            .index = 0,
+            .data_size = 1,
+        },
+    };
+}
+
+fn getStatusTransfer(data_buffer: []u8) usb.TransferRequest {
+    const length: u16 = @truncate(data_buffer.len);
+    return .{
+        .device = &nulldev,
+        .data = data_buffer.ptr,
+        .size = @truncate(data_buffer.len),
+        .setup_data = .{
+            .request = usb.USB_REQUEST_GET_STATUS,
+            .request_type = usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,
+            .value = 0,
+            .index = 0,
+            .data_size = length,
+        },
+    };
+}
+
+fn getHubStatusTransfer(data_buffer: []u8) usb.TransferRequest {
+    var t = getStatusTransfer(data_buffer);
+    t.setup_data.request_type = usb.USB_REQUEST_TYPE_DEVICE_CLASS_IN;
+    return t;
+}
+
+fn getHubPortStatusTransfer(port_number: u8, data_buffer: []u8) usb.TransferRequest {
+    return .{
+        .device = &nulldev,
+        .data = data_buffer.ptr,
+        .size = @truncate(data_buffer.len),
+        .setup_data = .{
+            .request = usb.USB_REQUEST_GET_STATUS,
+            .request_type = usb.USB_REQUEST_TYPE_OTHER_CLASS_IN,
+            .value = 0,
+            .index = port_number,
+            .data_size = 4,
+        },
+    };
+}
+
+fn setHubPortFeatureTransfer(feature: u16, port_number: u8, port_indicator: u8) usb.TransferRequest {
+    const index: u16 = @as(u16, port_indicator) | port_number;
+    return .{
+        .device = &nulldev,
+        .data = @ptrFromInt(0),
+        .size = 0,
+        .setup_data = .{
+            .request = usb.USB_REQUEST_SET_FEATURE,
+            .request_type = usb.USB_REQUEST_TYPE_OTHER_CLASS_OUT,
+            .value = feature,
+            .index = index,
+            .data_size = 0,
+        },
+    };
+}
+
+fn hubFeatureTransfer(req: u8, feature: u16) usb.TransferRequest {
+    return .{
+        .device = &nulldev,
+        .data = @ptrFromInt(0),
+        .size = 0,
+        .setup_data = .{
+            .request = req,
+            .request_type = usb.USB_REQUEST_TYPE_DEVICE_CLASS_OUT,
+            .value = feature,
+            .index = 0,
+            .data_size = 0,
+        },
+    };
+}
+
+fn setHubFeatureTransfer(feature: u16) usb.TransferRequest {
+    return hubFeatureTransfer(usb.USB_REQUEST_SET_FEATURE, feature);
+}
+
+fn clearHubFeatureTransfer(feature: u16) usb.TransferRequest {
+    return hubFeatureTransfer(usb.USB_REQUEST_CLEAR_FEATURE, feature);
+}
+
 fn getDeviceDescriptor() !void {
-    const buffer_size = @sizeOf(DeviceDescriptor);
+    const buffer_size = @sizeOf(usb.DeviceDescriptor);
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initDescriptorTransfer(&nulldev, DescriptorType.device, 0, 0, &buffer);
+    var xfer = deviceDescriptorTransfer(0, 0, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 
-    const device_descriptor = std.mem.bytesAsValue(DeviceDescriptor, xfer.data[0..@sizeOf(DeviceDescriptor)]);
+    const device_descriptor = std.mem.bytesAsValue(usb.DeviceDescriptor, xfer.data[0..@sizeOf(usb.DeviceDescriptor)]);
 
-    expectEqual(@src(), DescriptorType.device, device_descriptor.header.descriptor_type);
-    expectEqual(@src(), DeviceClass.hub, device_descriptor.device_class);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_DEVICE, device_descriptor.descriptor_type);
+    expectEqual(@src(), usb.USB_DEVICE_HUB, device_descriptor.device_class);
     expectEqual(@src(), @as(u8, 0), device_descriptor.device_subclass);
     expectEqual(@src(), @as(u8, 1), device_descriptor.device_protocol);
     expect(@src(), device_descriptor.configuration_count >= 1);
@@ -153,10 +284,10 @@ fn getDeviceDescriptor() !void {
 }
 
 fn getDeviceDescriptorShortBuffer() !void {
-    const short_buffer_len: u16 = @as(u16, @sizeOf(DeviceDescriptor)) / 2;
+    const short_buffer_len: u16 = @as(u16, @sizeOf(usb.DeviceDescriptor)) / 2;
     var buffer: [short_buffer_len]u8 = undefined;
 
-    var xfer = TransferFactory.initDescriptorTransfer(&nulldev, DescriptorType.device, 0, 0, &buffer);
+    var xfer = deviceDescriptorTransfer(0, 0, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
@@ -164,41 +295,41 @@ fn getDeviceDescriptorShortBuffer() !void {
 }
 
 fn getConfigurationDescriptor() !void {
-    const buffer_size = ConfigurationDescriptor.STANDARD_LENGTH + InterfaceDescriptor.STANDARD_LENGTH + EndpointDescriptor.STANDARD_LENGTH;
+    const buffer_size = usb.ConfigurationDescriptor.STANDARD_LENGTH + usb.InterfaceDescriptor.STANDARD_LENGTH + usb.EndpointDescriptor.STANDARD_LENGTH;
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initConfigurationDescriptorTransfer(&nulldev, 1, &buffer);
+    var xfer = configurationDescriptorTransfer(1, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 
-    var config = try DeviceConfiguration.initFromBytes(helpers.allocator, &buffer);
+    var config = try usb.DeviceConfiguration.initFromBytes(helpers.allocator, &buffer);
     defer {
         config.deinit();
         helpers.allocator.destroy(config);
     }
 
-    expectEqual(@src(), DescriptorType.configuration, config.configuration_descriptor.header.descriptor_type);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_CONFIGURATION, config.configuration_descriptor.descriptor_type);
     expect(@src(), config.configuration_descriptor.interface_count >= 1);
 
-    expectEqual(@src(), DescriptorType.interface, config.interfaces[0].?.header.descriptor_type);
-    expectEqual(@src(), InterfaceClass.hub, config.interfaces[0].?.interface_class);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_INTERFACE, config.interfaces[0].?.descriptor_type);
+    expectEqual(@src(), usb.USB_INTERFACE_CLASS_HUB, config.interfaces[0].?.interface_class);
     expect(@src(), config.interfaces[0].?.endpoint_count >= 1);
 
-    expectEqual(@src(), DescriptorType.endpoint, config.endpoints[0][0].?.header.descriptor_type);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_ENDPOINT, config.endpoints[0][0].?.descriptor_type);
     expect(@src(), config.endpoints[0][0].?.max_packet_size >= 4);
 }
 
 fn getConfigurationDescriptorShortBuffer() !void {
-    const buffer_size = (@sizeOf(ConfigurationDescriptor) + @sizeOf(InterfaceDescriptor) + @sizeOf(EndpointDescriptor)) / 2;
+    const buffer_size = (@sizeOf(usb.ConfigurationDescriptor) + @sizeOf(usb.InterfaceDescriptor) + @sizeOf(usb.EndpointDescriptor)) / 2;
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initConfigurationDescriptorTransfer(&nulldev, 1, &buffer);
+    var xfer = configurationDescriptorTransfer(1, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getStringDescriptors() !void {
@@ -206,60 +337,60 @@ fn getStringDescriptors() !void {
     const buffer_size = @sizeOf(usb.StringDescriptor);
     var buffer: [buffer_size]u8 align(2) = undefined;
 
-    var xfer = TransferFactory.initStringDescriptorTransfer(&nulldev, 0, LangID.none, &buffer);
+    var xfer = stringDescriptorTransfer(0, usb.USB_LANGID_NONE, &buffer);
     expectTransferCompletionStatus(.ok, &xfer);
 
-    const string = @as(*align(2) StringDescriptor, @ptrCast(@alignCast(xfer.data[0..buffer_size])));
+    const string = @as(*align(2) usb.StringDescriptor, @ptrCast(@alignCast(xfer.data[0..buffer_size])));
 
     expectEqualSlices(@src(), u16, &.{0x0409}, string.body[0..1]);
 
     // check string at index 2
-    xfer = TransferFactory.initStringDescriptorTransfer(&nulldev, 2, LangID.none, &buffer);
+    xfer = stringDescriptorTransfer(2, usb.USB_LANGID_NONE, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    const string2 = @as(*align(2) StringDescriptor, @ptrCast(@alignCast(xfer.data[0..buffer_size])));
+    const string2 = @as(*align(2) usb.StringDescriptor, @ptrCast(@alignCast(xfer.data[0..buffer_size])));
     const str_slice = try string2.asSlice(helpers.allocator);
     defer helpers.allocator.free(str_slice);
 
-    expectEqualSlices(@src(), u8, "USB", str_slice[0..3]);
+    expectEqualSlices(@src(), u8, "Aapen USB", str_slice[0..9]);
 }
 
 fn getStringDescriptorShortBuffer() !void {
-    const buffer_size = @sizeOf(usb.Header) + 4;
+    const buffer_size = 6;
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initStringDescriptorTransfer(&nulldev, 1, LangID.none, &buffer);
+    var xfer = stringDescriptorTransfer(1, usb.USB_LANGID_NONE, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getStatus() !void {
     const buffer_size = @sizeOf(u16);
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initGetStatusTransfer(&nulldev, &buffer);
+    var xfer = getStatusTransfer(&buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn setConfiguration() !void {
-    var xfer = TransferFactory.initSetConfigurationTransfer(&nulldev, 1);
+    var xfer = setConfigurationTransfer(1);
     expectTransferCompletionStatus(.ok, &xfer);
 
-    var xfer2 = TransferFactory.initSetConfigurationTransfer(&nulldev, 99);
-    expectTransferCompletionStatus(.unsupported_request, &xfer2);
+    var xfer2 = setConfigurationTransfer(99);
+    expectTransferCompletionStatus(.ok, &xfer2);
 }
 
 fn getConfiguration() !void {
     const buffer_size = 1;
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initGetConfigurationTransfer(&nulldev, &buffer);
+    var xfer = getConfigurationTransfer(&buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
@@ -267,18 +398,18 @@ fn getConfiguration() !void {
 }
 
 fn getDescriptor() !void {
-    const buffer_size = @sizeOf(HubDescriptor);
+    const buffer_size = @sizeOf(usb.HubDescriptor);
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initGetHubDescriptorTransfer(&nulldev, 0, &buffer);
+    var xfer = getHubDescriptorTransfer(0, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 
-    const hub_descriptor = std.mem.bytesAsValue(HubDescriptor, xfer.data[0..@sizeOf(HubDescriptor)]);
+    const hub_descriptor = std.mem.bytesAsValue(usb.HubDescriptor, xfer.data[0..@sizeOf(usb.HubDescriptor)]);
 
-    expectEqual(@src(), DescriptorType.hub, hub_descriptor.header.descriptor_type);
+    expectEqual(@src(), usb.USB_DESCRIPTOR_TYPE_HUB, hub_descriptor.descriptor_type);
     expectEqual(@src(), @as(u8, 1), hub_descriptor.number_ports);
 }
 
@@ -286,35 +417,35 @@ fn getHubStatus() !void {
     const buffer_size = 4;
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initGetHubStatusTransfer(&nulldev, &buffer);
+    var xfer = getHubStatusTransfer(&buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getPortStatus() !void {
-    const buffer_size = @sizeOf(PortStatus);
+    const buffer_size = @sizeOf(usb.HubPortStatus);
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initHubGetPortStatusTransfer(&nulldev, 1, &buffer);
+    var xfer = getHubPortStatusTransfer(1, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn getPortPowerStatus() !bool {
-    const buffer_size = @sizeOf(PortStatus);
+    const buffer_size = @sizeOf(usb.HubPortStatus);
     var buffer: [buffer_size]u8 = undefined;
 
-    var xfer = TransferFactory.initHubGetPortStatusTransfer(&nulldev, 1, &buffer);
+    var xfer = getHubPortStatusTransfer(1, &buffer);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 
-    const port_status = std.mem.bytesAsValue(PortStatus, xfer.data[0..@sizeOf(PortStatus)]);
+    const port_status = std.mem.bytesAsValue(usb.HubPortStatus, xfer.data[0..@sizeOf(usb.HubPortStatus)]);
 
     return port_status.port_status.power == 1;
 }
@@ -322,46 +453,42 @@ fn getPortPowerStatus() !bool {
 fn setPortFeature() !void {
     const buffer_size = 0;
 
-    var xfer = TransferFactory.initHubSetPortFeatureTransfer(&nulldev, PortFeature.port_power, 1, 0);
+    var xfer = setHubPortFeatureTransfer(usb.HUB_PORT_FEATURE_PORT_POWER, 1, 0);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn setPortFeatureReset() !void {
     const buffer_size = 0;
 
-    var xfer = TransferFactory.initHubSetPortFeatureTransfer(&nulldev, PortFeature.port_reset, 1, 0);
+    var xfer = setHubPortFeatureTransfer(usb.HUB_PORT_FEATURE_PORT_RESET, 1, 0);
 
     expectTransferCompletionStatus(.ok, &xfer);
 
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
+    expectEqual(@src(), @as(usb.TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn setAddress() !void {
-    const buffer_size = 0;
-    var buffer: [buffer_size]u8 = undefined;
-    var xfer = TransferFactory.initDescriptorTransfer(&nulldev, DescriptorType.device, 0, 0, &buffer);
+    var xfer = setAddressTransfer(1);
 
     expectTransferCompletionStatus(.ok, &xfer);
-
-    expectEqual(@src(), @as(TransferBytes, buffer_size), xfer.actual_size);
 }
 
 fn setHubFeature() !void {
-    var xfer = TransferFactory.initHubSetHubFeatureTransfer(&nulldev, HubFeature.c_hub_local_power);
+    var xfer = setHubFeatureTransfer(usb.USB_HUB_FEATURE_C_LOCAL_POWER);
     expectTransferCompletionStatus(.unsupported_request, &xfer);
 }
 
 fn clearHubFeature() !void {
-    var xfer = TransferFactory.initHubClearHubFeatureTransfer(&nulldev, HubFeature.c_hub_local_power);
+    var xfer = clearHubFeatureTransfer(usb.USB_HUB_FEATURE_C_LOCAL_POWER);
     expectTransferCompletionStatus(.unsupported_request, &xfer);
 }
 
 fn hubHoldInterruptRequestUntilChange() !void {
     const buffer_size = 1;
     var buffer: [buffer_size]u8 = undefined;
-    var xfer = TransferFactory.initInterruptTransfer(&nulldev, &buffer);
+    var xfer = usb.TransferRequest.initInterrupt(&nulldev, &buffer);
     expectTransferCompletionStatus(.incomplete, &xfer);
 }

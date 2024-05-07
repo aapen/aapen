@@ -90,7 +90,7 @@ pub fn expectEqual(loc: std.builtin.SourceLocation, expected: anytype, actual: @
         .ComptimeInt,
         => {
             if (actual != expected) {
-                var buf_act: [256]u8 = undefined;
+                var buf_act: [256]u8 = [_]u8{0} ** 256;
                 const b = std.fmt.bufPrint(&buf_act, "expected {}, found {}", .{ expected, actual }) catch "";
                 emitLoc(loc);
                 _ = printf("%s\n", b.ptr);

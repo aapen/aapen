@@ -16,9 +16,6 @@ const Forth = @import("../forty/forth.zig").Forth;
 const Logger = @import("../logger.zig");
 var log: *Logger = undefined;
 
-const p = @import("../printf.zig");
-const printf = p.printf;
-
 const schedule = @import("../schedule.zig");
 
 const semaphore = @import("../semaphore.zig");
@@ -27,24 +24,9 @@ const SID = semaphore.SID;
 const synchronize = @import("../synchronize.zig");
 const OneShot = synchronize.OneShot;
 
-const descriptor = @import("descriptor.zig");
-const EndpointDescriptor = descriptor.EndpointDescriptor;
-const HidDescriptor = descriptor.HidDescriptor;
-const InterfaceDescriptor = descriptor.InterfaceDescriptor;
-
 const device = @import("device.zig");
 const Device = device.Device;
-const DeviceClass = device.DeviceClass;
 const DeviceDriver = device.DeviceDriver;
-const HidClassRequest = device.HidClassRequest;
-const HidProtocol = device.HidProtocol;
-const HidSubclass = device.HidSubclass;
-
-const endpoint = @import("endpoint.zig");
-const EndpointDirection = endpoint.EndpointDirection;
-
-const request = @import("request.zig");
-const request_interface_class_out = request.interface_class_out;
 
 const transfer = @import("transfer.zig");
 const TransferRequest = transfer.TransferRequest;
@@ -74,8 +56,8 @@ var driver_initialized: OneShot = .{};
 var shutdown_signal: OneShot = .{};
 
 var keyboard_device: ?*Device = null;
-var keyboard_interface: ?*InterfaceDescriptor = null;
-var keyboard_endpoint: ?*EndpointDescriptor = null;
+var keyboard_interface: ?*usb.InterfaceDescriptor = null;
+var keyboard_endpoint: ?*usb.EndpointDescriptor = null;
 
 const REPORT_SIZE = 8;
 var report: [REPORT_SIZE]u8 = [_]u8{0} ** REPORT_SIZE;
@@ -314,10 +296,10 @@ pub const usage: [256]Usage = init: {
 // ----------------------------------------------------------------------
 // Driver interface
 // ----------------------------------------------------------------------
-fn isKeyboard(iface: *InterfaceDescriptor) bool {
+fn isKeyboard(iface: *usb.InterfaceDescriptor) bool {
     return iface.isHid() and
-        iface.interface_protocol == HidProtocol.keyboard and
-        (iface.interface_subclass == 0 or iface.interface_subclass == 1);
+        iface.interface_protocol == usb.HID_PROTOCOL_KEYBOARD and
+        (iface.interface_subclass == 0 or iface.interface_subclass == usb.HID_SUBCLASS_BOOT);
 }
 
 pub fn hidKeyboardDriverCanBind(dev: *Device) bool {
@@ -342,7 +324,7 @@ pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
             continue;
         }
 
-        const in_interrupt_endpoint: ?*EndpointDescriptor = for (0..iface.endpoint_count) |e| {
+        const in_interrupt_endpoint: ?*usb.EndpointDescriptor = for (0..iface.endpoint_count) |e| {
             if (dev.configuration.endpoints[i][e]) |ep| {
                 if (ep.isType(TransferType.interrupt) and
                     ep.direction() == 1)
@@ -364,8 +346,8 @@ pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
 
         const status = usb.controlMessage(
             dev,
-            HidClassRequest.set_protocol, // request
-            request_interface_class_out, // request type
+            usb.HID_REQUEST_SET_PROTOCOL, // request
+            usb.USB_REQUEST_TYPE_INTERFACE_CLASS_OUT, // request type
             0, // value - id of hid boot protocol
             @truncate(i), // index - interface to use
             &.{}, // data (not used for this transfer)

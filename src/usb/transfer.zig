@@ -1,36 +1,22 @@
 const std = @import("std");
 
-const descriptor = @import("descriptor.zig");
-const EndpointDescriptor = descriptor.EndpointDescriptor;
-
 const device = @import("device.zig");
 const DEFAULT_ADDRESS = device.DEFAULT_ADDRESS;
 const DeviceAddress = device.DeviceAddress;
 const Device = device.Device;
-const UsbSpeed = device.UsbSpeed;
-const StandardDeviceRequests = device.StandardDeviceRequests;
-
-const endpoint = @import("endpoint.zig");
-const EndpointDirection = endpoint.EndpointDirection;
-const EndpointNumber = endpoint.EndpointNumber;
-
-const request = @import("request.zig");
-const RequestType = request.RequestType;
-const RequestTypeDirection = request.RequestTypeDirection;
-const RequestTypeRecipient = request.RequestTypeRecipient;
-const RequestTypeType = request.RequestTypeType;
 
 const schedule = @import("../schedule.zig");
 const TID = schedule.TID;
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
 
+const spec = @import("spec.zig");
+const TransferBytes = spec.TransferBytes;
+const TransferPackets = spec.TransferPackets;
+
 const status = @import("status.zig");
 const TransactionStatus = status.TransactionStatus;
 
-pub const TransferBytes = u19;
-pub const TransferPackets = u10;
-pub const PacketSize = u11;
 pub const DEFAULT_MAX_PACKET_SIZE = 8;
 
 /// Describe a single USB transfer to perform. May be any type of
@@ -63,12 +49,12 @@ pub const TransferRequest = struct {
     // Endpoint descriptor to communicate with on the device. This
     // should come from one of the endpoints in the Device struct. A
     // control transfer can leave this as null
-    endpoint_desc: ?*EndpointDescriptor = null,
+    endpoint_desc: ?*spec.EndpointDescriptor = null,
 
     // For IN endpoints, this will be filled in up to the length of
     // the buffer. For OUT endpoints, this holds the exact bytes to
     // transmit.
-    data: [*]u8,
+    data: [*]allowzero u8,
     size: TransferBytes = 0,
 
     // Setup data for a USB control request. Only used when the
@@ -104,7 +90,8 @@ pub const TransferRequest = struct {
 
     semaphore: ?SID = semaphore.NO_SEM,
 
-    pub fn initControlAllocated(req: *TransferRequest, dev: *Device, setup: SetupPacket, buffer: []u8) void {
+    pub fn create(allocator: std.mem.Allocator, dev: *Device, setup: SetupPacket, buffer: []u8) !*TransferRequest {
+        const req = try allocator.create(TransferRequest);
         req.* = .{
             .actual_size = 0,
             .attempted_bytes_remaining = 0,
@@ -119,6 +106,7 @@ pub const TransferRequest = struct {
             .size = @truncate(buffer.len),
             .setup_data = setup,
         };
+        return req;
     }
 
     pub fn initControl(dev: *Device, setup_packet: SetupPacket, data_buffer: []u8) TransferRequest {
@@ -140,7 +128,7 @@ pub const TransferRequest = struct {
         };
     }
 
-    pub fn deinit(self: *TransferRequest) void {
+    pub fn deinit(self: *TransferRequest, allocator: std.mem.Allocator) void {
         if (self.deferrer_thread) |tid| {
             schedule.kill(tid);
         }
@@ -151,10 +139,12 @@ pub const TransferRequest = struct {
             };
             self.deferrer_thread_sem = null;
         }
+
+        allocator.destroy(self);
     }
 
     pub fn isControlRequest(self: *const TransferRequest) bool {
-        return self.endpoint_desc == null or (self.endpoint_desc.?.attributes.endpoint_type == TransferType.control);
+        return self.endpoint_desc == null or (self.endpoint_desc.?.isType(TransferType.control));
     }
 
     pub fn complete(self: *TransferRequest, txn_status: CompletionStatus) void {
@@ -170,24 +160,6 @@ pub const TransferRequest = struct {
     }
 };
 
-pub const PID2 = struct {
-    pub const token_out: u4 = 0b0001;
-    pub const token_in: u4 = 0b1001;
-    pub const token_sof: u4 = 0b0101;
-    pub const token_setup: u4 = 0b1101;
-    pub const data_data0: u4 = 0b0011;
-    pub const data_data1: u4 = 0b1011;
-    pub const data_data2: u4 = 0b0111;
-    pub const data_mdata: u4 = 0b1111;
-    pub const handshake_ack: u4 = 0b0010;
-    pub const handshake_nak: u4 = 0b1010;
-    pub const handshake_stall: u4 = 0b1110;
-    pub const handshake_nyet: u4 = 0b0110;
-    pub const special_preamble_or_err: u4 = 0b1100;
-    pub const special_split: u4 = 0b1000;
-    pub const special_ping: u4 = 0b0100;
-};
-
 pub const TransferType = struct {
     pub const control: u2 = 0b00;
     pub const isochronous: u2 = 0b01;
@@ -196,37 +168,9 @@ pub const TransferType = struct {
 };
 
 pub const SetupPacket = extern struct {
-    request_type: RequestType,
+    request_type: u8,
     request: u8,
     value: u16,
     index: u16,
     data_size: u16,
-
-    pub fn init(
-        recip: u5,
-        rtt: u2,
-        dir: u1,
-        rq: u8,
-        value: u16,
-        index: u16,
-        data_size: u16,
-    ) SetupPacket {
-        return init2(request.RT(recip, rtt, dir), rq, value, index, data_size);
-    }
-
-    pub fn init2(
-        rt: RequestType,
-        rq: u8,
-        value: u16,
-        index: u16,
-        data_size: u16,
-    ) SetupPacket {
-        return .{
-            .request_type = rt,
-            .request = rq,
-            .value = value,
-            .index = index,
-            .data_size = data_size,
-        };
-    }
 };

@@ -1,0 +1,117 @@
+@startuml
+
+package USB {
+        class Core {
+                transferSubmit(req: *TransferRequest) !void
+        }
+
+        class Device {
+                address: u7
+                parent: *Device
+                parent_port: u7
+        }
+
+        class DeviceConfiguration {
+        }
+
+        class InterfaceDescriptor {
+                class
+                subclass
+                protocol
+        }
+
+        class HidDescriptor {
+                class
+                subclass
+                protocol
+        }
+
+        class EndpointDescriptor {
+                direction
+                type
+        }
+
+        enum EndpointType {
+                control
+                interrupt
+                bulk
+                isochronous
+        }
+
+        class Driver {
+        }
+
+        class Hub {
+        }
+
+        class Port {
+        }
+
+        class TransferRequest {
+        }
+
+        class TransactionTranslator {
+        }
+
+
+        note left of Device::parent
+        pointer to Device of
+        Hub this Device is
+        attached to
+        end note
+
+        note left of Device::parent_port
+        index of port on parent hub
+        end note
+
+        note bottom of TransferRequest
+        Caller constructs TransferRequest
+        with *Device & *EndpointDescriptor
+        end note
+
+        note right of Core::"transferSubmit(req: *TransferRequest) !void"
+        Entry point for callers to send or receive
+        end note
+}
+
+package DWC2 {
+        class HCD {
+        }
+
+        class FakeRootHub {
+        }
+
+        class Channel {
+        }
+}
+
+HCD -d-> FakeRootHub
+HCD -d-> Channel
+
+HCD --> "*" TransferRequest : pending transfers
+HCD --> "0..15" TransferRequest : active transfers
+
+FakeRootHub --> TransferRequest : suspended interrupt transfer
+
+Core -d-> "0..15" Device : devices
+Core -d-> Device : root hub
+Core -r-> HCD
+Core -l-> "1..*" Driver : drivers
+Device -u-> Driver : class driver
+Device -d-> DeviceConfiguration
+Device -r-> TransactionTranslator
+TransactionTranslator -l-> Device : hub
+DeviceConfiguration --> "1..*" InterfaceDescriptor
+DeviceConfiguration --> "1..*" HidDescriptor
+InterfaceDescriptor --> "1..*" EndpointDescriptor
+EndpointDescriptor --> EndpointType : type
+
+Hub -u-> Device
+Hub -d-> TransferRequest : status change request
+Hub -r-> "1..*" Port
+Port -> "0..1" Device
+
+TransferRequest --> Device : target
+TransferRequest --> EndpointDescriptor
+
+@enduml

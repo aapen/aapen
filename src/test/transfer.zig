@@ -4,18 +4,7 @@ const expectEqual = helpers.expectEqual;
 const expectError = helpers.expectError;
 
 const device = @import("../usb/device.zig");
-const Device = device.Device;
-const DeviceState = device.DeviceState;
-const UsbSpeed = device.UsbSpeed;
-
 const transfer = @import("../usb/transfer.zig");
-const SetupPacket = transfer.SetupPacket;
-const Transfer = transfer.TransferRequest;
-
-const request = @import("../usb/request.zig");
-const RequestTypeRecipient = request.RequestTypeRecipient;
-const RequestTypeDirection = request.RequestTypeDirection;
-const RequestTypeType = request.RequestTypeType;
 
 pub fn testBody() !void {
     // these tests all relied on a state machine implementation that
