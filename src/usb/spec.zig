@@ -33,6 +33,12 @@ pub const usb3_0                                       : BCD = 0x0300;
 pub const usb3_1                                       : BCD = 0x0310;
 pub const usb3_2                                       : BCD = 0x0320;
 
+// Endpoint Types
+pub const USB_ENDPOINT_TYPE_CONTROL                    : u2 = 0b00;
+pub const USB_ENDPOINT_TYPE_ISOCHRONOUS                : u2 = 0b01;
+pub const USB_ENDPOINT_TYPE_BULK                       : u2 = 0b10;
+pub const USB_ENDPOINT_TYPE_INTERRUPT                  : u2 = 0b11;
+
 // Descriptor types
 pub const USB_DESCRIPTOR_TYPE_UNKNOWN                  : u8 = 0x00;
 pub const USB_DESCRIPTOR_TYPE_DEVICE                   : u8 = 0x01;
@@ -134,6 +140,14 @@ pub const USB_LANGID_EN_IN                             : LangId = 0x4009; // Ind
 pub const USB_LANGID_EN_MY                             : LangId = 0x4409; // Malaysia
 pub const USB_LANGID_EN_SG                             : LangId = 0x4809; // Singapore
 pub const USB_LANGID_EN_AE                             : LangId = 0x4c09; // United Arab Emirates
+
+pub const USB_SPEED_UNKNOWN                            : u8 = 0;
+pub const USB_SPEED_LOW                                : u8 = 1;
+pub const USB_SPEED_FULL                               : u8 = 2;
+pub const USB_SPEED_HIGH                               : u8 = 3;
+pub const USB_SPEED_WIRELESS                           : u8 = 4;
+pub const USB_SPEED_SUPER                              : u8 = 5;
+pub const USB_SPEED_SUPER_PLUS                         : u8 = 6;
 
 // Hub protocols
 pub const USB_HUB_PROTOCOL_FULL_SPEED                  : u8 = 0x00;
@@ -401,6 +415,10 @@ pub const EndpointDescriptor = packed struct {
 
     pub fn isType(self: *const EndpointDescriptor, ty: u2) bool {
         return self.getType() == ty;
+    }
+
+    pub fn getMaxPacketSize(self: *const EndpointDescriptor) PacketSize {
+        return @truncate(self.max_packet_size & 0x7ff);
     }
 };
 

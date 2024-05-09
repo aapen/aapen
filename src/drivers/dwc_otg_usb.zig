@@ -74,9 +74,12 @@ pub const Error = error{
     PowerFailure,
     ConfigurationError,
     OvercurrentDetected,
+    InvalidRequest,
     InvalidResponse,
     DataLengthMismatch,
-    NoDevice,
+    NotConnected,
+    NoAvailableChannel,
+    Busy,
 };
 
 // ----------------------------------------------------------------------
@@ -125,7 +128,7 @@ pub const HighSpeedPhyType = reg.HighSpeedPhyType;
 // ----------------------------------------------------------------------
 pub const DEFAULT_TRANSFER_TIMEOUT = 1000;
 pub const DEFAULT_INTERVAL = 1;
-pub const DMA_ALIGNMENT: usize = 64;
+pub const DMA_ALIGNMENT: usize = 4;
 
 const HcdChannels = ChannelSet.init("dwc_otg_usb channels", u5, dwc_max_channels);
 const UsbTransferMailbox = Mailbox(*TransferRequest);
@@ -173,6 +176,11 @@ pub fn init(
 
     const self = try allocator.create(Self);
     self.* = .{};
+
+    for (0..dwc_max_channels) |i| {
+        const chid: ChannelId = @intCast(i);
+        channel_pool[chid] = try Channel.init(chid);
+    }
 
     power_controller = power_ctrl;
 
@@ -464,6 +472,17 @@ fn rxFifoFlush() !void {
     // go low.
 }
 
+fn hostPortSpeed() u8 {
+    const hprt = host.port;
+
+    return switch (hprt.speed) {
+        .high => usb.USB_SPEED_HIGH,
+        .full => usb.USB_SPEED_FULL,
+        .low => usb.USB_SPEED_LOW,
+        .undefined => usb.USB_SPEED_UNKNOWN,
+    };
+}
+
 // ----------------------------------------------------------------------
 // Interrupt handling
 // ----------------------------------------------------------------------
@@ -544,9 +563,40 @@ fn dumpRegister(field_name: []const u8, v: u32) void {
 // ----------------------------------------------------------------------
 // Channel handling
 // ----------------------------------------------------------------------
+const ControlTransferState = enum {
+    NotControl,
+    Setup,
+    DataIn,
+    DataOut,
+    StatusIn,
+    StatusOut,
+};
+
+const Channel = struct {
+    ep0_state: ControlTransferState,
+    packet_count: usb.TransferPackets,
+    transfer_length: usb.TransferBytes,
+    chid: ChannelId,
+    busy: bool,
+    waitsem: semaphore.SID,
+    urb: ?*usb.URB,
+
+    fn init(chid: ChannelId) !Channel {
+        return .{
+            .ep0_state = .NotControl,
+            .packet_count = 0,
+            .transfer_length = 0,
+            .chid = chid,
+            .busy = false,
+            .waitsem = try semaphore.create(0),
+            .urb = null,
+        };
+    }
+};
 
 var channel_assignments: HcdChannels = .{};
 var channel_buffers: [dwc_max_channels][1024]u8 align(DMA_ALIGNMENT) = [_][1024]u8{.{0} ** 1024} ** dwc_max_channels;
+var channel_pool: [dwc_max_channels]Channel = undefined;
 
 const ChannelId = u5;
 
@@ -570,7 +620,7 @@ fn channelRegisters(chid: ChannelId) *volatile ChannelRegisters {
     return @ptrFromInt(channel_base + (@sizeOf(ChannelRegisters) * @as(usize, chid)));
 }
 
-fn channelAllocate() !ChannelId {
+fn channelAllocate() error{NoAvailableChannel}!ChannelId {
     const chid = try channel_assignments.allocate();
     errdefer channel_assignments.free(chid);
 
@@ -582,6 +632,9 @@ fn channelAllocate() !ChannelId {
 }
 
 pub fn channelFree(channel: ChannelId) void {
+    channel_pool[channel].urb = null;
+    channel_pool[channel].busy = false;
+
     channel_assignments.free(channel);
 }
 
@@ -602,7 +655,13 @@ pub fn perform(_: *Self, xfer: *TransferRequest) !void {
     try transfer_mailbox.send(xfer);
 }
 
-fn calculatePacketCount(input_size_in: TransferBytes, ep_dir: u1, ep_mps: u16) TransferSize {
+fn calculatePacketCount2(input_size: TransferBytes, ep_addr: u8, mps: usb.PacketSize, size_out: *TransferBytes) usb.TransferPackets {
+    const txsize = calculatePacketCount(input_size, @truncate((ep_addr >> 7) & 0x1), mps);
+    size_out.* = txsize.size;
+    return txsize.packet_count;
+}
+
+fn calculatePacketCount(input_size_in: TransferBytes, ep_dir: u1, ep_mps: usb.PacketSize) TransferSize {
     var input_size = input_size_in;
     var num_packets: u32 = (input_size + ep_mps - 1) / ep_mps;
 
@@ -1288,4 +1347,183 @@ fn channelHaltedNormal(id: ChannelId, req: *TransferRequest, ints: ChannelInterr
             return .transfer_failed;
         }
     }
+}
+
+// ----------------------------------------------------------------------
+// New Style Transfer Handling
+// ----------------------------------------------------------------------
+
+pub fn submitUrb(urb: *usb.URB) Error!void {
+    if (!isAligned(@ptrCast(urb.setup)) or !isAligned(urb.transfer_buffer)) {
+        return Error.InvalidRequest;
+    }
+
+    if (!urb.port.connected) {
+        return Error.NotConnected;
+    }
+
+    const flags = cpu.disable();
+    defer cpu.restore(flags);
+
+    const chid = try channelAllocate();
+
+    const chan = &channel_pool[chid];
+    chan.urb = urb;
+
+    urb.private = chan;
+    urb.actual_length = 0;
+    urb.status = .Busy;
+
+    switch (urb.ep.getType()) {
+        usb.USB_ENDPOINT_TYPE_CONTROL => {
+            chan.ep0_state = .Setup;
+            controlUrbInit(chan, urb, urb.setup, urb.transfer_buffer, urb.transfer_buffer_length);
+        },
+        usb.USB_ENDPOINT_TYPE_BULK, usb.USB_ENDPOINT_TYPE_INTERRUPT => {
+            bulkOrInterruptUrbInit(chan, urb, urb.transfer_buffer, urb.transfer_buffer_length);
+        },
+        usb.USB_ENDPOINT_TYPE_ISOCHRONOUS => {},
+    }
+
+    // TODO: support timeouts. Requires changes to scheduler. Today a
+    // thread cannot be in the sleepq and the semaphore queue simultaneously
+    // if (urb.timeout > 0) {
+    //     try semaphore.waitTimeout(chan.waitsem, urb.timeout) catch |err| {
+    //         urb.timeout = 0;
+    //         // killUrb(urb);  // abort failed transfer
+    //         return err;
+    //     };
+    //     urb.timeout = 0;
+    //     const ret = urb.status;
+    //     channelFree(chid);
+    //     return ret;
+    // }
+
+    return;
+}
+
+fn controlUrbInit(
+    chan: *Channel,
+    urb: *usb.URB,
+    setup: *SetupPacket,
+    transfer_buffer: [*]u8,
+    transfer_buffer_length: usb.TransferBytes,
+) void {
+    _ = transfer_buffer_length;
+    _ = transfer_buffer;
+
+    switch (chan.ep0_state) {
+        .Setup => {
+            const ep_mps = urb.ep.getMaxPacketSize();
+            chan.packet_count = calculatePacketCount2(8, 0x00, ep_mps, &chan.transfer_length);
+            channelInit(chan, urb.port.device_address, 0x00, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
+            channelTransfer(chan, 0x00, std.mem.asBytes(setup), chan.transfer_length, chan.packet_count, DwcTransferSizePid.setup);
+        },
+        .DataIn => {},
+        .DataOut => {},
+        .StatusIn => {},
+        .StatusOut => {},
+        else => {},
+    }
+}
+
+fn bulkOrInterruptUrbInit(
+    chan: *Channel,
+    urb: *usb.URB,
+    transfer_buffer: [*]u8,
+    transfer_buffer_length: usb.TransferBytes,
+) void {
+    const ep_mps = urb.ep.getMaxPacketSize();
+    chan.packet_count = calculatePacketCount2(transfer_buffer_length, urb.ep.endpoint_address, ep_mps, &chan.transfer_length);
+
+    const hc_pid = if (urb.data_toggle == 0) DwcTransferSizePid.data0 else DwcTransferSizePid.data1;
+
+    channelInit(chan, urb.port.device_address, urb.ep.endpoint_address, urb.ep.getType(), ep_mps, urb.port.speed);
+    channelTransfer(chan, urb.ep.endpoint_address, transfer_buffer, chan.transfer_length, chan.packet_count, hc_pid);
+}
+
+fn channelInit(
+    chan: *Channel,
+    device_address: usb.DeviceAddress,
+    ep_address: u8,
+    ep_type: u8,
+    ep_mps: usb.PacketSize,
+    speed: u8,
+) void {
+    var chreg = channel_registers[chan.chid];
+    chreg.channel_int = @bitCast(@as(u32, 0xffff_ffff));
+
+    var intmask: reg.ChannelInterrupt = .{
+        .halt = 1,
+    };
+
+    if (ep_type == usb.USB_ENDPOINT_TYPE_INTERRUPT) {
+        intmask.nak = 1;
+    }
+
+    chreg.channel_int_mask = intmask;
+
+    host.all_channel_interrupts_mask |= @as(u32, 1) << chan.chid;
+
+    channelCharacterInit(chan, device_address, ep_address, ep_type, ep_mps, speed);
+}
+
+fn channelCharacterInit(
+    chan: *Channel,
+    device_address: usb.DeviceAddress,
+    ep_addr: u8,
+    ep_type: u8,
+    ep_mps: usb.PacketSize,
+    speed: u8,
+) void {
+    var char: ChannelCharacteristics = .{
+        .max_packet_size = ep_mps,
+        .endpoint_number = @truncate(ep_addr & 0xf),
+        .endpoint_type = @truncate(ep_type & 0x3),
+        .device_address = device_address,
+    };
+
+    if ((ep_addr & 0x80) == 0x80) {
+        char.endpoint_direction = 0b1;
+    }
+
+    if ((speed == usb.USB_SPEED_LOW) and (hostPortSpeed() != usb.USB_SPEED_LOW)) {
+        char.low_speed_device = 0b1;
+    }
+
+    if (ep_type == usb.USB_ENDPOINT_TYPE_INTERRUPT) {
+        char.odd_frame = 0b1;
+    }
+
+    channel_registers[chan.chid].channel_character = char;
+}
+
+fn channelTransfer(
+    chan: *Channel,
+    ep_addr: u8,
+    buffer: [*]u8,
+    size: usb.TransferBytes,
+    packet_count: usb.TransferPackets,
+    hc_pid: u2,
+) void {
+    _ = ep_addr;
+
+    const chreg = channel_registers[chan.chid];
+
+    chreg.transfer = .{
+        .size = size,
+        .packet_count = packet_count,
+        .packet_id = hc_pid,
+        .do_ping = 0,
+    };
+
+    chreg.channel_dma_addr = @truncate(@intFromPtr(buffer) & 0xffff_ffff);
+
+    const is_oddframe: u1 = if ((host.frame_num.number & 0b1) != 0) 0 else 1;
+    chreg.channel_character.odd_frame = is_oddframe;
+
+    var char = chreg.channel_character;
+    char.enable = 1;
+    char.disable = 0;
+    chreg.channel_character = char;
 }

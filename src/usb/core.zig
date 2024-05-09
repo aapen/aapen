@@ -16,6 +16,7 @@ const synchronize = @import("../synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
 const device = @import("device.zig");
+const hub = @import("hub.zig");
 const spec = @import("spec.zig");
 const status = @import("status.zig");
 const Error = status.Error;
@@ -25,11 +26,13 @@ const transfer = @import("transfer.zig");
 // Lifecycle
 // ----------------------------------------------------------------------
 var allocator: std.mem.Allocator = undefined;
+var submitUrb: *const fn (urb: *URB) HCI.Error!void = undefined;
 
 pub fn initCore(alloc: std.mem.Allocator) void {
     log = Logger.init("usb_core", .info);
 
     allocator = alloc;
+    submitUrb = HCI.submitUrb;
 }
 
 // ----------------------------------------------------------------------
@@ -61,6 +64,61 @@ fn controlMessageDone(xfer: *transfer.TransferRequest) void {
     semaphore.signal(xfer.semaphore.?) catch {
         log.err(@src(), "failed to signal semaphore {?d} on completion of control msg", .{xfer.semaphore});
     };
+}
+
+pub const URB = struct {
+    pub const Completion = *const fn (self: *URB) void;
+    pub const Status = enum { OK, Busy };
+
+    port: *hub.HubPort,
+    ep: *spec.EndpointDescriptor,
+    setup: *transfer.SetupPacket,
+    transfer_buffer: [*]u8,
+    transfer_buffer_length: spec.TransferBytes,
+    timeout: u16,
+    complete: Completion,
+    private: ?*anyopaque = null,
+    actual_length: spec.TransferBytes = 0,
+    status: Status = .OK,
+    data_toggle: u1 = 0,
+
+    pub inline fn fill(
+        urb: *URB,
+        port: *hub.HubPort,
+        setup: *transfer.SetupPacket,
+        buffer: []u8,
+        buffer_length: spec.TransferBytes,
+        timeout: u32,
+        complete: Completion,
+    ) void {
+        urb.* = .{
+            .port = port,
+            .ep = &port.ep0,
+            .setup = setup,
+            .transfer_buffer = buffer,
+            .transfer_buffer_length = buffer_length,
+            .timeout = timeout,
+            .complete = complete,
+        };
+    }
+};
+
+// ----------------------------------------------------------------------
+// new API (temp message: change to "Specific Transfers" when new API
+// is complete)
+// ----------------------------------------------------------------------
+pub fn controlTransfer(port: *hub.HubPort, setup: *transfer.SetupPacket, data: ?[]u8) !spec.TransferBytes {
+    var urb = &port.ep0_urb;
+
+    try semaphore.wait(port.mutex);
+    defer semaphore.signal(port.mutex);
+
+    @memset(std.mem.asBytes(urb), 0);
+
+    urb.fill(port, setup, data, setup.data_size, null);
+    try submitUrb(urb);
+
+    return urb.actual_length;
 }
 
 // ----------------------------------------------------------------------

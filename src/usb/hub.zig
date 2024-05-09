@@ -39,7 +39,6 @@ const spec = @import("spec.zig");
 
 const transfer = @import("transfer.zig");
 const SetupPacket = transfer.SetupPacket;
-const setup = transfer.setup;
 const TransferRequest = transfer.TransferRequest;
 const TransferType = transfer.TransferType;
 
@@ -89,6 +88,7 @@ pub const HubPort = struct {
     // Connecting to the hub tree
     parent: *Hub,
     port: u7,
+    speed: u8,
 
     // About the device connected to this port
     connected: bool,
@@ -106,6 +106,7 @@ pub const HubPort = struct {
         var self: HubPort = .{
             .parent = parent,
             .port = port_number,
+            .speed = spec.USB_SPEED_FULL,
             .connected = false,
             .device_address = 0,
             .device_desc = std.mem.zeroes(spec.DeviceDescriptor),
@@ -122,6 +123,20 @@ pub const HubPort = struct {
         var hp = try alloc.create(HubPort);
         hp.* = init(parent, port_number);
         return hp;
+    }
+
+    pub fn featureSet(self: *HubPort, feature: u16) !void {
+        log.debug(@src(), "hub {d} port {d} featureSet {d} (new API)", .{ self.parent.index, self.port_number, feature });
+
+        var setup: *SetupPacket = self.hub.parent.setup;
+
+        setup.request_type = spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT;
+        setup.request = spec.HUB_REQUEST_SET_FEATURE;
+        setup.value = feature;
+        setup.index = self.port;
+        setup.data_size = 0;
+
+        try usb.controlTransfer(self.hub.parent, setup, null);
     }
 };
 

@@ -4,17 +4,17 @@ const usb = @import("../../usb.zig");
 const TransferType = usb.TransferType;
 
 pub const ChannelCharacteristics = packed struct {
-    max_packet_size: u11, // 0..10
-    endpoint_number: u4, // 11..14
-    endpoint_direction: u1, // 15
-    _reserved_16: u1, // 16
-    low_speed_device: u1, // 17
-    endpoint_type: u2, // 18..19
-    packets_per_frame: u2, // 20..21
-    device_address: u7, // 22..28
-    odd_frame: u1, // 29
-    disable: u1, // 30
-    enable: u1, // 31
+    max_packet_size: u11 = 0, // 0..10
+    endpoint_number: u4 = 0, // 11..14
+    endpoint_direction: u1 = 0, // 15
+    _reserved_16: u1 = 0, // 16
+    low_speed_device: u1 = 0, // 17
+    endpoint_type: u2 = 0, // 18..19
+    packets_per_frame: u2 = 0, // 20..21
+    device_address: u7 = 0, // 22..28
+    odd_frame: u1 = 0, // 29
+    disable: u1 = 0, // 30
+    enable: u1 = 0, // 31
 };
 
 pub const TransactionPosition = struct {
