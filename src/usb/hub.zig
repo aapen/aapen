@@ -167,6 +167,12 @@ pub const Hub = struct {
         };
     }
 
+    pub fn isRootHub(self: *Hub) bool {
+        // TODO change this to look for a parent HubPort instead of a
+        // parent device.
+        return self.device.parent == null;
+    }
+
     pub fn deviceBind(self: *Hub, dev: *Device) !void {
         // The device should already have it's device descriptor and
         // configuration descriptor populated.

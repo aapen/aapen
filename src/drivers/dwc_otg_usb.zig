@@ -1353,13 +1353,17 @@ fn channelHaltedNormal(id: ChannelId, req: *TransferRequest, ints: ChannelInterr
 // New Style Transfer Handling
 // ----------------------------------------------------------------------
 
-pub fn submitUrb(urb: *usb.URB) Error!void {
+pub fn submitUrb(urb: *usb.URB) Error!usb.URB.Status {
     if (!isAligned(@ptrCast(urb.setup)) or !isAligned(urb.transfer_buffer)) {
         return Error.InvalidRequest;
     }
 
     if (!urb.port.connected) {
         return Error.NotConnected;
+    }
+
+    if (urb.port.parent.isRootHub()) {
+        return root_hub.submitUrb(urb);
     }
 
     const flags = cpu.disable();
@@ -1399,7 +1403,7 @@ pub fn submitUrb(urb: *usb.URB) Error!void {
     //     return ret;
     // }
 
-    return;
+    return urb.status;
 }
 
 fn controlUrbInit(
@@ -1410,19 +1414,35 @@ fn controlUrbInit(
     transfer_buffer_length: usb.TransferBytes,
 ) void {
     _ = transfer_buffer_length;
-    _ = transfer_buffer;
+
+    const ep_mps = urb.ep.getMaxPacketSize();
 
     switch (chan.ep0_state) {
         .Setup => {
-            const ep_mps = urb.ep.getMaxPacketSize();
             chan.packet_count = calculatePacketCount2(8, 0x00, ep_mps, &chan.transfer_length);
             channelInit(chan, urb.port.device_address, 0x00, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
             channelTransfer(chan, 0x00, std.mem.asBytes(setup), chan.transfer_length, chan.packet_count, DwcTransferSizePid.setup);
         },
-        .DataIn => {},
-        .DataOut => {},
-        .StatusIn => {},
-        .StatusOut => {},
+        .DataIn => {
+            chan.packet_count = calculatePacketCount2(setup.data_size, 0x80, ep_mps, &chan.transfer_length);
+            channelInit(chan, urb.port.device_address, 0x80, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
+            channelTransfer(chan, 0x80, transfer_buffer, chan.transfer_length, chan.packet_count, DwcTransferSizePid.data1);
+        },
+        .DataOut => {
+            chan.packet_count = calculatePacketCount2(setup.data_size, 0x00, ep_mps, &chan.transfer_length);
+            channelInit(chan, urb.port.device_address, 0x00, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
+            channelTransfer(chan, 0x00, transfer_buffer, chan.transfer_length, chan.packet_count, DwcTransferSizePid.data1);
+        },
+        .StatusIn => {
+            chan.packet_count = calculatePacketCount2(0, 0x80, ep_mps, &chan.transfer_length);
+            channelInit(chan, urb.port.device_address, 0x80, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
+            channelTransfer(chan, 0x80, null, chan.transfer_length, chan.packet_count, DwcTransferSizePid.data1);
+        },
+        .StatusOut => {
+            chan.packet_count = calculatePacketCount2(0, 0x00, ep_mps, &chan.transfer_length);
+            channelInit(chan, urb.port.device_address, 0x00, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
+            channelTransfer(chan, 0x00, null, chan.transfer_length, chan.packet_count, DwcTransferSizePid.data1);
+        },
         else => {},
     }
 }
@@ -1501,7 +1521,7 @@ fn channelCharacterInit(
 fn channelTransfer(
     chan: *Channel,
     ep_addr: u8,
-    buffer: [*]u8,
+    buffer: ?[*]u8,
     size: usb.TransferBytes,
     packet_count: usb.TransferPackets,
     hc_pid: u2,
@@ -1517,7 +1537,11 @@ fn channelTransfer(
         .do_ping = 0,
     };
 
-    chreg.channel_dma_addr = @truncate(@intFromPtr(buffer) & 0xffff_ffff);
+    if (buffer) |b| {
+        chreg.channel_dma_addr = @truncate(@intFromPtr(b) & 0xffff_ffff);
+    } else {
+        chreg.channel_dma_addr = 0;
+    }
 
     const is_oddframe: u1 = if ((host.frame_num.number & 0b1) != 0) 0 else 1;
     chreg.channel_character.odd_frame = is_oddframe;

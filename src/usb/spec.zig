@@ -156,7 +156,7 @@ pub const USB_HUB_PROTOCOL_HIGH_SPEED_MULTIPLE_TT      : u8 = 0x02;
 
 // Hub features
 pub const USB_HUB_FEATURE_C_LOCAL_POWER                : u16 = 0;
-pub const USB_HUB_FEATURE_C_OVERCURRENT                : u16 = 0;
+pub const USB_HUB_FEATURE_C_OVERCURRENT                : u16 = 1;
 
 /// See USB 2.0 specification, revision 2.0, section 11.24.2
 pub const HUB_REQUEST_GET_STATUS                       : u8 = USB_REQUEST_GET_STATUS;
@@ -294,18 +294,18 @@ pub const USB_ISOCHRONOUS_USAGE_EXPLICIT_FEEDBACK      : u2 = 0b10;
 pub const USB_ISOCHRONOUS_USAGE_RESERVED               : u2 = 0b11;
 
 // Request types
-const REQUEST_RECIPIENT_DEVICE                         : u8 = 0x0;
-const REQUEST_RECIPIENT_INTERFACE                      : u8 = 0x01;
-const REQUEST_RECIPIENT_ENDPOINT                       : u8 = 0x02;
-const REQUEST_RECIPIENT_OTHER                          : u8 = 0x03;
+pub const REQUEST_RECIPIENT_DEVICE                     : u8 = 0x0;
+pub const REQUEST_RECIPIENT_INTERFACE                  : u8 = 0x01;
+pub const REQUEST_RECIPIENT_ENDPOINT                   : u8 = 0x02;
+pub const REQUEST_RECIPIENT_OTHER                      : u8 = 0x03;
 
-const REQUEST_TYPE_STANDARD                            : u8 = 0x0 << 5;
-const REQUEST_TYPE_CLASS                               : u8 = 0x01 << 5;
-const REQUEST_TYPE_VENDOR                              : u8 = 0x02 << 5;
-const REQUEST_TYPE_RESERVED                            : u8 = 0x03 << 5;
+pub const REQUEST_TYPE_STANDARD                        : u8 = 0x0 << 5;
+pub const REQUEST_TYPE_CLASS                           : u8 = 0x01 << 5;
+pub const REQUEST_TYPE_VENDOR                          : u8 = 0x02 << 5;
+pub const REQUEST_TYPE_RESERVED                        : u8 = 0x03 << 5;
 
-const REQUEST_DIRECTION_OUT                            : u8 = 0b0 << 7;
-const REQUEST_DIRECTION_IN                             : u8 = 0b1 << 7;
+pub const REQUEST_DIRECTION_OUT                        : u8 = 0b0 << 7;
+pub const REQUEST_DIRECTION_IN                         : u8 = 0b1 << 7;
 
 pub const USB_REQUEST_TYPE_DEVICE_STANDARD_IN = REQUEST_RECIPIENT_DEVICE | REQUEST_TYPE_STANDARD | REQUEST_DIRECTION_IN;
 pub const USB_REQUEST_TYPE_DEVICE_STANDARD_OUT = REQUEST_RECIPIENT_DEVICE | REQUEST_TYPE_STANDARD | REQUEST_DIRECTION_OUT;

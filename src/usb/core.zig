@@ -26,7 +26,7 @@ const transfer = @import("transfer.zig");
 // Lifecycle
 // ----------------------------------------------------------------------
 var allocator: std.mem.Allocator = undefined;
-var submitUrb: *const fn (urb: *URB) HCI.Error!void = undefined;
+var submitUrb: *const fn (urb: *URB) HCI.Error!URB.Status = undefined;
 
 pub fn initCore(alloc: std.mem.Allocator) void {
     log = Logger.init("usb_core", .info);
@@ -68,7 +68,7 @@ fn controlMessageDone(xfer: *transfer.TransferRequest) void {
 
 pub const URB = struct {
     pub const Completion = *const fn (self: *URB) void;
-    pub const Status = enum { OK, Busy };
+    pub const Status = enum { OK, Busy, Failed, NotSupported };
 
     port: *hub.HubPort,
     ep: *spec.EndpointDescriptor,

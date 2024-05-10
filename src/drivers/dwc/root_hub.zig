@@ -88,7 +88,7 @@ const RootHubConfiguration = packed struct {
     endpoint: EndpointDescriptor,
 };
 
-const root_hub_configuration: RootHubConfiguration = .{
+const root_hub_configuration_descriptor: RootHubConfiguration = .{
     .configuration = .{
         .length = ConfigurationDescriptor.STANDARD_LENGTH,
         .descriptor_type = usb.USB_DESCRIPTOR_TYPE_CONFIGURATION,
@@ -180,6 +180,32 @@ fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) HostPort
     hw_status.overcurrent_changed = 0;
 
     return hw_status;
+}
+
+fn hostPortEnable(self: *Self) TransferStatus {
+    if (self.host_registers) |host_reg| {
+        Host.log.debug(@src(), "hostPortPowerOn", .{});
+
+        var hw_status = self.hostPortSafeRead(host_reg);
+
+        hw_status.enabled = 1;
+
+        host_reg.port = hw_status;
+    }
+    return .ok;
+}
+
+fn hostPortDisable(self: *Self) TransferStatus {
+    if (self.host_registers) |host_reg| {
+        Host.log.debug(@src(), "hostPortPowerOn", .{});
+
+        var hw_status = self.hostPortSafeRead(host_reg);
+
+        hw_status.enabled = 0;
+
+        host_reg.port = hw_status;
+    }
+    return .ok;
 }
 
 fn hostPortPowerOn(self: *Self) TransferStatus {
@@ -326,12 +352,22 @@ fn replyWithStructure(req: *TransferRequest, v: *const anyopaque, size: usize) T
     return .ok;
 }
 
+fn replyWithStructure2(urb: *usb.URB, data: []const u8) usb.URB.Status {
+    const requested_length = urb.transfer_buffer_length;
+    const provided_length = @min(requested_length, data.len);
+    Host.log.debug(@src(), "responding with {d} bytes from the structure", .{provided_length});
+    @memcpy(urb.transfer_buffer, data[0..provided_length]);
+
+    urb.actual_length = provided_length;
+    return .OK;
+}
+
 fn hubGetDeviceDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
     return replyWithStructure(req, &root_hub_device_descriptor, @sizeOf(@TypeOf(root_hub_device_descriptor)));
 }
 
 fn hubGetConfigurationDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
-    return replyWithStructure(req, &root_hub_configuration, @sizeOf(@TypeOf(root_hub_configuration)));
+    return replyWithStructure(req, &root_hub_configuration_descriptor, @sizeOf(@TypeOf(root_hub_configuration_descriptor)));
 }
 
 fn hubGetStringDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
@@ -457,4 +493,179 @@ pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
         }
         Host.log.debug(@src(), "unhandled request: type 0x{x}, req 0x{x}", .{ req.setup_data.request_type, req.setup_data.request });
     }
+}
+
+const UrbTarget = enum {
+    unknown,
+    device,
+    class,
+    other,
+};
+
+fn urbTarget(urb: *usb.URB) UrbTarget {
+    if  ((urb.setup.request_type & usb.REQUEST_RECIPIENT_DEVICE) != 0) {
+        return .device;
+    } else if  ((urb.setup.request_type & usb.REQUEST_RECIPIENT_OTHER) != 0) {
+        return .other;
+    } else if ((urb.setup.request_type & usb.REQUEST_RECIPIENT_CLASS) != 0) {
+        return .class;
+    } else {
+        return .unknown;
+    }
+}
+
+// zig fmt: off
+inline fn deviceRequest(rt: u8)   bool { return rt & usb.REQUEST_RECIPIENT_DEVICE != 0; }
+inline fn otherRequest(rt: u8)    bool { return rt & usb.REQUEST_RECIPIENT_OTHER != 0; }
+inline fn standardRequest(rt: u8) bool { return rt & usb.REQUEST_TYPE_STANDARD != 0; }
+inline fn classRequest(rt: u8)    bool { return rt & usb.REQUEST_TYPE_CLASS != 0; }
+// zig fmt: on
+
+pub fn control(self: *Self, urb: *usb.URB) usb.URB.Status {
+    Host.log.debug(@src(), "hubHandleTransfer: processing control message", .{});
+
+    const setup = urb.setup;
+    const port = setup.index;
+
+    if (deviceRequest(urb.setup.request_type)) {
+        switch (setup.request) {
+            usb.HUB_REQUEST_CLEAR_FEATURE => {
+                switch (setup.value) {
+                    usb.USB_HUB_FEATURE_C_LOCAL_POWER => {},
+                    usb.USB_HUB_FEATURE_C_OVERCURRENT => {},
+                    else => return .NotSupported,
+                }
+            },
+            usb.HUB_REQUEST_SET_FEATURE => {
+                switch (setup.value) {
+                    usb.USB_HUB_FEATURE_C_LOCAL_POWER => {},
+                    usb.USB_HUB_FEATURE_C_OVERCURRENT => {},
+                    else => return .NotSupported,
+                }
+            },
+            usb.USB_REQUEST_GET_DESCRIPTOR => {
+                const descriptor_type = urb.setup.value >> 8;
+                if (standardRequest(urb.setup.request_type)) {
+                    switch (descriptor_type) {
+                        usb.USB_DESCRIPTOR_TYPE_DEVICE => {
+                            return replyWithStructure2(urb, std.mem.asBytes(&root_hub_device_descriptor));
+                        },
+                        usb.USB_DESCRIPTOR_TYPE_CONFIGURATION => {
+                            return replyWithStructure2(urb, std.mem.asBytes(&root_hub_configuration_descriptor));
+                        },
+                        usb.USB_DESCRIPTOR_TYPE_STRING => {
+                            const string_index = urb.setup.value & 0xf;
+                            if (string_index < root_hub_strings.len) {
+                                return replyWithStructure2(urb, std.mem.asBytes(&root_hub_strings[string_index]));
+                            }
+                        },
+                        else => {},
+                    }
+                } else {
+                    return replyWithStructure2(urb, std.mem.asBytes(&root_hub_hub_descriptor));
+                }
+            },
+            usb.HUB_REQUEST_GET_STATUS => {
+                return replyWithStructure2(urb, std.mem.asBytes(&self.root_hub_hub_status));
+            },
+            usb.USB_REQUEST_SET_ADDRESS => {
+                return .OK;
+            },
+            usb.USB_REQUEST_GET_CONFIGURATION => {
+                return replyWithStructure2(urb, std.mem.asBytes(&root_hub_configuration_descriptor));
+            },
+            usb.USB_REQUEST_SET_CONFIGURATION => {
+                return .OK;
+            },
+            else => {},
+        }
+    } else if (otherRequest(urb.setup.request_type)) {
+        switch (urb.setup.request) {
+            usb.HUB_REQUEST_GET_STATUS => {
+                return replyWithStructure2(urb, std.mem.asBytes(&self.root_hub_port_status));
+            },
+            usb.HUB_REQUEST_SET_FEATURE => {
+                switch (urb.setup.value) {
+                    usb.HUB_PORT_FEATURE_PORT_ENABLE => {
+                        _ = self.hostPortEnable();
+                        return .OK;
+                    },
+                    usb.HUB_PORT_FEATURE_PORT_SUSPEND,
+                    usb.HUB_PORT_FEATURE_C_PORT_SUSPEND,
+                    => {},
+                    usb.HUB_PORT_FEATURE_PORT_POWER => {
+                        _ = self.hostPortPowerOn();
+                        return .OK;
+                    },
+                    usb.HUB_PORT_FEATURE_PORT_RESET => {
+                        _ = self.hostPortReset();
+                        return .OK;
+                    },
+                    usb.HUB_PORT_FEATURE_C_PORT_CONNECTION => {
+                        self.root_hub_port_status.port_change.connected_changed = 0;
+                        return .OK;
+                    },
+                    usb.HUB_PORT_FEATURE_C_PORT_ENABLE => {
+                        self.root_hub_port_status.port_change.enabled_changed = 0;
+                        return .OK;
+                    },
+                    usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT => {
+                        self.root_hub_port_status.port_status.overcurrent = 0;
+                        return .OK;
+                    },
+                    usb.HUB_PORT_FEATURE_C_PORT_RESET => {
+                        self.root_hub_port_status.port_status.reset = 0;
+                        return .OK;
+                    },
+                    else => {},
+                }
+                return .OK;
+            },
+            usb.HUB_REQUEST_CLEAR_FEATURE => {
+                if (port != 1) {
+                    return .Failed;
+                }
+
+                switch (urb.setup.value) {
+                    usb.HUB_PORT_FEATURE_PORT_ENABLE => {
+                        _ = self.hostPortDisable();
+                        return .OK;
+                    },
+                    usb.HUB_PORT_FEATURE_PORT_POWER => {
+                        _ = self.hostPortPowerOff();
+                        return .OK;
+                    },
+                    usb.HUB_PORT_FEATURE_PORT_RESET,
+                    usb.HUB_PORT_FEATURE_PORT_SUSPEND,
+                    usb.HUB_PORT_FEATURE_C_PORT_SUSPEND,
+                    usb.HUB_PORT_FEATURE_C_PORT_CONNECTION,
+                    usb.HUB_PORT_FEATURE_C_PORT_ENABLE,
+                    usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT,
+                    usb.HUB_PORT_FEATURE_C_PORT_RESET,
+                    => {
+                        return .OK;
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+
+    Host.log.debug(@src(), "unhandled request: type 0x{x}, req 0x{x}", .{ urb.setup.request_type, urb.setup.request });
+    return .Failed;
+}
+
+pub fn interrupt(self: *Self, urb: *usb.URB) usb.URB.Status {
+    _ = urb;
+    _ = self;
+    return .OK;
+}
+
+pub fn submitUrb(self: *Self, urb: *usb.URB) usb.URB.Status {
+    return switch (urb.ep.getType()) {
+        usb.USB_ENDPOINT_TYPE_CONTROL => self.control(urb),
+        usb.USB_ENDPOINT_TYPE_INTERRUPT => self.interrupt(urb),
+        usb.USB_ENDPOINT_TYPE_BULK, usb.USB_ENDPOINT_TYPE_ISOCHRONOUS => usb.URB.Status.Failed,
+    };
 }
