@@ -21,6 +21,8 @@ const putchar = p._putchar;
 
 const string = @import("forty/string.zig");
 
+const schedule = @import("schedule.zig");
+
 const Lock = @import("synchronize.zig").TicketLock;
 
 const Logger = @This();
@@ -147,8 +149,15 @@ inline fn newline(self: *const Logger) void {
 }
 
 fn writeHeader(self: *const Logger, level: Level, loc: std.builtin.SourceLocation) void {
+    self.writeThreadId();
     self.writePrefix(level);
     self.source(loc);
+    self.writeByte(' ');
+}
+
+fn writeThreadId(self: *const Logger) void {
+    self.writeInt(@TypeOf(schedule.current), schedule.current);
+    self.writeByte(':');
     self.writeByte(' ');
 }
 
@@ -222,7 +231,7 @@ fn writeBytesNTimes(self: *const Logger, bytes: []const u8, n: usize) void {
 
 fn writeInt(self: *const Logger, comptime T: type, val: T) void {
     _ = self;
-    _ = root.printf("%d", val);
+    _ = root.printf("%-4d", val);
 }
 
 fn writeAddrHex(self: *const Logger, addr: u64) void {

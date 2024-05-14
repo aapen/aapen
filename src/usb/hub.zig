@@ -5,13 +5,18 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const root = @import("root");
+const DMA = root.HAL.USBHCI.DMA_ALIGNMENT;
+
 const arch = @import("../architecture.zig");
 const cpu = arch.cpu;
 
 const ChannelSet = @import("../channel_set.zig");
+const mailbox = @import("../mailbox.zig");
 
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
+const NO_SEM = semaphore.NO_SEM;
 
 const Logger = @import("../logger.zig");
 var log: *Logger = undefined;
@@ -32,6 +37,8 @@ const DeviceAddress = device.DeviceAddress;
 const DeviceDriver = device.DeviceDriver;
 const TransactionTranslator = device.TransactionTranslator;
 const UsbSpeed = device.UsbSpeed;
+
+const enumerate = @import("enumerate.zig");
 
 const Error = @import("status.zig").Error;
 
@@ -79,9 +86,9 @@ pub const InterfaceAlternate = struct {
 };
 
 pub const Interface = struct {
-    class_driver: *usb.DeviceDriver,
-    device_name: []u8,
-    alternate: [MAX_INTERFACE_ALTERNATES]InterfaceAlternate,
+    class_driver: *usb.DeviceDriver = undefined,
+    device_name: []u8 = undefined,
+    alternate: [MAX_INTERFACE_ALTERNATES]InterfaceAlternate = undefined,
 };
 
 pub const HubPort = struct {
@@ -89,6 +96,7 @@ pub const HubPort = struct {
     parent: *Hub,
     port: u7,
     speed: u8,
+    status: usb.HubPortStatus,
 
     // About the device connected to this port
     connected: bool,
@@ -96,24 +104,30 @@ pub const HubPort = struct {
     device_desc: spec.DeviceDescriptor,
     config_desc: spec.ConfigurationDescriptor,
     interfaces: [MAX_INTERFACES]Interface,
+    raw_config_descriptor: []u8,
 
     // Reserved space for activities
-    setup: SetupPacket,
+    setup: SetupPacket align(DMA),
     ep0: spec.EndpointDescriptor,
-    // ep0_urb: URB,
+    ep0_urb: usb.URB,
+    mutex: SID,
 
-    pub fn init(parent: *Hub, port_number: u7) HubPort {
+    pub fn init(parent: *Hub, port_number: u7) !HubPort {
         var self: HubPort = .{
             .parent = parent,
             .port = port_number,
             .speed = spec.USB_SPEED_FULL,
+            .status = @bitCast(@as(u32, 0)),
             .connected = false,
             .device_address = 0,
             .device_desc = std.mem.zeroes(spec.DeviceDescriptor),
             .config_desc = std.mem.zeroes(spec.ConfigurationDescriptor),
+            .raw_config_descriptor = undefined,
             .interfaces = undefined,
-            .setup = std.mem.zeroes(SetupPacket),
+            .setup = undefined,
             .ep0 = std.mem.zeroes(spec.EndpointDescriptor),
+            .ep0_urb = undefined,
+            .mutex = try semaphore.create(1),
         };
 
         return self;
@@ -126,17 +140,141 @@ pub const HubPort = struct {
     }
 
     pub fn featureSet(self: *HubPort, feature: u16) !void {
-        log.debug(@src(), "hub {d} port {d} featureSet {d} (new API)", .{ self.parent.index, self.port_number, feature });
+        log.debug(@src(), "hub {d} port {d} featureSet {d} (new API)", .{ self.parent.index, self.port, feature });
 
-        var setup: *SetupPacket = self.hub.parent.setup;
+        try self.parent.hubControlMessage(spec.HUB_REQUEST_SET_FEATURE, spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT, feature, self.port, null);
+    }
 
-        setup.request_type = spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT;
-        setup.request = spec.HUB_REQUEST_SET_FEATURE;
-        setup.value = feature;
-        setup.index = self.port;
-        setup.data_size = 0;
+    pub fn featureClear(self: *HubPort, feature: u16) !void {
+        log.debug(@src(), "hub {d} port {d} featureClear {d} (new API)", .{ self.parent.index, self.port, feature });
 
-        try usb.controlTransfer(self.hub.parent, setup, null);
+        try self.parent.hubControlMessage(spec.HUB_REQUEST_CLEAR_FEATURE, spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT, feature, self.port, null);
+    }
+
+    pub fn statusGet(self: *HubPort) !void {
+        log.debug(@src(), "hub {d} port {d} statusGet (new API)", .{ self.parent.index, self.port });
+
+        try self.parent.hubControlMessage(spec.HUB_REQUEST_GET_STATUS, spec.USB_REQUEST_TYPE_OTHER_CLASS_IN, 0, self.port, self.parent.transfer_buffer[0..4]);
+
+        @memcpy(std.mem.asBytes(&self.status), self.parent.transfer_buffer[0..4]);
+    }
+
+    pub fn reset(self: *HubPort, delay: u32) !void {
+        log.debug(@src(), "hub {d} port {d} initiate reset (new API)", .{ self.parent.index, self.port });
+
+        try self.featureSet(usb.HUB_PORT_FEATURE_PORT_RESET);
+
+        const deadline = time.deadlineMillis(PORT_RESET_TIMEOUT);
+        while (self.status.port_status.reset == 1 and time.ticks() < deadline) {
+            try schedule.sleep(delay);
+            try self.statusGet();
+        }
+
+        if (time.ticks() > deadline) {
+            return Error.ResetTimeout;
+        }
+
+        try self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_RESET);
+
+        log.debug(@src(), "hub {d} port {d} reset finished", .{ self.parent.index, self.port });
+    }
+
+    pub fn statusChanged(self: *HubPort) void {
+        self.statusGet() catch return;
+
+        log.debug(@src(), "hub {d} port {d} port status changed: status 0x{x:0>4}, change 0x{x:0>4}", .{
+            self.parent.index,
+            self.port,
+            @as(u16, @bitCast(self.status.port_status)),
+            @as(u16, @bitCast(self.status.port_change)),
+        });
+
+        const chg = self.status.port_change;
+
+        if (chg.connected_changed != 0) {
+            self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_CONNECTION) catch {};
+            self.connectChanged() catch {};
+        }
+
+        if (chg.enabled_changed != 0) {
+            self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_ENABLE) catch {};
+        }
+
+        if (chg.reset_changed != 0) {
+            self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_RESET) catch {};
+        }
+
+        if (chg.suspended_changed != 0) {
+            self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_SUSPEND) catch {};
+        }
+
+        if (chg.overcurrent_changed != 0) {
+            self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT) catch {};
+        }
+    }
+
+    fn connectChanged(self: *HubPort) !void {
+        const connected_now: bool = (self.status.port_status.connected != 0);
+
+        // TODO detach the old device, if any
+
+        if (connected_now) {
+            self.attachDevice() catch |err| {
+                log.err(@src(), "hub {d} port {d} attach device error {any}", .{
+                    self.parent.index,
+                    self.port,
+                    err,
+                });
+                return err;
+            };
+        }
+    }
+
+    fn attachDevice(self: *HubPort) !void {
+        log.debug(@src(), "hub {d} port {d} attach device", .{ self.parent.index, self.port });
+
+        const port_reset_delay: u32 = if (self.parent.is_roothub) ROOT_RESET_DELAY else SHORT_RESET_DELAY;
+
+        try self.reset(port_reset_delay);
+
+        errdefer |err| {
+            log.err(@src(), "hub {d} failed to attach device, disabling port {d}: {}", .{
+                self.parent.index,
+                self.port,
+                err,
+            });
+            self.featureClear(usb.HUB_PORT_FEATURE_PORT_ENABLE) catch {};
+        }
+
+        try self.statusGet();
+
+        if (self.status.port_status.high_speed_device != 0) {
+            self.speed = usb.USB_SPEED_HIGH;
+        } else if (self.status.port_status.low_speed_device != 0) {
+            self.speed = usb.USB_SPEED_LOW;
+        } else {
+            self.speed = usb.USB_SPEED_FULL;
+        }
+
+        log.debug(@src(), "hub {d} port {d} reports speed is {d}", .{ self.parent.index, self.port, self.speed });
+
+        self.connected = true;
+
+        // schedule enumeration for later
+        try enumerate.later(self);
+    }
+
+    fn detachDevice(self: *HubPort) !void {
+        // TODO buncha stuff: kill pending transfers, unbind drivers
+        // for endpoints,
+
+        usb.addressFree(self.device_address);
+
+        self.device_desc = .{};
+        self.config_desc = .{};
+        self.ep0 = .{};
+        self.device_address = 0;
+        self.connected = false;
     }
 };
 
@@ -150,16 +288,22 @@ pub const Hub = struct {
 
     in_use: bool = false,
     index: u5 = undefined,
+    is_roothub: bool = false,
+    hub_address: u7 = undefined, // device address of this hub
     device: *Device = undefined,
     descriptor: usb.HubDescriptor = undefined,
+    parent: ?*HubPort = null,
     port_count: u8 = 0,
     ports: []Port = undefined,
     ports2: []HubPort = undefined,
+    speed: u8 = undefined,
     status_change_buffer: [8]u8 = [_]u8{0} ** 8,
     status_change_request: TransferRequest = undefined,
     tt: TransactionTranslator = .{ .hub = null, .think_time = 0 },
 
     error_count: u64 = 0,
+
+    transfer_buffer: [64]u8 align(DMA) = [_]u8{0} ** 64,
 
     pub fn init(table_index: u5) Hub {
         return .{
@@ -167,10 +311,10 @@ pub const Hub = struct {
         };
     }
 
-    pub fn isRootHub(self: *Hub) bool {
-        // TODO change this to look for a parent HubPort instead of a
-        // parent device.
-        return self.device.parent == null;
+    pub fn driverBind(self: *Hub, ep: *spec.EndpointDescriptor, parent_port: *HubPort) !void {
+        _ = ep;
+        _ = parent_port;
+        _ = self;
     }
 
     pub fn deviceBind(self: *Hub, dev: *Device) !void {
@@ -240,8 +384,10 @@ pub const Hub = struct {
             spec.USB_REQUEST_TYPE_DEVICE_CLASS_IN,
             @as(u16, usb.USB_DESCRIPTOR_TYPE_HUB) << 8 | 0,
             0,
-            std.mem.asBytes(&self.descriptor),
+            self.transfer_buffer[0..@sizeOf(spec.HubDescriptor)],
         );
+
+        @memcpy(std.mem.asBytes(&self.descriptor), self.transfer_buffer[0..@sizeOf(spec.HubDescriptor)]);
     }
 
     fn initPorts(self: *Hub) !void {
@@ -256,10 +402,10 @@ pub const Hub = struct {
         }
     }
 
-    fn initPorts2(self: *Hub) !void {
+    pub fn initPorts2(self: *Hub) !void {
         self.ports2 = try allocator.alloc(HubPort, self.port_count);
         for (1..self.port_count + 1) |i| {
-            self.ports2[i - 1] = HubPort.init(self, @truncate(i));
+            self.ports2[i - 1] = try HubPort.init(self, @truncate(i));
         }
     }
 
@@ -301,20 +447,57 @@ pub const Hub = struct {
         }
     }
 
-    fn hubControlMessage(self: *Hub, req: u8, req_type: u8, value: u16, index: u16, data: []u8) !void {
-        const result = usb.controlMessage(
-            self.device,
-            req,
-            req_type,
-            value,
-            index,
-            data,
-        ) catch {
-            return error.TransferFailed;
-        };
+    fn powerOnPorts2(self: *Hub) !void {
+        switch (self.decidePowerOnStrategy()) {
+            .unpowered => {},
+            .powered_individual => {
+                log.debug(@src(), "powering on {d} ports", .{self.port_count});
 
-        if (result != .ok) {
-            return error.TransferFailed;
+                for (self.ports2) |*port| {
+                    port.featureSet(usb.HUB_PORT_FEATURE_PORT_POWER) catch return;
+                }
+
+                delayMillis(2 * self.descriptor.power_on_to_power_good);
+            },
+            .powered_ganged => {
+                log.debug(@src(), "powering on all ports", .{});
+                self.ports2[0].featureSet(usb.HUB_PORT_FEATURE_PORT_POWER) catch |err| {
+                    log.err(@src(), "hub {d} ganged ports failed to power on: {any}", .{ self.index, err });
+                };
+                delayMillis(2 * self.descriptor.power_on_to_power_good);
+            },
+        }
+    }
+
+    fn hubControlMessage(self: *Hub, req: u8, req_type: u8, value: u16, index: u16, data: ?[]align(DMA) u8) !void {
+        if (self.is_roothub) {
+            var setup: transfer.SetupPacket = .{
+                .request_type = req_type,
+                .request = req,
+                .value = value,
+                .index = index,
+                .data_size = if (data) |d| @truncate(d.len) else 0,
+            };
+            _ = usb.rootHubControl(&setup, data);
+        } else {
+            const port = self.parent orelse return Error.InvalidData;
+
+            var setup: *transfer.SetupPacket = &port.setup;
+            setup.* = .{
+                .request_type = req_type,
+                .request = req,
+                .value = value,
+                .index = index,
+                .data_size = if (data) |d| @truncate(d.len) else 0,
+            };
+
+            const result = usb.controlTransfer(port, setup, data) catch {
+                return error.TransferFailed;
+            };
+
+            if (result != setup.data_size) {
+                return error.TransferFailed;
+            }
         }
     }
 
@@ -492,15 +675,12 @@ pub const Hub = struct {
 fn statusChangeCompletion(req: *TransferRequest) void {
     const self: *Hub = @fieldParentPtr(Hub, "status_change_request", req);
     log.debug(@src(), "hub {d} finished interrupt transfer, {any}", .{ self.index, req.status });
+    hubThreadWakeup(self);
+}
 
-    if (req.status != .ok) {
-        log.warn(@src(), "hub {d} interrupt transfer returned {any}", .{ self.index, req.status });
-        return;
-    }
-
-    hubs_with_pending_status_change |= @as(u32, 1) << @truncate(self.index);
-    semaphore.signal(hub_status_change_semaphore) catch |err| {
-        log.err(@src(), "hub status change semaphore signal error: {any}", .{err});
+pub fn hubThreadWakeup(hub_with_notification: *Hub) void {
+    hub_mailbox.send(hub_with_notification.index) catch |err| {
+        log.err(@src(), "hub mailbox send error {}", .{err});
     };
 }
 
@@ -515,6 +695,9 @@ var hubs: [MAX_HUBS]Hub = init: {
 };
 var hubs_allocated: HubAlloc = .{};
 
+const HubMailbox = mailbox.Mailbox(u32);
+var hub_mailbox: HubMailbox = undefined;
+
 var hubs_lock: TicketLock = undefined;
 var hub_thread: TID = undefined;
 var allocator: Allocator = undefined;
@@ -522,76 +705,78 @@ var shutdown_signal: OneShot = .{};
 var hub_status_change_semaphore: SID = undefined;
 var hubs_with_pending_status_change: u32 = 0;
 
-fn hubClassAlloc() !*Hub {
+pub fn hubClassAlloc() !*Hub {
     const hub_id = try hubs_allocated.allocate();
     hubs[hub_id].in_use = true;
     return &hubs[hub_id];
 }
 
-fn hubClassFree(hub: *Hub) void {
+pub fn hubClassFree(hub: *Hub) void {
     hub.in_use = false;
     hubs_allocated.free(hub.index);
 }
 
 pub fn initialize(alloc: Allocator) !void {
-    log = Logger.init("usb_hub", .info);
+    log = Logger.init("usbh", .debug);
 
     allocator = alloc;
 
     hubs_lock = TicketLock.initWithTargetLevel("usb hubs", true, .FIQ);
 
-    hubs_with_pending_status_change = 0;
-    hub_status_change_semaphore = try semaphore.create(1);
+    try hub_mailbox.init(allocator, MAX_HUBS);
+
+    // hubs_with_pending_status_change = 0;
+    // hub_status_change_semaphore = try semaphore.create(1);
     hub_thread = try schedule.spawn(hubThread, "hub thread", &.{});
 }
 
 fn hubThread(_: *anyopaque) void {
+    root.hal.usb_hci.initialize() catch |err| {
+        log.err(@src(), "USB host control initialization error {}", .{err});
+        return;
+    };
+    log.debug(@src(), "started host controller", .{});
+
     while (!shutdown_signal.isSignalled()) {
-        semaphore.wait(hub_status_change_semaphore) catch |err| {
-            log.err(@src(), "hub status change wait: {any}", .{err});
+        const hub_with_status_change = hub_mailbox.receive() catch |err| {
+            log.err(@src(), "hubThread: hub mailbox receive error {}", .{err});
+            break;
         };
+        log.debug(@src(), "hubThread: hub with pending status change 0x{x}", .{hub_with_status_change});
 
-        // loop through the hubs that have pending status changes
-        log.debug(@src(), "hubThread: hubs with pending status change 0x{x}", .{hubs_with_pending_status_change});
+        const hub = &hubs[hub_with_status_change];
 
-        while (hubs_with_pending_status_change != 0) {
-            const hub_id: u5 = @truncate(@ctz(hubs_with_pending_status_change));
-            const hub = &hubs[hub_id];
-            const req = &hub.status_change_request;
+        const req = &hub.status_change_request;
 
-            const im = cpu.disable();
-            hubs_with_pending_status_change &= ~(@as(u32, 1) << hub_id);
-            cpu.restore(im);
+        if (hub.is_roothub or req.status == .ok) {
+            const status_change_bytes = (hub.port_count + 7) / 8;
+            const status: []u8 = hub.status_change_buffer[0..status_change_bytes];
+            log.debug(@src(), "hub {d} processing status change: 0x{x}", .{ hub.index, status[0] });
 
-            if (req.status == .ok) {
-                log.debug(@src(), "hub {d} processing status change: 0x{x}", .{ hub_id, req.data[0] });
-
-                if (req.actual_size != req.size) {
-                    log.debug(@src(), "hub {d} actual_size = {d}, expected = {d}", .{ hub_id, req.actual_size, req.size });
-                }
-                // find which ports have changes to report
-                // the request buffer has a bitmask
-                var portmask: u32 = 0;
-                for (0..req.actual_size) |i| {
-                    portmask |= @as(u32, req.data[i]) << @truncate(i * 8);
-                }
-
-                // now process the ports that have changes
-                var check_mask: u32 = 1;
-                for (hub.ports) |*port| {
-                    check_mask = @as(u32, 1) << @truncate(port.number);
-                    if ((portmask & check_mask) != 0) {
-                        hub.portStatusChanged(port);
-                    }
-                }
-            } else {
-                log.err(@src(), "hub {d} status change request failed: {s}", .{ hub_id, @tagName(req.status) });
+            // find which ports have changes to report
+            // the request buffer has a bitmask
+            var portmask: u32 = 0;
+            for (status, 0..) |b, i| {
+                portmask |= @as(u32, b) << @truncate(i * 8);
             }
 
+            // now process the ports that have changes
+            var check_mask: u32 = 0;
+            for (hub.ports2) |*port| {
+                check_mask = @as(u32, 1) << @truncate(port.port);
+                if ((portmask & check_mask) != 0) {
+                    port.statusChanged();
+                }
+            }
+        } else {
+            log.err(@src(), "hub {d} status change request failed: {s}", .{ hub.index, @tagName(req.status) });
+        }
+
+        if (!hub.is_roothub) {
             // resend the status change interrupt request
-            log.debug(@src(), "hub {d} resubmitting status change request", .{hub_id});
+            log.debug(@src(), "hub {d} resubmitting status change request", .{hub.index});
             usb.transferSubmit(req) catch |err| {
-                log.err(@src(), "hub {d} transfer submit error: {any}", .{ hub_id, err });
+                log.err(@src(), "hub {d} transfer submit error: {any}", .{ hub.index, err });
             };
         }
     }
@@ -611,7 +796,7 @@ pub fn hubDriverDeviceBind(dev: *Device) Error!void {
     };
     errdefer hubClassFree(next_hub);
 
-    return try next_hub.deviceBind(dev);
+    try next_hub.deviceBind(dev);
 }
 
 pub fn hubDriverDeviceUnbind(dev: *Device) void {

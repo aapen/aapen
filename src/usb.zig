@@ -32,9 +32,11 @@ pub usingnamespace @import("usb/device.zig");
 pub usingnamespace @import("usb/status.zig");
 pub usingnamespace @import("usb/transfer.zig");
 
+const enumerate = @import("usb/enumerate.zig");
 const hid_keyboard = @import("usb/hid_keyboard.zig");
 
 const hub = @import("usb/hub.zig");
+pub const hubThreadWakeup = hub.hubThreadWakeup;
 
 const Self = @This();
 
@@ -82,7 +84,7 @@ var devices_allocated: DeviceAlloc = .{};
 var allocator: std.mem.Allocator = undefined;
 var drivers: Drivers = undefined;
 var drivers_lock: TicketLock = undefined;
-var root_hub: ?*Self.Device = undefined;
+pub var root_hub: *hub.Hub = undefined;
 var bus_lock: TicketLock = undefined;
 
 // `init` does the allocations and registrations needed, but does not
@@ -93,9 +95,15 @@ pub fn init() !void {
     allocator = root.kernel_allocator;
     drivers = Drivers.init(allocator);
     Self.initCore(allocator);
+    enumerate.init(allocator);
 
     drivers_lock = TicketLock.initWithTargetLevel("usb drivers", true, .FIQ);
     bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
+}
+
+// `initialize` activates the hardware and does the initial port scan
+pub fn initialize() !void {
+    try busInit();
 
     try registerDriver(&hub.driver);
     try registerDriver(&hid_keyboard.driver);
@@ -103,23 +111,28 @@ pub fn init() !void {
     try initializeDrivers();
 }
 
-// `initialize` activates the hardware and does the initial port scan
-pub fn initialize() !void {
-    try root.hal.usb_hci.initialize();
-    log.debug(@src(), "started host controller", .{});
+fn busInit() !void {
+    const roothub_addr = try addressAllocate();
+    errdefer addressFree(roothub_addr);
 
-    const dev0 = try deviceAlloc(null);
-    errdefer deviceFree(dev0);
+    var rh = try hub.hubClassAlloc();
+    errdefer {
+        hub.hubClassFree(rh);
+    }
 
-    log.debug(@src(), "attaching root hub", .{});
+    rh.is_roothub = true;
+    rh.hub_address = roothub_addr;
+    rh.speed = Self.USB_SPEED_FULL;
+    rh.port_count = 1;
+    rh.descriptor = root.HAL.USBHCI.root_hub_hub_descriptor;
+    rh.ports2 = try allocator.alloc(hub.HubPort, 1);
+    rh.ports2[0] = try hub.HubPort.init(rh, 1);
 
-    attachDevice(dev0, Self.UsbSpeed.Full, null, null) catch |err| {
-        log.err(@src(), "usb init failed: {any}", .{err});
-        return err;
-    };
+    root_hub = rh;
+}
 
-    log.debug(@src(), "usb initialized", .{});
-    root_hub = &devices[dev0];
+pub fn rootHubControl(setup: *Self.SetupPacket, data: ?[]u8) Self.URB.Status {
+    return HCI.rootHubControl(setup, data);
 }
 
 pub fn registerDriver(device_driver: *const Self.DeviceDriver) !void {
@@ -136,7 +149,7 @@ pub fn registerDriver(device_driver: *const Self.DeviceDriver) !void {
     }
 
     if (!already_registered) {
-        log.debug(@src(), "registering {s}", .{device_driver.name});
+        log.debug(@src(), "registering driver: {s}", .{device_driver.name});
         try drivers.append(device_driver);
     }
 }
@@ -150,6 +163,20 @@ fn initializeDrivers() !void {
             log.err(@src(), "driver {s} initialization error {any}", .{ drv.name, err });
         };
     }
+}
+
+pub fn addressAllocate() !Self.DeviceAddress {
+    bus_lock.acquire();
+    defer bus_lock.release();
+
+    const addr: Self.DeviceAddress = try devices_allocated.allocate();
+    return addr + 1;
+}
+
+pub fn addressFree(dev_addr: Self.DeviceAddress) void {
+    bus_lock.acquire();
+    defer bus_lock.release();
+    devices_allocated.free(dev_addr);
 }
 
 pub fn deviceAlloc(parent: ?*Self.Device) !Self.DeviceAddress {

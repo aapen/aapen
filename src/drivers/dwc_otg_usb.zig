@@ -147,6 +147,7 @@ var shutdown_signal: OneShot = .{};
 var transfer_mailbox: UsbTransferMailbox = undefined;
 
 var root_hub: RootHub = .{};
+pub const root_hub_hub_descriptor = RootHub.root_hub_hub_descriptor_base;
 var num_host_channels: u4 = 0;
 
 var interrupt_controller: *InterruptController = undefined;
@@ -487,6 +488,47 @@ fn hostPortSpeed() u8 {
 // Interrupt handling
 // ----------------------------------------------------------------------
 fn irqHandle(_: *InterruptController, _: IrqId, _: ?*anyopaque) void {
+    const gint_status = core.core_interrupt_status;
+    const gint_mask = core.core_interrupt_mask;
+
+    // check for spurious interrupt, not interested
+    const ints = @as(u32, @bitCast(gint_status)) & @as(u32, @bitCast(gint_mask));
+    if (ints == 0) return;
+
+    // check for port interrupt
+    if (gint_status.port != 0) {
+        log.debug(@src(), "irq handle: host port interrupt, port status 0x{x:0>8}", .{@as(u32, @bitCast(host.port))});
+        root_hub.hubHandlePortInterrupt();
+    }
+
+    // check for some channel interrupted
+    if (gint_status.host_channel != 0) {
+        const all_intrs = host.all_channel_interrupts;
+
+        log.debug(@src(), "irq handle: host channel ints 0x{x:0>8}", .{@as(u32, @bitCast(all_intrs))});
+
+        // Find the channel that has something to say
+        var channel_mask: u32 = 1;
+        // TODO consider using @ctz to find the lowest bit that's set,
+        // instead of looping over all 16 channels.
+        for (0..dwc_max_channels) |i| {
+            const chid: ChannelId = @truncate(i);
+            if ((all_intrs & channel_mask) != 0) {
+                if (channel_registers[chid].channel_character.endpoint_direction == 1) {
+                    channelHandleInInterrupt(chid);
+                } else {
+                    channelHandleOutInterrupt(chid);
+                }
+            }
+            channel_mask <<= 1;
+        }
+    }
+
+    // clear interrupt flags
+    core.core_interrupt_status = gint_status;
+}
+
+fn irqHandle_old(_: *InterruptController, _: IrqId, _: ?*anyopaque) void {
     _ = atomic.atomicReset(&schedule.resdefer, 1);
 
     const intr_status = core.core_interrupt_status;
@@ -1350,20 +1392,190 @@ fn channelHaltedNormal(id: ChannelId, req: *TransferRequest, ints: ChannelInterr
 }
 
 // ----------------------------------------------------------------------
+// New Style Interrupt Handling
+// ----------------------------------------------------------------------
+fn channelHandleInInterrupt(chid: ChannelId) void {
+    const chan = &channel_pool[chid];
+    const chreg = channel_registers[chid];
+    const chints = chreg.channel_int;
+    const urb = chan.urb orelse return;
+
+    if (chints.halt != 0) {
+        if (chints.transfer_complete != 0) {
+            log.debug(@src(), "ch {d} in interrupt, halted, xfrc", .{chid});
+            urb.status = .OK;
+            const count = chan.transfer_length - chreg.transfer.size;
+            // const used_packets = chan.packet_count - chreg.transfer.packet_count;
+            // _ = used_packets;
+
+            urb.actual_length += count;
+
+            const data_toggle = chreg.transfer.packet_id;
+            if (data_toggle == DwcTransferSizePid.data0) {
+                urb.data_toggle = 0;
+            } else {
+                urb.data_toggle = 1;
+            }
+
+            // TODO - does this work if we need multiple datain packets?
+            if (urb.ep.isType(usb.USB_ENDPOINT_TYPE_CONTROL)) {
+                // note that not all ep0_states are reachable on an
+                // "in" interrupt.
+                if (chan.ep0_state == .DataIn) {
+                    chan.ep0_state = .StatusOut;
+                    controlUrbInit(chan, urb, urb.setup, urb.transfer_buffer, urb.transfer_buffer_length);
+                } else if (chan.ep0_state == .StatusIn) {
+                    chan.ep0_state = .Setup;
+                    urbWaitup(urb);
+                }
+            } else if (urb.ep.isType(usb.USB_ENDPOINT_TYPE_ISOCHRONOUS)) {
+                //
+            } else {
+                urbWaitup(urb);
+            }
+        } else if (chints.ahb_error != 0) {
+            log.debug(@src(), "ch {d} in interrupt, ahb_error", .{chid});
+            urbFail(urb, .IO);
+        } else if (chints.stall != 0) {
+            log.debug(@src(), "ch {d} in interrupt, stall", .{chid});
+            urbFail(urb, .Stall);
+        } else if (chints.nak != 0) {
+            log.debug(@src(), "ch {d} in interrupt, nak", .{chid});
+            urbFail(urb, .Nak);
+        } else if (chints.nyet != 0) {
+            log.debug(@src(), "ch {d} in interrupt, nyet", .{chid});
+            urbFail(urb, .Nyet);
+        } else if (chints.transaction_error != 0) {
+            log.debug(@src(), "ch {d} in interrupt, transaction_error", .{chid});
+            urbFail(urb, .IO);
+        } else if (chints.babble_error != 0) {
+            log.debug(@src(), "ch {d} in interrupt, babble_error", .{chid});
+            urbFail(urb, .Babble);
+        } else if (chints.data_toggle_error != 0) {
+            log.debug(@src(), "ch {d} in interrupt, data_toggle_error", .{chid});
+            urbFail(urb, .DataToggle);
+        } else if (chints.frame_overrun != 0) {
+            log.debug(@src(), "ch {d} in interrupt, frame_overrun", .{chid});
+            urbFail(urb, .IO);
+        }
+
+        chreg.channel_int = chints;
+    }
+}
+
+fn channelHandleOutInterrupt(chid: ChannelId) void {
+    const chan = &channel_pool[chid];
+    const chreg = channel_registers[chid];
+    const chints = chreg.channel_int;
+    const urb = chan.urb orelse return;
+
+    if (chints.halt != 0) {
+        if (chints.transfer_complete != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, xfrc", .{chid});
+            urb.status = .OK;
+            const count = chreg.transfer.size;
+            const used_packets = chan.packet_count - chreg.transfer.packet_count;
+
+            urb.actual_length += (used_packets - 1) * urb.ep.getMaxPacketSize() + count;
+
+            const data_toggle = chreg.transfer.packet_id;
+            if (data_toggle == DwcTransferSizePid.data0) {
+                urb.data_toggle = 0;
+            } else {
+                urb.data_toggle = 1;
+            }
+
+            if (urb.ep.isType(usb.USB_ENDPOINT_TYPE_CONTROL)) {
+                if (chan.ep0_state == .Setup) {
+                    if (urb.setup.data_size > 0) {
+                        if ((urb.setup.request_type & 0x80) != 0) {
+                            chan.ep0_state = .DataIn;
+                        } else {
+                            chan.ep0_state = .DataOut;
+                        }
+                    } else {
+                        chan.ep0_state = .StatusIn;
+                    }
+                    controlUrbInit(chan, urb, urb.setup, urb.transfer_buffer, urb.transfer_buffer_length);
+                } else if (chan.ep0_state == .DataOut) {
+                    chan.ep0_state = .StatusIn;
+                    controlUrbInit(chan, urb, urb.setup, urb.transfer_buffer, urb.transfer_buffer_length);
+                } else if (chan.ep0_state == .StatusOut) {
+                    chan.ep0_state = .Setup;
+                    urbWaitup(urb);
+                }
+            } else if (urb.ep.isType(usb.USB_ENDPOINT_TYPE_ISOCHRONOUS)) {
+                //
+            } else {
+                urbWaitup(urb);
+            }
+        } else if (chints.ahb_error != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, ahb_error", .{chid});
+            urbFail(urb, .IO);
+        } else if (chints.stall != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, stall", .{chid});
+            urbFail(urb, .Stall);
+        } else if (chints.nak != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, nak", .{chid});
+            urbFail(urb, .Nak);
+        } else if (chints.nyet != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, nyet", .{chid});
+            urbFail(urb, .Nyet);
+        } else if (chints.transaction_error != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, transaction_error", .{chid});
+            urbFail(urb, .IO);
+        } else if (chints.babble_error != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, babble_error", .{chid});
+            urbFail(urb, .Babble);
+        } else if (chints.data_toggle_error != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, data_toggle_error", .{chid});
+            urbFail(urb, .DataToggle);
+        } else if (chints.frame_overrun != 0) {
+            log.debug(@src(), "ch {d} out interrupt, halted, frame_overrun", .{chid});
+            urbFail(urb, .IO);
+        }
+
+        chreg.channel_int = chints;
+    }
+}
+
+fn urbWaitup(urb: *usb.URB) void {
+    const chan: *Channel = @alignCast(@ptrCast(urb.private orelse return));
+
+    if (urb.isSynchronous()) {
+        semaphore.signal(chan.waitsem) catch {
+            // TODO what do?
+            // could happen if the thread is killed while waiting?
+        };
+    } else {
+        chan.urb = null;
+        urb.private = null;
+        channelFree(chan.chid);
+        urb.callCompletion();
+    }
+}
+
+fn urbFail(urb: *usb.URB, detail: usb.URB.StatusDetail) void {
+    urb.status = .Failed;
+    urb.status_detail = detail;
+    urbWaitup(urb);
+}
+
+// ----------------------------------------------------------------------
 // New Style Transfer Handling
 // ----------------------------------------------------------------------
 
+pub fn rootHubControl(setup: *usb.SetupPacket, data: ?[]u8) usb.URB.Status {
+    return root_hub.control(setup, data);
+}
+
 pub fn submitUrb(urb: *usb.URB) Error!usb.URB.Status {
-    if (!isAligned(@ptrCast(urb.setup)) or !isAligned(urb.transfer_buffer)) {
+    if (!isAligned(@ptrCast(urb.setup)) or (urb.transfer_buffer != null and !isAligned(urb.transfer_buffer.?))) {
         return Error.InvalidRequest;
     }
 
     if (!urb.port.connected) {
         return Error.NotConnected;
-    }
-
-    if (urb.port.parent.isRootHub()) {
-        return root_hub.submitUrb(urb);
     }
 
     const flags = cpu.disable();
@@ -1377,6 +1589,7 @@ pub fn submitUrb(urb: *usb.URB) Error!usb.URB.Status {
     urb.private = chan;
     urb.actual_length = 0;
     urb.status = .Busy;
+    urb.status_detail = .OK;
 
     switch (urb.ep.getType()) {
         usb.USB_ENDPOINT_TYPE_CONTROL => {
@@ -1389,19 +1602,16 @@ pub fn submitUrb(urb: *usb.URB) Error!usb.URB.Status {
         usb.USB_ENDPOINT_TYPE_ISOCHRONOUS => {},
     }
 
-    // TODO: support timeouts. Requires changes to scheduler. Today a
-    // thread cannot be in the sleepq and the semaphore queue simultaneously
-    // if (urb.timeout > 0) {
-    //     try semaphore.waitTimeout(chan.waitsem, urb.timeout) catch |err| {
-    //         urb.timeout = 0;
-    //         // killUrb(urb);  // abort failed transfer
-    //         return err;
-    //     };
-    //     urb.timeout = 0;
-    //     const ret = urb.status;
-    //     channelFree(chid);
-    //     return ret;
-    // }
+    if (urb.isSynchronous()) {
+        // TODO: support timeouts. Requires changes to scheduler. Today a
+        // thread cannot be in the sleepq and the semaphore queue simultaneously
+        semaphore.wait(chan.waitsem) catch {
+            urb.status = .Failed;
+        };
+
+        urb.private = null;
+        channelFree(chid);
+    }
 
     return urb.status;
 }
@@ -1410,7 +1620,7 @@ fn controlUrbInit(
     chan: *Channel,
     urb: *usb.URB,
     setup: *SetupPacket,
-    transfer_buffer: [*]u8,
+    transfer_buffer: ?[*]u8,
     transfer_buffer_length: usb.TransferBytes,
 ) void {
     _ = transfer_buffer_length;
@@ -1450,7 +1660,7 @@ fn controlUrbInit(
 fn bulkOrInterruptUrbInit(
     chan: *Channel,
     urb: *usb.URB,
-    transfer_buffer: [*]u8,
+    transfer_buffer: ?[*]u8,
     transfer_buffer_length: usb.TransferBytes,
 ) void {
     const ep_mps = urb.ep.getMaxPacketSize();
@@ -1515,6 +1725,8 @@ fn channelCharacterInit(
         char.odd_frame = 0b1;
     }
 
+    log.debug(@src(), "ch {d} setting characteristics 0x{x:0>8}", .{ chan.chid, @as(u32, @bitCast(char)) });
+
     channel_registers[chan.chid].channel_character = char;
 }
 
@@ -1545,6 +1757,16 @@ fn channelTransfer(
 
     const is_oddframe: u1 = if ((host.frame_num.number & 0b1) != 0) 0 else 1;
     chreg.channel_character.odd_frame = is_oddframe;
+
+    log.debug(@src(), "ch {d} starting {d}x{d} transfer {s} 0x{x:0>8} to {d}:{d}", .{
+        chan.chid,
+        packet_count,
+        size,
+        if (chreg.channel_character.endpoint_direction == 1) "in" else "out",
+        chreg.channel_dma_addr,
+        chreg.channel_character.device_address,
+        chreg.channel_character.endpoint_number,
+    });
 
     var char = chreg.channel_character;
     char.enable = 1;

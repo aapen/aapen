@@ -27,12 +27,14 @@ const transfer = @import("transfer.zig");
 // ----------------------------------------------------------------------
 var allocator: std.mem.Allocator = undefined;
 var submitUrb: *const fn (urb: *URB) HCI.Error!URB.Status = undefined;
+var rootHubControl: *const fn (setup: *transfer.SetupPacket, data: ?[]u8) URB.Status = undefined;
 
 pub fn initCore(alloc: std.mem.Allocator) void {
-    log = Logger.init("usb_core", .info);
+    log = Logger.init("usbc", .info);
 
     allocator = alloc;
     submitUrb = HCI.submitUrb;
+    rootHubControl = HCI.rootHubControl;
 }
 
 // ----------------------------------------------------------------------
@@ -67,39 +69,55 @@ fn controlMessageDone(xfer: *transfer.TransferRequest) void {
 }
 
 pub const URB = struct {
-    pub const Completion = *const fn (self: *URB) void;
+    pub const Completion = *const fn (self: *URB, actual_length: spec.TransferBytes) void;
     pub const Status = enum { OK, Busy, Failed, NotSupported };
+    pub const StatusDetail = enum { OK, IO, Stall, Nak, Nyet, Babble, DataToggle };
 
     port: *hub.HubPort,
     ep: *spec.EndpointDescriptor,
     setup: *transfer.SetupPacket,
-    transfer_buffer: [*]u8,
+    transfer_buffer: ?[*]u8,
     transfer_buffer_length: spec.TransferBytes,
     timeout: u16,
-    complete: Completion,
+    complete: ?Completion = null,
     private: ?*anyopaque = null,
     actual_length: spec.TransferBytes = 0,
     status: Status = .OK,
+    status_detail: StatusDetail = .OK,
     data_toggle: u1 = 0,
 
     pub inline fn fill(
         urb: *URB,
         port: *hub.HubPort,
         setup: *transfer.SetupPacket,
-        buffer: []u8,
+        buffer: ?[]u8,
         buffer_length: spec.TransferBytes,
         timeout: u32,
-        complete: Completion,
+        complete: ?Completion,
     ) void {
+        const buf: ?[*]u8 = if (buffer != null) buffer.?.ptr else null;
+
         urb.* = .{
             .port = port,
             .ep = &port.ep0,
             .setup = setup,
-            .transfer_buffer = buffer,
+            .transfer_buffer = buf,
             .transfer_buffer_length = buffer_length,
             .timeout = timeout,
             .complete = complete,
+            .status = .OK,
+            .status_detail = .OK,
         };
+    }
+
+    pub fn isSynchronous(self: *const URB) bool {
+        return self.complete == null;
+    }
+
+    pub fn callCompletion(self: *URB) void {
+        if (self.complete) |c| {
+            c(self, self.actual_length);
+        }
     }
 };
 
@@ -111,14 +129,19 @@ pub fn controlTransfer(port: *hub.HubPort, setup: *transfer.SetupPacket, data: ?
     var urb = &port.ep0_urb;
 
     try semaphore.wait(port.mutex);
-    defer semaphore.signal(port.mutex);
+    defer semaphore.signal(port.mutex) catch {};
 
-    @memset(std.mem.asBytes(urb), 0);
+    var urb_slice = std.mem.asBytes(urb);
+    @memset(urb_slice, 0);
 
-    urb.fill(port, setup, data, setup.data_size, null);
-    try submitUrb(urb);
+    urb.fill(port, setup, data, setup.data_size, 0, null);
+    const ret = try submitUrb(urb);
 
-    return urb.actual_length;
+    if (ret == .OK) {
+        return urb.actual_length;
+    } else {
+        return error.Failed;
+    }
 }
 
 // ----------------------------------------------------------------------

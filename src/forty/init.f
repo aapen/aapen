@@ -695,9 +695,11 @@ cr cr
 
 : usb-noisy
 5 "usb" set-log-level
-5 "dwc2" set-log-level
-5 "usb_hub" set-log-level
+5 "usbc" set-log-level
+5 "usbe" set-log-level
+5 "usbh" set-log-level
 5 "usb_hid_keyboard" set-log-level
+5 "dwc2" set-log-level
 ;
 
 "Forty REPL" s. cr cr
