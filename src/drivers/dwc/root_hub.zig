@@ -21,8 +21,6 @@ const TransferStatus = usb.TransferRequest.CompletionStatus;
 const TransferFactory = usb.TransferFactory;
 const TransferType = usb.TransferType;
 
-//const hub = @import("../../usb/hub.zig");
-
 const reg = @import("registers.zig");
 const HostPortStatusAndControl = reg.HostPortStatusAndControl;
 const HostRegisters = reg.HostRegisters;
@@ -36,8 +34,11 @@ host_registers: ?*volatile reg.HostRegisters = null,
 
 root_hub_device_status: DeviceStatus = undefined,
 root_hub_hub_status: usb.HubStatus = undefined,
-root_hub_port_status: usb.HubPortStatus = undefined,
 root_hub_status_change_transfer: ?*TransferRequest = null,
+
+port_connect_status_changed: bool = false,
+port_enabled_changed: bool = false,
+port_overcurrent_changed: bool = false,
 
 pub fn init(self: *Self, registers: *volatile HostRegisters) void {
     self.* = .{
@@ -52,10 +53,6 @@ pub fn init(self: *Self, registers: *volatile HostRegisters) void {
                 .local_power_changed = 0,
                 .overcurrent_changed = 0,
             },
-        },
-        .root_hub_port_status = .{
-            .port_status = @bitCast(@as(u16, 0)),
-            .port_change = @bitCast(@as(u16, 0)),
         },
     };
 }
@@ -182,22 +179,9 @@ fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) HostPort
     return hw_status;
 }
 
-fn hostPortEnable(self: *Self) TransferStatus {
+fn hostPortDisable(self: *Self) usb.URB.Status {
     if (self.host_registers) |host_reg| {
-        Host.log.debug(@src(), "hostPortPowerOn", .{});
-
-        var hw_status = self.hostPortSafeRead(host_reg);
-
-        hw_status.enabled = 1;
-
-        host_reg.port = hw_status;
-    }
-    return .ok;
-}
-
-fn hostPortDisable(self: *Self) TransferStatus {
-    if (self.host_registers) |host_reg| {
-        Host.log.debug(@src(), "hostPortPowerOn", .{});
+        Host.log.debug(@src(), "hostPortDisable", .{});
 
         var hw_status = self.hostPortSafeRead(host_reg);
 
@@ -205,10 +189,10 @@ fn hostPortDisable(self: *Self) TransferStatus {
 
         host_reg.port = hw_status;
     }
-    return .ok;
+    return .OK;
 }
 
-fn hostPortPowerOn(self: *Self) TransferStatus {
+fn hostPortPowerOn(self: *Self) usb.URB.Status {
     if (self.host_registers) |host_reg| {
         Host.log.debug(@src(), "hostPortPowerOn", .{});
 
@@ -218,10 +202,10 @@ fn hostPortPowerOn(self: *Self) TransferStatus {
 
         host_reg.port = hw_status;
     }
-    return .ok;
+    return .OK;
 }
 
-fn hostPortPowerOff(self: *Self) TransferStatus {
+fn hostPortPowerOff(self: *Self) usb.URB.Status {
     if (self.host_registers) |host_reg| {
         var hw_status = self.hostPortSafeRead(host_reg);
 
@@ -229,21 +213,40 @@ fn hostPortPowerOff(self: *Self) TransferStatus {
 
         host_reg.port = hw_status;
     }
-    return .ok;
+    return .OK;
 }
 
-fn hostPortReset(self: *Self) TransferStatus {
-    if (self.host_registers) |host_reg| {
-        var hw_status = self.hostPortSafeRead(host_reg);
-        hw_status.reset = 1;
-        host_reg.port = hw_status;
+fn hostPortReset(self: *Self) usb.URB.Status {
+    const regs = self.host_registers orelse return .Failed;
 
-        delayMillis(60);
+    var port = self.hostPortSafeRead(regs);
 
-        hw_status.reset = 0;
-        host_reg.port = hw_status;
+    // assert the reset bit
+    port.reset = 1;
+    regs.port = port;
+
+    // wait for it to be processed
+    delayMillis(100);
+
+    // deassert the reset bit
+    port.reset = 0;
+    regs.port = port;
+
+    // wait for it to be processed
+    delayMillis(100);
+
+    // we should see enabled go high within a short time.
+    const enable_wait_end = time.deadlineMillis(200);
+    while (regs.port.enabled == 0 and time.ticks() < enable_wait_end) {
+        delayMillis(10);
     }
-    return .ok;
+
+    if (regs.port.enabled == 0) {
+        Host.log.err(@src(), "port enabled bit not observed before timeout", .{});
+        return .Failed;
+    }
+
+    return .OK;
 }
 
 // ----------------------------------------------------------------------
@@ -253,34 +256,40 @@ fn hostPortReset(self: *Self) TransferStatus {
 // This is called from the DWC core driver when it receives a 'port'
 // interrupt
 pub fn hubHandlePortInterrupt(self: *Self) void {
-    if (self.host_registers) |host_reg| {
-        var hw_status = host_reg.port;
+    const regs = self.host_registers orelse return;
+    const port = regs.port;
+    var port_dup = port;
+    port_dup.overcurrent_changed = 0;
+    port_dup.connected_changed = 0;
+    port_dup.enabled_changed = 0;
+    port_dup.enabled = 0;
 
-        Host.log.debug(@src(), "host port interrupt, hw_status = 0x{x:0>8}", .{@as(u32, @bitCast(hw_status))});
+    Host.log.debug(@src(), "host port interrupt, port 0x{x:0>8}", .{@as(u32, @bitCast(port))});
 
-        self.root_hub_port_status.port_status.connected = hw_status.connected;
-        self.root_hub_port_status.port_status.enabled = hw_status.enabled;
-        self.root_hub_port_status.port_status.suspended = hw_status.suspended;
-        self.root_hub_port_status.port_status.overcurrent = hw_status.overcurrent;
-        self.root_hub_port_status.port_status.reset = hw_status.reset;
-        self.root_hub_port_status.port_status.power = hw_status.power;
-        self.root_hub_port_status.port_status.low_speed_device = if (hw_status.speed == .low) 1 else 0;
-        self.root_hub_port_status.port_status.high_speed_device = if (hw_status.speed == .high) 1 else 0;
-
-        self.root_hub_port_status.port_change.connected_changed = hw_status.connected_changed;
-        self.root_hub_port_status.port_change.enabled_changed = hw_status.enabled_changed;
-        self.root_hub_port_status.port_change.overcurrent_changed = hw_status.overcurrent_changed;
-
-        // Clear the interrupts, which are WC ("write clear") bits by
-        // writing the register value back to itself -- all except for the
-        // enabled bit.
-        hw_status.enabled = 0;
-        host_reg.port = hw_status;
-
-        // indicate status change on port 1 (which is bit 1 == 0x02)
-        usb.root_hub.status_change_buffer[0] = 0x2;
-        usb.hubThreadWakeup(usb.root_hub);
+    if (port.connected_changed != 0) {
+        if (port.connected != 0) {
+            // indicate port status change of port 1 (which is bit 1 == 0x02)
+            usb.root_hub.status_change_buffer[0] = 0x2;
+            usb.hubThreadWakeup(usb.root_hub);
+        }
+        port_dup.connected_changed = 1; // write-clear this status bit
+        self.port_connect_status_changed = true;
     }
+
+    if (port.enabled_changed != 0) {
+        port_dup.enabled_changed = 1; // write-clear this status bit
+        self.port_enabled_changed = true;
+
+        // TODO - do we need to perform speed detection here?
+    }
+
+    if (port.overcurrent_changed != 0) {
+        port_dup.overcurrent_changed = 1; // write-clear this status bit
+        self.port_overcurrent_changed = true;
+    }
+
+    // Clear the interrupts by writing the modified control register value back
+    regs.port = port_dup;
 }
 
 // ----------------------------------------------------------------------
@@ -317,183 +326,22 @@ fn hubNotifyPortChange(self: *Self) void {
 // ----------------------------------------------------------------------
 // Request Handling Behavior
 // ----------------------------------------------------------------------
-const Handler = struct { u8, u8, *const fn (self: *Self, req: *TransferRequest) TransferStatus };
-
-const handlers: []const Handler = &.{
-    // zig fmt: off
-    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,   usb.USB_REQUEST_GET_STATUS,         hubGetDeviceStatus   },
-    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_OUT,  usb.USB_REQUEST_SET_ADDRESS,        no_op                },
-    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,   usb.USB_REQUEST_GET_DESCRIPTOR,     hubGetDescriptor     },
-    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_IN,   usb.USB_REQUEST_GET_CONFIGURATION,  hubGetConfiguration  },
-    .{  usb.USB_REQUEST_TYPE_DEVICE_STANDARD_OUT,  usb.USB_REQUEST_SET_CONFIGURATION,  no_op                },
-    .{  usb.USB_REQUEST_TYPE_DEVICE_CLASS_IN,      usb.HUB_REQUEST_GET_DESCRIPTOR,     hubGetHubDescriptor  },
-    .{  usb.USB_REQUEST_TYPE_DEVICE_CLASS_IN,      usb.HUB_REQUEST_GET_STATUS,         hubGetHubStatus      },
-    .{  usb.USB_REQUEST_TYPE_DEVICE_CLASS_OUT,     usb.HUB_REQUEST_SET_FEATURE,        not_supported        },
-    .{  usb.USB_REQUEST_TYPE_DEVICE_CLASS_OUT,     usb.HUB_REQUEST_CLEAR_FEATURE,      not_supported        },
-    .{  usb.USB_REQUEST_TYPE_OTHER_CLASS_IN,       usb.HUB_REQUEST_GET_STATUS,         hubGetPortStatus     },
-    .{  usb.USB_REQUEST_TYPE_OTHER_CLASS_OUT,      usb.HUB_REQUEST_SET_FEATURE,        hubSetPortFeature    },
-    .{  usb.USB_REQUEST_TYPE_OTHER_CLASS_OUT,      usb.HUB_REQUEST_CLEAR_FEATURE,      hubClearPortFeature  },
-    // zig fmt: on
-};
-
-fn no_op(_: *Self, _: *TransferRequest) TransferStatus {
-    return .ok;
+fn getPortSpeed(self: *Self) u8 {
+    return switch (self.host_registers.?.port.speed) {
+        .high => usb.USB_SPEED_HIGH,
+        .full => usb.USB_SPEED_FULL,
+        .low => usb.USB_SPEED_LOW,
+        .undefined => usb.USB_SPEED_UNKNOWN,
+    };
 }
 
-fn not_supported(_: *Self, _: *TransferRequest) TransferStatus {
-    return .unsupported_request;
-}
-
-fn replyWithStructure(req: *TransferRequest, v: *const anyopaque, size: usize) TransferStatus {
-    const requested_length = req.setup_data.data_size;
-    const provided_length = @min(requested_length, size);
-    Host.log.debug(@src(), "responding with {d} bytes from the structure", .{provided_length});
-    @memcpy(req.data, @as([*]const u8, @ptrCast(v))[0..provided_length]);
-
-    req.actual_size = provided_length;
-    return .ok;
-}
-
-fn replyWithStructure2(setup: *usb.SetupPacket, out: []u8, data: []const u8) usb.URB.Status {
+fn replyWithStructure(setup: *usb.SetupPacket, out: []u8, data: []const u8) usb.URB.Status {
     _ = setup;
     const actual_length = @min(out.len, data.len);
-    Host.log.debug(@src(), "responding with {d} bytes from 0x{x:0>8}", .{actual_length, @intFromPtr(data.ptr)});
+    Host.log.debug(@src(), "responding with {d} bytes from 0x{x:0>8}", .{ actual_length, @intFromPtr(data.ptr) });
     Host.log.sliceDump(@src(), data[0..actual_length]);
     @memcpy(out[0..actual_length], data[0..actual_length]);
     return .OK;
-}
-
-fn hubGetDeviceDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
-    return replyWithStructure(req, &root_hub_device_descriptor, @sizeOf(@TypeOf(root_hub_device_descriptor)));
-}
-
-fn hubGetConfigurationDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
-    return replyWithStructure(req, &root_hub_configuration_descriptor, @sizeOf(@TypeOf(root_hub_configuration_descriptor)));
-}
-
-fn hubGetStringDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
-    const descriptor_index = req.setup_data.value & 0x0f;
-    if (descriptor_index > root_hub_strings.len) {
-        Host.log.warn(@src(), "hubGetStringDescriptor: descriptor_index {d} is greater than {d}", .{ descriptor_index, root_hub_strings.len });
-        return .unsupported_request;
-    }
-
-    const string = &root_hub_strings[descriptor_index];
-    return replyWithStructure(req, string, string.length);
-}
-
-fn hubGetDeviceStatus(self: *Self, req: *TransferRequest) TransferStatus {
-    return replyWithStructure(req, &self.root_hub_device_status, @sizeOf(@TypeOf(self.root_hub_device_status)));
-}
-
-fn hubGetDescriptor(self: *Self, req: *TransferRequest) TransferStatus {
-    const descriptor_type = req.setup_data.value >> 8;
-    switch (descriptor_type) {
-        usb.USB_DESCRIPTOR_TYPE_DEVICE => return self.hubGetDeviceDescriptor(req),
-        usb.USB_DESCRIPTOR_TYPE_CONFIGURATION => return self.hubGetConfigurationDescriptor(req),
-        usb.USB_DESCRIPTOR_TYPE_STRING => return self.hubGetStringDescriptor(req),
-        else => {
-            Host.log.warn(@src(), "hubGetDescriptor: descriptor type {d} not supported", .{descriptor_type});
-            return .unsupported_request;
-        },
-    }
-}
-
-fn hubGetConfiguration(_: *const Self, req: *TransferRequest) TransferStatus {
-    if (req.setup_data.data_size >= 1) {
-        req.data[0] = 1;
-    }
-    return .ok;
-}
-
-fn hubGetHubDescriptor(_: *Self, req: *TransferRequest) TransferStatus {
-    const descriptor_index = req.setup_data.value & 0x0f;
-    if (descriptor_index == 0) {
-        return replyWithStructure(req, &root_hub_hub_descriptor, @sizeOf(@TypeOf(root_hub_hub_descriptor)));
-    } else {
-        Host.log.warn(@src(), "hubGetHubDescriptor: descriptor index {d} not supported", .{descriptor_index});
-        return .unsupported_request;
-    }
-}
-
-fn hubGetHubStatus(self: *Self, req: *TransferRequest) TransferStatus {
-    Host.log.debug(@src(), "hubGetHubStatus: status = 0x{x:0>8}", .{@as(u32, @bitCast(self.root_hub_hub_status))});
-    return replyWithStructure(req, &self.root_hub_hub_status, @sizeOf(@TypeOf(self.root_hub_hub_status)));
-}
-
-fn hubGetPortStatus(self: *Self, req: *TransferRequest) TransferStatus {
-    Host.log.debug(@src(), "hubGetPortStatus: port {d} status = 0x{x:0>8}", .{ req.setup_data.index, @as(u32, @bitCast(self.root_hub_port_status)) });
-    return replyWithStructure(req, &self.root_hub_port_status, @sizeOf(@TypeOf(self.root_hub_port_status)));
-}
-
-fn hubSetPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
-    const feature = req.setup_data.value;
-
-    switch (feature) {
-        usb.HUB_PORT_FEATURE_PORT_POWER => return self.hostPortPowerOn(),
-        usb.HUB_PORT_FEATURE_PORT_RESET => return self.hostPortReset(),
-        else => {
-            Host.log.warn(@src(), "hubSetPortFeature: port feature {d} not supported", .{feature});
-            return .unsupported_request;
-        },
-    }
-}
-
-fn hubClearPortFeature(self: *Self, req: *TransferRequest) TransferStatus {
-    const feature = req.setup_data.value;
-
-    Host.log.debug(@src(), "hubClearPortFeature: feature {d}", .{feature});
-
-    switch (feature) {
-        usb.HUB_PORT_FEATURE_C_PORT_CONNECTION => self.root_hub_port_status.port_change.connected_changed = 0,
-
-        usb.HUB_PORT_FEATURE_C_PORT_ENABLE => self.root_hub_port_status.port_change.enabled_changed = 0,
-
-        usb.HUB_PORT_FEATURE_C_PORT_SUSPEND => self.root_hub_port_status.port_change.suspended_changed = 0,
-
-        usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT => self.root_hub_port_status.port_change.overcurrent_changed = 0,
-
-        usb.HUB_PORT_FEATURE_C_PORT_RESET => self.root_hub_port_status.port_change.reset_changed = 0,
-        else => {
-            Host.log.warn(@src(), "hubClearPortFeature: feature {d} not supported", .{feature});
-            return .unsupported_request;
-        },
-    }
-    return .ok;
-}
-
-pub fn hubHandleTransfer(self: *Self, req: *TransferRequest) void {
-    if (req.endpoint_desc) |ep| {
-        switch (ep.getType()) {
-            TransferType.interrupt => {
-                // this is an interrupt transfer request for the status change endpoint.
-                Host.log.debug(@src(), "hubHandleTransfer: holding status change request a status change occurs", .{});
-                self.root_hub_status_change_transfer = req;
-
-                // we might have previously gotten a status change that we
-                // need to report right now
-                if (@as(u16, @bitCast(self.root_hub_port_status.port_change)) != 0) {
-                    self.hubNotifyPortChange();
-                }
-            },
-            else => {
-                req.complete(.unsupported_request);
-            },
-        }
-    } else {
-        // this is a control request to the default endpoint.
-        Host.log.debug(@src(), "hubHandleTransfer: processing control message", .{});
-
-        for (handlers) |h| {
-            if (req.setup_data.request_type == h[0] and
-                req.setup_data.request == h[1])
-            {
-                req.complete(h[2](self, req));
-                return;
-            }
-        }
-        Host.log.debug(@src(), "unhandled request: type 0x{x}, req 0x{x}", .{ req.setup_data.request_type, req.setup_data.request });
-    }
 }
 
 // zig fmt: off
@@ -513,135 +361,147 @@ pub fn control(self: *Self, setup: *usb.SetupPacket, data: ?[]u8) usb.URB.Status
         switch (setup.request) {
             usb.HUB_REQUEST_CLEAR_FEATURE => {
                 switch (setup.value) {
-                    usb.USB_HUB_FEATURE_C_LOCAL_POWER => {},
-                    usb.USB_HUB_FEATURE_C_OVERCURRENT => {},
+                    usb.USB_HUB_FEATURE_C_LOCAL_POWER => return .OK,
+                    usb.USB_HUB_FEATURE_C_OVERCURRENT => return .OK,
                     else => return .NotSupported,
                 }
             },
             usb.HUB_REQUEST_SET_FEATURE => {
                 switch (setup.value) {
-                    usb.USB_HUB_FEATURE_C_LOCAL_POWER => {},
-                    usb.USB_HUB_FEATURE_C_OVERCURRENT => {},
+                    usb.USB_HUB_FEATURE_C_LOCAL_POWER => return .OK,
+                    usb.USB_HUB_FEATURE_C_OVERCURRENT => return .OK,
                     else => return .NotSupported,
                 }
             },
+            usb.USB_REQUEST_SET_ADDRESS => return .OK,
+            usb.USB_REQUEST_SET_CONFIGURATION => return .OK,
             usb.USB_REQUEST_GET_DESCRIPTOR => {
                 const descriptor_type = setup.value >> 8;
 
                 if (standardRequest(setup.request_type)) {
                     switch (descriptor_type) {
                         usb.USB_DESCRIPTOR_TYPE_DEVICE => {
-                            return replyWithStructure2(setup, data.?, std.mem.asBytes(&root_hub_device_descriptor));
+                            return replyWithStructure(setup, data.?, std.mem.asBytes(&root_hub_device_descriptor));
                         },
                         usb.USB_DESCRIPTOR_TYPE_CONFIGURATION => {
-                            return replyWithStructure2(setup, data.?, std.mem.asBytes(&root_hub_configuration_descriptor));
+                            return replyWithStructure(setup, data.?, std.mem.asBytes(&root_hub_configuration_descriptor));
                         },
                         usb.USB_DESCRIPTOR_TYPE_STRING => {
                             const string_index = setup.value & 0xf;
                             if (string_index < root_hub_strings.len) {
-                                return replyWithStructure2(setup, data.?, std.mem.asBytes(&root_hub_strings[string_index]));
+                                return replyWithStructure(setup, data.?, std.mem.asBytes(&root_hub_strings[string_index]));
+                            } else {
+                                return .Failed;
                             }
                         },
-                        else => {},
+                        else => return .NotSupported,
                     }
                 } else if (classRequest(setup.request_type)) {
                     switch (descriptor_type) {
                         usb.USB_DESCRIPTOR_TYPE_HUB => {
-                            return replyWithStructure2(setup, data.?, std.mem.asBytes(&root_hub_hub_descriptor));
+                            return replyWithStructure(setup, data.?, std.mem.asBytes(&root_hub_hub_descriptor));
                         },
-                        else => {},
+                        else => return .NotSupported,
                     }
+                } else {
+                    return .Failed;
                 }
             },
             usb.HUB_REQUEST_GET_STATUS => {
-                return replyWithStructure2(setup, data.?, std.mem.asBytes(&self.root_hub_hub_status));
-            },
-            usb.USB_REQUEST_SET_ADDRESS => {
-                return .OK;
+                return replyWithStructure(setup, data.?, std.mem.asBytes(&self.root_hub_hub_status));
             },
             usb.USB_REQUEST_GET_CONFIGURATION => {
-                return replyWithStructure2(setup, data.?, std.mem.asBytes(&root_hub_configuration_descriptor));
+                return replyWithStructure(setup, data.?, std.mem.asBytes(&root_hub_configuration_descriptor));
             },
-            usb.USB_REQUEST_SET_CONFIGURATION => {
-                return .OK;
-            },
-            else => {},
+            else => return .NotSupported,
         }
     } else if (otherRequest(setup.request_type)) {
         switch (setup.request) {
-            usb.HUB_REQUEST_GET_STATUS => {
-                return replyWithStructure2(setup, data.?, std.mem.asBytes(&self.root_hub_port_status));
-            },
-            usb.HUB_REQUEST_SET_FEATURE => {
-                switch (setup.value) {
-                    usb.HUB_PORT_FEATURE_PORT_ENABLE => {
-                        _ = self.hostPortEnable();
-                        return .OK;
-                    },
-                    usb.HUB_PORT_FEATURE_PORT_SUSPEND,
-                    usb.HUB_PORT_FEATURE_C_PORT_SUSPEND,
-                    => {},
-                    usb.HUB_PORT_FEATURE_PORT_POWER => {
-                        _ = self.hostPortPowerOn();
-                        return .OK;
-                    },
-                    usb.HUB_PORT_FEATURE_PORT_RESET => {
-                        _ = self.hostPortReset();
-                        return .OK;
-                    },
-                    usb.HUB_PORT_FEATURE_C_PORT_CONNECTION => {
-                        self.root_hub_port_status.port_change.connected_changed = 0;
-                        return .OK;
-                    },
-                    usb.HUB_PORT_FEATURE_C_PORT_ENABLE => {
-                        self.root_hub_port_status.port_change.enabled_changed = 0;
-                        return .OK;
-                    },
-                    usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT => {
-                        self.root_hub_port_status.port_status.overcurrent = 0;
-                        return .OK;
-                    },
-                    usb.HUB_PORT_FEATURE_C_PORT_RESET => {
-                        self.root_hub_port_status.port_status.reset = 0;
-                        return .OK;
-                    },
-                    else => {},
-                }
-                return .OK;
-            },
             usb.HUB_REQUEST_CLEAR_FEATURE => {
+                Host.log.debug(@src(), "port {d} feature clear {d}", .{ port, setup.value });
                 if (port != 1) {
                     return .Failed;
                 }
 
                 switch (setup.value) {
-                    usb.HUB_PORT_FEATURE_PORT_ENABLE => {
-                        _ = self.hostPortDisable();
+                    usb.HUB_PORT_FEATURE_PORT_ENABLE => return self.hostPortDisable(),
+                    usb.HUB_PORT_FEATURE_PORT_POWER => return self.hostPortPowerOff(),
+                    usb.HUB_PORT_FEATURE_C_PORT_CONNECTION => {
+                        self.port_connect_status_changed = false;
                         return .OK;
                     },
-                    usb.HUB_PORT_FEATURE_PORT_POWER => {
-                        _ = self.hostPortPowerOff();
+                    usb.HUB_PORT_FEATURE_C_PORT_ENABLE => {
+                        self.port_enabled_changed = false;
                         return .OK;
                     },
-                    usb.HUB_PORT_FEATURE_PORT_RESET,
-                    usb.HUB_PORT_FEATURE_PORT_SUSPEND,
-                    usb.HUB_PORT_FEATURE_C_PORT_SUSPEND,
-                    usb.HUB_PORT_FEATURE_C_PORT_CONNECTION,
-                    usb.HUB_PORT_FEATURE_C_PORT_ENABLE,
-                    usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT,
-                    usb.HUB_PORT_FEATURE_C_PORT_RESET,
-                    => {
+                    usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT => {
+                        self.port_overcurrent_changed = false;
                         return .OK;
                     },
-                    else => {},
+                    else => return .OK,
                 }
             },
-            else => {},
-        }
-    }
+            usb.HUB_REQUEST_GET_STATUS => {
+                if (port != 1) {
+                    return .Failed;
+                }
 
-    Host.log.debug(@src(), "unhandled request: type 0x{x}, req 0x{x}", .{ setup.request_type, setup.request });
-    return .Failed;
+                var status: u32 = 0;
+                if (self.port_connect_status_changed) {
+                    status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_C_PORT_CONNECTION;
+                }
+                if (self.port_enabled_changed) {
+                    status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_C_PORT_ENABLE;
+                }
+                if (self.port_overcurrent_changed) {
+                    status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_C_PORT_OVER_CURRENT;
+                }
+
+                const port_control: reg.HostPortStatusAndControl = self.host_registers.?.port;
+                Host.log.debug(@src(), "hub_request_get_status, port status is 0x{x:0>8}", .{@as(u32, @bitCast(port_control))});
+
+                if (port_control.connected != 0) {
+                    status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_PORT_CONNECTION;
+                }
+
+                if (port_control.enabled != 0) {
+                    status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_PORT_ENABLE;
+
+                    const speed = self.getPortSpeed();
+                    if (speed == usb.USB_SPEED_LOW) {
+                        status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_PORT_LOW_SPEED;
+                    } else if (speed == usb.USB_SPEED_HIGH) {
+                        status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_PORT_HIGH_SPEED;
+                    }
+                }
+                if (port_control.overcurrent != 0) {
+                    status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_PORT_OVER_CURRENT;
+                }
+                if (port_control.reset != 0) {
+                    status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_PORT_RESET;
+                }
+                if (port_control.power != 0) {
+                    status |= @as(u32, 1) << usb.HUB_PORT_FEATURE_PORT_POWER;
+                }
+                return replyWithStructure(setup, data.?, std.mem.asBytes(&status));
+            },
+            usb.HUB_REQUEST_SET_FEATURE => {
+                if (port != 1) {
+                    return .Failed;
+                }
+
+                switch (setup.value) {
+                    usb.HUB_PORT_FEATURE_PORT_POWER => return self.hostPortPowerOn(),
+                    usb.HUB_PORT_FEATURE_PORT_RESET => return self.hostPortReset(),
+                    //                    usb.HUB_PORT_FEATURE_PORT_SUSPEND => return .OK,
+                    else => return .OK,
+                }
+            },
+            else => return .NotSupported,
+        }
+    } else {
+        return .NotSupported;
+    }
 }
 
 pub fn interrupt(urb: *usb.URB) usb.URB.Status {

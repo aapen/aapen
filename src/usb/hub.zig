@@ -31,6 +31,8 @@ const TID = schedule.TID;
 const time = @import("../time.zig");
 const delayMillis = time.delayMillis;
 
+const core = @import("core.zig");
+
 const device = @import("device.zig");
 const Device = device.Device;
 const DeviceAddress = device.DeviceAddress;
@@ -148,13 +150,25 @@ pub const HubPort = struct {
     pub fn featureClear(self: *HubPort, feature: u16) !void {
         log.debug(@src(), "hub {d} port {d} featureClear {d} (new API)", .{ self.parent.index, self.port, feature });
 
-        try self.parent.hubControlMessage(spec.HUB_REQUEST_CLEAR_FEATURE, spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT, feature, self.port, null);
+        try self.parent.hubControlMessage(
+            spec.HUB_REQUEST_CLEAR_FEATURE,
+            spec.USB_REQUEST_TYPE_OTHER_CLASS_OUT,
+            feature,
+            self.port,
+            null,
+        );
     }
 
     pub fn statusGet(self: *HubPort) !void {
         log.debug(@src(), "hub {d} port {d} statusGet (new API)", .{ self.parent.index, self.port });
 
-        try self.parent.hubControlMessage(spec.HUB_REQUEST_GET_STATUS, spec.USB_REQUEST_TYPE_OTHER_CLASS_IN, 0, self.port, self.parent.transfer_buffer[0..4]);
+        try self.parent.hubControlMessage(
+            spec.HUB_REQUEST_GET_STATUS,
+            spec.USB_REQUEST_TYPE_OTHER_CLASS_IN,
+            0,
+            self.port,
+            self.parent.transfer_buffer[0..4],
+        );
 
         @memcpy(std.mem.asBytes(&self.status), self.parent.transfer_buffer[0..4]);
     }
@@ -192,8 +206,12 @@ pub const HubPort = struct {
         const chg = self.status.port_change;
 
         if (chg.connected_changed != 0) {
-            self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_CONNECTION) catch {};
-            self.connectChanged() catch {};
+            self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_CONNECTION) catch |err| {
+                log.err(@src(), "feature clear error {}", .{err});
+            };
+            self.connectChanged() catch |err| {
+                log.err(@src(), "connect changed error {}", .{err});
+            };
         }
 
         if (chg.enabled_changed != 0) {
@@ -288,6 +306,17 @@ pub const Hub = struct {
 
     in_use: bool = false,
     index: u5 = undefined,
+    // TODO - find the real interrupt endpoint from the device configuration
+    interrupt_in: Endpoint = .{
+        .ep_desc = .{
+            .length = 7,
+            .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
+            .endpoint_address = 0x80,
+            .attributes = usb.USB_ENDPOINT_TYPE_INTERRUPT,
+            .max_packet_size = 0x08,
+            .interval = 1,
+        },
+    },
     is_roothub: bool = false,
     hub_address: u7 = undefined, // device address of this hub
     device: *Device = undefined,
@@ -298,7 +327,8 @@ pub const Hub = struct {
     ports2: []HubPort = undefined,
     speed: u8 = undefined,
     status_change_buffer: [8]u8 = [_]u8{0} ** 8,
-    status_change_request: TransferRequest = undefined,
+    status_change_urb: usb.URB = undefined,
+
     tt: TransactionTranslator = .{ .hub = null, .think_time = 0 },
 
     error_count: u64 = 0,
@@ -365,17 +395,15 @@ pub const Hub = struct {
             usb.USB_HUB_TT_THINK_TIME_32 => full_speed_bit_time * 4,
         };
 
-        try self.initPorts();
         try self.initPorts2();
-        try self.powerOnPorts();
+        try self.powerOnPorts2();
 
         log.debug(@src(), "hub {d} starting interrupt transfer", .{self.index});
 
         dev.driver_private = self;
-        self.status_change_request = TransferRequest.initInterrupt(dev, &self.status_change_buffer);
-        self.status_change_request.completion = statusChangeCompletion;
+        self.status_change_urb.fillInterrupt(self.parent.?, &self.interrupt_in, &self.status_change_buffer, 1, 0, statusChangeCompletion);
 
-        try usb.transferSubmit(&self.status_change_request);
+        _ = try core.interruptTransfer(&self.status_change_urb);
     }
 
     fn hubDescriptorRead(self: *Hub) !void {
@@ -388,18 +416,6 @@ pub const Hub = struct {
         );
 
         @memcpy(std.mem.asBytes(&self.descriptor), self.transfer_buffer[0..@sizeOf(spec.HubDescriptor)]);
-    }
-
-    fn initPorts(self: *Hub) !void {
-        self.ports = try allocator.alloc(Port, self.port_count);
-        for (1..self.port_count + 1) |i| {
-            self.ports[i - 1] = .{
-                .number = @truncate(i),
-                .status = @bitCast(@as(u32, 0)),
-                .device_speed = .High,
-                .device = null,
-            };
-        }
     }
 
     pub fn initPorts2(self: *Hub) !void {
@@ -422,28 +438,6 @@ pub const Hub = struct {
             return .powered_ganged;
         } else {
             return .powered_individual;
-        }
-    }
-
-    fn powerOnPorts(self: *Hub) !void {
-        switch (self.decidePowerOnStrategy()) {
-            .unpowered => {},
-            .powered_individual => {
-                log.debug(@src(), "powering on {d} ports", .{self.port_count});
-
-                for (self.ports) |*port| {
-                    self.portFeatureSet(port, usb.HUB_PORT_FEATURE_PORT_POWER) catch return;
-                }
-
-                delayMillis(2 * self.descriptor.power_on_to_power_good);
-            },
-            .powered_ganged => {
-                log.debug(@src(), "powering on all ports", .{});
-                self.portFeatureSet(&self.ports[0], usb.HUB_PORT_FEATURE_PORT_POWER) catch |err| {
-                    log.err(@src(), "hub {d} ganged ports failed to power on: {any}", .{ self.index, err });
-                };
-                delayMillis(2 * self.descriptor.power_on_to_power_good);
-            },
         }
     }
 
@@ -478,7 +472,10 @@ pub const Hub = struct {
                 .index = index,
                 .data_size = if (data) |d| @truncate(d.len) else 0,
             };
-            _ = usb.rootHubControl(&setup, data);
+            const ret = usb.rootHubControl(&setup, data);
+            if (ret != .OK) {
+                log.err(@src(), "hubControlMessage not OK {}", .{ret});
+            }
         } else {
             const port = self.parent orelse return Error.InvalidData;
 
@@ -672,15 +669,19 @@ pub const Hub = struct {
     }
 };
 
-fn statusChangeCompletion(req: *TransferRequest) void {
-    const self: *Hub = @fieldParentPtr(Hub, "status_change_request", req);
-    log.debug(@src(), "hub {d} finished interrupt transfer, {any}", .{ self.index, req.status });
+fn statusChangeCompletion(urb: *usb.URB, actual_length: spec.TransferBytes) void {
+    const self: *Hub = @fieldParentPtr(Hub, "status_change_urb", urb);
+    log.debug(@src(), "hub {d} finished interrupt transfer, status {any} length {d}", .{ self.index, urb.status, actual_length });
     hubThreadWakeup(self);
 }
 
 pub fn hubThreadWakeup(hub_with_notification: *Hub) void {
-    hub_mailbox.send(hub_with_notification.index) catch |err| {
-        log.err(@src(), "hub mailbox send error {}", .{err});
+    log.debug(@src(), "hub {d} wakeup message send", .{hub_with_notification.index});
+    hubs_lock.acquire();
+    hubs_with_pending_status_change |= @as(u32, 1) << hub_with_notification.index;
+    hubs_lock.release();
+    semaphore.signal(hub_status_change_semaphore) catch |err| {
+        log.err(@src(), "hub {d} status change signal error {}", .{ hub_with_notification.index, err });
     };
 }
 
@@ -722,11 +723,9 @@ pub fn initialize(alloc: Allocator) !void {
     allocator = alloc;
 
     hubs_lock = TicketLock.initWithTargetLevel("usb hubs", true, .FIQ);
+    hub_status_change_semaphore = try semaphore.create(0);
+    hubs_with_pending_status_change = 0;
 
-    try hub_mailbox.init(allocator, MAX_HUBS);
-
-    // hubs_with_pending_status_change = 0;
-    // hub_status_change_semaphore = try semaphore.create(1);
     hub_thread = try schedule.spawn(hubThread, "hub thread", &.{});
 }
 
@@ -737,47 +736,63 @@ fn hubThread(_: *anyopaque) void {
     };
     log.debug(@src(), "started host controller", .{});
 
+    // enumerate.later(&usb.root_hub.ports2[0]) catch |err| {
+    //     log.err(@src(), "Root hub enumerate error {}", .{err});
+    //     return;
+    // };
+
     while (!shutdown_signal.isSignalled()) {
-        const hub_with_status_change = hub_mailbox.receive() catch |err| {
-            log.err(@src(), "hubThread: hub mailbox receive error {}", .{err});
-            break;
+        semaphore.wait(hub_status_change_semaphore) catch |err| {
+            log.err(@src(), "hubThread semaphore wait error {}", .{err});
+            return;
         };
-        log.debug(@src(), "hubThread: hub with pending status change 0x{x}", .{hub_with_status_change});
 
-        const hub = &hubs[hub_with_status_change];
+        hubs_lock.acquire();
+        var hubs_to_process = hubs_with_pending_status_change;
+        hubs_lock.release();
 
-        const req = &hub.status_change_request;
+        while (hubs_to_process != 0) {
+            log.debug(@src(), "hubThread: in loop, remaining hubs with pending status change 0x{x}", .{hubs_to_process});
 
-        if (hub.is_roothub or req.status == .ok) {
-            const status_change_bytes = (hub.port_count + 7) / 8;
-            const status: []u8 = hub.status_change_buffer[0..status_change_bytes];
-            log.debug(@src(), "hub {d} processing status change: 0x{x}", .{ hub.index, status[0] });
+            const hub_with_status_change = @ctz(hubs_to_process);
 
-            // find which ports have changes to report
-            // the request buffer has a bitmask
-            var portmask: u32 = 0;
-            for (status, 0..) |b, i| {
-                portmask |= @as(u32, b) << @truncate(i * 8);
-            }
+            if (hub_with_status_change > MAX_HUBS) break;
 
-            // now process the ports that have changes
-            var check_mask: u32 = 0;
-            for (hub.ports2) |*port| {
-                check_mask = @as(u32, 1) << @truncate(port.port);
-                if ((portmask & check_mask) != 0) {
-                    port.statusChanged();
+            hubs_to_process &= ~(@as(u32, 1) << @truncate(hub_with_status_change));
+            const hub = &hubs[hub_with_status_change];
+            const urb = &hub.status_change_urb;
+
+            if (hub.is_roothub or urb.status == .OK) {
+                const status_change_bytes = (hub.port_count + 7) / 8;
+                const status: []u8 = hub.status_change_buffer[0..status_change_bytes];
+                log.debug(@src(), "hub {d} processing status change: 0x{x}", .{ hub.index, status[0] });
+
+                // find which ports have changes to report
+                // the request buffer has a bitmask
+                var portmask: u32 = 0;
+                for (status, 0..) |b, i| {
+                    portmask |= @as(u32, b) << @truncate(i * 8);
                 }
-            }
-        } else {
-            log.err(@src(), "hub {d} status change request failed: {s}", .{ hub.index, @tagName(req.status) });
-        }
 
-        if (!hub.is_roothub) {
-            // resend the status change interrupt request
-            log.debug(@src(), "hub {d} resubmitting status change request", .{hub.index});
-            usb.transferSubmit(req) catch |err| {
-                log.err(@src(), "hub {d} transfer submit error: {any}", .{ hub.index, err });
-            };
+                // now process the ports that have changes
+                var check_mask: u32 = 0;
+                for (hub.ports2) |*port| {
+                    check_mask = @as(u32, 1) << @truncate(port.port);
+                    if ((portmask & check_mask) != 0) {
+                        port.statusChanged();
+                    }
+                }
+            } else {
+                log.err(@src(), "hub {d} status change request failed: {s}", .{ hub.index, @tagName(urb.status) });
+            }
+
+            // if (!hub.is_roothub) {
+            //     // resend the status change interrupt request
+            //     log.debug(@src(), "hub {d} resubmitting status change request", .{hub.index});
+            //     usb.transferSubmit(req) catch |err| {
+            //         log.err(@src(), "hub {d} transfer submit error: {any}", .{ hub.index, err });
+            //     };
+            // }
         }
     }
 }

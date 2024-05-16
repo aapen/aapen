@@ -64,6 +64,8 @@ fn initializePort(port: *hub.HubPort) !void {
     setup.index = 0;
     setup.data_size = 8;
 
+    log.debug(@src(), "read device descriptor", .{});
+
     _ = try core.controlTransfer(port, setup, ep0_req_buf);
 
     try parseDeviceDescriptor(port, @ptrCast(@alignCast(ep0_req_buf)), 8);
@@ -87,6 +89,8 @@ fn initializePort(port: *hub.HubPort) !void {
     setup.index = 0;
     setup.data_size = 0;
 
+    log.debug(@src(), "assigning the device to use address {d}", .{dev_addr});
+
     _ = try core.controlTransfer(port, setup, null);
 
     try schedule.sleep(2);
@@ -101,6 +105,8 @@ fn initializePort(port: *hub.HubPort) !void {
     setup.index = 0;
     setup.data_size = spec.DeviceDescriptor.STANDARD_LENGTH;
 
+    log.debug(@src(), "read full device descriptor from {d}", .{dev_addr});
+
     _ = try core.controlTransfer(port, setup, ep0_req_buf);
     try parseDeviceDescriptor(port, @ptrCast(@alignCast(ep0_req_buf)), spec.DeviceDescriptor.STANDARD_LENGTH);
 
@@ -112,6 +118,8 @@ fn initializePort(port: *hub.HubPort) !void {
     setup.value = (@as(u16, spec.USB_DESCRIPTOR_TYPE_CONFIGURATION) << 8) | config_index;
     setup.index = 0;
     setup.data_size = 9;
+
+    log.debug(@src(), "read config descriptor (short)", .{});
 
     _ = try core.controlTransfer(port, setup, ep0_req_buf);
 
@@ -128,6 +136,8 @@ fn initializePort(port: *hub.HubPort) !void {
     setup.value = (@as(u16, 1) << 8) | config_index;
     setup.index = 0;
     setup.data_size = total_length;
+
+    log.debug(@src(), "read full config descriptor ({d} bytes)", .{total_length});
 
     _ = try core.controlTransfer(port, setup, ep0_req_buf);
 
@@ -150,6 +160,9 @@ fn initializePort(port: *hub.HubPort) !void {
     setup.value = port.config_desc.configuration_value;
     setup.index = 0;
     setup.data_size = 0;
+
+    log.debug(@src(), "select configuration {d}", .{port.config_desc.configuration_value});
+
     _ = try core.controlTransfer(port, setup, null);
 }
 

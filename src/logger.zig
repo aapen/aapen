@@ -137,7 +137,7 @@ fn logAtLevel(self: *Logger, level: Level, loc: std.builtin.SourceLocation, comp
 pub fn source(self: *const Logger, loc: std.builtin.SourceLocation) void {
     self.writeTruncated(loc.file, 20);
     self.writeByte(':');
-    self.writeInt(u32, loc.line);
+    self.writeIntPadded(u32, 4, loc.line);
 }
 
 fn enabled(self: *const Logger, requested_level: Level) bool {
@@ -156,9 +156,7 @@ fn writeHeader(self: *const Logger, level: Level, loc: std.builtin.SourceLocatio
 }
 
 fn writeThreadId(self: *const Logger) void {
-    self.writeInt(@TypeOf(schedule.current), schedule.current);
-    self.writeByte(':');
-    self.writeByte(' ');
+    self.writeIntPadded(@TypeOf(schedule.current), 3, schedule.current);
 }
 
 fn writePrefix(self: *const Logger, level: Level) void {
@@ -229,9 +227,14 @@ fn writeBytesNTimes(self: *const Logger, bytes: []const u8, n: usize) void {
     }
 }
 
+fn writeIntPadded(self: *const Logger, comptime T: type, width: usize, val: T) void {
+    _ = self;
+    _ = root.printf("%-*d", width, val);
+}
+
 fn writeInt(self: *const Logger, comptime T: type, val: T) void {
     _ = self;
-    _ = root.printf("%-4d", val);
+    _ = root.printf("%d", val);
 }
 
 fn writeAddrHex(self: *const Logger, addr: u64) void {

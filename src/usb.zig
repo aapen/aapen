@@ -33,7 +33,7 @@ pub usingnamespace @import("usb/status.zig");
 pub usingnamespace @import("usb/transfer.zig");
 
 const enumerate = @import("usb/enumerate.zig");
-const hid_keyboard = @import("usb/hid_keyboard.zig");
+//const hid_keyboard = @import("usb/hid_keyboard.zig");
 
 const hub = @import("usb/hub.zig");
 pub const hubThreadWakeup = hub.hubThreadWakeup;
@@ -52,7 +52,7 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineConstant("usbhci", @intFromPtr(root.hal.usb_hci));
     try forth.defineStruct("Device", Self.Device, .{});
 
-    try hid_keyboard.defineModule(forth);
+    //    try hid_keyboard.defineModule(forth);
     try HCI.defineModule(forth);
 }
 
@@ -106,7 +106,7 @@ pub fn initialize() !void {
     try busInit();
 
     try registerDriver(&hub.driver);
-    try registerDriver(&hid_keyboard.driver);
+    // try registerDriver(&hid_keyboard.driver);
 
     try initializeDrivers();
 }
@@ -127,6 +127,7 @@ fn busInit() !void {
     rh.descriptor = root.HAL.USBHCI.root_hub_hub_descriptor;
     rh.ports2 = try allocator.alloc(hub.HubPort, 1);
     rh.ports2[0] = try hub.HubPort.init(rh, 1);
+    rh.ports2[0].connected = true;
 
     root_hub = rh;
 }
@@ -212,81 +213,81 @@ pub fn deviceFree(devid: Self.DeviceAddress) void {
     devices_allocated.free(devindex);
 }
 
-pub fn attachDevice(devid: Self.DeviceAddress, speed: Self.UsbSpeed, parent_hub: ?*hub.Hub, parent_port: ?*hub.Hub.Port) !void {
-    var dev = &devices[devid - 1];
+// pub fn attachDevice(devid: Self.DeviceAddress, speed: Self.UsbSpeed, parent_hub: ?*hub.Hub, parent_port: ?*hub.Hub.Port) !void {
+//     var dev = &devices[devid - 1];
 
-    // assume the speed detected by the hub this device is attached to
-    dev.speed = speed;
+//     // assume the speed detected by the hub this device is attached to
+//     dev.speed = speed;
 
-    // default to max packet size according to speed until we can read the device
-    // descriptor to find the real max packet size.
-    dev.device_descriptor.max_packet_size = switch (speed) {
-        // super speed is supposed to have mps of 512, but we're
-        // re-using the descriptor's field which is a u8
-        Self.UsbSpeed.Super => 255,
-        Self.UsbSpeed.High => 64,
-        Self.UsbSpeed.Full => 64,
-        Self.UsbSpeed.Low => 8,
-    };
+//     // default to max packet size according to speed until we can read the device
+//     // descriptor to find the real max packet size.
+//     dev.device_descriptor.max_packet_size = switch (speed) {
+//         // super speed is supposed to have mps of 512, but we're
+//         // re-using the descriptor's field which is a u8
+//         Self.UsbSpeed.Super => 255,
+//         Self.UsbSpeed.High => 64,
+//         Self.UsbSpeed.Full => 64,
+//         Self.UsbSpeed.Low => 8,
+//     };
 
-    log.debug(@src(), "attach device: read device descriptor, irq flags = 0x{x:0>8}", .{arch.cpu.irqFlagsRead()});
+//     log.debug(@src(), "attach device: read device descriptor, irq flags = 0x{x:0>8}", .{arch.cpu.irqFlagsRead()});
 
-    // when attaching a device, it will be in the default state:
-    // responding to address 0, endpoint 0
-    try Self.deviceDescriptorRead(dev, 8);
+//     // when attaching a device, it will be in the default state:
+//     // responding to address 0, endpoint 0
+//     try Self.deviceDescriptorRead(dev, 8);
 
-    log.debug(@src(), "device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
+//     log.debug(@src(), "device descriptor read class {d} subclass {d} protocol {d}", .{ dev.device_descriptor.device_class, dev.device_descriptor.device_subclass, dev.device_descriptor.device_protocol });
 
-    if (parent_hub) |h| {
-        try h.portReset(parent_port.?, 10);
-        dev.parent_port = parent_port.?.number;
-    }
+//     if (parent_hub) |h| {
+//         try h.portReset(parent_port.?, 10);
+//         dev.parent_port = parent_port.?.number;
+//     }
 
-    log.debug(@src(), "assigning address {d}", .{devid});
-    try Self.deviceSetAddress(dev, devid);
+//     log.debug(@src(), "assigning address {d}", .{devid});
+//     try Self.deviceSetAddress(dev, devid);
 
-    // now read the real descriptor
-    try Self.deviceDescriptorRead(dev, @sizeOf(Self.DeviceDescriptor));
+//     // now read the real descriptor
+//     try Self.deviceDescriptorRead(dev, @sizeOf(Self.DeviceDescriptor));
 
-    log.debug(@src(), "reading configuration descriptor", .{});
-    try Self.deviceConfigurationDescriptorRead(dev);
+//     log.debug(@src(), "reading configuration descriptor", .{});
+//     try Self.deviceConfigurationDescriptorRead(dev);
 
-    const use_config = dev.configuration.configuration_descriptor.configuration_value;
-    //    log.debug(@src(), "setting device to use configuration {d}", .{use_config});
-    try Self.deviceSetConfiguration(dev, use_config);
+//     const use_config = dev.configuration.configuration_descriptor.configuration_value;
+//     //    log.debug(@src(), "setting device to use configuration {d}", .{use_config});
+//     try Self.deviceSetConfiguration(dev, use_config);
 
-    var buf: [512]u8 = [_]u8{0} ** 512;
-    log.debug(@src(), "attaching {s}", .{dev.description(&buf) catch ""});
+//     var buf: [512]u8 = [_]u8{0} ** 512;
+//     log.debug(@src(), "attaching {s}", .{dev.description(&buf) catch ""});
 
-    try bindDriver(dev);
-}
+//     try bindDriver(dev);
+// }
 
-fn bindDriver(dev: *Self.Device) !void {
-    if (dev.driver != null) {
-        // device already has a driver
-        return;
-    }
+// fn bindDriver(dev: *Self.Device) !void {
+//     if (dev.driver != null) {
+//         // device already has a driver
+//         return;
+//     }
 
-    for (drivers.items) |drv| {
-        if (drv.canBind(dev)) {
-            log.debug(@src(), "Attempting to bind '{s}' driver to device", .{drv.name});
-            if (drv.bind(dev)) {
-                var buf: [512]u8 = [_]u8{0} ** 512;
-                log.info(@src(), "Bound '{s}' driver to '{s}'", .{ drv.name, dev.description(&buf) catch "" });
-                return;
-            } else |e| {
-                switch (e) {
-                    error.DeviceUnsupported => {
-                        log.debug(@src(), "Driver {s} doesn't support this device", .{drv.name});
-                        // move on to the next driver.
-                        continue;
-                    },
-                    else => {
-                        log.err(@src(), "Driver bind error {any}", .{e});
-                        return e;
-                    },
-                }
-            }
-        }
-    }
-}
+//     for (drivers.items) |drv| {
+//         if (drv.canBind(dev)) {
+//             log.debug(@src(), "Attempting to bind '{s}' driver to device", .{drv.name});
+//             if (drv.bind(dev)) {
+//                 var buf: [512]u8 = [_]u8{0} ** 512;
+//                 log.info(@src(), "Bound '{s}' driver to '{s}'", .{ drv.name, dev.description(&buf) catch "" });
+//                 return;
+//             } else |e| {
+//                 switch (e) {
+//                     error.DeviceUnsupported => {
+//                         log.debug(@src(), "Driver {s} doesn't support this device", .{drv.name});
+//                         // move on to the next driver.
+//                         continue;
+//                     },
+//                     else => {
+//                         log.err(@src(), "Driver bind error {any}", .{e});
+//                         return e;
+//                     },
+//                 }
+//             }
+//         }
+//     }
+// }

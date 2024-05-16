@@ -31,7 +31,7 @@ else
 endif
 
 QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb $(SD_ARGS)
-QEMU_DEBUG_ARGS = -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd
+QEMU_DEBUG_ARGS = -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd -trace 'events=trace_events.txt'
 QEMU_UNIT_TEST_ARGS = -nographic
 
 # Use this to get USB tracing from the emulator.
