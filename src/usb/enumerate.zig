@@ -9,10 +9,12 @@ var log: *Logger = undefined;
 
 const schedule = @import("../schedule.zig");
 
+const class = @import("class.zig");
 const core = @import("core.zig");
 const hub = @import("hub.zig");
 const transfer = @import("transfer.zig");
 const spec = @import("spec.zig");
+const status = @import("status.zig");
 const usb = @import("../usb.zig");
 
 var allocator: Allocator = undefined;
@@ -68,6 +70,8 @@ fn initializePort(port: *hub.HubPort) !void {
 
     _ = try core.controlTransfer(port, setup, ep0_req_buf);
 
+    log.sliceDump(@src(), ep0_req_buf[0..8]);
+
     try parseDeviceDescriptor(port, @ptrCast(@alignCast(ep0_req_buf)), 8);
 
     var ep_mps: u16 = 0;
@@ -108,6 +112,9 @@ fn initializePort(port: *hub.HubPort) !void {
     log.debug(@src(), "read full device descriptor from {d}", .{dev_addr});
 
     _ = try core.controlTransfer(port, setup, ep0_req_buf);
+
+    log.sliceDump(@src(), ep0_req_buf[0..spec.DeviceDescriptor.STANDARD_LENGTH]);
+
     try parseDeviceDescriptor(port, @ptrCast(@alignCast(ep0_req_buf)), spec.DeviceDescriptor.STANDARD_LENGTH);
 
     var config_index: u8 = 0;
@@ -123,6 +130,8 @@ fn initializePort(port: *hub.HubPort) !void {
 
     _ = try core.controlTransfer(port, setup, ep0_req_buf);
 
+    log.sliceDump(@src(), ep0_req_buf[0..9]);
+
     try parseConfigDescriptor(port, @ptrCast(@alignCast(ep0_req_buf)), spec.ConfigurationDescriptor.STANDARD_LENGTH);
 
     const total_length: u16 = port.config_desc.total_length;
@@ -133,7 +142,7 @@ fn initializePort(port: *hub.HubPort) !void {
 
     setup.request_type = spec.USB_REQUEST_TYPE_DEVICE_STANDARD_IN;
     setup.request = spec.USB_REQUEST_GET_DESCRIPTOR;
-    setup.value = (@as(u16, 1) << 8) | config_index;
+    setup.value = (@as(u16, spec.USB_DESCRIPTOR_TYPE_CONFIGURATION) << 8) | config_index;
     setup.index = 0;
     setup.data_size = total_length;
 
@@ -141,13 +150,15 @@ fn initializePort(port: *hub.HubPort) !void {
 
     _ = try core.controlTransfer(port, setup, ep0_req_buf);
 
+    log.sliceDump(@src(), ep0_req_buf[0..total_length]);
+
     try parseConfigDescriptor(port, @ptrCast(@alignCast(ep0_req_buf)), total_length);
 
     // stash the raw config descriptor, some class drivers need it
     port.raw_config_descriptor = try allocator.alloc(u8, total_length);
     errdefer allocator.free(port.raw_config_descriptor);
 
-    @memcpy(port.raw_config_descriptor, ep0_req_buf);
+    @memcpy(port.raw_config_descriptor, ep0_req_buf[0..total_length]);
 
     // show some device diagnostics
     dumpDeviceString("Manufacturer", port, setup, port.device_desc.manufacturer_name);
@@ -164,6 +175,22 @@ fn initializePort(port: *hub.HubPort) !void {
     log.debug(@src(), "select configuration {d}", .{port.config_desc.configuration_value});
 
     _ = try core.controlTransfer(port, setup, null);
+
+    // find a driver for each supported interface
+    for (0..port.config_desc.interface_count) |iface| {
+        const intf_desc = &port.interfaces[iface].alternate[0].interface_descriptor;
+
+        if (class.findDriver(intf_desc.interface_class, intf_desc.interface_subclass, intf_desc.interface_protocol, port.device_desc.vendor, port.device_desc.product)) |drv| {
+            port.interfaces[iface].class_driver = drv;
+            log.info(@src(), "Loading {s} class driver", .{drv.name});
+        } else {
+            log.err(@src(), "no driver for interface {d}-{d}-{d}", .{
+                intf_desc.interface_class,
+                intf_desc.interface_subclass,
+                intf_desc.interface_protocol,
+            });
+        }
+    }
 }
 
 fn defaultMps(speed: u8) spec.PacketSize {
@@ -176,16 +203,17 @@ fn defaultMps(speed: u8) spec.PacketSize {
 }
 
 fn dumpDeviceString(label: []const u8, port: *hub.HubPort, setup: *transfer.SetupPacket, index: spec.StringIndex) void {
-    var desc: spec.StringDescriptor = undefined;
+    var desc: spec.StringDescriptor align(HCI.DMA_ALIGNMENT) = undefined;
 
     setup.request_type = spec.USB_REQUEST_TYPE_DEVICE_STANDARD_IN;
     setup.request = spec.USB_REQUEST_GET_DESCRIPTOR;
-    setup.value = @as(u16, 1) << spec.USB_DESCRIPTOR_TYPE_STRING | index;
+    setup.value = @as(u16, spec.USB_DESCRIPTOR_TYPE_STRING) << 8 | index;
     setup.index = 0x0409; // english
     setup.data_size = @sizeOf(spec.StringDescriptor);
 
     _ = core.controlTransfer(port, setup, std.mem.asBytes(&desc)) catch |err| {
         log.err(@src(), "Failed to get string descriptor {d}: {}", .{ index, err });
+        return;
     };
 
     var buf: [256]u8 = undefined;
@@ -238,16 +266,19 @@ fn parseDeviceDescriptor(port: *hub.HubPort, desc: *spec.DeviceDescriptor, lengt
     port.device_desc.configuration_count = desc.configuration_count;
 }
 
-fn parseConfigDescriptor(port: *hub.HubPort, desc: *spec.ConfigurationDescriptor, length: usize) !void {
+fn parseConfigDescriptor(port: *hub.HubPort, desc: *spec.ConfigurationDescriptor, expected_length: usize) !void {
     if (desc.length != spec.ConfigurationDescriptor.STANDARD_LENGTH) {
+        log.err(@src(), "descriptor length {d}, expected {d}", .{ desc.length, spec.ConfigurationDescriptor.STANDARD_LENGTH });
         return error.InvalidData;
     }
 
     if (desc.descriptor_type != spec.USB_DESCRIPTOR_TYPE_CONFIGURATION) {
+        log.err(@src(), "descriptor type {d}, expected {d}", .{ desc.descriptor_type, spec.USB_DESCRIPTOR_TYPE_CONFIGURATION });
         return error.InvalidData;
     }
 
-    if (length <= spec.ConfigurationDescriptor.STANDARD_LENGTH) {
+    if (expected_length < spec.ConfigurationDescriptor.STANDARD_LENGTH) {
+        log.err(@src(), "caller requested {d} bytes, but minimum is {d}", .{ expected_length, spec.ConfigurationDescriptor.STANDARD_LENGTH });
         return;
     }
 
@@ -261,20 +292,77 @@ fn parseConfigDescriptor(port: *hub.HubPort, desc: *spec.ConfigurationDescriptor
     port.config_desc.power_max = desc.power_max;
 
     var srcptr: [*]u8 = @ptrCast(desc);
-    var src_len: usize = spec.ConfigurationDescriptor.STANDARD_LENGTH;
+    var bytes_consumed: usize = spec.ConfigurationDescriptor.STANDARD_LENGTH;
 
     // initialize the destination data structure
     @memset(port.interfaces[0..hub.MAX_INTERFACES], hub.Interface{});
 
     // step past the ConfigurationDescriptor bytes
-    srcptr += src_len;
+    srcptr += bytes_consumed;
 
-    var cur_iface: usize = 0;
-    _ = cur_iface;
-    var cur_alt_setting: usize = 0;
-    _ = cur_alt_setting;
-    var cur_ep_num: usize = 0;
-    _ = cur_ep_num;
-    var cur_ep: usize = 0;
-    _ = cur_ep;
+    var cur_iface: u8 = 0;
+    var cur_alt_setting: u8 = 0;
+    var cur_ep_num: u8 = 0;
+    var cur_ep: u8 = 0;
+
+    while (srcptr[0] != 0 and bytes_consumed <= expected_length) {
+        const desc_len = srcptr[0];
+        const desc_type = srcptr[1];
+
+        switch (desc_type) {
+            usb.USB_DESCRIPTOR_TYPE_INTERFACE => {
+                const intf_desc: *align(1) spec.InterfaceDescriptor = std.mem.bytesAsValue(spec.InterfaceDescriptor, srcptr[0..@sizeOf(spec.InterfaceDescriptor)]);
+                cur_iface = intf_desc.interface_number;
+                cur_alt_setting = intf_desc.alternate_setting;
+                cur_ep_num = intf_desc.endpoint_count;
+                cur_ep = 0;
+
+                if (cur_iface > hub.MAX_INTERFACES - 1) {
+                    log.err(@src(), "interface overflow", .{});
+                    return error.InitializationFailure;
+                }
+
+                if (cur_alt_setting > hub.MAX_INTERFACE_ALTERNATES - 1) {
+                    log.err(@src(), "interface alternate setting overflow", .{});
+                    return error.InitializationFailure;
+                }
+
+                if (cur_ep_num > hub.MAX_ENDPOINTS - 1) {
+                    log.err(@src(), "endpoint overflow", .{});
+                    return error.InitializationFailure;
+                }
+
+                log.debug(@src(), "Interface Descriptor:         ", .{});
+                log.debug(@src(), "bLength: 0x{x:0>2}            ", .{intf_desc.length});
+                log.debug(@src(), "bDescriptorType: 0x{x:0>2}    ", .{intf_desc.descriptor_type});
+                log.debug(@src(), "bInterfaceNumber: 0x{x:0>2}   ", .{intf_desc.interface_number});
+                log.debug(@src(), "bAlternateSetting: 0x{x:0>2}  ", .{intf_desc.alternate_setting});
+                log.debug(@src(), "bNumEndpoints: 0x{x:0>2}      ", .{intf_desc.endpoint_count});
+                log.debug(@src(), "bInterfaceClass: 0x{x:0>2}    ", .{intf_desc.interface_class});
+                log.debug(@src(), "bInterfaceSubClass: 0x{x:0>2} ", .{intf_desc.interface_subclass});
+                log.debug(@src(), "bInterfaceProtocol: 0x{x:0>2} ", .{intf_desc.interface_protocol});
+                log.debug(@src(), "iInterface: 0x{x:0>2}         ", .{intf_desc.interface_number});
+
+                port.interfaces[cur_iface].alternate[cur_alt_setting].interface_descriptor = intf_desc.*;
+                port.interfaces[cur_iface].altsetting_count = cur_alt_setting + 1;
+            },
+            usb.USB_DESCRIPTOR_TYPE_ENDPOINT => {
+                //                const ep_desc: *spec.EndpointDescriptor = @ptrCast(@alignCast(srcptr));
+                const ep_desc: *align(1) spec.EndpointDescriptor = std.mem.bytesAsValue(spec.EndpointDescriptor, srcptr[0..@sizeOf(spec.EndpointDescriptor)]);
+                port.interfaces[cur_iface].alternate[cur_alt_setting].ep[cur_ep].ep_desc = ep_desc.*;
+                cur_ep += 1;
+            },
+            usb.USB_DESCRIPTOR_TYPE_HID => {
+                // TODO - something reasonable
+                //                const hid_descriptor: *spec.HidDescriptor = @ptrCast(@alignCast(srcptr));
+                const hid_descriptor: *align(1) spec.HidDescriptor = std.mem.bytesAsValue(spec.HidDescriptor, srcptr[0..@sizeOf(spec.HidDescriptor)]);
+                log.info(@src(), "hid descriptor found: {any}", .{hid_descriptor.*});
+            },
+            else => {},
+        }
+
+        // advance to next descriptor
+        srcptr += desc_len;
+        bytes_consumed += srcptr[0];
+    }
 }

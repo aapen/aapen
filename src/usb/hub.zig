@@ -31,6 +31,7 @@ const TID = schedule.TID;
 const time = @import("../time.zig");
 const delayMillis = time.delayMillis;
 
+const class = @import("class.zig");
 const core = @import("core.zig");
 
 const device = @import("device.zig");
@@ -88,9 +89,10 @@ pub const InterfaceAlternate = struct {
 };
 
 pub const Interface = struct {
-    class_driver: *usb.DeviceDriver = undefined,
+    class_driver: *const class.Driver = undefined,
     device_name: []u8 = undefined,
     alternate: [MAX_INTERFACE_ALTERNATES]InterfaceAlternate = undefined,
+    altsetting_count: u8 = 0,
 };
 
 pub const HubPort = struct {
@@ -832,4 +834,19 @@ pub const driver: DeviceDriver = .{
     .canBind = hubDriverCanBind,
     .bind = hubDriverDeviceBind,
     .unbind = hubDriverDeviceUnbind,
+};
+
+fn hubClassDriverBind(port: *HubPort, interface: u8) Error!void {
+    log.info(@src(), "hub class driver bind, hub {d} port {d} intf {d}", .{ port.parent.index, port.port, interface });
+}
+
+fn hubClassDriverUnbind(port: *HubPort, interface: u8) Error!void {
+    log.info(@src(), "hub class driver bind, hub {d} port {d} intf {d}", .{ port.parent.index, port.port, interface });
+}
+
+pub const class_driver: class.Driver = .{
+    .name = "USB Hub",
+    .initialize = initialize,
+    .bind = hubClassDriverBind,
+    .unbind = hubClassDriverUnbind,
 };

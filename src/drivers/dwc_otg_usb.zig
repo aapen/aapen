@@ -862,6 +862,7 @@ pub fn rootHubControl(setup: *usb.SetupPacket, data: ?[]u8) usb.URB.Status {
 
 pub fn submitUrb(urb: *usb.URB) Error!usb.URB.Status {
     if (!isAligned(@ptrCast(urb.setup)) or (urb.transfer_buffer != null and !isAligned(urb.transfer_buffer.?))) {
+        log.debug(@src(), "transfer buffer misaligned (ptr 0x{x:0>8})", .{&urb.transfer_buffer.?[0]});
         return Error.InvalidRequest;
     }
 
