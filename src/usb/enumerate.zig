@@ -182,7 +182,12 @@ fn initializePort(port: *hub.HubPort) !void {
 
         if (class.findDriver(intf_desc.interface_class, intf_desc.interface_subclass, intf_desc.interface_protocol, port.device_desc.vendor, port.device_desc.product)) |drv| {
             port.interfaces[iface].class_driver = drv;
-            log.info(@src(), "Loading {s} class driver", .{drv.name});
+            log.info(@src(), "Loading {s} class driver for interface {d}", .{ drv.name, iface });
+
+            drv.bind(port, @truncate(iface)) catch |err| {
+                log.err(@src(), "class driver bind error {}", .{err});
+                continue;
+            };
         } else {
             log.err(@src(), "no driver for interface {d}-{d}-{d}", .{
                 intf_desc.interface_class,
@@ -302,7 +307,7 @@ fn parseConfigDescriptor(port: *hub.HubPort, desc: *spec.ConfigurationDescriptor
 
     var cur_iface: u8 = 0;
     var cur_alt_setting: u8 = 0;
-    var cur_ep_num: u8 = 0;
+    var cur_iface_ep_count: u8 = 0;
     var cur_ep: u8 = 0;
 
     while (srcptr[0] != 0 and bytes_consumed <= expected_length) {
@@ -314,7 +319,7 @@ fn parseConfigDescriptor(port: *hub.HubPort, desc: *spec.ConfigurationDescriptor
                 const intf_desc: *align(1) spec.InterfaceDescriptor = std.mem.bytesAsValue(spec.InterfaceDescriptor, srcptr[0..@sizeOf(spec.InterfaceDescriptor)]);
                 cur_iface = intf_desc.interface_number;
                 cur_alt_setting = intf_desc.alternate_setting;
-                cur_ep_num = intf_desc.endpoint_count;
+                cur_iface_ep_count = intf_desc.endpoint_count;
                 cur_ep = 0;
 
                 if (cur_iface > hub.MAX_INTERFACES - 1) {
@@ -327,7 +332,7 @@ fn parseConfigDescriptor(port: *hub.HubPort, desc: *spec.ConfigurationDescriptor
                     return error.InitializationFailure;
                 }
 
-                if (cur_ep_num > hub.MAX_ENDPOINTS - 1) {
+                if (cur_iface_ep_count > hub.MAX_ENDPOINTS - 1) {
                     log.err(@src(), "endpoint overflow", .{});
                     return error.InitializationFailure;
                 }
@@ -343,8 +348,9 @@ fn parseConfigDescriptor(port: *hub.HubPort, desc: *spec.ConfigurationDescriptor
                 log.debug(@src(), "bInterfaceProtocol: 0x{x:0>2} ", .{intf_desc.interface_protocol});
                 log.debug(@src(), "iInterface: 0x{x:0>2}         ", .{intf_desc.interface_number});
 
-                port.interfaces[cur_iface].alternate[cur_alt_setting].interface_descriptor = intf_desc.*;
                 port.interfaces[cur_iface].altsetting_count = cur_alt_setting + 1;
+                port.interfaces[cur_iface].alternate[cur_alt_setting].interface_descriptor = intf_desc.*;
+                port.interfaces[cur_iface].alternate[cur_alt_setting].ep_count = cur_iface_ep_count;
             },
             usb.USB_DESCRIPTOR_TYPE_ENDPOINT => {
                 //                const ep_desc: *spec.EndpointDescriptor = @ptrCast(@alignCast(srcptr));

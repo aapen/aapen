@@ -86,6 +86,7 @@ pub const Endpoint = struct {
 pub const InterfaceAlternate = struct {
     interface_descriptor: spec.InterfaceDescriptor,
     ep: [MAX_ENDPOINTS]Endpoint,
+    ep_count: u8 = 0,
 };
 
 pub const Interface = struct {
@@ -837,7 +838,20 @@ pub const driver: DeviceDriver = .{
 };
 
 fn hubClassDriverBind(port: *HubPort, interface: u8) Error!void {
-    log.info(@src(), "hub class driver bind, hub {d} port {d} intf {d}", .{ port.parent.index, port.port, interface });
+    log.debug(@src(), "hub class driver bind, hub {d} port {d} intf {d}", .{ port.parent.index, port.port, interface });
+
+    const iface = &port.interfaces[interface];
+
+    for (0..iface.alternate[0].ep_count) |ep_num| {
+        const ep_desc = &iface.alternate[0].ep[ep_num].ep_desc;
+
+        if (ep_desc.isType(spec.USB_ENDPOINT_TYPE_INTERRUPT) and ep_desc.direction() == spec.USB_ENDPOINT_DIRECTION_IN) {
+            log.debug(@src(), "selecting ep addr 0x{x:0>2}, type 0x{x}", .{
+                ep_desc.endpoint_address,
+                ep_desc.getType(),
+            });
+        }
+    }
 }
 
 fn hubClassDriverUnbind(port: *HubPort, interface: u8) Error!void {
