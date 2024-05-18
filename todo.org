@@ -431,8 +431,8 @@ Approach:
 No idea why this is the address: 0x2eff7a00
 * Scratch Notes
 ** USB debugging
-- [ ] status transfers end with 'halted, stall' interrupt. why the stall?
-- [ ] hub port power on sometimes doesn't power all ports. interrupt timing?
+- [ ] In QEMU, initializing the host controller triggers a port interrupt, on HW it does not.
+  Device enumeration is triggered by that first port interrupt, since the port interrupt causes the hub's first get status call
 ** bzt has a reset() routine that reboots the board
 https://github.com/bztsrc/raspi3-tutorial/blob/master/08_power/power.c#L75
 
