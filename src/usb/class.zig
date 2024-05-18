@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const hid_kbd = @import("hid_keyboard.zig");
+const hidkbd = @import("hid_keyboard.zig");
 const hub = @import("hub.zig");
 const spec = @import("spec.zig");
 const Error = @import("status.zig").Error;
@@ -16,7 +16,7 @@ const DriverTableEntry = struct {
 
 const driver_table_registry = .{
     .{ spec.USB_INTERFACE_CLASS_HUB, null, null, null, null, &hub.class_driver },
-    //    .{ 0x00, spec.HID_SUBCLASS_BOOT, spec.HID_PROTOCOL_KEYBOARD, null, null, &hid_kbd.class_driver },
+    .{ spec.USB_INTERFACE_CLASS_HID, spec.HID_SUBCLASS_BOOT, spec.HID_PROTOCOL_KEYBOARD, null, null, &hidkbd.class_driver },
 };
 
 pub const driver_table: [driver_table_registry.len]DriverTableEntry = init: {

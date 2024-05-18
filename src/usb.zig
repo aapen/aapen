@@ -30,7 +30,6 @@ pub usingnamespace @import("usb/spec.zig");
 pub usingnamespace @import("usb/core.zig");
 pub usingnamespace @import("usb/device.zig");
 pub usingnamespace @import("usb/status.zig");
-pub usingnamespace @import("usb/transfer.zig");
 
 const class = @import("usb/class.zig");
 
@@ -39,6 +38,8 @@ const enumerate = @import("usb/enumerate.zig");
 const hub = @import("usb/hub.zig");
 pub const hubThreadWakeup = hub.hubThreadWakeup;
 pub const HubPort = hub.HubPort;
+
+const hidkbd = @import("usb/hid_keyboard.zig");
 
 const Self = @This();
 
@@ -55,6 +56,7 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineStruct("Device", Self.Device, .{});
 
     try HCI.defineModule(forth);
+    try hidkbd.defineModule(forth);
 }
 
 pub fn getDevice(id: u64) ?*Self.Device {

@@ -1,7 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const DoublyLinkedList = std.DoublyLinkedList;
-const PendingTransfers = DoublyLinkedList(*TransferRequest);
 
 const root = @import("root");
 const HAL = root.HAL;
@@ -45,7 +43,6 @@ const time = @import("../time.zig");
 
 const usb = @import("../usb.zig");
 const SetupPacket = usb.SetupPacket;
-const TransferRequest = usb.TransferRequest;
 const TransferBytes = usb.TransferBytes;
 const TransferType = usb.TransferType;
 const UsbSpeed = usb.UsbSpeed;
@@ -596,14 +593,6 @@ var channel_buffers: [dwc_max_channels][1024]u8 align(DMA_ALIGNMENT) = [_][1024]
 var channel_pool: [dwc_max_channels]Channel = undefined;
 
 const ChannelId = u5;
-
-var active_transfer: [dwc_max_channels]?*TransferRequest = init: {
-    var initial_value: [dwc_max_channels]?*TransferRequest = undefined;
-    for (0..dwc_max_channels) |chid| {
-        initial_value[chid] = null;
-    }
-    break :init initial_value;
-};
 
 var channel_registers: [dwc_max_channels]*volatile ChannelRegisters = init: {
     var initial_value: [dwc_max_channels]*volatile ChannelRegisters = undefined;

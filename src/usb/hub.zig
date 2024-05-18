@@ -47,11 +47,6 @@ const Error = @import("status.zig").Error;
 
 const spec = @import("spec.zig");
 
-const transfer = @import("transfer.zig");
-const SetupPacket = transfer.SetupPacket;
-const TransferRequest = transfer.TransferRequest;
-const TransferType = transfer.TransferType;
-
 const usb = @import("../usb.zig");
 
 pub fn deviceSpeed(self: *const usb.HubPortStatus) UsbSpeed {
@@ -112,7 +107,7 @@ pub const HubPort = struct {
     raw_config_descriptor: []u8,
 
     // Reserved space for activities
-    setup: SetupPacket align(DMA),
+    setup: spec.SetupPacket align(DMA),
     ep0: spec.EndpointDescriptor,
     ep0_urb: usb.URB,
     mutex: SID,
@@ -419,7 +414,7 @@ pub const Hub = struct {
 
     fn hubControlMessage(self: *Hub, req: u8, req_type: u8, value: u16, index: u16, data: ?[]align(DMA) u8) !void {
         if (self.is_roothub) {
-            var setup: transfer.SetupPacket = .{
+            var setup: spec.SetupPacket = .{
                 .request_type = req_type,
                 .request = req,
                 .value = value,
@@ -433,7 +428,7 @@ pub const Hub = struct {
         } else {
             const port = self.parent orelse return Error.InvalidData;
 
-            var setup: *transfer.SetupPacket = &port.setup;
+            var setup: *spec.SetupPacket = &port.setup;
             setup.* = .{
                 .request_type = req_type,
                 .request = req,
@@ -506,7 +501,7 @@ pub fn hubClassFree(hub: *Hub) void {
 }
 
 pub fn initialize(alloc: Allocator) !void {
-    log = Logger.init("usbh", .debug);
+    log = Logger.init("usbh", .info);
 
     allocator = alloc;
 
@@ -575,6 +570,18 @@ fn hubThread(_: *anyopaque) void {
                 }
             } else if (urb.status == .Failed and urb.status_detail == .Nak) {
                 // hub doesn't have any update for us, this is normal
+
+                // THIS IS A HACK
+                // We need to wait `interval` millis before polling
+                // again. At the moment we have no way to do that
+                // other than making a thread go to sleep. The problem
+                // is that this is the only thread handling hub
+                // events. So we're gating the response latency of the
+                // hub thread by the sum of the sleep intervals of any
+                // hub that had an event.
+                schedule.sleep(hub.interrupt_interval) catch |err| {
+                    log.err(@src(), "sleep hub interrupt interval error {any}", .{err});
+                };
             } else {
                 log.err(@src(), "hub {d} status change request failed: {any}:{any}", .{ hub.index, urb.status, urb.status_detail });
             }

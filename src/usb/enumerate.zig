@@ -12,7 +12,6 @@ const schedule = @import("../schedule.zig");
 const class = @import("class.zig");
 const core = @import("core.zig");
 const hub = @import("hub.zig");
-const transfer = @import("transfer.zig");
 const spec = @import("spec.zig");
 const status = @import("status.zig");
 const usb = @import("../usb.zig");
@@ -27,7 +26,7 @@ pub fn init(alloc: Allocator) void {
 // Make space that is guaranteed to be aligned correctly.
 const REQUEST_BUFFER_LEN = 512;
 var ep0_request_buffer: [hub.MAX_HUBS][REQUEST_BUFFER_LEN]u8 align(HCI.DMA_ALIGNMENT) = undefined;
-var setup_buffer: [hub.MAX_HUBS][hub.MAX_INTERFACES]transfer.SetupPacket align(HCI.DMA_ALIGNMENT) = undefined;
+var setup_buffer: [hub.MAX_HUBS][hub.MAX_INTERFACES]spec.SetupPacket align(HCI.DMA_ALIGNMENT) = undefined;
 
 pub fn later(port: *hub.HubPort) !void {
     log.debug(@src(), "spawning thread to enumerate asynchronously", .{});
@@ -208,7 +207,7 @@ fn defaultMps(speed: u8) spec.PacketSize {
     };
 }
 
-fn dumpDeviceString(label: []const u8, port: *hub.HubPort, setup: *transfer.SetupPacket, index: spec.StringIndex) void {
+fn dumpDeviceString(label: []const u8, port: *hub.HubPort, setup: *spec.SetupPacket, index: spec.StringIndex) void {
     var desc: spec.StringDescriptor align(HCI.DMA_ALIGNMENT) = undefined;
 
     setup.request_type = spec.USB_REQUEST_TYPE_DEVICE_STANDARD_IN;

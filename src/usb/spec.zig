@@ -330,6 +330,14 @@ pub const USB_HUB_TT_THINK_TIME_32                     : u2 = 0b11;
 
 const std = @import("std");
 
+pub const SetupPacket = extern struct {
+    request_type: u8,
+    request: u8,
+    value: u16,
+    index: u16,
+    data_size: u16,
+};
+
 // Descriptors
 pub const DeviceDescriptor = extern struct {
     pub const STANDARD_LENGTH = 18;

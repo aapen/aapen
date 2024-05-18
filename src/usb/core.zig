@@ -20,14 +20,13 @@ const hub = @import("hub.zig");
 const spec = @import("spec.zig");
 const status = @import("status.zig");
 const Error = status.Error;
-const transfer = @import("transfer.zig");
 
 // ----------------------------------------------------------------------
 // Lifecycle
 // ----------------------------------------------------------------------
 var allocator: std.mem.Allocator = undefined;
 var submitUrb: *const fn (urb: *URB) HCI.Error!URB.Status = undefined;
-var rootHubControl: *const fn (setup: *transfer.SetupPacket, data: ?[]u8) URB.Status = undefined;
+var rootHubControl: *const fn (setup: *spec.SetupPacket, data: ?[]u8) URB.Status = undefined;
 
 pub fn initCore(alloc: std.mem.Allocator) void {
     log = Logger.init("usbc", .info);
@@ -47,7 +46,7 @@ pub const URB = struct {
 
     port: *hub.HubPort,
     ep: *spec.EndpointDescriptor,
-    setup: ?*transfer.SetupPacket,
+    setup: ?*spec.SetupPacket,
     transfer_buffer: ?[*]u8,
     transfer_buffer_length: spec.TransferBytes,
     timeout: u16,
@@ -61,7 +60,7 @@ pub const URB = struct {
     pub inline fn fill(
         urb: *URB,
         port: *hub.HubPort,
-        setup: *transfer.SetupPacket,
+        setup: *spec.SetupPacket,
         buffer: ?[]u8,
         buffer_length: spec.TransferBytes,
         timeout: u32,
@@ -120,7 +119,7 @@ pub const URB = struct {
 // ----------------------------------------------------------------------
 // Specific transfers
 // ----------------------------------------------------------------------
-pub fn controlTransfer(port: *hub.HubPort, setup: *transfer.SetupPacket, data: ?[]u8) !spec.TransferBytes {
+pub fn controlTransfer(port: *hub.HubPort, setup: *spec.SetupPacket, data: ?[]u8) !spec.TransferBytes {
     var urb = &port.ep0_urb;
 
     try semaphore.wait(port.mutex);
@@ -147,6 +146,9 @@ pub fn interruptTransfer(urb: *URB) !spec.TransferBytes {
     if (ret == .OK) {
         return urb.actual_length;
     } else if (!urb.isSynchronous() and ret == .Busy) {
+        return 0;
+    } else if (urb.status_detail == .Nak) {
+        // NAK is normal for an interrupt request.
         return 0;
     } else {
         log.err(@src(), "dev addr {d} ep addr {d} interrupt transfer failed {}:{}", .{ urb.port.device_address, urb.ep.endpoint_address, urb.status, urb.status_detail });

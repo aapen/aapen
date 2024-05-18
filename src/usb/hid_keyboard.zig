@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
-const delayMillis = root.HAL.delayMillis;
+const DMA = root.HAL.USBHCI.DMA_ALIGNMENT;
 
 const InputBuffer = @import("../input_buffer.zig");
 
@@ -24,14 +24,10 @@ const SID = semaphore.SID;
 const synchronize = @import("../synchronize.zig");
 const OneShot = synchronize.OneShot;
 
-const device = @import("device.zig");
-const Device = device.Device;
-const DeviceDriver = device.DeviceDriver;
-
-const transfer = @import("transfer.zig");
-const TransferRequest = transfer.TransferRequest;
-const TransferType = transfer.TransferType;
-
+const class = @import("class.zig");
+const core = @import("core.zig");
+const hub = @import("hub.zig");
+const spec = @import("spec.zig");
 const usb = @import("../usb.zig");
 
 const Error = @import("status.zig").Error;
@@ -55,50 +51,14 @@ pub fn defineModule(forth: *Forth) !void {
 var driver_initialized: OneShot = .{};
 var shutdown_signal: OneShot = .{};
 
-var keyboard_device: ?*Device = null;
-var keyboard_interface: ?*usb.InterfaceDescriptor = null;
-var keyboard_endpoint: ?*usb.EndpointDescriptor = null;
+var keyboard_port: ?*hub.HubPort = null;
+var keyboard_endpoint: ?*hub.Endpoint = null;
+var keyboard_int_urb: core.URB = undefined;
+var keyboard_interval: u8 = 1;
 
 const REPORT_SIZE = 8;
-var report: [REPORT_SIZE]u8 = [_]u8{0} ** REPORT_SIZE;
+var report: [REPORT_SIZE]u8 align(DMA) = [_]u8{0} ** REPORT_SIZE;
 var last_report: [REPORT_SIZE]u8 = [_]u8{0} ** REPORT_SIZE;
-
-fn keyboardPollCompletion(req: *TransferRequest) void {
-    semaphore.signal(req.semaphore.?) catch |err| {
-        log.err(@src(), "keyboard poll completion cannot signal {?d}: {any}", .{ req.semaphore, err });
-    };
-}
-
-fn initializePolling() !TransferRequest {
-    shutdown_signal = .{};
-
-    while (!driver_initialized.isSignalled()) {
-        try schedule.sleep(1000);
-    }
-
-    const interrupt_completion_sem = semaphore.create(0) catch |err| {
-        log.err(@src(), "semaphore create error {any}", .{err});
-        return Error.BadSemaphoreId;
-    };
-
-    return .{
-        .device = keyboard_device.?,
-        .endpoint_desc = keyboard_endpoint.?,
-        .setup_data = undefined,
-        .data = &report,
-        .size = REPORT_SIZE,
-        .completion = keyboardPollCompletion,
-        .semaphore = interrupt_completion_sem,
-    };
-}
-
-fn shutdownPolling(req: *const TransferRequest) void {
-    if (req.semaphore) |s| {
-        semaphore.free(s) catch |err| {
-            log.err(@src(), "semaphore free error {any}", .{err});
-        };
-    }
-}
 
 fn in(ch: u8, rpt: [*]u8) bool {
     for (2..8) |i| {
@@ -130,32 +90,33 @@ fn processCurrentReport() void {
     @memcpy(last_report[0..8], report[0..8]);
 }
 
-pub fn pollKeyboard(args: *anyopaque) void {
-    _ = args;
+pub fn pollKeyboard(_: *anyopaque) void {
+    while (!driver_initialized.isSignalled()) {
+        schedule.sleep(1000) catch |err| {
+            log.err(@src(), "schedule sleep error {any}", .{err});
+            return;
+        };
+    }
 
-    const interrupt_request_template = initializePolling() catch |err| {
-        log.err(@src(), "initialize polling error {any}", .{err});
-        return;
-    };
-
-    defer shutdownPolling(&interrupt_request_template);
+    keyboard_int_urb.fillInterrupt(keyboard_port.?, keyboard_endpoint.?, &report, REPORT_SIZE, 0, null);
 
     while (!shutdown_signal.isSignalled()) {
-        var interrupt_request = interrupt_request_template;
+        const ret = usb.interruptTransfer(&keyboard_int_urb) catch 0;
+        _ = ret;
 
-        usb.transferSubmit(&interrupt_request) catch |err| {
-            log.err(@src(), "transfer submit error {any}", .{err});
-            return;
-        };
-
-        semaphore.wait(interrupt_request.semaphore.?) catch |err| {
-            log.err(@src(), "semaphore wait error {any}", .{err});
-            return;
-        };
-
-        if (interrupt_request.status == .ok) {
+        if (keyboard_int_urb.status == .OK) {
             processCurrentReport();
+        } else if (keyboard_int_urb.status_detail == .Nak) {
+            // no data available. wait a while
+        } else {
+            // probably an error
+            log.err(@src(), "interrupt transfer status {any}:{any}", .{ keyboard_int_urb.status, keyboard_int_urb.status_detail });
         }
+
+        schedule.sleep(keyboard_interval) catch |err| {
+            log.err(@src(), "sleep keyboard interval error {any}", .{err});
+            return;
+        };
     }
 }
 
@@ -296,90 +257,58 @@ pub const usage: [256]Usage = init: {
 // ----------------------------------------------------------------------
 // Driver interface
 // ----------------------------------------------------------------------
-fn isKeyboard(iface: *usb.InterfaceDescriptor) bool {
-    return iface.isHid() and
-        iface.interface_protocol == usb.HID_PROTOCOL_KEYBOARD and
-        (iface.interface_subclass == 0 or iface.interface_subclass == usb.HID_SUBCLASS_BOOT);
-}
+fn selectInterruptEndpoint(iface: *const hub.Interface) ?u8 {
+    for (0..iface.alternate[0].ep_count) |ep_num| {
+        const ep_desc = &iface.alternate[0].ep[ep_num].ep_desc;
 
-pub fn hidKeyboardDriverCanBind(dev: *Device) bool {
-    const configuration = dev.configuration;
-    _ = configuration;
-
-    for (0..dev.interfaceCount()) |i| {
-        const iface = dev.interface(i);
-        if (iface != null and isKeyboard(iface.?)) {
-            return true;
+        if (ep_desc.isType(spec.USB_ENDPOINT_TYPE_INTERRUPT) and
+            ep_desc.direction() == spec.USB_ENDPOINT_DIRECTION_IN)
+        {
+            log.debug(@src(), "selecting ep addr 0x{x:0>2}, type 0x{x}", .{ ep_desc.endpoint_address, ep_desc.getType() });
+            return @truncate(ep_num);
         }
     }
 
-    return false;
+    return null;
 }
 
-pub fn hidKeyboardDriverDeviceBind(dev: *Device) Error!void {
-    for (0..dev.interfaceCount()) |i| {
-        const iface = dev.interface(i).?;
+pub fn hidkbdClassDriverBind(port: *hub.HubPort, interface: u8) !void {
+    const iface = &port.interfaces[interface];
+    const ep_int_in = selectInterruptEndpoint(iface) orelse return Error.ConfigurationError;
 
-        if (!isKeyboard(iface)) {
-            continue;
-        }
+    keyboard_port = port;
+    keyboard_endpoint = &iface.alternate[0].ep[ep_int_in];
+    keyboard_interval = iface.alternate[0].ep[ep_int_in].ep_desc.interval;
 
-        const in_interrupt_endpoint: ?*usb.EndpointDescriptor = for (0..iface.endpoint_count) |e| {
-            if (dev.configuration.endpoints[i][e]) |ep| {
-                if (ep.isType(TransferType.interrupt) and
-                    ep.direction() == 1)
-                {
-                    break ep;
-                }
-            }
-        } else null;
+    port.setup = .{
+        .request_type = usb.USB_REQUEST_TYPE_INTERFACE_CLASS_OUT,
+        .request = usb.HID_REQUEST_SET_PROTOCOL,
+        .value = 0,
+        .index = interface,
+        .data_size = 0,
+    };
 
-        if (in_interrupt_endpoint == null) {
-            continue;
-        }
+    _ = usb.controlTransfer(port, &port.setup, null) catch |err| {
+        log.warn(@src(), "cannot set keyboard to use boot protocol {any}", .{err});
+        return err;
+    };
 
-        log.info(@src(), "usbaddr {d} keyboard: selecting interface {d}, endpoint {d}", .{ dev.address, i, in_interrupt_endpoint.?.endpoint_address });
-
-        keyboard_device = dev;
-        keyboard_interface = iface;
-        keyboard_endpoint = in_interrupt_endpoint;
-
-        const status = usb.controlMessage(
-            dev,
-            usb.HID_REQUEST_SET_PROTOCOL, // request
-            usb.USB_REQUEST_TYPE_INTERFACE_CLASS_OUT, // request type
-            0, // value - id of hid boot protocol
-            @truncate(i), // index - interface to use
-            &.{}, // data (not used for this transfer)
-        );
-
-        if (status) |s| {
-            if (s == .ok) {
-                driver_initialized.signal();
-            } else {
-                log.warn(@src(), "cannot set keyboard to use boot protocol: {any}", .{status});
-            }
-        } else |err| {
-            log.err(@src(), "error sending control message to set protocol: {any}", .{err});
-        }
-
-        return;
-    }
+    driver_initialized.signal();
 }
 
-pub fn hidKeyboardDriverDeviceUnbind(dev: *Device) void {
-    log.debug(@src(), "hid keyboard driver pretending to unbind device {d}", .{dev.address});
+pub fn hidkbdClassDriverUnbind(port: *hub.HubPort, interface: u8) !void {
+    _ = interface;
+    _ = port;
 }
 
-pub fn hidKeyboardDriverInitialize(allocator: Allocator) !void {
+pub fn hidkbdDriverInitialize(allocator: Allocator) !void {
     _ = allocator;
     log = Logger.init("usb_hid_keyboard", .info);
 }
 
-pub const driver: DeviceDriver = .{
+pub const class_driver: class.Driver = .{
     .name = "USB Keyboard",
-    .initialize = hidKeyboardDriverInitialize,
-    .canBind = hidKeyboardDriverCanBind,
-    .bind = hidKeyboardDriverDeviceBind,
-    .unbind = hidKeyboardDriverDeviceUnbind,
+    .initialize = hidkbdDriverInitialize,
+    .bind = hidkbdClassDriverBind,
+    .unbind = hidkbdClassDriverUnbind,
 };

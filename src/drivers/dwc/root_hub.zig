@@ -6,20 +6,14 @@ const time = @import("../../time.zig");
 const delayMillis = time.delayMillis;
 
 const usb = @import("../../usb.zig");
-const ClassRequest = usb.ClassRequest;
 const ConfigurationDescriptor = usb.ConfigurationDescriptor;
 const DeviceConfiguration = usb.DeviceConfiguration;
 const DeviceDescriptor = usb.DeviceDescriptor;
 const DeviceStatus = usb.DeviceStatus;
 const EndpointDescriptor = usb.EndpointDescriptor;
 const InterfaceDescriptor = usb.InterfaceDescriptor;
-const IsoSynchronizationType = usb.IsoSynchronizationType;
 const StringDescriptor = usb.StringDescriptor;
-const TransferRequest = usb.TransferRequest;
 const TransferBytes = usb.TransferBytes;
-const TransferStatus = usb.TransferRequest.CompletionStatus;
-const TransferFactory = usb.TransferFactory;
-const TransferType = usb.TransferType;
 
 const reg = @import("registers.zig");
 const HostPortStatusAndControl = reg.HostPortStatusAndControl;
@@ -34,7 +28,6 @@ host_registers: ?*volatile reg.HostRegisters = null,
 
 root_hub_device_status: DeviceStatus = undefined,
 root_hub_hub_status: usb.HubStatus = undefined,
-root_hub_status_change_transfer: ?*TransferRequest = null,
 root_hub_configuration: u8 = 1,
 
 port_connect_status_changed: bool = false,
@@ -79,14 +72,14 @@ const root_hub_device_descriptor: DeviceDescriptor = .{
 };
 
 const RootHubConfiguration = packed struct {
-    configuration: ConfigurationDescriptor,
-    interface: InterfaceDescriptor,
-    endpoint: EndpointDescriptor,
+    configuration: usb.ConfigurationDescriptor,
+    interface: usb.InterfaceDescriptor,
+    endpoint: usb.EndpointDescriptor,
 };
 
 const root_hub_configuration_descriptor: RootHubConfiguration = .{
     .configuration = .{
-        .length = ConfigurationDescriptor.STANDARD_LENGTH,
+        .length = usb.ConfigurationDescriptor.STANDARD_LENGTH,
         .descriptor_type = usb.USB_DESCRIPTOR_TYPE_CONFIGURATION,
         .total_length = @sizeOf(RootHubConfiguration),
         .interface_count = 1,
@@ -96,7 +89,7 @@ const root_hub_configuration_descriptor: RootHubConfiguration = .{
         .power_max = 1,
     },
     .interface = .{
-        .length = InterfaceDescriptor.STANDARD_LENGTH,
+        .length = usb.InterfaceDescriptor.STANDARD_LENGTH,
         .descriptor_type = usb.USB_DESCRIPTOR_TYPE_INTERFACE,
         .interface_number = 0,
         .alternate_setting = 0,
@@ -107,10 +100,10 @@ const root_hub_configuration_descriptor: RootHubConfiguration = .{
         .interface_string = 0,
     },
     .endpoint = .{
-        .length = EndpointDescriptor.STANDARD_LENGTH,
+        .length = usb.EndpointDescriptor.STANDARD_LENGTH,
         .descriptor_type = usb.USB_DESCRIPTOR_TYPE_ENDPOINT,
         .endpoint_address = 0x81, // Endpoint 1, direction IN
-        .attributes = TransferType.interrupt,
+        .attributes = usb.USB_ENDPOINT_TYPE_INTERRUPT,
         .max_packet_size = 0x04,
         .interval = 0x0c,
     },
@@ -291,37 +284,6 @@ pub fn hubHandlePortInterrupt(self: *Self) void {
 
     // Clear the interrupts by writing the modified control register value back
     regs.port = port_dup;
-}
-
-// ----------------------------------------------------------------------
-// Interrupt Transfer Handling
-// ----------------------------------------------------------------------
-
-// An "interrupt" transfer is a request to be interrupted when an
-// event occurs. The hub receives an interrupt transfer and sits on it
-// until something "interesting" occurs. At that point the hub
-// completes the transfer, thereby interrupting the host software with
-// the information. This is not the same as a hardware interrupt
-// within the host machine. (Though a hardware interrupt may result
-// from completing the USB interrupt transfer!)
-
-fn hubNotifyPortChange(self: *Self) void {
-    if (self.root_hub_status_change_transfer) |request| {
-        Host.log.debug(@src(), "host port status changed; completing status changed transfer on root hub", .{});
-        self.root_hub_status_change_transfer = null;
-        if (request.size >= 1) {
-            // in the status change, bit 0 indicates the hub changed,
-            // bits 1..N indicate a port change. We pretend the DWC
-            // host port is port 1, so we set bit 1 in the one-byte
-            // response.
-            //
-            // See USB specification, revision 2.0 dated April 2000,
-            // section 11.12.4
-            request.data[0] = 0x02;
-        }
-        request.actual_size = 1;
-        request.complete(.ok);
-    }
 }
 
 // ----------------------------------------------------------------------
