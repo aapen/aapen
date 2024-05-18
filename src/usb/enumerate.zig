@@ -182,12 +182,13 @@ fn initializePort(port: *hub.HubPort) !void {
 
         if (class.findDriver(intf_desc.interface_class, intf_desc.interface_subclass, intf_desc.interface_protocol, port.device_desc.vendor, port.device_desc.product)) |drv| {
             port.interfaces[iface].class_driver = drv;
-            log.info(@src(), "Loading {s} class driver for interface {d}", .{ drv.name, iface });
+            log.info(@src(), "attempting to bind {s} class driver for device addr {d} interface {d}", .{ drv.name, dev_addr, iface });
 
             drv.bind(port, @truncate(iface)) catch |err| {
-                log.err(@src(), "class driver bind error {}", .{err});
+                log.err(@src(), "device addr {d} interface {d} class driver bind error {}", .{ dev_addr, iface, err });
                 continue;
             };
+            log.info(@src(), "device addr {d} interface {d} bound to class driver {s}", .{ dev_addr, iface, drv.name });
         } else {
             log.err(@src(), "no driver for interface {d}-{d}-{d}", .{
                 intf_desc.interface_class,

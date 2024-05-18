@@ -42,6 +42,12 @@ pub const Driver = struct {
     unbind: ?*const fn (port: *hub.HubPort, interface: u8) Error!void,
 };
 
+pub fn initializeDrivers(alloc: std.mem.Allocator) !void {
+    for (&driver_table) |*dte| {
+        try dte.driver.initialize(alloc);
+    }
+}
+
 pub fn findDriver(intf_class: u8, intf_subclass: u8, intf_protocol: u8, vendor: u16, product: u16) ?*const Driver {
     for (&driver_table) |*dte| {
         if ((dte.class == null or dte.class.? == intf_class) and

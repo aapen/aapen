@@ -32,8 +32,9 @@ pub usingnamespace @import("usb/device.zig");
 pub usingnamespace @import("usb/status.zig");
 pub usingnamespace @import("usb/transfer.zig");
 
+const class = @import("usb/class.zig");
+
 const enumerate = @import("usb/enumerate.zig");
-//const hid_keyboard = @import("usb/hid_keyboard.zig");
 
 const hub = @import("usb/hub.zig");
 pub const hubThreadWakeup = hub.hubThreadWakeup;
@@ -52,7 +53,6 @@ pub fn defineModule(forth: *Forth) !void {
     try forth.defineConstant("usbhci", @intFromPtr(root.hal.usb_hci));
     try forth.defineStruct("Device", Self.Device, .{});
 
-    //    try hid_keyboard.defineModule(forth);
     try HCI.defineModule(forth);
 }
 
@@ -67,7 +67,7 @@ pub fn getDevice(id: u64) ?*Self.Device {
 // ----------------------------------------------------------------------
 // Core subsystem
 // ----------------------------------------------------------------------
-const Drivers = std.ArrayList(*const Self.DeviceDriver);
+// const Drivers = std.ArrayList(*const Self.DeviceDriver);
 
 const MAX_DEVICES = 16;
 const DeviceAlloc = ChannelSet.init("devices", Self.DeviceAddress, MAX_DEVICES);
@@ -82,10 +82,19 @@ pub var devices: [MAX_DEVICES]Self.Device = init: {
 var devices_allocated: DeviceAlloc = .{};
 
 var allocator: std.mem.Allocator = undefined;
-var drivers: Drivers = undefined;
-var drivers_lock: TicketLock = undefined;
 pub var root_hub: *hub.Hub = undefined;
 var bus_lock: TicketLock = undefined;
+
+const root_hub_default_endpoint = hub.Endpoint{
+    .ep_desc = .{
+        .length = 7,
+        .descriptor_type = Self.USB_DESCRIPTOR_TYPE_ENDPOINT,
+        .endpoint_address = 0x80,
+        .attributes = Self.USB_ENDPOINT_TYPE_INTERRUPT,
+        .max_packet_size = 0x08,
+        .interval = 1,
+    },
+};
 
 // `init` does the allocations and registrations needed, but does not
 // activate the hardware
@@ -93,11 +102,10 @@ pub fn init() !void {
     log = Logger.init("usb", .info);
 
     allocator = root.kernel_allocator;
-    drivers = Drivers.init(allocator);
+    // drivers = Drivers.init(allocator);
     Self.initCore(allocator);
     enumerate.init(allocator);
 
-    drivers_lock = TicketLock.initWithTargetLevel("usb drivers", true, .FIQ);
     bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
 }
 
@@ -105,10 +113,7 @@ pub fn init() !void {
 pub fn initialize() !void {
     try busInit();
 
-    try registerDriver(&hub.driver);
-    // try registerDriver(&hid_keyboard.driver);
-
-    try initializeDrivers();
+    try class.initializeDrivers(allocator);
 }
 
 fn busInit() !void {
@@ -125,45 +130,16 @@ fn busInit() !void {
     rh.speed = Self.USB_SPEED_FULL;
     rh.port_count = 1;
     rh.descriptor = root.HAL.USBHCI.root_hub_hub_descriptor;
-    rh.ports2 = try allocator.alloc(hub.HubPort, 1);
-    rh.ports2[0] = try hub.HubPort.init(rh, 1);
-    rh.ports2[0].connected = true;
+    // rh.interrupt_in = &root_hub_default_endpoint;
+    rh.ports = try allocator.alloc(hub.HubPort, 1);
+    rh.ports[0] = try hub.HubPort.init(rh, 1);
+    rh.ports[0].connected = true;
 
     root_hub = rh;
 }
 
 pub fn rootHubControl(setup: *Self.SetupPacket, data: ?[]u8) Self.URB.Status {
     return HCI.rootHubControl(setup, data);
-}
-
-pub fn registerDriver(device_driver: *const Self.DeviceDriver) !void {
-    drivers_lock.acquire();
-    defer drivers_lock.release();
-
-    var already_registered = false;
-    for (drivers.items) |drv| {
-        if (drv == device_driver) {
-            log.err(@src(), "device driver is already registered, skipping it", .{});
-            already_registered = true;
-            break;
-        }
-    }
-
-    if (!already_registered) {
-        log.debug(@src(), "registering driver: {s}", .{device_driver.name});
-        try drivers.append(device_driver);
-    }
-}
-
-fn initializeDrivers() !void {
-    drivers_lock.acquire();
-    defer drivers_lock.release();
-
-    for (drivers.items) |drv| {
-        drv.initialize(allocator) catch |err| {
-            log.err(@src(), "driver {s} initialization error {any}", .{ drv.name, err });
-        };
-    }
 }
 
 pub fn addressAllocate() !Self.DeviceAddress {
