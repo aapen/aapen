@@ -236,7 +236,6 @@ fn verifyHostControllerDevice() !void {
     const fs_phy_type = hwcfg.full_speed_physical_type;
     const hs_phy_type = hwcfg.high_speed_physical_type;
     const dma_support = hwcfg.dma_architecture;
-    const endpoints = hwcfg.num_device_endpoints;
     const num_channels = hwcfg.num_host_channels;
 
     log.debug(@src(), "operating mode: {s}", .{
@@ -249,8 +248,7 @@ fn verifyHostControllerDevice() !void {
         @tagName(dma_support),
     });
 
-    log.debug(@src(), "enpoints: {d}, channels: {d}", .{
-        endpoints,
+    log.debug(@src(), "channels: {d}", .{
         num_channels,
     });
 }
