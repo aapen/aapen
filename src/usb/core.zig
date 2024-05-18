@@ -149,7 +149,7 @@ pub fn interruptTransfer(urb: *URB) !spec.TransferBytes {
     } else if (!urb.isSynchronous() and ret == .Busy) {
         return 0;
     } else {
-        log.err(@src(), "dev addr {d} ep addr {d} interrupt transfer failed {}", .{ urb.port.device_address, urb.ep.endpoint_address, ret });
+        log.err(@src(), "dev addr {d} ep addr {d} interrupt transfer failed {}:{}", .{ urb.port.device_address, urb.ep.endpoint_address, urb.status, urb.status_detail });
         return error.Failed;
     }
 }

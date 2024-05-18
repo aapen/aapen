@@ -20,7 +20,7 @@ const usb = @import("../usb.zig");
 var allocator: Allocator = undefined;
 
 pub fn init(alloc: Allocator) void {
-    log = Logger.init("usbe", .debug);
+    log = Logger.init("usbe", .info);
     allocator = alloc;
 }
 

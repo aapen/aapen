@@ -10,17 +10,15 @@ const expectEqual = helpers.expectEqual;
 const expectError = helpers.expectError;
 
 const atomic = @import("../atomic.zig");
-const mailbox = @import("../mailbox.zig");
+const Mailbox = @import("../mailbox.zig").Mailbox;
 const schedule = @import("../schedule.zig");
 const time = @import("../time.zig");
 
-const IntBox = mailbox.Mailbox(u32);
-var mbox: IntBox = undefined;
+var mbox: Mailbox(u32, 5) = undefined;
 
 pub fn testBody() !void {
-    const allocator = root.kernel_allocator;
+    try mbox.init();
 
-    try createIntBox(allocator);
     try expectCount(0);
 
     try sendBasicMessages();
@@ -39,7 +37,7 @@ fn createIntBox(allocator: Allocator) !void {
     try mbox.init(allocator, 5);
 }
 
-fn expectCount(ex: IntBox.MailboxCapacity) !void {
+fn expectCount(ex: u16) !void {
     expectEqual(@src(), ex, mbox.count);
 }
 

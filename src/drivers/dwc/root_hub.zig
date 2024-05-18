@@ -35,6 +35,7 @@ host_registers: ?*volatile reg.HostRegisters = null,
 root_hub_device_status: DeviceStatus = undefined,
 root_hub_hub_status: usb.HubStatus = undefined,
 root_hub_status_change_transfer: ?*TransferRequest = null,
+root_hub_configuration: u8 = 1,
 
 port_connect_status_changed: bool = false,
 port_enabled_changed: bool = false,
@@ -374,7 +375,10 @@ pub fn control(self: *Self, setup: *usb.SetupPacket, data: ?[]u8) usb.URB.Status
                 }
             },
             usb.USB_REQUEST_SET_ADDRESS => return .OK,
-            usb.USB_REQUEST_SET_CONFIGURATION => return .OK,
+            usb.USB_REQUEST_SET_CONFIGURATION => {
+                self.root_hub_configuration = @truncate(setup.value & 0xff);
+                return .OK;
+            },
             usb.USB_REQUEST_GET_DESCRIPTOR => {
                 const descriptor_type = setup.value >> 8;
 
@@ -411,7 +415,7 @@ pub fn control(self: *Self, setup: *usb.SetupPacket, data: ?[]u8) usb.URB.Status
                 return replyWithStructure(setup, data.?, std.mem.asBytes(&self.root_hub_hub_status));
             },
             usb.USB_REQUEST_GET_CONFIGURATION => {
-                return replyWithStructure(setup, data.?, std.mem.asBytes(&root_hub_configuration_descriptor));
+                return replyWithStructure(setup, data.?, std.mem.asBytes(&self.root_hub_configuration));
             },
             else => return .NotSupported,
         }
@@ -502,17 +506,4 @@ pub fn control(self: *Self, setup: *usb.SetupPacket, data: ?[]u8) usb.URB.Status
     } else {
         return .NotSupported;
     }
-}
-
-pub fn interrupt(urb: *usb.URB) usb.URB.Status {
-    _ = urb;
-    return .OK;
-}
-
-pub fn submitUrb(urb: *usb.URB) usb.URB.Status {
-    return switch (urb.ep.getType()) {
-        usb.USB_ENDPOINT_TYPE_CONTROL => {},
-        usb.USB_ENDPOINT_TYPE_INTERRUPT => interrupt(urb),
-        usb.USB_ENDPOINT_TYPE_BULK, usb.USB_ENDPOINT_TYPE_ISOCHRONOUS => usb.URB.Status.Failed,
-    };
 }

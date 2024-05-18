@@ -38,6 +38,7 @@ const enumerate = @import("usb/enumerate.zig");
 
 const hub = @import("usb/hub.zig");
 pub const hubThreadWakeup = hub.hubThreadWakeup;
+pub const HubPort = hub.HubPort;
 
 const Self = @This();
 
@@ -102,7 +103,6 @@ pub fn init() !void {
     log = Logger.init("usb", .info);
 
     allocator = root.kernel_allocator;
-    // drivers = Drivers.init(allocator);
     Self.initCore(allocator);
     enumerate.init(allocator);
 

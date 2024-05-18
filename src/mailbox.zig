@@ -16,45 +16,35 @@ const SID = semaphore.SID;
 
 const synchronize = @import("synchronize.zig");
 
-/// Create a mailbox type.
-pub fn Mailbox(comptime T: type) type {
-    return struct {
-        pub const MailboxCapacity = u15;
+/// Create and initialize a mailbox with fixed, reserved capacity
+pub fn Mailbox(comptime T: type, comptime capacity: u16) type {
+    return MailboxReturnType(T, capacity);
+}
 
-        const Self = @This();
+pub fn MailboxReturnType(comptime T: type, comptime capacity: u16) type {
+    return struct {
+        pub const Self = @This();
 
         sender: SID,
         receiver: SID,
-        max: MailboxCapacity,
-        count: MailboxCapacity,
-        start: MailboxCapacity,
-        items: []T,
+        max: u16 = capacity,
+        count: u16 = 0,
+        start: u16 = 0,
+        items: [capacity]T = undefined,
 
-        pub fn init(self: *Self, allocator: Allocator, capacity: MailboxCapacity) !void {
-            // const bytes = capacity * @sizeOf(T);
-            // const space: u64 = try allocator.alloc(bytes);
-            // const space_ptr: [*]u8 = @ptrFromInt(space);
-            // const items: []T = @as([*]T, @alignCast(@ptrCast(space_ptr)))[0..capacity];
-
+        pub fn init(self: *Self) !void {
             self.* = .{
                 .sender = try semaphore.create(capacity),
                 .receiver = try semaphore.create(0),
-                .max = capacity,
-                .count = 0,
-                .start = 0,
-                .items = try allocator.alloc(T, capacity),
             };
         }
 
         pub fn deinit(self: *Self) !void {
             try semaphore.free(self.sender);
             try semaphore.free(self.receiver);
-
-            const bytes = self.max * @sizeOf(T);
-            try memory.free(@intFromPtr(self.items.ptr), bytes);
         }
 
-        pub fn count(self: *Self) MailboxCapacity {
+        pub fn count(self: *Self) u16 {
             return self.count;
         }
 

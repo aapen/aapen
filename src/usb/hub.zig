@@ -303,6 +303,7 @@ pub const Hub = struct {
     in_use: bool = false,
     index: u5 = undefined,
     interrupt_in: *Endpoint = undefined,
+    interrupt_interval: u8 = 1,
     is_roothub: bool = false,
     hub_address: u7 = undefined, // device address of this hub
     device: *Device = undefined,
@@ -329,6 +330,7 @@ pub const Hub = struct {
     pub fn bind(self: *Hub, parent_port: *HubPort, int_in_iface: u8, int_in_ep: u8) !void {
         self.parent = parent_port;
         self.interrupt_in = &parent_port.interfaces[int_in_iface].alternate[0].ep[int_in_ep];
+        self.interrupt_interval = self.interrupt_in.ep_desc.interval;
 
         log.debug(@src(), "reading hub descriptor", .{});
         try self.hubDescriptorRead();
@@ -454,7 +456,10 @@ pub const Hub = struct {
 
 fn statusChangeCompletion(urb: *usb.URB, actual_length: spec.TransferBytes) void {
     const self: *Hub = @fieldParentPtr(Hub, "status_change_urb", urb);
-    log.debug(@src(), "hub {d} finished interrupt transfer, status {any} length {d}", .{ self.index, urb.status, actual_length });
+    log.debug(@src(), "hub {d} finished interrupt transfer, status {any}:{any} length {d}", .{ self.index, urb.status, urb.status_detail, actual_length });
+
+    log.sliceDump(@src(), urb.transfer_buffer.?[0..actual_length]);
+
     hubThreadWakeup(self);
 }
 
@@ -519,27 +524,30 @@ fn hubThread(_: *anyopaque) void {
     };
     log.debug(@src(), "started host controller", .{});
 
-    // enumerate.later(&usb.root_hub.ports2[0]) catch |err| {
-    //     log.err(@src(), "Root hub enumerate error {}", .{err});
-    //     return;
-    // };
-
     while (!shutdown_signal.isSignalled()) {
         semaphore.wait(hub_status_change_semaphore) catch |err| {
             log.err(@src(), "hubThread semaphore wait error {}", .{err});
             return;
         };
 
-        hubs_lock.acquire();
-        var hubs_to_process = hubs_with_pending_status_change;
-        hubs_lock.release();
+        while (hubs_with_pending_status_change != 0) {
+            var hubs_to_process: u32 = 0;
+            var hub_with_status_change: u6 = 0;
 
-        while (hubs_to_process != 0) {
-            log.debug(@src(), "hubThread: in loop, remaining hubs with pending status change 0x{x}", .{hubs_to_process});
+            {
+                hubs_lock.acquire();
+                defer hubs_lock.release();
 
-            const hub_with_status_change = @ctz(hubs_to_process);
+                hubs_to_process = hubs_with_pending_status_change;
+                hub_with_status_change = @ctz(hubs_to_process);
+                if (hub_with_status_change < 32 and hub_with_status_change < MAX_HUBS) {
+                    hubs_with_pending_status_change &= ~(@as(u32, 1) << @truncate(hub_with_status_change));
+                } else {
+                    break;
+                }
+            }
 
-            if (hub_with_status_change > MAX_HUBS) break;
+            log.debug(@src(), "hubThread: in loop, remaining hubs 0x{x}, next is {d}", .{ hubs_to_process, hub_with_status_change });
 
             hubs_to_process &= ~(@as(u32, 1) << @truncate(hub_with_status_change));
             const hub = &hubs[hub_with_status_change];
@@ -565,17 +573,21 @@ fn hubThread(_: *anyopaque) void {
                         port.statusChanged();
                     }
                 }
+            } else if (urb.status == .Failed and urb.status_detail == .Nak) {
+                // hub doesn't have any update for us, this is normal
             } else {
-                log.err(@src(), "hub {d} status change request failed: {s}", .{ hub.index, @tagName(urb.status) });
+                log.err(@src(), "hub {d} status change request failed: {any}:{any}", .{ hub.index, urb.status, urb.status_detail });
             }
 
-            // if (!hub.is_roothub) {
-            //     // resend the status change interrupt request
-            //     log.debug(@src(), "hub {d} resubmitting status change request", .{hub.index});
-            //     usb.transferSubmit(req) catch |err| {
-            //         log.err(@src(), "hub {d} transfer submit error: {any}", .{ hub.index, err });
-            //     };
-            // }
+            if (!hub.is_roothub) {
+                // wait the hub's "interval" before polling again
+                log.debug(@src(), "hub {d} resubmitting interrupt request", .{hub.index});
+
+                // resend the status change interrupt request
+                _ = core.interruptTransfer(&hub.status_change_urb) catch |err| {
+                    log.err(@src(), "hub {d} interrupt request submit error: {any}", .{ hub.index, err });
+                };
+            }
         }
     }
 }

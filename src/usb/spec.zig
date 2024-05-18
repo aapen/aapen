@@ -464,6 +464,8 @@ pub const StringDescriptor = extern struct {
 };
 
 pub const HubDescriptor = extern struct {
+    pub const STANDARD_LENGTH = 8;
+
     pub const Characteristics = packed struct {
         power_switching_mode: u2, // 0..1
         compound: u1, // 2

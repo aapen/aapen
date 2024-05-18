@@ -152,7 +152,7 @@ pub fn expectEqual(loc: std.builtin.SourceLocation, expected: anytype, actual: @
 
         .Struct => |structType| {
             inline for (structType.fields) |field| {
-                try expectEqual(loc, @field(expected, field.name), @field(actual, field.name));
+                expectEqual(loc, @field(expected, field.name), @field(actual, field.name));
             }
         },
 
