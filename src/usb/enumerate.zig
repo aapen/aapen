@@ -181,13 +181,13 @@ fn initializePort(port: *hub.HubPort) !void {
 
         if (class.findDriver(intf_desc.interface_class, intf_desc.interface_subclass, intf_desc.interface_protocol, port.device_desc.vendor, port.device_desc.product)) |drv| {
             port.interfaces[iface].class_driver = drv;
-            log.info(@src(), "attempting to bind {s} class driver for device addr {d} interface {d}", .{ drv.name, dev_addr, iface });
+            log.debug(@src(), "attempting to bind {s} class driver for device addr {d} interface {d}", .{ drv.name, dev_addr, iface });
 
             drv.bind(port, @truncate(iface)) catch |err| {
                 log.err(@src(), "device addr {d} interface {d} class driver bind error {}", .{ dev_addr, iface, err });
                 continue;
             };
-            log.info(@src(), "device addr {d} interface {d} bound to class driver {s}", .{ dev_addr, iface, drv.name });
+            log.debug(@src(), "device addr {d} interface {d} bound to class driver {s}", .{ dev_addr, iface, drv.name });
         } else {
             log.err(@src(), "no driver for interface {d}-{d}-{d}", .{
                 intf_desc.interface_class,
@@ -223,7 +223,7 @@ fn dumpDeviceString(label: []const u8, port: *hub.HubPort, setup: *spec.SetupPac
 
     var buf: [256]u8 = undefined;
     const str = desc.intoSlice(&buf);
-    log.info(@src(), "{s}: '{s}'", .{ label, str });
+    log.debug(@src(), "{s}: '{s}'", .{ label, str });
 }
 
 fn parseDeviceDescriptor(port: *hub.HubPort, desc: *spec.DeviceDescriptor, length: usize) !void {
@@ -359,10 +359,8 @@ fn parseConfigDescriptor(port: *hub.HubPort, desc: *spec.ConfigurationDescriptor
                 cur_ep += 1;
             },
             usb.USB_DESCRIPTOR_TYPE_HID => {
-                // TODO - something reasonable
-                //                const hid_descriptor: *spec.HidDescriptor = @ptrCast(@alignCast(srcptr));
                 const hid_descriptor: *align(1) spec.HidDescriptor = std.mem.bytesAsValue(spec.HidDescriptor, srcptr[0..@sizeOf(spec.HidDescriptor)]);
-                log.info(@src(), "hid descriptor found: {any}", .{hid_descriptor.*});
+                port.interfaces[cur_iface].alternate[cur_alt_setting].hid = hid_descriptor.*;
             },
             else => {},
         }

@@ -221,8 +221,8 @@ fn powerOff() !void {
 fn verifyHostControllerDevice() !void {
     const id = core.vendor_id;
 
-    log.info(@src(), "Core registers at 0x{x:0>8}", .{@intFromPtr(core)});
-    log.info(@src(), "DWC2 OTG core rev: {x}.{x:0>3}", .{ id.device_series, id.device_minor_rev });
+    log.debug(@src(), "Core registers at 0x{x:0>8}", .{@intFromPtr(core)});
+    log.debug(@src(), "DWC2 OTG core rev: {x}.{x:0>3}", .{ id.device_series, id.device_minor_rev });
 
     if (id.device_vendor_id != 0x4f54 or (id.device_series != 2 and id.device_series != 3)) {
         log.warn(@src(), " gsnpsid = 0x{x:0>8}, vendor = 0x{x:0>4}", .{ @as(u32, @bitCast(id)), id.device_vendor_id });

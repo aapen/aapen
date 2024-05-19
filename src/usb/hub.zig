@@ -80,6 +80,7 @@ pub const Endpoint = struct {
 
 pub const InterfaceAlternate = struct {
     interface_descriptor: spec.InterfaceDescriptor,
+    hid: spec.HidDescriptor,
     ep: [MAX_ENDPOINTS]Endpoint,
     ep_count: u8 = 0,
 };
