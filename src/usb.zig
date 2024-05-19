@@ -28,7 +28,6 @@ const TicketLock = synchronize.TicketLock;
 
 pub usingnamespace @import("usb/spec.zig");
 pub usingnamespace @import("usb/core.zig");
-pub usingnamespace @import("usb/device.zig");
 pub usingnamespace @import("usb/status.zig");
 
 const class = @import("usb/class.zig");
@@ -50,21 +49,11 @@ const Self = @This();
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(Self, .{
         .{ "initialize", "usb-init" },
-        .{ "getDevice", "usb-device" },
     });
     try forth.defineConstant("usbhci", @intFromPtr(root.hal.usb_hci));
-    try forth.defineStruct("Device", Self.Device, .{});
 
     try HCI.defineModule(forth);
     try hidkbd.defineModule(forth);
-}
-
-pub fn getDevice(id: u64) ?*Self.Device {
-    if (id < MAX_DEVICES and devices[id].state != .unconfigured) {
-        return &devices[id];
-    } else {
-        return null;
-    }
 }
 
 // ----------------------------------------------------------------------

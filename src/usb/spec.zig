@@ -18,6 +18,7 @@ pub const PacketSize = u11;
 pub const StringIndex = u8;
 pub const TransferBytes = u19;
 pub const TransferPackets = u10;
+pub const UsbSpeed = u8;
 
 // ----------------------------------------------------------------------
 // Specified values

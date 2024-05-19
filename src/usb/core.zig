@@ -15,7 +15,6 @@ const SID = semaphore.SID;
 const synchronize = @import("../synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
-const device = @import("device.zig");
 const hub = @import("hub.zig");
 const spec = @import("spec.zig");
 const status = @import("status.zig");

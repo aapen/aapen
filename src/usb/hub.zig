@@ -34,13 +34,6 @@ const delayMillis = time.delayMillis;
 const class = @import("class.zig");
 const core = @import("core.zig");
 
-const device = @import("device.zig");
-const Device = device.Device;
-const DeviceAddress = device.DeviceAddress;
-const DeviceDriver = device.DeviceDriver;
-const TransactionTranslator = device.TransactionTranslator;
-const UsbSpeed = device.UsbSpeed;
-
 const enumerate = @import("enumerate.zig");
 
 const Error = @import("status.zig").Error;
@@ -48,17 +41,6 @@ const Error = @import("status.zig").Error;
 const spec = @import("spec.zig");
 
 const usb = @import("../usb.zig");
-
-pub fn deviceSpeed(self: *const usb.HubPortStatus) UsbSpeed {
-    if (self.port_status.low_speed_device == .low_speed) {
-        return UsbSpeed.Low;
-    } else if (self.port_status.high_speed_device == .high_speed) {
-        return UsbSpeed.High;
-    } else {
-        // This may not be correct for USB 3
-        return UsbSpeed.Full;
-    }
-}
 
 // some timing constants from the USB spec
 const RESET_TIMEOUT = 100;
@@ -302,7 +284,7 @@ pub const Hub = struct {
     interrupt_interval: u8 = 1,
     is_roothub: bool = false,
     hub_address: u7 = undefined, // device address of this hub
-    device: *Device = undefined,
+
     descriptor: usb.HubDescriptor = undefined,
     parent: ?*HubPort = null,
     port_count: u8 = 0,
@@ -310,10 +292,6 @@ pub const Hub = struct {
     speed: u8 = undefined,
     status_change_buffer: [8]u8 align(DMA) = [_]u8{0} ** 8,
     status_change_urb: usb.URB = undefined,
-
-    tt: TransactionTranslator = .{ .hub = null, .think_time = 0 },
-
-    error_count: u64 = 0,
 
     transfer_buffer: [64]u8 align(DMA) = [_]u8{0} ** 64,
 

@@ -37,7 +37,7 @@ port_overcurrent_changed: bool = false,
 pub fn init(self: *Self, registers: *volatile HostRegisters) void {
     self.* = .{
         .host_registers = registers,
-        .root_hub_device_status = usb.STATUS_SELF_POWERED,
+        .root_hub_device_status = @as(u32, 1) << usb.USB_FEATURE_SELF_POWERED,
         .root_hub_hub_status = .{
             .hub_status = .{
                 .local_power_source = 1,
