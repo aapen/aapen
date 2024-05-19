@@ -1,9 +1,9 @@
 const std = @import("std");
 
+const core = @import("core.zig");
 const hidkbd = @import("hid_keyboard.zig");
 const hub = @import("hub.zig");
 const spec = @import("spec.zig");
-const Error = @import("status.zig").Error;
 
 const DriverTableEntry = struct {
     class: ?u8,
@@ -37,9 +37,9 @@ pub const driver_table: [driver_table_registry.len]DriverTableEntry = init: {
 
 pub const Driver = struct {
     name: []const u8,
-    initialize: *const fn (allocator: std.mem.Allocator) Error!void,
-    bind: *const fn (port: *hub.HubPort, interface: u8) Error!void,
-    unbind: ?*const fn (port: *hub.HubPort, interface: u8) Error!void,
+    initialize: *const fn (allocator: std.mem.Allocator) core.Error!void,
+    bind: *const fn (port: *hub.HubPort, interface: u8) core.Error!void,
+    unbind: ?*const fn (port: *hub.HubPort, interface: u8) core.Error!void,
 };
 
 pub fn initializeDrivers(alloc: std.mem.Allocator) !void {

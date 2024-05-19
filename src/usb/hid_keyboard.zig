@@ -30,8 +30,6 @@ const hub = @import("hub.zig");
 const spec = @import("spec.zig");
 const usb = @import("../usb.zig");
 
-const Error = @import("status.zig").Error;
-
 const Self = @This();
 
 // ----------------------------------------------------------------------
@@ -272,9 +270,9 @@ fn selectInterruptEndpoint(iface: *const hub.Interface) ?u8 {
     return null;
 }
 
-pub fn hidkbdClassDriverBind(port: *hub.HubPort, interface: u8) !void {
+pub fn hidkbdClassDriverBind(port: *hub.HubPort, interface: u8) core.Error!void {
     const iface = &port.interfaces[interface];
-    const ep_int_in = selectInterruptEndpoint(iface) orelse return Error.ConfigurationError;
+    const ep_int_in = selectInterruptEndpoint(iface) orelse return core.Error.ConfigurationError;
 
     keyboard_port = port;
     keyboard_endpoint = &iface.alternate[0].ep[ep_int_in];

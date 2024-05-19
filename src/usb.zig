@@ -28,7 +28,6 @@ const TicketLock = synchronize.TicketLock;
 
 pub usingnamespace @import("usb/spec.zig");
 pub usingnamespace @import("usb/core.zig");
-pub usingnamespace @import("usb/status.zig");
 
 const class = @import("usb/class.zig");
 

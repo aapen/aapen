@@ -9,6 +9,8 @@ const cpu = arch.cpu;
 const Logger = @import("../logger.zig");
 var log: *Logger = undefined;
 
+const schedule = @import("../schedule.zig");
+
 const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
 
@@ -17,8 +19,6 @@ const TicketLock = synchronize.TicketLock;
 
 const hub = @import("hub.zig");
 const spec = @import("spec.zig");
-const status = @import("status.zig");
-const Error = status.Error;
 
 // ----------------------------------------------------------------------
 // Lifecycle
@@ -34,6 +34,38 @@ pub fn initCore(alloc: std.mem.Allocator) void {
     submitUrb = HCI.submitUrb;
     rootHubControl = HCI.rootHubControl;
 }
+
+pub const Error = error{
+    Busy,
+    ConfigurationError,
+    DataLengthMismatch,
+    DeviceDetaching,
+    DeviceUnconfigured,
+    DeviceUnsupported,
+    Failed,
+    HardwareError,
+    IncorrectDevice,
+    InitializationFailure,
+    InvalidData,
+    InvalidParameter,
+    InvalidRequest,
+    InvalidResponse,
+    NoAvailableChannel,
+    NoDevice,
+    NotConnected,
+    NotProcessed,
+    OutOfMemory,
+    OvercurrentDetected,
+    PowerFailure,
+    ResetTimeout,
+    TooManyDevices,
+    TooManyHubs,
+    TransferFailed,
+    TransferIncomplete,
+    TransferStarted,
+    TransferTimeout,
+    UnsupportedRequest,
+} || schedule.Error;
 
 // ----------------------------------------------------------------------
 // Transfer handling

@@ -36,8 +36,6 @@ const core = @import("core.zig");
 
 const enumerate = @import("enumerate.zig");
 
-const Error = @import("status.zig").Error;
-
 const spec = @import("spec.zig");
 
 const usb = @import("../usb.zig");
@@ -166,7 +164,7 @@ pub const HubPort = struct {
         }
 
         if (time.ticks() > deadline) {
-            return Error.ResetTimeout;
+            return core.Error.ResetTimeout;
         }
 
         try self.featureClear(usb.HUB_PORT_FEATURE_C_PORT_RESET);
@@ -391,7 +389,7 @@ pub const Hub = struct {
         }
     }
 
-    fn hubControlMessage(self: *Hub, req: u8, req_type: u8, value: u16, index: u16, data: ?[]align(DMA) u8) !void {
+    fn hubControlMessage(self: *Hub, req: u8, req_type: u8, value: u16, index: u16, data: ?[]align(DMA) u8) core.Error!void {
         if (self.is_roothub) {
             var setup: spec.SetupPacket = .{
                 .request_type = req_type,
@@ -405,7 +403,7 @@ pub const Hub = struct {
                 log.err(@src(), "hubControlMessage not OK {}", .{ret});
             }
         } else {
-            const port = self.parent orelse return Error.InvalidData;
+            const port = self.parent orelse return core.Error.InvalidData;
 
             var setup: *spec.SetupPacket = &port.setup;
             setup.* = .{
@@ -593,18 +591,18 @@ fn selectInterruptEndpoint(iface: *const Interface) ?u8 {
     return null;
 }
 
-fn hubClassDriverBind(port: *HubPort, interface: u8) Error!void {
+fn hubClassDriverBind(port: *HubPort, interface: u8) core.Error!void {
     log.debug(@src(), "hub class driver bind, hub {d} port {d} intf {d}", .{ port.parent.index, port.port, interface });
 
     var next_hub = try hubClassAlloc();
 
     const iface = &port.interfaces[interface];
-    const ep_int_in = selectInterruptEndpoint(iface) orelse return Error.ConfigurationError;
+    const ep_int_in = selectInterruptEndpoint(iface) orelse return core.Error.ConfigurationError;
 
     try next_hub.bind(port, interface, ep_int_in);
 }
 
-fn hubClassDriverUnbind(port: *HubPort, interface: u8) Error!void {
+fn hubClassDriverUnbind(port: *HubPort, interface: u8) core.Error!void {
     log.info(@src(), "hub class driver bind, hub {d} port {d} intf {d}", .{ port.parent.index, port.port, interface });
 }
 

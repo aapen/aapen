@@ -13,7 +13,6 @@ const class = @import("class.zig");
 const core = @import("core.zig");
 const hub = @import("hub.zig");
 const spec = @import("spec.zig");
-const status = @import("status.zig");
 const usb = @import("../usb.zig");
 
 var allocator: Allocator = undefined;
