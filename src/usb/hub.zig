@@ -12,33 +12,21 @@ const arch = @import("../architecture.zig");
 const cpu = arch.cpu;
 
 const ChannelSet = @import("../channel_set.zig");
-const mailbox = @import("../mailbox.zig");
-
-const semaphore = @import("../semaphore.zig");
-const SID = semaphore.SID;
-const NO_SEM = semaphore.NO_SEM;
 
 const Logger = @import("../logger.zig");
 var log: *Logger = undefined;
 
+const mailbox = @import("../mailbox.zig");
+const semaphore = @import("../semaphore.zig");
 const synchronize = @import("../synchronize.zig");
-const OneShot = synchronize.OneShot;
-const TicketLock = synchronize.TicketLock;
-
 const schedule = @import("../schedule.zig");
-const TID = schedule.TID;
-
 const time = @import("../time.zig");
-const delayMillis = time.delayMillis;
+const usb = @import("../usb.zig");
 
 const class = @import("class.zig");
 const core = @import("core.zig");
-
 const enumerate = @import("enumerate.zig");
-
 const spec = @import("spec.zig");
-
-const usb = @import("../usb.zig");
 
 // some timing constants from the USB spec
 const RESET_TIMEOUT = 100;
@@ -91,7 +79,7 @@ pub const HubPort = struct {
     setup: spec.SetupPacket align(DMA),
     ep0: spec.EndpointDescriptor,
     ep0_urb: usb.URB,
-    mutex: SID,
+    mutex: semaphore.SID,
 
     pub fn init(parent: *Hub, port_number: u7) !HubPort {
         var self: HubPort = .{
@@ -377,14 +365,14 @@ pub const Hub = struct {
                     port.featureSet(usb.HUB_PORT_FEATURE_PORT_POWER) catch return;
                 }
 
-                delayMillis(2 * self.descriptor.power_on_to_power_good);
+                time.delayMillis(2 * self.descriptor.power_on_to_power_good);
             },
             .powered_ganged => {
                 log.debug(@src(), "powering on all ports", .{});
                 self.ports[0].featureSet(usb.HUB_PORT_FEATURE_PORT_POWER) catch |err| {
                     log.err(@src(), "hub {d} ganged ports failed to power on: {any}", .{ self.index, err });
                 };
-                delayMillis(2 * self.descriptor.power_on_to_power_good);
+                time.delayMillis(2 * self.descriptor.power_on_to_power_good);
             },
         }
     }
@@ -459,11 +447,11 @@ var hubs_allocated: HubAlloc = .{};
 const HubMailbox = mailbox.Mailbox(u32);
 var hub_mailbox: HubMailbox = undefined;
 
-var hubs_lock: TicketLock = undefined;
-var hub_thread: TID = undefined;
+var hubs_lock: synchronize.TicketLock = undefined;
+var hub_thread: schedule.TID = undefined;
 var allocator: Allocator = undefined;
-var shutdown_signal: OneShot = .{};
-var hub_status_change_semaphore: SID = undefined;
+var shutdown_signal: synchronize.OneShot = .{};
+var hub_status_change_semaphore: semaphore.SID = undefined;
 var hubs_with_pending_status_change: u32 = 0;
 
 pub fn hubClassAlloc() !*Hub {
@@ -475,18 +463,6 @@ pub fn hubClassAlloc() !*Hub {
 pub fn hubClassFree(hub: *Hub) void {
     hub.in_use = false;
     hubs_allocated.free(hub.index);
-}
-
-pub fn initialize(alloc: Allocator) !void {
-    log = Logger.init("usbh", .info);
-
-    allocator = alloc;
-
-    hubs_lock = TicketLock.initWithTargetLevel("usb hubs", true, .FIQ);
-    hub_status_change_semaphore = try semaphore.create(0);
-    hubs_with_pending_status_change = 0;
-
-    hub_thread = try schedule.spawn(hubThread, "hub thread", &.{});
 }
 
 fn hubThread(_: *anyopaque) void {
@@ -591,6 +567,18 @@ fn selectInterruptEndpoint(iface: *const Interface) ?u8 {
     return null;
 }
 
+pub fn hubClassDriverInitialize(alloc: Allocator) !void {
+    log = Logger.init("usbh", .info);
+
+    allocator = alloc;
+
+    hubs_lock = synchronize.TicketLock.initWithTargetLevel("usb hubs", true, .FIQ);
+    hub_status_change_semaphore = try semaphore.create(0);
+    hubs_with_pending_status_change = 0;
+
+    hub_thread = try schedule.spawn(hubThread, "hub thread", &.{});
+}
+
 fn hubClassDriverBind(port: *HubPort, interface: u8) core.Error!void {
     log.debug(@src(), "hub class driver bind, hub {d} port {d} intf {d}", .{ port.parent.index, port.port, interface });
 
@@ -608,7 +596,7 @@ fn hubClassDriverUnbind(port: *HubPort, interface: u8) core.Error!void {
 
 pub const class_driver: class.Driver = .{
     .name = "USB Hub",
-    .initialize = initialize,
+    .initialize = hubClassDriverInitialize,
     .bind = hubClassDriverBind,
     .unbind = hubClassDriverUnbind,
 };

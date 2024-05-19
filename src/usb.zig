@@ -26,18 +26,13 @@ const SID = semaphore.SID;
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
-pub usingnamespace @import("usb/spec.zig");
-pub usingnamespace @import("usb/core.zig");
-
 const class = @import("usb/class.zig");
-
 const enumerate = @import("usb/enumerate.zig");
-
-const hub = @import("usb/hub.zig");
-pub const hubThreadWakeup = hub.hubThreadWakeup;
-pub const HubPort = hub.HubPort;
-
 const hidkbd = @import("usb/hid_keyboard.zig");
+
+pub usingnamespace @import("usb/core.zig");
+pub usingnamespace @import("usb/hub.zig");
+pub usingnamespace @import("usb/spec.zig");
 
 const Self = @This();
 
@@ -73,10 +68,10 @@ pub var devices: [MAX_DEVICES]Self.Device = init: {
 var devices_allocated: DeviceAlloc = .{};
 
 var allocator: std.mem.Allocator = undefined;
-pub var root_hub: *hub.Hub = undefined;
+pub var root_hub: *Self.Hub = undefined;
 var bus_lock: TicketLock = undefined;
 
-const root_hub_default_endpoint = hub.Endpoint{
+const root_hub_default_endpoint = Self.Endpoint{
     .ep_desc = .{
         .length = 7,
         .descriptor_type = Self.USB_DESCRIPTOR_TYPE_ENDPOINT,
@@ -110,9 +105,9 @@ fn busInit() !void {
     const roothub_addr = try addressAllocate();
     errdefer addressFree(roothub_addr);
 
-    var rh = try hub.hubClassAlloc();
+    var rh = try Self.hubClassAlloc();
     errdefer {
-        hub.hubClassFree(rh);
+        Self.hubClassFree(rh);
     }
 
     rh.is_roothub = true;
@@ -121,8 +116,8 @@ fn busInit() !void {
     rh.port_count = 1;
     rh.descriptor = root.HAL.USBHCI.root_hub_hub_descriptor;
     // rh.interrupt_in = &root_hub_default_endpoint;
-    rh.ports = try allocator.alloc(hub.HubPort, 1);
-    rh.ports[0] = try hub.HubPort.init(rh, 1);
+    rh.ports = try allocator.alloc(Self.HubPort, 1);
+    rh.ports[0] = try Self.HubPort.init(rh, 1);
     rh.ports[0].connected = true;
 
     root_hub = rh;

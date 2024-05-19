@@ -455,8 +455,9 @@ fn txFifoFlush(fifo_num: u5) !void {
     const flush_wait_end = time.deadlineMillis(100);
     while (core.reset.tx_fifo_flush == 1 and time.ticks() < flush_wait_end) {}
 
-    // TODO return error if timeout hit without seeing tx_fifo_flush
-    // go low.
+    if (core.reset.tx_fifo_flush == 1) {
+        return error.InitializationFailure;
+    }
 }
 
 fn rxFifoFlush() !void {
@@ -467,8 +468,9 @@ fn rxFifoFlush() !void {
     const flush_wait_end = time.deadlineMillis(100);
     while (core.reset.rx_fifo_flush == 1 and time.ticks() < flush_wait_end) {}
 
-    // TODO return error if timeout hit without seeing rx_fifo_flush
-    // go low.
+    if (core.reset.rx_fifo_flush == 1) {
+        return error.InitializationFailure;
+    }
 }
 
 fn hostPortSpeed() u8 {
