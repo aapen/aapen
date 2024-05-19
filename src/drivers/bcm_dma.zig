@@ -192,7 +192,6 @@ pub fn reserveChannel(self: *Self) DMAError!Channel {
     };
 }
 
-// TODO: after dma completes, free the control block
 pub fn initiate(self: *Self, channel: Channel, request: *Request) DMAError!void {
     const channel_registers = channel.registers;
     const control_block = &self.channel_control_blocks[channel.channel_id];

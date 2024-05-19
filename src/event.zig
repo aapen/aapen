@@ -54,7 +54,7 @@ pub fn enqueue(event: Event) void {
 pub fn dequeue() Event {
     queue_lock.acquire();
 
-    // TODO if the queue is empty, park (but remember to release the
+    // if the queue is empty, park (but remember to release the
     // spinlock before parking!)
     if (queue.isEmpty()) {
         queue_lock.release();

@@ -259,7 +259,6 @@ pub fn kill(tid: TID) void {
     // depending on the thread's state, we have some bookkeeping to do
     switch (thr.state) {
         THREAD_SLEEP => {
-            // TODO remove from sleep queue
             unsleep(tid) catch {};
         },
         THREAD_RUNNING => {

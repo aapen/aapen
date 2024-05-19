@@ -2,8 +2,6 @@ const std = @import("std");
 const cpu = @import("../cortex_a.zig");
 const registers = @import("registers.zig");
 
-// TODO: is there a way to integrate this with std.time?
-
 pub const TimeError = error{ DurationTooShort, DurationTooLong };
 
 pub const Seconds = u64;
@@ -39,7 +37,7 @@ fn read_cntpct() u32 {
 pub fn uptime() Duration {
     const current_count = read_cntpct();
 
-    // TODO: seems like overflow is possible?
+    // Caution: this will overflow after 1x10^25 years
     return Duration.from_u64_nanos((current_count * nanos_per_second) / frequency());
 }
 
