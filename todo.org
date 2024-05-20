@@ -441,3 +441,13 @@ It uses a register "RSTS"
 #+begin_src
   #define PM_RSTS         ((volatile unsigned int*)(MMIO_BASE+0x00100020))
 #+end_src
+* Other random enhancement ideas
+** Decouple ASCII from USB keyboard input
+See https://sw.kovidgoyal.net/kitty/keyboard-protocol/ for some inspirations
+Today we use a combo of esc-sequences, ctrl-sequences, and ascii char codes to control the display
+The HID keyboard driver could emit u32 or u64 into the input buffer, using the extra bits to encode the modifier keys and keypress/repeat/release info. REPL could perhaps use this to simply input processing.
+Serial input driver would need to do the same translation. (Including collapsing esc-sequences into single events.)
+** Bitmap support in low level video
+We have more graphics primitives but no way to render a bitmap on the screen.
+** Multiple screen support
+Allow multiple frame buffers. (Q: restrict MainConsole to fb 0?) Provide Forty words to switch the current fb. Since the graphics calls already take an fb pointer as argument, we could implement double-buffering for animation.
