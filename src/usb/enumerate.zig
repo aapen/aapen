@@ -24,7 +24,7 @@ pub fn init(alloc: Allocator) void {
 
 // Make space that is guaranteed to be aligned correctly.
 const REQUEST_BUFFER_LEN = 512;
-var ep0_request_buffer: [hub.MAX_HUBS][REQUEST_BUFFER_LEN]u8 align(HCI.DMA_ALIGNMENT) = undefined;
+var ep0_request_buffer: [hub.MAX_HUBS][hub.MAX_INTERFACES][REQUEST_BUFFER_LEN]u8 align(HCI.DMA_ALIGNMENT) = undefined;
 var setup_buffer: [hub.MAX_HUBS][hub.MAX_INTERFACES]spec.SetupPacket align(HCI.DMA_ALIGNMENT) = undefined;
 
 pub fn later(port: *hub.HubPort) !void {
@@ -43,7 +43,7 @@ pub fn enumerate(args: *anyopaque) void {
 fn initializePort(port: *hub.HubPort) !void {
     const setup = &port.setup;
 
-    const ep0_req_buf: []u8 = &ep0_request_buffer[port.parent.index];
+    const ep0_req_buf: []u8 = &ep0_request_buffer[port.parent.index][port.port];
     const ep_desc: *spec.EndpointDescriptor = &port.ep0;
 
     // Initialize the port's ep0, since we need it for the early control transfers

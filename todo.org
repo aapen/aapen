@@ -444,6 +444,7 @@ It uses a register "RSTS"
 * Other random enhancement ideas
 ** Decouple ASCII from USB keyboard input
 See https://sw.kovidgoyal.net/kitty/keyboard-protocol/ for some inspirations
+See https://github.com/Calder-Ty/ztui/tree/master/ztui-tabby for a Zig implementation
 Today we use a combo of esc-sequences, ctrl-sequences, and ascii char codes to control the display
 The HID keyboard driver could emit u32 or u64 into the input buffer, using the extra bits to encode the modifier keys and keypress/repeat/release info. REPL could perhaps use this to simply input processing.
 Serial input driver would need to do the same translation. (Including collapsing esc-sequences into single events.)
