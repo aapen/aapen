@@ -29,6 +29,7 @@ const TicketLock = synchronize.TicketLock;
 const class = @import("usb/class.zig");
 const enumerate = @import("usb/enumerate.zig");
 const hidkbd = @import("usb/hid_keyboard.zig");
+const hidmouse = @import("usb/hid_mouse.zig");
 
 pub usingnamespace @import("usb/core.zig");
 pub usingnamespace @import("usb/hub.zig");
@@ -48,6 +49,7 @@ pub fn defineModule(forth: *Forth) !void {
 
     try HCI.defineModule(forth);
     try hidkbd.defineModule(forth);
+    try hidmouse.defineModule(forth);
 }
 
 // ----------------------------------------------------------------------

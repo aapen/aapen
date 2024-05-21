@@ -19,6 +19,7 @@ const CharBuffer = @import("char_buffer.zig");
 const CharBufferConsole = @import("char_buffer_console.zig");
 const MainConsole = @import("main_console.zig");
 
+const mouse = @import("mouse.zig");
 const forty = @import("forty/forth.zig");
 const Forth = forty.Forth;
 
@@ -229,6 +230,10 @@ fn startForty(_: *anyopaque) void {
 
             disassemble.defineModule(interp) catch |err| {
                 debug.kernelError("Disassembler define module", err);
+            };
+
+            mouse.defineModule(interp) catch |err| {
+                debug.kernelError("Mouse define module", err);
             };
 
             completed = true;

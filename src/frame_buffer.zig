@@ -5,7 +5,6 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const debug = @import("debug.zig");
 
-const auto = @import("forty/auto.zig");
 const Forth = @import("forty/forth.zig").Forth;
 
 const DMA = root.HAL.DMA;
