@@ -227,6 +227,20 @@ const SDClock = struct {
     const FRQ_208: u32 = 208000000;
 };
 
+// Flags for status register.
+const StatusRegister = struct {
+    const DataInhibit: u32 = (1 << 1);
+    const CmdInhibit: u32 = (1 << 1);
+};
+
+// Flags for the control registers.
+const ControlRegister = struct {
+    const GenSel: u32 = (1 << 5);
+    const ClockEnable: u32 = (1 << 2);
+    const ClockStable: u32 = (1 << 1);
+    const ClockIntEnable: u32 = (1 << 0);
+};
+
 registers: *volatile Registers,
 interrupt_controller: *InterruptController,
 gpio: *GPIO,
@@ -887,22 +901,14 @@ fn getClockDivider(_: *Self, base_clock: u32, target_rate: u32) u32 {
     return ret;
 }
 
-const EMMC_STATUS_DAT_INHIBIT: u32 = (1 << 1);
-const EMMC_STATUS_CMD_INHIBIT: u32 = (1 << 0);
-
-const EMMC_CmdRL1_CLK_GENSEL: u32 = (1 << 5);
-const EMMC_CmdRL1_CLK_ENABLE: u32 = (1 << 2);
-const EMMC_CmdRL1_CLK_STABLE: u32 = (1 << 1);
-const EMMC_CmdRL1_CLK_INT_EN: u32 = (1 << 0);
-
 fn switchClockRate(self: *Self, base_clock: u32, target_rate: u32) bool {
     const divider: u32 = self.getClockDivider(base_clock, target_rate);
 
-    while (isNotZero(self.registers.status & (EMMC_STATUS_CMD_INHIBIT | EMMC_STATUS_DAT_INHIBIT))) {
+    while (isNotZero(self.registers.status & (StatusRegister.CmdInhibit | StatusRegister.DataInhibit))) {
         delayMillis(1);
     }
 
-    const c1: u32 = self.registers.control[1] & ~EMMC_CmdRL1_CLK_ENABLE;
+    const c1: u32 = self.registers.control[1] & ~ControlRegister.ClockEnable;
 
     self.registers.control[1] = c1;
 
@@ -912,7 +918,7 @@ fn switchClockRate(self: *Self, base_clock: u32, target_rate: u32) bool {
 
     delayMillis(3);
 
-    self.registers.control[1] = c1 | EMMC_CmdRL1_CLK_ENABLE;
+    self.registers.control[1] = c1 | ControlRegister.ClockEnable;
 
     delayMillis(3);
 
@@ -925,14 +931,14 @@ fn setupClock(self: *Self) bool {
     const rate: u32 = self.emmc_clock_rate;
 
     var n = self.registers.control[1];
-    n |= EMMC_CmdRL1_CLK_INT_EN;
+    n |= ControlRegister.ClockIntEnable;
     n |= self.getClockDivider(rate, SDClock.ID);
     n &= ~(@as(u32, 0xf) << 16);
     n |= (11 << 16);
 
     self.registers.control[1] = n;
 
-    if (!waitRegister(&self.registers.control[1], EMMC_CmdRL1_CLK_STABLE, true, 2000)) {
+    if (!waitRegister(&self.registers.control[1], ControlRegister.ClockStable, true, 2000)) {
         _ = printf("emmc: sd clock not stable\n");
         return false;
     }
