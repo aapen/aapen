@@ -1,8 +1,5 @@
 const std = @import("std");
 
-const usb = @import("../../usb.zig");
-const TransferType = usb.TransferType;
-
 pub const ChannelCharacteristics = packed struct {
     max_packet_size: u11 = 0, // 0..10
     endpoint_number: u4 = 0, // 11..14
