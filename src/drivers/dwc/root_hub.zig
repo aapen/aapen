@@ -1,23 +1,11 @@
 const std = @import("std");
 
+const time = @import("../../time.zig");
+const usb = @import("../../usb.zig");
+
 const Host = @import("../dwc_otg_usb.zig");
 
-const time = @import("../../time.zig");
-const delayMillis = time.delayMillis;
-
-const usb = @import("../../usb.zig");
-const ConfigurationDescriptor = usb.ConfigurationDescriptor;
-const DeviceConfiguration = usb.DeviceConfiguration;
-const DeviceDescriptor = usb.DeviceDescriptor;
-const DeviceStatus = usb.DeviceStatus;
-const EndpointDescriptor = usb.EndpointDescriptor;
-const InterfaceDescriptor = usb.InterfaceDescriptor;
-const StringDescriptor = usb.StringDescriptor;
-const TransferBytes = usb.TransferBytes;
-
 const reg = @import("registers.zig");
-const HostPortStatusAndControl = reg.HostPortStatusAndControl;
-const HostRegisters = reg.HostRegisters;
 
 const Self = @This();
 
@@ -26,7 +14,7 @@ const Self = @This();
 // ----------------------------------------------------------------------
 host_registers: ?*volatile reg.HostRegisters = null,
 
-root_hub_device_status: DeviceStatus = undefined,
+root_hub_device_status: usb.DeviceStatus = undefined,
 root_hub_hub_status: usb.HubStatus = undefined,
 root_hub_configuration: u8 = 1,
 
@@ -34,7 +22,7 @@ port_connect_status_changed: bool = false,
 port_enabled_changed: bool = false,
 port_overcurrent_changed: bool = false,
 
-pub fn init(self: *Self, registers: *volatile HostRegisters) void {
+pub fn init(self: *Self, registers: *volatile reg.HostRegisters) void {
     self.* = .{
         .host_registers = registers,
         .root_hub_device_status = @as(u32, 1) << usb.USB_FEATURE_SELF_POWERED,
@@ -54,8 +42,8 @@ pub fn init(self: *Self, registers: *volatile HostRegisters) void {
 // ----------------------------------------------------------------------
 // Static data
 // ----------------------------------------------------------------------
-const root_hub_device_descriptor: DeviceDescriptor = .{
-    .length = @sizeOf(DeviceDescriptor),
+const root_hub_device_descriptor: usb.DeviceDescriptor = .{
+    .length = @sizeOf(usb.DeviceDescriptor),
     .descriptor_type = usb.USB_DESCRIPTOR_TYPE_DEVICE,
     .usb_standard_compliance = 0x200,
     .device_class = usb.USB_DEVICE_HUB,
@@ -109,7 +97,7 @@ const root_hub_configuration_descriptor: RootHubConfiguration = .{
     },
 };
 
-fn mkStringDescriptor(comptime payload: []const u16) StringDescriptor {
+fn mkStringDescriptor(comptime payload: []const u16) usb.StringDescriptor {
     if (payload.len > 31) @compileError("This unit only supports string descriptors up to 31 U16's long");
 
     var body: [31]u16 = [_]u16{0} ** 31;
@@ -129,7 +117,7 @@ const root_hub_manufacturer = mkStringDescriptor(&[_]u16{ 'M', '&', 'R', ' ', 'h
 
 // The order of these items must correspond to the indexes in the
 // root_hub_device_descriptor
-const root_hub_strings = &[_]StringDescriptor{
+const root_hub_strings = &[_]usb.StringDescriptor{
     root_hub_default_language,
     root_hub_serial_number,
     root_hub_product_name,
@@ -159,7 +147,7 @@ const root_hub_hub_descriptor: RootHubDescriptor = .{
 // Hardware interaction
 // ----------------------------------------------------------------------
 
-fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) HostPortStatusAndControl {
+fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) reg.HostPortStatusAndControl {
     _ = self;
     var hw_status = host_reg.port;
 
@@ -220,19 +208,19 @@ fn hostPortReset(self: *Self) usb.URB.Status {
     regs.port = port;
 
     // wait for it to be processed
-    delayMillis(100);
+    time.delayMillis(100);
 
     // deassert the reset bit
     port.reset = 0;
     regs.port = port;
 
     // wait for it to be processed
-    delayMillis(100);
+    time.delayMillis(100);
 
     // we should see enabled go high within a short time.
     const enable_wait_end = time.deadlineMillis(200);
     while (regs.port.enabled == 0 and time.ticks() < enable_wait_end) {
-        delayMillis(10);
+        time.delayMillis(10);
     }
 
     if (regs.port.enabled == 0) {
