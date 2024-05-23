@@ -632,6 +632,16 @@ finish
   'hello header.name + @ "hello" s= "Struct offsets" assert clear
 ;
 
+: countdown-with-recur
+  dup if dup dec recur endif
+;
+
+: test-recur
+  "recur ." s.
+  100 countdown-with-recur 0 = "Recur" assert clear
+;
+
+
 (Retro startup!)
 
 c64-colors
@@ -646,6 +656,7 @@ cls
   test-constants
   test-structures
   test-create
+  test-recur
   "Done" s. cr
 ;
 

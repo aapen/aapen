@@ -153,6 +153,20 @@ pub fn wordReturn(forth: *Forth, _: *Header) ForthError!void {
     try forth.addOpCode(OpCode.Return);
 }
 
+// Compiler word, generate the code for recur.
+// Emits a jump back to the start of the current word,
+// doesn't change any stacks.
+pub fn wordRecur(forth: *Forth, _: *Header) ForthError!void {
+    try forth.assertCompiling();
+    if (forth.new_word) |new_word| {
+        const start_p = new_word.bodyPointer();
+        try forth.addOpCode(OpCode.Jump);
+        const current_p = memory.alignByType(forth.current(), u64);
+        const offset = wordOffset(start_p, current_p) + 1;
+        try forth.addNumber(@bitCast(offset));
+    }
+}
+
 // Compiler word, generate the code for an if.
 // Emits an jump_if_not instruction with an invalid target address
 // and pushes the address of the target address onto the istack.
@@ -306,6 +320,7 @@ pub fn defineCompiler(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc(":", " -- :Start a new word definition", &wordColon, false);
     _ = try forth.definePrimitiveDesc(";", " -- :Complete a new word definition", &wordSemi, true);
     _ = try forth.definePrimitiveDesc("return", " -- :Return from word", &wordReturn, true);
+    _ = try forth.definePrimitiveDesc("recur", " -- :Jump to the top of current word", &wordRecur, true);
 
     _ = try forth.definePrimitiveDesc("{", " -- : Temp turn off compile mode.", &wordLBrace, true);
     _ = try forth.definePrimitiveDesc("}", " -- : Turn compile mode back on", &wordRBrace, true);

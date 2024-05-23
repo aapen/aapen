@@ -95,6 +95,15 @@ pub fn wordStack(forth: *Forth, _: *Header) ForthError!void {
 }
 
 /// --
+pub fn wordCallStack(forth: *Forth, _: *Header) ForthError!void {
+    try forth.print("Call Stack: ", .{});
+    for (forth.call_stack.items()) |item| {
+        try forth.print("{}\t", .{item});
+    }
+    try forth.print("\n", .{});
+}
+
+/// --
 pub fn wordDictionary(forth: *Forth, _: *Header) ForthError!void {
     try listDictionary(forth, "");
 }
@@ -185,6 +194,7 @@ pub fn defineInspect(forth: *Forth) !void {
     _ = try forth.definePrimitiveDesc("tdump", "addr len -- : Dump an arbitrary area of memory as text", &wordTDump, false);
 
     _ = try forth.definePrimitiveDesc("?stack", " -- :Print the stack.", &wordStack, false);
+    _ = try forth.definePrimitiveDesc("?call-stack", " -- :Print the call stack.", &wordCallStack, false);
     _ = try forth.definePrimitiveDesc("?", " -- :Print description of word.", &wordDesc, false);
     _ = try forth.definePrimitiveDesc("??", " -- :Print the dictionary.", &wordDictionary, false);
     _ = try forth.definePrimitiveDesc("???", " -- :Print dictionary words that begin with...", &wordDictionaryFilter, false);
