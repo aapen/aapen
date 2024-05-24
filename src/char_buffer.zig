@@ -7,8 +7,7 @@ const FrameBuffer = @import("frame_buffer.zig");
 
 const Forth = @import("forty/forth.zig");
 
-const RichChar = @import("rich_char.zig").RichChar;
-
+const RichChar = @import("rich_char.zig");
 const Rectangle = @import("rectangle.zig");
 
 pub const DEFAULT_FOREGROUND: u8 = 0x01;

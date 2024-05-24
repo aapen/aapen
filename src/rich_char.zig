@@ -1,21 +1,19 @@
 const std = @import("std");
 
-const FrameBuffer = @import("frame_buffer.zig");
+const Self = @This();
 
-pub const RichChar = struct {
-    ch: u8,
-    fg: u8,
-    bg: u8,
+ch: u8,
+fg: u8,
+bg: u8,
 
-    pub fn init(ch: u8, fg: u8, bg: u8) RichChar {
-        return RichChar{
-            .ch = ch,
-            .fg = fg,
-            .bg = bg,
-        };
-    }
+pub fn init(ch: u8, fg: u8, bg: u8) Self {
+    return .{
+        .ch = ch,
+        .fg = fg,
+        .bg = bg,
+    };
+}
 
-    pub inline fn isWhitespace(self: *const RichChar) bool {
-        return std.ascii.isWhitespace(self.ch);
-    }
-};
+pub inline fn isWhitespace(self: *const Self) bool {
+    return std.ascii.isWhitespace(self.ch);
+}
