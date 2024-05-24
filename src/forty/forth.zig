@@ -358,7 +358,7 @@ pub fn complete(this: *Forth) void {
 // Allocate some memory, starting on the given alignment.
 // Return a pointer to the start of the memory.
 // Intended for use between create and complete.
-pub fn allocate(this: *Forth, alignment: usize, n: usize) ![*]u8 {
+pub fn allocate(this: *Forth, comptime alignment: usize, n: usize) ![*]u8 {
     return this.memory.allocate(alignment, n);
 }
 
@@ -508,7 +508,7 @@ pub fn addScalar(this: *Forth, comptime T: type, s: T) !*T {
 }
 
 // Copy n bytes with the given alignment into memory.
-pub fn addBytes(this: *Forth, src: [*]const u8, alignment: usize, n: usize) !void {
+pub fn addBytes(this: *Forth, src: [*]const u8, comptime alignment: usize, n: usize) !void {
     _ = try this.memory.addBytes(@constCast(src), alignment, n);
 }
 

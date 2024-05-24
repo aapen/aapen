@@ -47,12 +47,12 @@ pub fn alignByType(p: [*]u8, comptime T: type) [*]u8 {
     return alignBy(p, @alignOf(T));
 }
 
-pub fn alignBy(p: [*]u8, alignment: usize) [*]u8 {
+pub fn alignBy(p: [*]u8, comptime alignment: usize) [*]u8 {
     const i: usize = @intFromPtr(p);
     return @ptrFromInt(intAlignBy(i, alignment));
 }
 
-pub fn intAlignBy(i: u64, alignment: usize) u64 {
+pub fn intAlignBy(i: u64, comptime alignment: usize) u64 {
     const words = (i + alignment - 1) / alignment;
     return words * alignment;
 }
@@ -89,7 +89,7 @@ pub const Memory = struct {
 
     // Allocate some memory, ensuring that the start is aligned.
     // Returns a pointer to the number in memory.
-    pub fn allocate(this: *Memory, alignment: usize, n: usize) ![*]u8 {
+    pub fn allocate(this: *Memory, comptime alignment: usize, n: usize) ![*]u8 {
         _ = try this.checkForSpace(n);
         this.current = alignBy(this.current, alignment);
         const result = this.current;
@@ -123,7 +123,7 @@ pub const Memory = struct {
     // Copy n bytes into the current location of memory with the given alignment.
     // Moves the current pointer past the newly copied data and returns the
     // beginning address of the newly copied data.
-    pub fn addBytes(this: *Memory, src: [*]u8, alignment: usize, n: usize) ![*]u8 {
+    pub fn addBytes(this: *Memory, src: [*]u8, comptime alignment: usize, n: usize) ![*]u8 {
         this.current = alignBy(this.current, alignment);
         const result = this.current;
         this.current = try this.rawAddBytes(src, n);
