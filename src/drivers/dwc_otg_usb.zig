@@ -15,39 +15,17 @@ const arch = @import("../architecture.zig");
 const cpu = arch.cpu;
 
 const atomic = @import("../atomic.zig");
-
 const debug = @import("../debug.zig");
-
 const ChannelSet = @import("../channel_set.zig");
-
 const Forth = @import("../forty/forth.zig").Forth;
-
 const Logger = @import("../logger.zig");
 pub var log: *Logger = undefined;
 
-const memory = @import("../memory.zig");
-const AddressTranslation = memory.AddressTranslation;
-const AddressTranslations = memory.AddressTranslations;
-const toChild = memory.toChild;
-const toParent = memory.toParent;
-
 const schedule = @import("../schedule.zig");
-
 const semaphore = @import("../semaphore.zig");
-
 const synchronize = @import("../synchronize.zig");
-const OneShot = synchronize.OneShot;
-const TicketLock = synchronize.TicketLock;
-
 const time = @import("../time.zig");
-
 const usb = @import("../usb.zig");
-const SetupPacket = usb.SetupPacket;
-const TransferBytes = usb.TransferBytes;
-const TransferType = usb.TransferType;
-const UsbSpeed = usb.UsbSpeed;
-const USB_FRAMES_PER_MS = usb.FRAMES_PER_MS;
-const USB_UFRAMES_PER_MS = usb.UFRAMES_PER_MS;
 
 const reg = @import("dwc/registers.zig");
 const RootHub = @import("dwc/root_hub.zig");
@@ -136,7 +114,7 @@ const power: *volatile PowerAndClock = @ptrFromInt(register_base + 0xe00);
 var power_controller: *PowerController = undefined;
 
 var driver_thread: schedule.TID = schedule.NO_TID;
-var shutdown_signal: OneShot = .{};
+var shutdown_signal: synchronize.OneShot = .{};
 
 var root_hub: RootHub = .{};
 pub const root_hub_hub_descriptor = RootHub.root_hub_hub_descriptor_base;
@@ -637,17 +615,9 @@ pub fn isAligned(ptr: [*]u8) bool {
 // Transfer interface - high level
 // ----------------------------------------------------------------------
 
-fn calculatePacketCount2(input_size: TransferBytes, ep_addr: u8, mps: usb.PacketSize, size_out: *TransferBytes) usb.TransferPackets {
-    const txsize = calculatePacketCount(input_size, @truncate((ep_addr >> 7) & 0x1), mps);
-    size_out.* = txsize.size;
-    return txsize.packet_count;
-}
-
-fn calculatePacketCount(input_size_in: TransferBytes, ep_dir: u1, ep_mps: usb.PacketSize) TransferSize {
-    _ = ep_dir;
-
+fn calculatePacketCount(input_size_in: usb.TransferBytes, mps: usb.PacketSize, size_out: *usb.TransferBytes) usb.TransferPackets {
     var input_size = input_size_in;
-    var num_packets: u32 = (input_size + ep_mps - 1) / ep_mps;
+    var num_packets: u32 = (input_size + mps - 1) / mps;
 
     if (num_packets > 256) {
         num_packets = 256;
@@ -657,16 +627,8 @@ fn calculatePacketCount(input_size_in: TransferBytes, ep_dir: u1, ep_mps: usb.Pa
         num_packets = 1;
     }
 
-    // if (ep_dir == usb.USB_ENDPOINT_DIRECTION_IN) {
-    //     input_size = @truncate(num_packets * ep_mps);
-    // }
-
-    return TransferSize{
-        .packet_count = @truncate(num_packets),
-        .size = input_size,
-        .packet_id = DwcTransferSizePid.data1,
-        .do_ping = 0,
-    };
+    size_out.* = input_size;
+    return @truncate(num_packets);
 }
 
 // ----------------------------------------------------------------------
@@ -905,7 +867,7 @@ pub fn submitUrb(urb: *usb.URB) Error!usb.URB.Status {
 fn controlUrbInit(
     chan: *Channel,
     urb: *usb.URB,
-    setup: *SetupPacket,
+    setup: *usb.SetupPacket,
     transfer_buffer: ?[*]u8,
     transfer_buffer_length: usb.TransferBytes,
 ) void {
@@ -915,27 +877,27 @@ fn controlUrbInit(
 
     switch (chan.ep0_state) {
         .Setup => {
-            chan.packet_count = calculatePacketCount2(8, 0x00, ep_mps, &chan.transfer_length);
+            chan.packet_count = calculatePacketCount(8, ep_mps, &chan.transfer_length);
             channelInit(chan, urb.port.device_address, 0x00, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
             channelTransfer(chan, 0x00, std.mem.asBytes(setup), chan.transfer_length, chan.packet_count, DwcTransferSizePid.setup);
         },
         .DataIn => {
-            chan.packet_count = calculatePacketCount2(setup.data_size, 0x80, ep_mps, &chan.transfer_length);
+            chan.packet_count = calculatePacketCount(setup.data_size, ep_mps, &chan.transfer_length);
             channelInit(chan, urb.port.device_address, 0x80, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
             channelTransfer(chan, 0x80, transfer_buffer, chan.transfer_length, chan.packet_count, DwcTransferSizePid.data1);
         },
         .DataOut => {
-            chan.packet_count = calculatePacketCount2(setup.data_size, 0x00, ep_mps, &chan.transfer_length);
+            chan.packet_count = calculatePacketCount(setup.data_size, ep_mps, &chan.transfer_length);
             channelInit(chan, urb.port.device_address, 0x00, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
             channelTransfer(chan, 0x00, transfer_buffer, chan.transfer_length, chan.packet_count, DwcTransferSizePid.data1);
         },
         .StatusIn => {
-            chan.packet_count = calculatePacketCount2(0, 0x80, ep_mps, &chan.transfer_length);
+            chan.packet_count = calculatePacketCount(0, ep_mps, &chan.transfer_length);
             channelInit(chan, urb.port.device_address, 0x80, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
             channelTransfer(chan, 0x80, null, chan.transfer_length, chan.packet_count, DwcTransferSizePid.data1);
         },
         .StatusOut => {
-            chan.packet_count = calculatePacketCount2(0, 0x00, ep_mps, &chan.transfer_length);
+            chan.packet_count = calculatePacketCount(0, ep_mps, &chan.transfer_length);
             channelInit(chan, urb.port.device_address, 0x00, usb.USB_ENDPOINT_TYPE_CONTROL, ep_mps, urb.port.speed);
             channelTransfer(chan, 0x00, null, chan.transfer_length, chan.packet_count, DwcTransferSizePid.data1);
         },
@@ -950,7 +912,7 @@ fn bulkOrInterruptUrbInit(
     transfer_buffer_length: usb.TransferBytes,
 ) void {
     const ep_mps = urb.ep.getMaxPacketSize();
-    chan.packet_count = calculatePacketCount2(transfer_buffer_length, urb.ep.endpoint_address, ep_mps, &chan.transfer_length);
+    chan.packet_count = calculatePacketCount(transfer_buffer_length, ep_mps, &chan.transfer_length);
 
     const hc_pid = if (urb.data_toggle == 0) DwcTransferSizePid.data0 else DwcTransferSizePid.data1;
 
