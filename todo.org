@@ -499,8 +499,3 @@ Allow multiple frame buffers. (Q: restrict MainConsole to fb 0?) Provide Forty w
 - InputBuffer becomes a ring of u16.
 - CharBufferConsole.emit goes away.
 - MainConsole probably goes away entirely.
-- Serial becomes abstract, needs to be supplied with a writech function.
-- new directory term/
-  - term/out.zig - abstract writer
-  - term/uart.zig - implements out, uses root.hal.uart to send chars
-  - term/vt220.zig - implements out, translates \n and \? 

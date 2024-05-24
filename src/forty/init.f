@@ -308,7 +308,6 @@ finish
   if
     dup history-add
   endif
-  dup s~
   cr
   eval-command
   emit-prompt

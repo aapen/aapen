@@ -9,7 +9,6 @@ const auto = @import("forty/auto.zig");
 
 const CharBufferConsole = @import("char_buffer_console.zig");
 const InputBuffer = @import("input_buffer.zig");
-const Readline = @import("readline.zig");
 
 const Self = @This();
 
@@ -59,36 +58,6 @@ pub fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     try self.writer().print(fmt, args);
 }
 
-pub fn readLine(self: *Self, prompt: []const u8, buffer: []u8) usize {
-    var i: usize = 0;
-    var ch: u8 = 0;
-    var echo: bool = true;
-
-    self.char_buffer_console.emitString(prompt);
-
-    while (i < (buffer.len - 1) and !newline(ch)) {
-        echo = true;
-        ch = self.getc();
-
-        switch (ch) {
-            0x7f => if (i > 0) {
-                i -= 1;
-            } else {
-                echo = false;
-            },
-            else => {
-                buffer[i] = ch;
-                i += 1;
-            },
-        }
-        if (echo) {
-            self.putc(ch);
-        }
-        buffer[i] = 0;
-    }
-    return i;
-}
-
 pub fn getc(self: *Self) u8 {
     _ = self;
     const ch = InputBuffer.read();
@@ -96,22 +65,7 @@ pub fn getc(self: *Self) u8 {
 }
 
 pub fn putc(self: *Self, ch: u8) void {
-    switch (ch) {
-        '\n' => {
-            _ = term.putch('\r');
-            _ = term.putch('\n');
-        },
-        0x7f => {
-            _ = term.putch(0x08);
-            _ = term.putch(' ');
-            _ = term.putch(0x08);
-        },
-        else => {
-            if (std.ascii.isPrint(ch)) {
-                _ = term.putch(ch);
-            }
-        },
-    }
+    term.putch(ch);
     self.char_buffer_console.emit(ch);
 }
 
@@ -122,13 +76,4 @@ pub fn char_available(self: *Self) bool {
 
 fn newline(ch: u8) bool {
     return ch == '\r' or ch == '\n';
-}
-
-fn readLineThunk(ctx: *anyopaque, prompt: []const u8, buffer: []u8) Readline.Error!usize {
-    var console: *Self = @ptrCast(@alignCast(ctx));
-    return console.readLine(prompt, buffer);
-}
-
-pub fn createReader(allocator: Allocator, console: *Self) !*Readline {
-    return Readline.init(allocator, console, readLineThunk);
 }

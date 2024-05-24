@@ -4,11 +4,13 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 
 const root = @import("root");
 const term = @import("../term.zig");
+const ascii = @import("../ascii.zig");
+const schedule = @import("../schedule.zig");
 
 const MainConsole = @import("../main_console.zig");
 const CharBuffer = @import("../char_buffer.zig");
-const Readline = @import("../readline.zig");
-const buffer = @import("buffer.zig");
+const InputBuffer = @import("../input_buffer.zig");
+const FileBuffer = @import("file_buffer.zig");
 
 const auto = @import("auto.zig");
 const stack = @import("stack.zig");
@@ -34,10 +36,6 @@ const isOpCode = inner_module.isOpCode;
 const history = @import("history.zig");
 const History = history.History;
 
-pub const init_f = @embedFile("init.f");
-var initBuffer = buffer.BufferSource{};
-
-const InputStack = stack.Stack(*Readline);
 const DataStack = stack.Stack(u64);
 const IntermediateStack = stack.Stack(u64);
 const CallStack = stack.Stack(u64);
@@ -58,7 +56,6 @@ pub const Forth = struct {
     stack: DataStack = undefined,
     istack: IntermediateStack = undefined,
     call_stack: CallStack = undefined,
-    input: InputStack = undefined,
     buffer: []u8 = undefined,
     history: History = undefined,
     ibase: u64 = 10,
@@ -68,8 +65,9 @@ pub const Forth = struct {
     last_word: ?*Header = null,
     new_word: ?*Header = null,
     compiling: u64 = 0,
-    line_buffer: *string.LineBuffer = undefined,
     words: ForthTokenIterator = undefined,
+    source_buffer: ?[]u8 = null,
+    current_file_buffer: FileBuffer = undefined,
 
     pub fn init(this: *Forth, a: Allocator, c: *MainConsole, cb: *CharBuffer) !void {
         this.ibase = 10;
@@ -87,8 +85,8 @@ pub const Forth = struct {
         this.call_stack = CallStack.init(&a);
         this.buffer = try a.alloc(u8, MemSize); // TBD make size a parameter.
         this.memory = Memory.init(this.buffer.ptr, this.buffer.len);
-        this.line_buffer = try a.create(string.LineBuffer);
         this.history = History.init(a, 15);
+        this.current_file_buffer = FileBuffer.init(@embedFile("init.f"));
 
         _ = try this.defineBuffer("cmd-buffer", 20);
         try this.defineConstant("inner", @intFromPtr(&inner));
@@ -102,14 +100,6 @@ pub const Forth = struct {
         try core.defineCore(this);
         try inspect.defineInspect(this);
         try interop.defineInterop(this);
-
-        initBuffer.init(init_f);
-        const initBufferReader = try buffer.createReader(a, &initBuffer);
-        const consoleReader = try MainConsole.createReader(a, c);
-
-        this.input = InputStack.init(&a);
-        try this.pushSource(consoleReader);
-        try this.pushSource(initBufferReader);
     }
 
     pub fn deinit(this: *Forth) !void {
@@ -391,7 +381,7 @@ pub const Forth = struct {
     }
 
     // Evaluate a command, a string containing zero or more words.
-    pub fn evalCommand(this: *Forth, cmd: []const u8) !void {
+    pub fn evalCommand(this: *Forth, cmd: []const u8) void {
         const savedWords = this.words;
         defer {
             this.words = savedWords;
@@ -403,9 +393,10 @@ pub const Forth = struct {
         while (word != null) : (word = this.words.next()) {
             if (word) |w| {
                 this.evalToken(w) catch |err| {
-                    try this.print("error: {s} {any}\n", .{ w, err });
+                    this.print("error: {s} {any}\n", .{ w, err }) catch {};
                     this.reset() catch {
-                        try this.print("Not looking good, can't reset Forth!\n", .{});
+                        this.print("Not looking good, can't reset Forth!\n", .{}) catch {};
+                        schedule.exit();
                     };
                     break;
                 };
@@ -548,7 +539,7 @@ pub const Forth = struct {
         try this.console.print(fmt, args);
     }
 
-    pub fn emit(this: *Forth, ch: u8) !void {
+    pub fn emit(this: *Forth, ch: u8) void {
         this.console.putc(ch);
     }
 
@@ -560,53 +551,75 @@ pub const Forth = struct {
 
     pub fn write(self: *Forth, bytes: []const u8) !usize {
         for (bytes) |ch| {
-            try self.emit(ch);
+            self.emit(ch);
         }
         return bytes.len;
     }
 
-    fn readline(this: *Forth) !usize {
-        var source = try this.input.peek();
-        return source.read("OK>> ", this.line_buffer);
-    }
-
-    fn popSource(this: *Forth) !void {
-        if (this.input.items().len > 1) {
-            _ = try this.input.pop();
+    fn prompt(this: *Forth) void {
+        if (!this.current_file_buffer.hasMore()) {
+            _ = this.console.write("OK>> ") catch {};
         }
     }
 
-    fn pushSource(this: *Forth, rl: *Readline) !void {
-        try this.input.push(rl);
+    fn read(this: *Forth) u8 {
+        if (this.current_file_buffer.hasMore()) {
+            return this.current_file_buffer.read();
+        } else {
+            return InputBuffer.read();
+        }
+    }
+
+    fn echo(this: *Forth, ch: u8) void {
+        if (!this.current_file_buffer.hasMore()) {
+            this.emit(ch);
+        }
     }
 
     pub fn repl(this: *Forth) !void {
-        // outer loop, one line at a time.
-        while (true) {
-            this.begin();
-            if (this.readline()) |line_len| {
-                this.words = ForthTokenIterator.init(this.line_buffer[0..line_len]);
+        const MaxLineLen = 256;
+        var line_buffer: [MaxLineLen:0]u8 = undefined;
+        var line_len: usize = 0;
 
-                // inner loop, one word at a time.
-                var word = this.words.next();
-                while (word != null) : (word = this.words.next()) {
-                    if (word) |w| {
-                        this.evalToken(w) catch |err| {
-                            try this.print("error: {s} {any}\n", .{ w, err });
-                            this.reset() catch {
-                                try this.print("Not looking good, can't reset Forth!\n", .{});
-                            };
-                            break;
-                        };
+        // outer loop, one line at a time.
+        this.begin();
+        this.prompt();
+
+        while (true) {
+            const ch = this.read();
+
+            switch (ch) {
+                ascii.CR,
+                ascii.NL,
+                => {
+                    line_buffer[line_len] = 0;
+                    this.evalCommand(line_buffer[0..line_len]);
+                    this.end();
+                    this.begin();
+                    this.prompt();
+                    line_len = 0;
+                },
+                ascii.DEL,
+                ascii.BS,
+                => {
+                    if (line_len > 0) {
+                        if (line_len < MaxLineLen) {
+                            line_buffer[line_len] = 0;
+                        }
+                        line_len -= 1;
+                        this.echo(ascii.DEL);
                     }
-                }
-            } else |err| {
-                switch (err) {
-                    Readline.Error.EOF => try this.popSource(),
-                    else => return err,
-                }
+                },
+                else => {
+                    if (line_len + 1 >= MaxLineLen) {
+                        try this.print("line too long\n", .{});
+                    } else {
+                        this.echo(ch);
+                        line_buffer[line_len] = ch;
+                        line_len += 1;
+                    }
+                },
             }
-            this.end();
         }
     }
 };

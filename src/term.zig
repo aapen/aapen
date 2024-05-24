@@ -1,6 +1,7 @@
 const std = @import("std");
 const root = @import("root");
 const HalUart = root.HAL.Uart;
+const ascii = @import("ascii.zig");
 const synchronize = @import("synchronize.zig");
 
 // ----------------------------------------------------------------------
@@ -21,11 +22,18 @@ const Vt220 = struct {
     uart: Uart,
 
     pub fn out(self: *Self, ch: u8) void {
-        if (ch == '\n') {
-            self.uart.out('\r');
+        switch (ch) {
+            ascii.NL => {
+                self.uart.out(ascii.CR);
+                self.uart.out(ascii.NL);
+            },
+            ascii.DEL => {
+                self.uart.out(ascii.BS);
+                self.uart.out(ascii.SPACE);
+                self.uart.out(ascii.BS);
+            },
+            else => self.uart.out(ch),
         }
-
-        self.uart.out(ch);
     }
 };
 

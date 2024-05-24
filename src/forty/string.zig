@@ -3,9 +3,6 @@ const ForthError = @import("errors.zig").ForthError;
 
 const Allocator = std.mem.Allocator;
 
-pub const MaxLineLen = 256;
-pub const LineBuffer = [MaxLineLen:0]u8;
-
 pub fn newline(ch: u8) bool {
     return ch == '\r' or ch == '\n';
 }

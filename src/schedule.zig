@@ -228,6 +228,10 @@ pub fn ready(tid: TID, resched: bool) !void {
     }
 }
 
+pub fn exit() void {
+    kill(current);
+}
+
 pub fn kill(tid: TID) void {
     log.debug(@src(), "kill tid {d}, current is {d}", .{ tid, current });
 

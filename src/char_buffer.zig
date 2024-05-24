@@ -7,7 +7,6 @@ const FrameBuffer = @import("frame_buffer.zig");
 
 const Forth = @import("forty/forth.zig").Forth;
 
-const Readline = @import("readline.zig");
 const RichChar = @import("rich_char.zig").RichChar;
 
 const Rectangle = @import("rectangle.zig").Rectangle;

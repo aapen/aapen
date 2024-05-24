@@ -40,7 +40,7 @@ pub fn wordEval(forth: *Forth, _: *Header) ForthError!void {
 pub fn wordEvalCommand(forth: *Forth, _: *Header) ForthError!void {
     const pStr: [*]u8 = try forth.popAs([*]u8);
     const token = string.asSlice(pStr);
-    try forth.evalCommand(token);
+    forth.evalCommand(token);
 }
 
 /// *[]u8  --  <results>
