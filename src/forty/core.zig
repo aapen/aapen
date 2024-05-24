@@ -13,8 +13,8 @@ const parser = @import("parser.zig");
 const Forth = @import("forth.zig");
 const WordFunction = Forth.WordFunction;
 
-const memory_module = @import("memory.zig");
-const Header = memory_module.Header;
+const Memory = @import("memory.zig");
+const Header = Memory.Header;
 
 const inner_module = @import("inner.zig");
 const OpCode = inner_module.OpCode;

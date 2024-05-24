@@ -18,8 +18,8 @@ const WordFunction = Forth.WordFunction;
 const formatText = std.fmt.formatText;
 const FormatOptions = std.fmt.FormatOptions;
 
-const memory_module = @import("memory.zig");
-const Header = memory_module.Header;
+const Memory = @import("memory.zig");
+const Header = Memory.Header;
 
 const inner_module = @import("inner.zig");
 const inner = inner_module.inner;

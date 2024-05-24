@@ -2,7 +2,8 @@ const std = @import("std");
 const root = @import("root");
 
 const Forth = @import("forty/forth.zig");
-const Header = @import("forty/memory.zig").Header;
+const Memory = @import("forty/memory.zig");
+const Header = Memory.Header;
 const ForthError = @import("forty/errors.zig").ForthError;
 
 // ----------------------------------------------------------------------

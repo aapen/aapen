@@ -23,10 +23,9 @@ const inspect = @import("inspect.zig");
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
-const memory_module = @import("memory.zig");
-const Header = memory_module.Header;
-const Memory = memory_module.Memory;
-const intAlignBy = memory_module.intAlignBy;
+const Memory = @import("memory.zig");
+const Header = Memory.Header;
+const intAlignBy = Memory.intAlignBy;
 
 const inner_module = @import("inner.zig");
 const inner = inner_module.inner;

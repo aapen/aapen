@@ -3,12 +3,9 @@ const std = @import("std");
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
 
-const memory = @import("memory.zig");
-
 const Forth = @import("forth.zig");
-
-const memory_module = @import("memory.zig");
-const Header = memory_module.Header;
+const Memory = @import("memory.zig");
+const Header = Memory.Header;
 
 pub fn defineNamespace(comptime Module: type, exports: anytype, forth: *Forth) !void {
     const exports_type_info = @typeInfo(@TypeOf(exports));

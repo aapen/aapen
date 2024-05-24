@@ -7,8 +7,8 @@ const memory = @import("memory.zig");
 
 const Forth = @import("forth.zig");
 
-const memory_module = @import("memory.zig");
-const Header = memory_module.Header;
+const Memory = @import("memory.zig");
+const Header = Memory.Header;
 
 fn invokeF(comptime FuncT: type, comptime pushResult: bool, forth: *Forth) ForthError!void {
     const f = try forth.stack.pop();

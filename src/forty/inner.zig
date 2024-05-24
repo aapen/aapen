@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const memory_module = @import("memory.zig");
-const Header = memory_module.Header;
 const Forth = @import("forth.zig");
+const Memory = @import("memory.zig");
+const Header = Memory.Header;
 
 const errors = @import("errors.zig");
 const ForthError = errors.ForthError;
