@@ -33,8 +33,7 @@ const inner = inner_module.inner;
 const OpCode = inner_module.OpCode;
 const isOpCode = inner_module.isOpCode;
 
-const history = @import("history.zig");
-const History = history.History;
+const History = @import("history.zig");
 
 const WordStack = stack.Stack(u64);
 
