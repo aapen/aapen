@@ -1,10 +1,17 @@
 const Forth = @import("forty/forth.zig").Forth;
+const memory = @import("forty/memory.zig");
+const errors = @import("forty/errors.zig");
+
 const fb = @import("frame_buffer.zig");
 
 pub fn defineModule(forth: *Forth) !void {
-    try forth.defineConstant("mouse-x", @intFromPtr(&x));
-    try forth.defineConstant("mouse-y", @intFromPtr(&y));
-    try forth.defineConstant("mouse-buttons", @intFromPtr(&buttons));
+    _ = try forth.definePrimitiveDesc("mouse", "-- btns y x : get mouse state", info, false);
+}
+
+pub fn info(forth: *Forth, _: *memory.Header) errors.ForthError!void {
+    try forth.stack.push(buttons);
+    try forth.stack.push(@max(0, y));
+    try forth.stack.push(@max(0, x));
 }
 
 pub var x_max: i32 = @intCast(fb.DEFAULT_X_RESOLUTION);
