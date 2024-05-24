@@ -15,11 +15,11 @@ fn basicStackOperation() !void {
     const allocator = root.os.heap.page_allocator;
 
     const DStack = Stack(i32);
-    var dstack = DStack.init(&allocator);
+    var dstack = DStack.init(allocator);
     defer dstack.deinit();
 
     const RStack = Stack(u16);
-    var rstack = RStack.init(&allocator);
+    var rstack = RStack.init(allocator);
     defer rstack.deinit();
 
     for (0..7) |i| {
