@@ -10,7 +10,7 @@ const TicketLock = synchronize.TicketLock;
 // Private
 // ----------------------------------------------------------------------
 
-var serial_lock = TicketLock.init("serial output", false);
+var serial_lock: TicketLock("serial output") = .{ .enabled = false };
 
 // ----------------------------------------------------------------------
 // Low level interface

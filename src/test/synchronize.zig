@@ -10,7 +10,7 @@ pub fn testBody() !void {
 }
 
 fn ticketLock() !void {
-    var lock: TicketLock = TicketLock.init("test ticket", true);
+    var lock: TicketLock("test ticket") = .{};
 
     lock.acquire();
     defer lock.release();

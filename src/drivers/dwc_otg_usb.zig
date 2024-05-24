@@ -23,7 +23,6 @@ pub var log: *Logger = undefined;
 const schedule = @import("../schedule.zig");
 const semaphore = @import("../semaphore.zig");
 const synchronize = @import("../synchronize.zig");
-const AllocationSet = synchronize.AllocationSet;
 const time = @import("../time.zig");
 const usb = @import("../usb.zig");
 
@@ -566,7 +565,7 @@ const Channel = struct {
     }
 };
 
-var channel_assignments: AllocationSet("dwc_otg_usb channels", u5, dwc_max_channels) = .{};
+var channel_assignments: synchronize.AllocationSet("dwc_otg_usb channels", u5, dwc_max_channels) = .{};
 var channel_buffers: [dwc_max_channels][1024]u8 align(DMA_ALIGNMENT) = [_][1024]u8{.{0} ** 1024} ** dwc_max_channels;
 var channel_pool: [dwc_max_channels]Channel = undefined;
 

@@ -204,7 +204,7 @@ pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, return_addr: ?us
 
 const mring_space_bytes = 1024 * 1024;
 pub var mring_storage: [mring_space_bytes]u8 = undefined;
-var mring_spinlock: TicketLock = TicketLock.init("kernel_message_ring", true);
+var mring_spinlock: TicketLock("kernel_message_ring") = .{};
 var ring: RingBuffer = undefined;
 
 fn initMring() void {

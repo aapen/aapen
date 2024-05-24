@@ -16,7 +16,6 @@ const toChild = memory.toChild;
 const toParent = memory.toParent;
 
 const synchronize = @import("../synchronize.zig");
-const AllocationSet = synchronize.AllocationSet;
 
 const Self = @This();
 
@@ -131,7 +130,7 @@ const ChannelRegisters = extern struct {
 const ChannelId = u5;
 
 const max_channel_id: ChannelId = 14;
-const DmaChannels = AllocationSet("bcm_dma channels", u5, max_channel_id);
+const DmaChannels = synchronize.AllocationSet("bcm_dma channels", u5, max_channel_id);
 
 //    clock: *Clock = undefined,
 allocator: Allocator,

@@ -23,7 +23,7 @@ const string = @import("forty/string.zig");
 
 const schedule = @import("schedule.zig");
 
-const Lock = @import("synchronize.zig").TicketLock;
+const TicketLock = @import("synchronize.zig").TicketLock;
 
 const Logger = @This();
 
@@ -39,7 +39,7 @@ pub const Level = enum {
 const Loggers = std.StringHashMap(*Logger);
 
 var initialized: bool = false;
-var init_lock: Lock = Lock.init("log_init", true);
+var init_lock: TicketLock("log_init") = .{};
 var all_loggers: Loggers = undefined;
 
 pub var allocator: std.mem.Allocator = undefined;
@@ -51,7 +51,7 @@ level: Level = .info,
 prefix: ?[]const u8 = null,
 
 /// Lock to prevent corrupted logs
-lock: Lock = undefined,
+lock: TicketLock("logging_lock") = .{},
 
 pub fn init(prefix: []const u8, level: Level) *Logger {
     init_lock.acquire();
@@ -70,7 +70,6 @@ pub fn init(prefix: []const u8, level: Level) *Logger {
     self.* = .{
         .prefix = prefix,
         .level = level,
-        .lock = Lock.init(prefix, true),
     };
     all_loggers.put(prefix, self) catch unreachable;
 

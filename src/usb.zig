@@ -22,8 +22,6 @@ const semaphore = @import("semaphore.zig");
 const SID = semaphore.SID;
 
 const synchronize = @import("synchronize.zig");
-const AllocationSet = synchronize.AllocationSet;
-const TicketLock = synchronize.TicketLock;
 
 const class = @import("usb/class.zig");
 const enumerate = @import("usb/enumerate.zig");
@@ -65,11 +63,11 @@ pub var devices: [MAX_DEVICES]Self.Device = init: {
     }
     break :init initial_value;
 };
-var devices_allocated: AllocationSet("devices", Self.DeviceAddress, MAX_DEVICES) = .{};
+var devices_allocated: synchronize.AllocationSet("devices", Self.DeviceAddress, MAX_DEVICES) = .{};
 
 var allocator: std.mem.Allocator = undefined;
 pub var root_hub: *Self.Hub = undefined;
-var bus_lock: TicketLock = undefined;
+var bus_lock: synchronize.TicketLock("bus lock") = .{};
 
 const root_hub_default_endpoint = Self.Endpoint{
     .ep_desc = .{
@@ -90,8 +88,6 @@ pub fn init() !void {
     allocator = root.kernel_allocator;
     Self.initCore(allocator);
     enumerate.init(allocator);
-
-    bus_lock = TicketLock.init("usb bus", true);
 }
 
 // `initialize` activates the hardware and does the initial port scan

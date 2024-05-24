@@ -22,7 +22,6 @@ const semaphore = @import("../semaphore.zig");
 const SID = semaphore.SID;
 
 const synchronize = @import("../synchronize.zig");
-const OneShot = synchronize.OneShot;
 
 const class = @import("class.zig");
 const core = @import("core.zig");
@@ -46,8 +45,8 @@ pub fn defineModule(forth: *Forth) !void {
 // ----------------------------------------------------------------------
 // Keyboard polling
 // ----------------------------------------------------------------------
-var driver_initialized: OneShot = .{};
-var shutdown_signal: OneShot = .{};
+var driver_initialized: synchronize.OneShot = .{};
+var shutdown_signal: synchronize.OneShot = .{};
 
 var keyboard_port: ?*hub.HubPort = null;
 var keyboard_endpoint: ?*hub.Endpoint = null;

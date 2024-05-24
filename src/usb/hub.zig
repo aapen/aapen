@@ -17,7 +17,6 @@ var log: *Logger = undefined;
 const mailbox = @import("../mailbox.zig");
 const semaphore = @import("../semaphore.zig");
 const synchronize = @import("../synchronize.zig");
-const AllocationSet = synchronize.AllocationSet;
 const schedule = @import("../schedule.zig");
 const time = @import("../time.zig");
 const usb = @import("../usb.zig");
@@ -439,12 +438,12 @@ var hubs: [MAX_HUBS]Hub = init: {
     }
     break :init initial_value;
 };
-var hubs_allocated: AllocationSet("hub devices", u5, MAX_HUBS) = .{};
+var hubs_allocated: synchronize.AllocationSet("hub devices", u5, MAX_HUBS) = .{};
 
 const HubMailbox = mailbox.Mailbox(u32);
 var hub_mailbox: HubMailbox = undefined;
 
-var hubs_lock: synchronize.TicketLock = undefined;
+var hubs_lock: synchronize.TicketLock("hubs") = .{};
 var hub_thread: schedule.TID = undefined;
 var allocator: Allocator = undefined;
 var shutdown_signal: synchronize.OneShot = .{};
@@ -569,7 +568,7 @@ pub fn hubClassDriverInitialize(alloc: Allocator) !void {
 
     allocator = alloc;
 
-    hubs_lock = synchronize.TicketLock.init("usb hubs", true);
+    //    hubs_lock = synchronize.TicketLock.init("usb hubs", true);
     hub_status_change_semaphore = try semaphore.create(0);
     hubs_with_pending_status_change = 0;
 

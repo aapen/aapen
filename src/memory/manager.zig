@@ -132,7 +132,7 @@ var freelist: Memblock = .{
     .length = 0,
 };
 
-var freelist_lock: TicketLock = TicketLock.init("memory", true);
+var freelist_lock: TicketLock("memory") = .{};
 
 /// initialize freelist
 pub fn init(start_addr: u64, end_addr: u64) void {
