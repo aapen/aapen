@@ -102,8 +102,6 @@ pub const DEFAULT_TRANSFER_TIMEOUT = 1000;
 pub const DEFAULT_INTERVAL = 1;
 pub const DMA_ALIGNMENT: usize = 16;
 
-const HcdChannels = AllocationSet("dwc_otg_usb channels", u5, dwc_max_channels);
-
 const empty_slice: []u8 = &[_]u8{};
 
 const register_base: u64 = root.HAL.peripheral_base + 0x980_000;
@@ -568,7 +566,7 @@ const Channel = struct {
     }
 };
 
-var channel_assignments: HcdChannels = .{};
+var channel_assignments: AllocationSet("dwc_otg_usb channels", u5, dwc_max_channels) = .{};
 var channel_buffers: [dwc_max_channels][1024]u8 align(DMA_ALIGNMENT) = [_][1024]u8{.{0} ** 1024} ** dwc_max_channels;
 var channel_pool: [dwc_max_channels]Channel = undefined;
 

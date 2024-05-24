@@ -432,8 +432,6 @@ pub fn hubThreadWakeup(hub_with_notification: *Hub) void {
     };
 }
 
-const HubAlloc = AllocationSet("hub devices", u5, MAX_HUBS);
-
 var hubs: [MAX_HUBS]Hub = init: {
     var initial_value: [MAX_HUBS]Hub = undefined;
     for (&initial_value, 0..) |*h, idx| {
@@ -441,7 +439,7 @@ var hubs: [MAX_HUBS]Hub = init: {
     }
     break :init initial_value;
 };
-var hubs_allocated: HubAlloc = .{};
+var hubs_allocated: AllocationSet("hub devices", u5, MAX_HUBS) = .{};
 
 const HubMailbox = mailbox.Mailbox(u32);
 var hub_mailbox: HubMailbox = undefined;

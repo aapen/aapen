@@ -2,7 +2,7 @@ const std = @import("std");
 const root = @import("root");
 const TicketLock = @import("ticketlock.zig");
 
-pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
+pub fn Type(comptime name: []const u8, comptime T: type, comptime max: T) type {
     return struct {
         const Self = @This();
         const Bitset = std.bit_set.ArrayBitSet(u32, max);

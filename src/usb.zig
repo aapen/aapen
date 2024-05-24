@@ -57,7 +57,6 @@ pub fn defineModule(forth: *Forth) !void {
 // const Drivers = std.ArrayList(*const Self.DeviceDriver);
 
 const MAX_DEVICES = 16;
-const DeviceAlloc = AllocationSet("devices", Self.DeviceAddress, MAX_DEVICES);
 
 pub var devices: [MAX_DEVICES]Self.Device = init: {
     var initial_value: [MAX_DEVICES]Self.Device = undefined;
@@ -66,7 +65,7 @@ pub var devices: [MAX_DEVICES]Self.Device = init: {
     }
     break :init initial_value;
 };
-var devices_allocated: DeviceAlloc = .{};
+var devices_allocated: AllocationSet("devices", Self.DeviceAddress, MAX_DEVICES) = .{};
 
 var allocator: std.mem.Allocator = undefined;
 pub var root_hub: *Self.Hub = undefined;
