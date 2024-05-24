@@ -1,7 +1,6 @@
 const root = @import("root");
 
-const Rectangle = @import("rectangle.zig").Rectangle;
-
+const Rectangle = @import("rectangle.zig");
 const schedule = @import("schedule.zig");
 
 const spin: [8]u8 = [_]u8{ '|', '/', '-', '\\', '|', '/', '-', '\\' };
