@@ -11,14 +11,13 @@ const DMA = root.HAL.USBHCI.DMA_ALIGNMENT;
 const arch = @import("../architecture.zig");
 const cpu = arch.cpu;
 
-const ChannelSet = @import("../channel_set.zig");
-
 const Logger = @import("../logger.zig");
 var log: *Logger = undefined;
 
 const mailbox = @import("../mailbox.zig");
 const semaphore = @import("../semaphore.zig");
 const synchronize = @import("../synchronize.zig");
+const AllocationSet = synchronize.AllocationSet;
 const schedule = @import("../schedule.zig");
 const time = @import("../time.zig");
 const usb = @import("../usb.zig");
@@ -433,7 +432,7 @@ pub fn hubThreadWakeup(hub_with_notification: *Hub) void {
     };
 }
 
-const HubAlloc = ChannelSet.init("hub devices", u5, MAX_HUBS);
+const HubAlloc = AllocationSet("hub devices", u5, MAX_HUBS);
 
 var hubs: [MAX_HUBS]Hub = init: {
     var initial_value: [MAX_HUBS]Hub = undefined;

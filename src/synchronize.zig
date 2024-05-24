@@ -1,5 +1,6 @@
 const std = @import("std");
 
+pub const AllocationSet = @import("synchronize/allocation_set.zig").init;
 pub const OneShot = @import("synchronize/oneshot.zig");
 pub const TicketLock = @import("synchronize/ticketlock.zig");
 

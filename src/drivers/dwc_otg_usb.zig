@@ -16,7 +16,6 @@ const cpu = arch.cpu;
 
 const atomic = @import("../atomic.zig");
 const debug = @import("../debug.zig");
-const ChannelSet = @import("../channel_set.zig");
 const Forth = @import("../forty/forth.zig").Forth;
 const Logger = @import("../logger.zig");
 pub var log: *Logger = undefined;
@@ -24,6 +23,7 @@ pub var log: *Logger = undefined;
 const schedule = @import("../schedule.zig");
 const semaphore = @import("../semaphore.zig");
 const synchronize = @import("../synchronize.zig");
+const AllocationSet = synchronize.AllocationSet;
 const time = @import("../time.zig");
 const usb = @import("../usb.zig");
 
@@ -102,7 +102,7 @@ pub const DEFAULT_TRANSFER_TIMEOUT = 1000;
 pub const DEFAULT_INTERVAL = 1;
 pub const DMA_ALIGNMENT: usize = 16;
 
-const HcdChannels = ChannelSet.init("dwc_otg_usb channels", u5, dwc_max_channels);
+const HcdChannels = AllocationSet("dwc_otg_usb channels", u5, dwc_max_channels);
 
 const empty_slice: []u8 = &[_]u8{};
 

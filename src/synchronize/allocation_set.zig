@@ -1,9 +1,6 @@
 const std = @import("std");
-
 const root = @import("root");
-
-const synchronize = @import("synchronize.zig");
-const TicketLock = synchronize.TicketLock;
+const TicketLock = @import("ticketlock.zig");
 
 pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
     return struct {
@@ -41,7 +38,7 @@ pub fn init(comptime name: []const u8, comptime T: type, comptime max: T) type {
             }
 
             if (this.available.isSet(channel)) {
-                root.log.err(@src(), "Attempt to free channel {d} but it was not allocated.", .{channel});
+                root.log.err(@src(), "Attempt to free item {d} but it was not allocated.", .{channel});
             } else {
                 this.available.set(channel);
             }

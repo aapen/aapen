@@ -11,8 +11,6 @@ const HCI = root.HAL.USBHCI;
 const arch = @import("architecture.zig");
 const cpu = arch.cpu;
 
-const ChannelSet = @import("channel_set.zig");
-
 const Forth = @import("forty/forth.zig").Forth;
 
 const Logger = @import("logger.zig");
@@ -24,6 +22,7 @@ const semaphore = @import("semaphore.zig");
 const SID = semaphore.SID;
 
 const synchronize = @import("synchronize.zig");
+const AllocationSet = synchronize.AllocationSet;
 const TicketLock = synchronize.TicketLock;
 
 const class = @import("usb/class.zig");
@@ -58,7 +57,7 @@ pub fn defineModule(forth: *Forth) !void {
 // const Drivers = std.ArrayList(*const Self.DeviceDriver);
 
 const MAX_DEVICES = 16;
-const DeviceAlloc = ChannelSet.init("devices", Self.DeviceAddress, MAX_DEVICES);
+const DeviceAlloc = AllocationSet("devices", Self.DeviceAddress, MAX_DEVICES);
 
 pub var devices: [MAX_DEVICES]Self.Device = init: {
     var initial_value: [MAX_DEVICES]Self.Device = undefined;
