@@ -91,7 +91,7 @@ pub fn init() !void {
     Self.initCore(allocator);
     enumerate.init(allocator);
 
-    bus_lock = TicketLock.initWithTargetLevel("usb bus", true, .FIQ);
+    bus_lock = TicketLock.init("usb bus", true);
 }
 
 // `initialize` activates the hardware and does the initial port scan

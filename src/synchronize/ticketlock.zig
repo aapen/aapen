@@ -9,7 +9,6 @@ const atomic = @import("../atomic.zig");
 const TicketLock = @This();
 
 name: []const u8,
-target_level: cpu.InterruptLevel = .Task,
 now_serving: u64 = 0,
 next_ticket: u64 = 0,
 enabled: bool = false,
@@ -18,14 +17,6 @@ pub fn init(name: []const u8, enabled: bool) TicketLock {
     return .{
         .name = name,
         .enabled = enabled,
-    };
-}
-
-pub fn initWithTargetLevel(name: []const u8, enabled: bool, target_level: cpu.InterruptLevel) TicketLock {
-    return .{
-        .name = name,
-        .enabled = enabled,
-        .target_level = target_level,
     };
 }
 

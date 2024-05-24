@@ -569,7 +569,7 @@ pub fn hubClassDriverInitialize(alloc: Allocator) !void {
 
     allocator = alloc;
 
-    hubs_lock = synchronize.TicketLock.initWithTargetLevel("usb hubs", true, .FIQ);
+    hubs_lock = synchronize.TicketLock.init("usb hubs", true);
     hub_status_change_semaphore = try semaphore.create(0);
     hubs_with_pending_status_change = 0;
 

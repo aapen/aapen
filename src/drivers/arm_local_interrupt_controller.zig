@@ -128,7 +128,7 @@ const Registers = extern struct {
     disable_basic_irqs: u32,
 };
 
-routing_lock: TicketLock = TicketLock.initWithTargetLevel("irq routing", true, .FIQ),
+routing_lock: TicketLock = TicketLock.init("irq routing", true),
 routing: [max_irq_id]IrqRouting = undefined,
 registers: *volatile Registers,
 core_sources: [4]*volatile u32,
