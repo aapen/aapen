@@ -705,12 +705,21 @@ mem-total 1024 / . "K RAM SYSTEM " s. mem-available . " FORTH BYTES FREE" s. cr
 cr cr
 
 : usb-noisy
-5 "usb" set-log-level
-5 "usbc" set-log-level
-5 "usbe" set-log-level
-5 "usbh" set-log-level
-5 "usb_hid_keyboard" set-log-level
-5 "dwc2" set-log-level
+5 "usb"              set-log-level drop
+5 "usbc"             set-log-level drop
+5 "usbe"             set-log-level drop
+5 "usbh"             set-log-level drop
+5 "usb_hid_keyboard" set-log-level drop
+5 "dwc2"             set-log-level drop
+;
+
+: usb-quiet
+4 "usb"              set-log-level drop
+4 "usbc"             set-log-level drop
+4 "usbe"             set-log-level drop
+4 "usbh"             set-log-level drop
+4 "usb_hid_keyboard" set-log-level drop
+4 "dwc2"             set-log-level drop
 ;
 
 "Forty REPL" s. cr cr
