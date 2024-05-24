@@ -28,7 +28,7 @@ const Logger = @import("logger.zig");
 const p = @import("printf.zig");
 pub const printf = p.printf;
 
-const Serial = @import("serial.zig"); //TBD
+const Term = @import("term.zig");
 const schedule = @import("schedule.zig");
 const semaphore = @import("semaphore.zig");
 const Usb = @import("usb.zig");
@@ -269,6 +269,7 @@ pub fn powerDown() void {
 fn hardwareInit() !void {
     hal = try HAL.init(kernel_allocator);
     uart_valid = true;
+    Term.init();
     InputBuffer.init();
 }
 

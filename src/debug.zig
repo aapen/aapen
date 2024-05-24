@@ -13,7 +13,6 @@ const memory = @import("memory.zig");
 const Sections = memory.Sections;
 
 const schedule = @import("schedule.zig");
-const serial = @import("serial.zig");
 
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;

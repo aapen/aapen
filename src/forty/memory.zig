@@ -8,8 +8,6 @@ const WordFunction = @import("forth.zig").WordFunction;
 
 pub const WordNameLen = 20;
 
-const serial = @import("../serial.zig");
-
 pub const Header = struct {
     func: WordFunction = undefined,
     name: []const u8 = undefined,

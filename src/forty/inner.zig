@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const serial = @import("../serial.zig");
-
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;
 const Forth = @import("forth.zig").Forth;

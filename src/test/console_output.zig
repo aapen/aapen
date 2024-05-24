@@ -6,9 +6,9 @@
 const root = @import("root");
 const printf = root.printf;
 
-const serial = @import("../serial.zig");
+const term = @import("../term.zig");
 
 pub fn testBody() !void {
-    serial.writer.print("Hello, world!\n", .{}) catch {};
+    term.writer.print("Hello, world!\n", .{}) catch {};
     _ = printf("Hello from %s!\n", "printf");
 }

@@ -1,5 +1,5 @@
 const root = @import("root");
-const serial = @import("serial.zig");
+const term = @import("term.zig");
 
 pub const printf = cstub.printf;
 pub const vprintf = cstub.vprintf;
@@ -25,7 +25,7 @@ fn videoEnabledPutc(ch: u8) void {
 }
 
 fn noVideoPutc(ch: u8) void {
-    serial.writer.writeByte(ch) catch {};
+    term.putch(ch);
 }
 
 const cstub = @cImport({

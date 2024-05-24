@@ -2,13 +2,13 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const root = @import("root");
+const term = @import("term.zig");
 
 const Forth = @import("forty/forth.zig").Forth;
 const auto = @import("forty/auto.zig");
 
 const CharBufferConsole = @import("char_buffer_console.zig");
 const InputBuffer = @import("input_buffer.zig");
-const Serial = @import("serial.zig");
 const Readline = @import("readline.zig");
 
 const Self = @This();
@@ -46,7 +46,7 @@ pub fn init(allocator: Allocator, fbc: *CharBufferConsole) !*Self {
 pub fn write(self: *Self, bytes: []const u8) !usize {
     for (bytes) |ch| {
         self.char_buffer_console.emit(ch);
-        Serial.putc(ch);
+        term.putch(ch);
     }
     return bytes.len;
 }
@@ -98,17 +98,17 @@ pub fn getc(self: *Self) u8 {
 pub fn putc(self: *Self, ch: u8) void {
     switch (ch) {
         '\n' => {
-            _ = Serial.putc('\r');
-            _ = Serial.putc('\n');
+            _ = term.putch('\r');
+            _ = term.putch('\n');
         },
         0x7f => {
-            _ = Serial.putc(0x08);
-            _ = Serial.putc(' ');
-            _ = Serial.putc(0x08);
+            _ = term.putch(0x08);
+            _ = term.putch(' ');
+            _ = term.putch(0x08);
         },
         else => {
             if (std.ascii.isPrint(ch)) {
-                _ = Serial.putc(ch);
+                _ = term.putch(ch);
             }
         },
     }

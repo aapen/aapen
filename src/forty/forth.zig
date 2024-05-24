@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
 const root = @import("root");
-const serial = @import("../serial.zig");
+const term = @import("../term.zig");
 
 const MainConsole = @import("../main_console.zig");
 const CharBuffer = @import("../char_buffer.zig");
@@ -536,12 +536,12 @@ pub const Forth = struct {
     // Print stuff out only if debug is non-zero.
     pub inline fn trace(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
         if (this.debug > 0) {
-            try serial.writer.print(fmt, args);
+            try term.writer.print(fmt, args);
         }
     }
 
     pub fn serial_print(_: *Forth, comptime fmt: []const u8, args: anytype) !void {
-        try serial.writer.print(fmt, args);
+        try term.writer.print(fmt, args);
     }
 
     pub fn print(this: *Forth, comptime fmt: []const u8, args: anytype) !void {

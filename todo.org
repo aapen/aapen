@@ -452,3 +452,55 @@ Serial input driver would need to do the same translation. (Including collapsing
 We have more graphics primitives but no way to render a bitmap on the screen.
 ** Multiple screen support
 Allow multiple frame buffers. (Q: restrict MainConsole to fb 0?) Provide Forty words to switch the current fb. Since the graphics calls already take an fb pointer as argument, we could implement double-buffering for animation.
+** Rework serial and keyboard input
+- escape handling for serial line discipline "leaks" all the way to the forty repl
+- we have an awkward interface from forty to the console
+  - partly due to using 'emit' for text output, cursor control, screen control
+- we're halfway between an immediate mode screen and a tty style terminal
+- this is somewhat imposed by the serial interface (and the fact that serial was first)
+- this has led to the stack of FB -> Console -> CharConsole -> MainConsole
+*** Principles
+- we don't want to inherit the unix debacle of terminals and line disciplines
+- a forty application should be able to take over the whole screen (e.g. full screen editor)
+- either the repl or an application should be simple to implement a status bar 
+- at the bottom is the frame buffer
+- it can offer a character grid
+- everything else about managing the state of the fb is a higher-level concern:
+  - cursor position
+  - line wrapping
+  - scrolling
+*** Ideas
+- Role of emit:
+  - Emit should be a forty-level word.
+  - We should remove use of emit with control characters for cursor or screen control
+- Isolation of input and output:
+  - We read input in terms of keys, not characters.
+  - Input is probably a u16 instead of u8.
+  - That allows room for modern keys that don't have easy ASCII codes: Function keys, media keys, cursor keys, page-up/down, scroll-lock, etc.
+  - Serial output is limited to ASCII.
+  - Screen output is not limited to ASCII, but _is_ tied to the embedded screen font.
+  - Cursor movement and screen control is out-of-band w.r.t. character display.
+  - This implies that there is _not_ just one "emit" function that writes a char to both outputs.
+  - But there _is_ just one "read char" function that reads from the input buffer.
+    - It is the job of the USB HID keyboard and the serial device to translate their inputs into the input buffer.
+  - Serial input:
+    - pl011.irqHandle should give the character to something that knows how to parse serial inputs and convert escape sequences into logical inputs.
+    - whatever does that needs to have a little timer so it can tell a single ESC from an ESC
+  - Serial output:
+    - serial.zig can provide the interface. Right now it handles newline to cr+newline translation. If we need to add anything else, then we should break out a "Terminal" or "TermIO" struct.
+- Role of forty applications:
+  - Forty has full control of the screen.
+    - That includes cursor position, line wrapping, scrolling.
+  - They should read from the input buffer.
+  - The input buffer should provide an ASCII character code for printables.
+  - Non printables should be provided via additional values (not separate fields)
+  - init.f is going to get too large. Is it time to add a ~read~ word?
+*** Design
+- InputBuffer becomes a ring of u16.
+- CharBufferConsole.emit goes away.
+- MainConsole probably goes away entirely.
+- Serial becomes abstract, needs to be supplied with a writech function.
+- new directory term/
+  - term/out.zig - abstract writer
+  - term/uart.zig - implements out, uses root.hal.uart to send chars
+  - term/vt220.zig - implements out, translates \n and \? 

@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const serial = @import("serial.zig");
+const term = @import("term.zig");
 
 const FrameBuffer = @import("frame_buffer.zig");
 
@@ -11,7 +11,6 @@ const Readline = @import("readline.zig");
 const RichChar = @import("rich_char.zig").RichChar;
 
 const Rectangle = @import("rectangle.zig").Rectangle;
-//const Point = @import("point.zig").Point;
 
 pub const DEFAULT_FOREGROUND: u8 = 0x01;
 pub const DEFAULT_BACKGROUND: u8 = 0x00;
@@ -402,21 +401,21 @@ pub fn scrollUp(self: *Self) void {
 
 /// Debugging: Dump the in-memory text to the serial port.
 pub fn textDump(self: *Self) void {
-    _ = serial.puts("===Text ===\r\n");
+    _ = term.puts("===Text ===\r\n");
     for (0..self.num_rows) |row| {
-        serial.putc('|');
+        term.putch('|');
         for (0..self.num_cols) |col| {
             const ch = self.richCharGet(col, row);
-            serial.putc(ch.ch);
+            term.putch(ch.ch);
         }
-        _ = serial.puts("$\r\n");
+        _ = term.puts("$\r\n");
     }
-    _ = serial.puts("------\r\n");
+    _ = term.puts("------\r\n");
 }
 
 /// Debugging: Dump info about adresses and indices to the serial port.
 pub fn infoDump(self: *Self) void {
-    const w = serial.writer;
+    const w = term.writer;
     try w.print("CharDisplay: num_rows: {} num_cols: {} length {}\n", .{ self.num_rows, self.num_cols, self.length });
 
     for (0..self.num_rows) |row| {
