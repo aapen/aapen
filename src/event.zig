@@ -10,7 +10,7 @@ const schedule = @import("schedule.zig");
 const synchronize = @import("synchronize.zig");
 const TicketLock = synchronize.TicketLock;
 
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 
 // ----------------------------------------------------------------------
 // Forty interop

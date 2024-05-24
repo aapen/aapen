@@ -7,14 +7,21 @@ const ForthError = errors.ForthError;
 
 pub fn Stack(comptime T: type) type {
     return struct {
-        contents: ArrayList(T),
-        // sp: usize,
+        const A = ArrayList(T);
+
+        contents: A,
 
         const Self = @This();
 
-        pub fn init(allocator: *const Allocator) Self {
-            return Self{
-                .contents = ArrayList(T).init(allocator.*),
+        pub fn init(allocator: Allocator) Self {
+            return .{
+                .contents = A.init(allocator),
+            };
+        }
+
+        pub fn initCapacity(allocator: Allocator, capacity: usize) !Self {
+            return .{
+                .contents = try A.initCapacity(allocator, capacity),
             };
         }
 

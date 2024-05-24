@@ -4,7 +4,7 @@ const assert = std.debug.assert;
 
 const root = @import("root");
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 const architecture = @import("../architecture.zig");
 const barriers = architecture.barriers;

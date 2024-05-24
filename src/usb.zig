@@ -11,7 +11,7 @@ const HCI = root.HAL.USBHCI;
 const arch = @import("architecture.zig");
 const cpu = arch.cpu;
 
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 
 const Logger = @import("logger.zig");
 pub var log: *Logger = undefined;

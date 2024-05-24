@@ -10,9 +10,8 @@ const syscall = @import("../syscall.zig");
 const string = @import("string.zig");
 const parser = @import("parser.zig");
 
-const forth_module = @import("forth.zig");
-const Forth = forth_module.Forth;
-const WordFunction = forth_module.WordFunction;
+const Forth = @import("forth.zig");
+const WordFunction = Forth.WordFunction;
 
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;

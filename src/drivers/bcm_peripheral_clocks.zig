@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 const root = @import("root");
 const Mailbox = root.HAL.Mailbox;

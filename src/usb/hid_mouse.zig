@@ -11,7 +11,7 @@ const DMA = root.HAL.USBHCI.DMA_ALIGNMENT;
 
 const InputBuffer = @import("../input_buffer.zig");
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 const Logger = @import("../logger.zig");
 var log: *Logger = undefined;

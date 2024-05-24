@@ -12,9 +12,8 @@ const string = @import("string.zig");
 const parser = @import("parser.zig");
 const memory = @import("memory.zig");
 
-const forth_module = @import("forth.zig");
-const Forth = forth_module.Forth;
-const WordFunction = forth_module.WordFunction;
+const Forth = @import("forth.zig");
+const WordFunction = Forth.WordFunction;
 
 const formatText = std.fmt.formatText;
 const FormatOptions = std.fmt.FormatOptions;

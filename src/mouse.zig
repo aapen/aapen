@@ -1,4 +1,4 @@
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 const memory = @import("forty/memory.zig");
 const errors = @import("forty/errors.zig");
 

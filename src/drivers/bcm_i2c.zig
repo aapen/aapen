@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const time = @import("../arch/aarch64/time.zig");
 
 const GPIO = @import("bcm_gpio.zig");
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 const root = @import("root");
 const InterruptController = root.HAL.InterruptController;

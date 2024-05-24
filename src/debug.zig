@@ -7,7 +7,7 @@ const root = @import("root");
 const p = @import("printf.zig");
 const printf = p.printf;
 
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 
 const memory = @import("memory.zig");
 const Sections = memory.Sections;

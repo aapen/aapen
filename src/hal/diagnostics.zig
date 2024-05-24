@@ -5,7 +5,7 @@ const root = @import("root");
 const printf = root.printf;
 const BoardInfo = root.HAL.BoardInfoController.BoardInfo;
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 const Self = @This();
 

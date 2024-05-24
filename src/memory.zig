@@ -1,4 +1,4 @@
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 
 const manager = @import("memory/manager.zig");
 pub const dumpFreelist = manager.dumpFreelist;

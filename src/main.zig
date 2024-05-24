@@ -20,8 +20,7 @@ const CharBufferConsole = @import("char_buffer_console.zig");
 const MainConsole = @import("main_console.zig");
 
 const mouse = @import("mouse.zig");
-const forty = @import("forty/forth.zig");
-const Forth = forty.Forth;
+const Forth = @import("forty/forth.zig");
 
 const Logger = @import("logger.zig");
 

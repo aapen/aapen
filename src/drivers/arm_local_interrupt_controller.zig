@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const HAL = root.HAL;
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 const debug = @import("../debug.zig");
 

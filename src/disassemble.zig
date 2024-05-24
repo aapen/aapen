@@ -1,7 +1,7 @@
 const std = @import("std");
 const root = @import("root");
 
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 
 // ----------------------------------------------------------------------
 // Forty interop

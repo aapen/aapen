@@ -11,7 +11,7 @@ const IrqHandler = InterruptController.IrqHandler;
 const arch = @import("../architecture.zig");
 const cpu = arch.cpu;
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 pub fn defineModule(forth: *Forth) !void {
     _ = forth;

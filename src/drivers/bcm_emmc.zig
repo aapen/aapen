@@ -9,7 +9,7 @@ const time = @import("../time.zig");
 const GPIO = @import("bcm_gpio.zig");
 const bcm_peripheral_clocks = @import("../drivers/bcm_peripheral_clocks.zig");
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 const PeripheralClockController = bcm_peripheral_clocks.PeripheralClockController;
 const CLOCK_EMMC = bcm_peripheral_clocks.CLOCK_EMMC;
 const InterruptController = root.HAL.InterruptController;

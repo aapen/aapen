@@ -12,7 +12,7 @@ const IrqHandler = InterruptController.IrqHandler;
 
 const InputBuffer = @import("../input_buffer.zig");
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 const Logger = @import("../logger.zig");
 pub var log: *Logger = undefined;

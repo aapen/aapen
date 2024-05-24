@@ -4,8 +4,7 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const term = @import("term.zig");
 
-const Forth = @import("forty/forth.zig").Forth;
-const auto = @import("forty/auto.zig");
+const Forth = @import("forty/forth.zig");
 
 const CharBufferConsole = @import("char_buffer_console.zig");
 const InputBuffer = @import("input_buffer.zig");

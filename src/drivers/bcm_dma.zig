@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const InterruptController = root.HAL.InterruptController;
 
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 
 const architecture = @import("../architecture.zig");
 const barriers = architecture.barriers;

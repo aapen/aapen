@@ -5,7 +5,7 @@ const term = @import("term.zig");
 
 const FrameBuffer = @import("frame_buffer.zig");
 
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 
 const RichChar = @import("rich_char.zig").RichChar;
 

@@ -16,7 +16,7 @@ const cpu = arch.cpu;
 
 const atomic = @import("../atomic.zig");
 const debug = @import("../debug.zig");
-const Forth = @import("../forty/forth.zig").Forth;
+const Forth = @import("../forty/forth.zig");
 const Logger = @import("../logger.zig");
 pub var log: *Logger = undefined;
 

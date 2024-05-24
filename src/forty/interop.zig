@@ -5,8 +5,7 @@ const ForthError = errors.ForthError;
 
 const memory = @import("memory.zig");
 
-const forth_module = @import("forth.zig");
-const Forth = forth_module.Forth;
+const Forth = @import("forth.zig");
 
 const memory_module = @import("memory.zig");
 const Header = memory_module.Header;

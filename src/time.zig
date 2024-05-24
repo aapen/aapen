@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 
 const root = @import("root");
 const HAL = root.HAL;
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 
 const Logger = @import("logger.zig");
 var log: *Logger = undefined;

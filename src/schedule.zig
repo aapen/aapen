@@ -666,7 +666,7 @@ fn threadFp(stack_bottom: u64) u64 {
 // Forty interop
 // ----------------------------------------------------------------------
 
-const Forth = @import("forty/forth.zig").Forth;
+const Forth = @import("forty/forth.zig");
 
 pub fn defineModule(forth: *Forth) !void {
     try forth.defineNamespace(@This(), .{
