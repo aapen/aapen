@@ -7,7 +7,6 @@ const FrameBuffer = @import("frame_buffer.zig");
 
 const Forth = @import("forty/forth.zig");
 
-const RichChar = @import("rich_char.zig");
 const Rectangle = @import("rectangle.zig");
 
 pub const DEFAULT_FOREGROUND: u8 = 0x01;
@@ -39,6 +38,24 @@ pub fn getNumCols(self: *Self) u64 {
 pub fn getNumRows(self: *Self) u64 {
     return self.num_rows;
 }
+
+const RichChar = struct {
+    ch: u8,
+    fg: u8,
+    bg: u8,
+
+    pub fn init(ch: u8, fg: u8, bg: u8) RichChar {
+        return .{
+            .ch = ch,
+            .fg = fg,
+            .bg = bg,
+        };
+    }
+
+    pub inline fn isWhitespace(self: *const RichChar) bool {
+        return std.ascii.isWhitespace(self.ch);
+    }
+};
 
 /// Character mode display.
 /// The naming convention is that x and y are pixel coordinates
