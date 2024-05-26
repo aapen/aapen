@@ -119,12 +119,30 @@ finish
 
 (Character)
 
-8   :char-bs    let
-10  :char-nl    let
-13  :char-cr    let
-27  :char-esc   let
-32  :char-space let
-127 :char-del   let
+0x08 :char-bs         let
+0x0a :char-nl         let
+0x0d :char-cr         let
+0x1b :char-esc        let
+0x20 :char-space      let
+0x7f :char-del        let
+0x80 :key-up-arrow    let
+0x81 :key-down-arrow  let
+0x82 :key-left-arrow  let
+0x83 :key-right-arrow let
+0x84 :key-home        let
+0x85 :key-end         let
+0x90 :key-f1          let
+0x91 :key-f2          let
+0x92 :key-f3          let
+0x93 :key-f4          let
+0x94 :key-f5          let
+0x95 :key-f6          let
+0x96 :key-f7          let
+0x97 :key-f8          let
+0x98 :key-f9          let
+0x99 :key-f10         let
+0x9a :key-f11         let
+0x9b :key-f12         let
 
 : char-ctrl (ch -- CNTRL-ch)
   \a - inc
@@ -351,36 +369,36 @@ finish
 
 :handlers dtab-create
 
-'echo-handler      handlers char-bs  dtab-set
-'echo-handler      handlers char-del dtab-set
-'newline-handler   handlers char-nl  dtab-set
-'newline-handler   handlers char-cr  dtab-set
+'echo-handler          handlers char-bs         dtab-set
+'echo-handler          handlers char-del        dtab-set
+'newline-handler       handlers char-nl         dtab-set
+'newline-handler       handlers char-cr         dtab-set
 
-'bol-handler           handlers \a   char-ctrl dtab-set
-'bol-handler           handlers 0x84           dtab-set (home)
-'back-handler          handlers \b   char-ctrl dtab-set
-'back-handler          handlers 0x82           dtab-set (left arrow)
-'dump-text-handler     handlers \d   char-ctrl dtab-set
-'eol-handler           handlers \e   char-ctrl dtab-set
-'eol-handler           handlers 0x85           dtab-set (end)
-'forward-handler       handlers \f   char-ctrl dtab-set
-'forward-handler       handlers 0x83           dtab-set (right arrow)
-'toggle-insert-handler handlers \i   char-ctrl dtab-set
-'next-handler          handlers \n   char-ctrl dtab-set
-'next-handler          handlers 0x81           dtab-set (down arrow)
-'previous-handler      handlers \p   char-ctrl dtab-set
-'previous-handler      handlers 0x80           dtab-set (up arrow)
-'redraw-handler        handlers \r   char-ctrl dtab-set
-'ex-handler            handlers \x   char-ctrl dtab-set
+'bol-handler           handlers \a char-ctrl    dtab-set
+'bol-handler           handlers key-home        dtab-set
+'back-handler          handlers \b char-ctrl    dtab-set
+'back-handler          handlers key-left-arrow  dtab-set
+'dump-text-handler     handlers \d char-ctrl    dtab-set
+'eol-handler           handlers \e char-ctrl    dtab-set
+'eol-handler           handlers key-end         dtab-set
+'forward-handler       handlers \f char-ctrl    dtab-set
+'forward-handler       handlers key-right-arrow dtab-set
+'toggle-insert-handler handlers \i char-ctrl    dtab-set
+'next-handler          handlers \n char-ctrl    dtab-set
+'next-handler          handlers key-down-arrow  dtab-set
+'previous-handler      handlers \p char-ctrl    dtab-set
+'previous-handler      handlers key-up-arrow    dtab-set
+'redraw-handler        handlers \r char-ctrl    dtab-set
+'ex-handler            handlers \x char-ctrl    dtab-set
 
-'insert-handler    handlers char-space \~ 1 + dtab-set-range
-'insert-handler    handlers 0x90 0x9c dtab-set-range
-'insert-handler    handlers 0xA0 0xAc dtab-set-range
+'insert-handler        handlers char-space \~ inc dtab-set-range
+'insert-handler        handlers 0x90       0x9c   dtab-set-range
+'insert-handler        handlers 0xA0       0xAc   dtab-set-range
 
 'line-demo-handler handlers \^ dtab-set
 
 : handle-one (ch -- : Handle a single character)
-  handlers key dtab-trigger
+  handlers key 0xff and dtab-trigger
 ;
 
 : repl (-- : Prompt for and execute words, does not return)

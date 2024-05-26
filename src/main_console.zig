@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const root = @import("root");
+const key = @import("key.zig");
 const term = @import("term.zig");
 
 const Forth = @import("forty/forth.zig");
@@ -57,13 +58,12 @@ pub fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     try self.writer().print(fmt, args);
 }
 
-pub fn getc(self: *Self) u8 {
+pub fn getc(self: *Self) key.Keycode {
     _ = self;
-    const ch = InputBuffer.read();
-    return if (ch == '\r') '\n' else ch;
+    return InputBuffer.read();
 }
 
-pub fn putc(self: *Self, ch: u8) void {
+pub fn putc(self: *Self, ch: key.Keycode) void {
     term.putch(ch);
     self.char_buffer_console.emit(ch);
 }

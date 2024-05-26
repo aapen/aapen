@@ -5,6 +5,7 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const root = @import("root");
 const term = @import("../term.zig");
 const ascii = @import("../ascii.zig");
+const key = @import("../key.zig");
 const schedule = @import("../schedule.zig");
 
 const MainConsole = @import("../main_console.zig");
@@ -536,7 +537,7 @@ pub fn print(this: *Forth, comptime fmt: []const u8, args: anytype) !void {
     try this.console.print(fmt, args);
 }
 
-pub fn emit(this: *Forth, ch: u8) void {
+pub fn emit(this: *Forth, ch: key.Keycode) void {
     this.console.putc(ch);
 }
 
@@ -559,7 +560,7 @@ fn prompt(this: *Forth) void {
     }
 }
 
-fn read(this: *Forth) u8 {
+fn read(this: *Forth) key.Keycode {
     if (this.current_file_buffer.hasMore()) {
         return this.current_file_buffer.read();
     } else {
@@ -567,7 +568,7 @@ fn read(this: *Forth) u8 {
     }
 }
 
-fn echo(this: *Forth, ch: u8) void {
+fn echo(this: *Forth, ch: key.Keycode) void {
     if (!this.current_file_buffer.hasMore()) {
         this.emit(ch);
     }
@@ -612,7 +613,7 @@ pub fn repl(this: *Forth) !void {
                     try this.print("line too long\n", .{});
                 } else {
                     this.echo(ch);
-                    line_buffer[line_len] = ch;
+                    line_buffer[line_len] = @truncate(ch & 0xff);
                     line_len += 1;
                 }
             },

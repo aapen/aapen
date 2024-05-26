@@ -2,8 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const atomic = @import("atomic.zig");
-const FrameBuffer = @import("frame_buffer.zig");
 const CharBuffer = @import("char_buffer.zig");
+const FrameBuffer = @import("frame_buffer.zig");
+const key = @import("key.zig");
 
 pub const DEFAULT_FOREGROUND: u8 = 0x01;
 pub const DEFAULT_BACKGROUND: u8 = 0x00;
@@ -59,7 +60,7 @@ pub fn emitString(self: *Self, str: []const u8) void {
 /// Emit a single character to the console. Chars <= 128 have their usual
 /// meanings. > 128 there are a selection of control codes that do things
 /// like change color and move the cursor.
-pub fn emit(self: *Self, ch: u8) void {
+pub fn emit(self: *Self, ch: key.Keycode) void {
     self.begin_update();
     defer self.end_update();
 
@@ -74,14 +75,14 @@ pub fn emit(self: *Self, ch: u8) void {
         0x83 => self.char_buffer.rightCursor(),
         0x84 => self.char_buffer.bolCursor(),
         0x85 => self.char_buffer.eolCursor(),
-        0x90...0x9f => self.char_buffer.current_fg = (ch - 0x90),
-        0xa0...0xaf => self.char_buffer.current_bg = (ch - 0xa0),
+        0x90...0x9f => self.char_buffer.current_fg = @truncate((ch & 0xff) - 0x90),
+        0xa0...0xaf => self.char_buffer.current_bg = @truncate((ch & 0xff) - 0xa0),
         0xb0 => self.char_buffer.textShiftLeft(self.char_buffer.current_col, self.char_buffer.current_row),
         0xb1 => self.char_buffer.textShiftRight(self.char_buffer.current_col, self.char_buffer.current_row),
         0xf0 => self.char_buffer.infoDump(),
         0xf1 => self.char_buffer.textDump(),
         0xff => self.char_buffer.invalidate(),
-        else => self.addChar(ch),
+        else => self.addChar(@truncate(ch & 0xff)),
     }
 }
 
