@@ -330,39 +330,6 @@ finish
 : eol-handler      drop 0x85 emit ;
 : redraw-handler   "redraw! " s~ drop 0xff emit ;
 
-: escape-handler
-  drop       (Discard the escape)
-  key drop   (Discard [)
-  key
-  dup 65 = if
-    previous-handler
-    return
-  endif
-  dup 66 = if
-    next-handler
-    return
-  endif
-  dup 67 = if
-    forward-handler
-    return
-  endif
-  dup 68 = if
-    back-handler
-    return
-  endif
-  dup 70 = if
-    eol-handler
-    return
-  endif
-  dup 72 = if
-    bol-handler
-    return
-  else
-    "??? esc [ " s~ ~
-  endif
-;
-
-
 : line-demo-handler (ch -- : Draw some pretty lines)
   drop
   0 256 for-range
@@ -388,7 +355,6 @@ finish
 'echo-handler      handlers char-del dtab-set
 'newline-handler   handlers char-nl  dtab-set
 'newline-handler   handlers char-cr  dtab-set
-'escape-handler    handlers char-esc dtab-set
 
 'bol-handler           handlers \a   char-ctrl dtab-set
 'bol-handler           handlers 0x84           dtab-set (home)

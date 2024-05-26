@@ -17,10 +17,20 @@ const Uart = struct {
     }
 };
 
-const Vt220 = struct {
+const HalfAnsi = struct {
     const Self = @This();
 
+    // TODO We should probably have a timeout on the ESC1 and CSI
+    // states. On timeout it would write the chars and return to
+    // normal state.
+
+    // Normal -> keys pass through
+    // ESC1 -> we've received the initial escape key
+    // CSI -> we received ESC-[ the "Control Sequence Introducer"
+    const State = enum { Normal, ESC1, CSI };
+
     uart: Uart,
+    state: State = .Normal,
 
     pub fn out(self: *Self, ch: u8) void {
         switch (ch) {
@@ -36,9 +46,82 @@ const Vt220 = struct {
             else => self.uart.out(ch),
         }
     }
+
+    pub fn in(self: *Self, ch: u8) void {
+        switch (self.state) {
+            .ESC1 => {
+                switch (ch) {
+                    '[' => {
+                        self.state = .CSI;
+                    },
+                    else => {
+                        // we previously swallowed the ESC, send it
+                        // now.
+                        self.state = .Normal;
+                        write(ascii.ESCAPE);
+                        write(ch);
+                    },
+                }
+            },
+            .CSI => {
+                switch (ch) {
+                    'A' => {
+                        // cursor up
+                        write(0x80); // phony right-arrow keycode
+                        self.state = .Normal;
+                    },
+                    'B' => {
+                        // cursor down
+                        write(0x81); // phony down-arrow keycode
+                        self.state = .Normal;
+                    },
+                    'C' => {
+                        // cursor right
+                        write(0x83); // phony right-arrow keycode
+                        self.state = .Normal;
+                    },
+                    'D' => {
+                        // cursor left
+                        write(0x82); // phony left-arrow keycode
+                        self.state = .Normal;
+                    },
+                    'F' => {
+                        // end
+                        write(0x85); // phony end keycode
+                        self.state = .Normal;
+                    },
+                    'H' => {
+                        // home
+                        write(0x84); // phony home keycode
+                        self.state = .Normal;
+                    },
+                    else => {
+                        // we previously swallowed the ESC and [, send
+                        // them now
+                        self.state = .Normal;
+                        write(ascii.ESCAPE);
+                        write('[');
+                        write(ch);
+                    },
+                }
+            },
+            else => {
+                switch (ch) {
+                    ascii.ESCAPE => {
+                        self.state = .ESC1;
+                    },
+                    else => write(ch),
+                }
+            },
+        }
+    }
+
+    inline fn write(ch: u8) void {
+        InputBuffer.write(ch);
+    }
 };
 
-var term: Vt220 = undefined;
+var term: HalfAnsi = undefined;
 
 pub fn init() void {
     term = .{
@@ -80,5 +163,5 @@ pub var writer: TermWriter = .{ .context = "ignored" };
 // Input up from hardware
 // ----------------------------------------------------------------------
 pub fn recv(ch: u8) void {
-    InputBuffer.write(ch);
+    term.in(ch);
 }
