@@ -9,12 +9,12 @@ const IrqId = InterruptController.IrqId;
 const IrqHandlerFn = InterruptController.IrqHandlerFn;
 const IrqHandler = InterruptController.IrqHandler;
 
-const InputBuffer = @import("../input_buffer.zig");
-
 const Forth = @import("../forty/forth.zig");
 
 const Logger = @import("../logger.zig");
 pub var log: *Logger = undefined;
+
+pub const InputHandler = *const fn (ch: u8) void;
 
 const Self = @This();
 
@@ -206,8 +206,9 @@ gpio: *GPIO,
 intc: *InterruptController,
 irq_id: IrqId,
 irq_handler: IrqHandler = irqHandle,
+input_handler: InputHandler,
 
-pub fn init(register_base: u64, intc: *InterruptController, irq_id: IrqId, gpio: *GPIO) Self {
+pub fn init(register_base: u64, intc: *InterruptController, irq_id: IrqId, gpio: *GPIO, input_handler: InputHandler) Self {
     log = Logger.init("pl011", .debug);
 
     return .{
@@ -215,6 +216,7 @@ pub fn init(register_base: u64, intc: *InterruptController, irq_id: IrqId, gpio:
         .irq_id = irq_id,
         .registers = @ptrFromInt(register_base),
         .gpio = gpio,
+        .input_handler = input_handler,
     };
 }
 
@@ -279,7 +281,7 @@ fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
     var self: *Self = @ptrCast(@alignCast(private));
 
     if (self.registers.raw_interrupt_status.receive_interrupt_status == 1) {
-        const ch = self.registers.data.data;
-        InputBuffer.write(ch);
+        const ch: u8 = self.registers.data.data;
+        self.input_handler(ch);
     }
 }

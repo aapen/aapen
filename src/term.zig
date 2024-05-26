@@ -2,6 +2,7 @@ const std = @import("std");
 const root = @import("root");
 const HalUart = root.HAL.Uart;
 const ascii = @import("ascii.zig");
+const InputBuffer = @import("input_buffer.zig");
 const synchronize = @import("synchronize.zig");
 
 // ----------------------------------------------------------------------
@@ -74,3 +75,10 @@ fn termStringSend(_: *const anyopaque, str: []const u8) !usize {
 const TermWriter = std.io.Writer(*const anyopaque, error{}, termStringSend);
 
 pub var writer: TermWriter = .{ .context = "ignored" };
+
+// ----------------------------------------------------------------------
+// Input up from hardware
+// ----------------------------------------------------------------------
+pub fn recv(ch: u8) void {
+    InputBuffer.write(ch);
+}

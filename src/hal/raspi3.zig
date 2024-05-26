@@ -6,6 +6,7 @@ const arch = @import("../architecture.zig");
 const synchronize = @import("../synchronize.zig");
 
 const Forth = @import("../forty/forth.zig");
+const Term = @import("../term.zig");
 
 // Memory map
 pub const device_start: u64 = 0x3b40_0000;
@@ -102,7 +103,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 
     self.power_controller = PowerController.init(&self.mailbox);
 
-    self.uart = Uart.init(peripheral_base + 0x201000, self.interrupt_controller, Irq.UART, self.gpio);
+    self.uart = Uart.init(peripheral_base + 0x201000, self.interrupt_controller, Irq.UART, self.gpio, &Term.recv);
 
     self.video_controller = VideoController.init(&self.mailbox, &self.dma);
 
