@@ -1,5 +1,4 @@
 const std = @import("std");
-const RingBuffer = std.RingBuffer;
 
 const root = @import("root");
 const GPIO = root.HAL.GPIO;
@@ -211,12 +210,6 @@ irq_handler: IrqHandler = irqHandle,
 pub fn init(register_base: u64, intc: *InterruptController, irq_id: IrqId, gpio: *GPIO) Self {
     log = Logger.init("pl011", .debug);
 
-    input_buffer = RingBuffer{
-        .data = &input_buffer_storage,
-        .write_index = 0,
-        .read_index = 0,
-    };
-
     return .{
         .intc = intc,
         .irq_id = irq_id,
@@ -281,10 +274,6 @@ pub fn putc(self: *Self, ch: u8) void {
     while (self.registers.flags.transmit_fifo_full != 0) {}
     self.registers.data.data = ch;
 }
-
-const INPUT_BUFFER_SIZE = 16;
-var input_buffer_storage: [INPUT_BUFFER_SIZE]u8 = undefined;
-var input_buffer: RingBuffer = undefined;
 
 fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
     var self: *Self = @ptrCast(@alignCast(private));
