@@ -162,12 +162,12 @@ pub fn in(ch: u8) void {
     }
 }
 
-inline fn upAndReset(k: key.KeyCode) void {
+inline fn upAndReset(k: key.Keycode) void {
     up(k);
     state = .Normal;
 }
 
-inline fn expectTildeThenUp(k: key.KeyCode) void {
+inline fn expectTildeThenUp(k: key.Keycode) void {
     pending = k;
     state = .ExpectTilde;
 }
