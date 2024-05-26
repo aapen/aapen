@@ -1,6 +1,5 @@
 const std = @import("std");
 const root = @import("root");
-const HalUart = root.HAL.Uart;
 const ascii = @import("ascii.zig");
 const InputBuffer = @import("input_buffer.zig");
 const synchronize = @import("synchronize.zig");
@@ -9,133 +8,107 @@ const synchronize = @import("synchronize.zig");
 // Private implementation
 // ----------------------------------------------------------------------
 
-const Uart = struct {
-    const Self = @This();
+var serial_lock: synchronize.TicketLock("term") = .{};
 
-    pub fn out(_: *Self, ch: u8) void {
-        root.hal.uart.putc(ch);
-    }
-};
+// TODO We should probably have a timeout on the ESC1 and CSI
+// states. On timeout it would write the chars and return to
+// normal state.
 
-const HalfAnsi = struct {
-    const Self = @This();
+// Normal -> keys pass through
+// ESC1 -> we've received the initial escape key
+// CSI -> we received ESC-[ the "Control Sequence Introducer"
+const State = enum { Normal, ESC1, CSI };
+var state: State = .Normal;
 
-    // TODO We should probably have a timeout on the ESC1 and CSI
-    // states. On timeout it would write the chars and return to
-    // normal state.
-
-    // Normal -> keys pass through
-    // ESC1 -> we've received the initial escape key
-    // CSI -> we received ESC-[ the "Control Sequence Introducer"
-    const State = enum { Normal, ESC1, CSI };
-
-    uart: Uart,
-    state: State = .Normal,
-
-    pub fn out(self: *Self, ch: u8) void {
-        switch (ch) {
-            ascii.NL => {
-                self.uart.out(ascii.CR);
-                self.uart.out(ascii.NL);
-            },
-            ascii.DEL => {
-                self.uart.out(ascii.BS);
-                self.uart.out(ascii.SPACE);
-                self.uart.out(ascii.BS);
-            },
-            else => self.uart.out(ch),
-        }
-    }
-
-    pub fn in(self: *Self, ch: u8) void {
-        switch (self.state) {
-            .ESC1 => {
-                switch (ch) {
-                    '[' => {
-                        self.state = .CSI;
-                    },
-                    else => {
-                        // we previously swallowed the ESC, send it
-                        // now.
-                        self.state = .Normal;
-                        write(ascii.ESCAPE);
-                        write(ch);
-                    },
-                }
-            },
-            .CSI => {
-                switch (ch) {
-                    'A' => {
-                        // cursor up
-                        write(0x80); // phony right-arrow keycode
-                        self.state = .Normal;
-                    },
-                    'B' => {
-                        // cursor down
-                        write(0x81); // phony down-arrow keycode
-                        self.state = .Normal;
-                    },
-                    'C' => {
-                        // cursor right
-                        write(0x83); // phony right-arrow keycode
-                        self.state = .Normal;
-                    },
-                    'D' => {
-                        // cursor left
-                        write(0x82); // phony left-arrow keycode
-                        self.state = .Normal;
-                    },
-                    'F' => {
-                        // end
-                        write(0x85); // phony end keycode
-                        self.state = .Normal;
-                    },
-                    'H' => {
-                        // home
-                        write(0x84); // phony home keycode
-                        self.state = .Normal;
-                    },
-                    else => {
-                        // we previously swallowed the ESC and [, send
-                        // them now
-                        self.state = .Normal;
-                        write(ascii.ESCAPE);
-                        write('[');
-                        write(ch);
-                    },
-                }
-            },
-            else => {
-                switch (ch) {
-                    ascii.ESCAPE => {
-                        self.state = .ESC1;
-                    },
-                    else => write(ch),
-                }
-            },
-        }
-    }
-
-    inline fn write(ch: u8) void {
-        InputBuffer.write(ch);
-    }
-};
-
-var term: HalfAnsi = undefined;
-
-pub fn init() void {
-    term = .{
-        .uart = .{},
-    };
+// "up" from the terminal to the OS
+inline fn up(ch: u8) void {
+    InputBuffer.write(ch);
 }
 
-var serial_lock: synchronize.TicketLock("term") = .{};
+// "down" from the OS to the terminal
+inline fn down(ch: u8) void {
+    root.hal.uart.putc(ch);
+}
+
+inline fn control(seq: []const u8) void {
+    inline for (seq) |c| {
+        down(c);
+    }
+}
+
+pub fn out(ch: u8) void {
+    switch (ch) {
+        ascii.NL => {
+            down(ascii.CR);
+            down(ascii.NL);
+        },
+        ascii.DEL => {
+            down(ascii.BS);
+            down(ascii.SPACE);
+            down(ascii.BS);
+        },
+        0x80 => control("\x1b[A"),
+        0x81 => control("\x1b[B"),
+        0x82 => control("\x1b[D"),
+        0x83 => control("\x1b[C"),
+        0x84 => control("\x1b[1G"),
+        // next one is tricky... we don't know
+        // how many characters are in the line
+        0x85 => control("\x1b[128G"),
+        else => down(ch),
+    }
+}
+
+pub fn in(ch: u8) void {
+    switch (state) {
+        .ESC1 => {
+            switch (ch) {
+                '[' => {
+                    state = .CSI;
+                },
+                else => {
+                    // we previously swallowed the ESC, send it
+                    // now.
+                    state = .Normal;
+                    up(ascii.ESCAPE);
+                    up(ch);
+                },
+            }
+        },
+        .CSI => {
+            switch (ch) {
+                'A' => up(0x80), // phony right-arrow keycode
+                'B' => up(0x81), // phony down-arrow keycode
+                'C' => up(0x83), // phony right-arrow keycode
+                'D' => up(0x82), // phony left-arrow keycode
+                'F' => up(0x85), // phony end keycode
+                'H' => up(0x84), // phony home keycode
+                else => {
+                    // we previously swallowed the ESC and [, send
+                    // them now
+                    up(ascii.ESCAPE);
+                    up('[');
+                    up(ch);
+                },
+            }
+            state = .Normal;
+        },
+        else => {
+            switch (ch) {
+                ascii.ESCAPE => {
+                    state = .ESC1;
+                },
+                else => up(ch),
+            }
+        },
+    }
+}
 
 // ----------------------------------------------------------------------
 // Public interface
 // ----------------------------------------------------------------------
 pub fn putch(ch: u8) void {
-    term.out(ch);
+    out(ch);
 }
 
 pub fn puts(str: []const u8) void {
@@ -143,7 +116,7 @@ pub fn puts(str: []const u8) void {
     defer serial_lock.release();
 
     for (str) |ch| {
-        putch(ch);
+        out(ch);
     }
 }
 
@@ -158,10 +131,3 @@ fn termStringSend(_: *const anyopaque, str: []const u8) !usize {
 const TermWriter = std.io.Writer(*const anyopaque, error{}, termStringSend);
 
 pub var writer: TermWriter = .{ .context = "ignored" };
-
-// ----------------------------------------------------------------------
-// Input up from hardware
-// ----------------------------------------------------------------------
-pub fn recv(ch: u8) void {
-    term.in(ch);
-}

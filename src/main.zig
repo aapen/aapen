@@ -268,7 +268,6 @@ pub fn powerDown() void {
 fn hardwareInit() !void {
     hal = try HAL.init(kernel_allocator);
     uart_valid = true;
-    Term.init();
     InputBuffer.init();
 }
 
