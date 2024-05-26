@@ -11,17 +11,17 @@ const synchronize = @import("synchronize.zig");
 
 var serial_lock: synchronize.TicketLock("term") = .{};
 
-// TODO We should probably have a timeout on the ESC1 and CSI
-// states. On timeout it would write the chars and return to
-// normal state.
+// TODO We should probably have a timeout on the ESC and CSI
+// states. On timeout it would send up whatever held chars and return
+// to normal state.
 
-// Normal -> keys pass through
-// ESC1 -> we've received the initial escape key
-// CSI -> we received ESC-[ the "Control Sequence Introducer"
-// FN1_4 -> we received ESC-O which starts F1 - F4
-// FN_ALL -> we received ESC-[1 or ESC-[2 which indicates F5 - F12
+// Normal      -> keys pass through
+// ESC         -> we've received the initial escape key
+// CSI         -> we received ESC-[ the "Control Sequence Introducer"
+// FN1_4       -> we received ESC-O which starts F1 - F4
+// FN_ALL      -> we received ESC-[1 or ESC-[2 which indicates F5 - F12
 // ExpectTilde -> we think the command is complete but need to see ~
-const State = enum { Normal, ESC1, CSI, FN1_4, FN_ALL, ExpectTilde };
+const State = enum { Normal, ESC, CSI, FN1_4, FN_ALL, ExpectTilde };
 var state: State = .Normal;
 
 // "up" from the terminal to the OS. Keycodes go up.
@@ -40,6 +40,8 @@ inline fn control(seq: []const u8) void {
     }
 }
 
+/// Send an outbound keycode. Translates some keycodes into a subset
+/// of ANSI escape sequences.
 pub fn out(ch: key.Keycode) void {
     switch (ch) {
         key.NL => {
@@ -69,51 +71,31 @@ pub fn out(ch: key.Keycode) void {
     }
 }
 
+/// Process an incoming serial byte. This uses a subset of ANSI escape
+/// sequences that seems to be common across several terminals on Linux
+/// and macOS. May or may not work on Putty.
 pub fn in(ch: u8) void {
     switch (state) {
-        .ESC1 => {
+        .ESC => {
             switch (ch) {
-                '[' => {
-                    state = .CSI;
-                },
-                'O' => {
-                    state = .FN1_4;
-                },
+                '[' => state = .CSI,
+                'O' => state = .FN1_4,
                 else => {
                     // we previously swallowed the ESC, send it
                     // now.
-                    state = .Normal;
                     up(ascii.ESCAPE);
-                    up(ch);
+                    upAndReset(ch);
                 },
             }
         },
         .CSI => {
             switch (ch) {
-                'A' => {
-                    up(key.UP_ARROW);
-                    state = .Normal;
-                },
-                'B' => {
-                    up(key.DOWN_ARROW);
-                    state = .Normal;
-                },
-                'C' => {
-                    up(key.RIGHT_ARROW);
-                    state = .Normal;
-                },
-                'D' => {
-                    up(key.LEFT_ARROW);
-                    state = .Normal;
-                },
-                'F' => {
-                    up(key.END);
-                    state = .Normal;
-                },
-                'H' => {
-                    up(key.HOME);
-                    state = .Normal;
-                },
+                'A' => upAndReset(key.UP_ARROW),
+                'B' => upAndReset(key.DOWN_ARROW),
+                'C' => upAndReset(key.RIGHT_ARROW),
+                'D' => upAndReset(key.LEFT_ARROW),
+                'F' => upAndReset(key.END),
+                'H' => upAndReset(key.HOME),
                 '1', '2' => {
                     pending = ch;
                     state = .FN_ALL;
@@ -130,59 +112,34 @@ pub fn in(ch: u8) void {
         },
         .FN1_4 => {
             switch (ch) {
-                0x50 => up(key.F1),
-                0x51 => up(key.F2),
-                0x52 => up(key.F3),
-                0x53 => up(key.F4),
+                0x50 => upAndReset(key.F1),
+                0x51 => upAndReset(key.F2),
+                0x52 => upAndReset(key.F3),
+                0x53 => upAndReset(key.F4),
                 else => {
                     // we previously swallowed the ESC and O, send
                     // them now
                     up(key.ESCAPE);
                     up('O');
-                    up(ch);
+                    upAndReset(ch);
                 },
             }
-            state = .Normal;
         },
         .FN_ALL => {
             if (pending == '1') {
                 switch (ch) {
-                    '5' => {
-                        pending = key.F5;
-                        state = .ExpectTilde;
-                    },
-                    '7' => {
-                        pending = key.F6;
-                        state = .ExpectTilde;
-                    },
-                    '8' => {
-                        pending = key.F7;
-                        state = .ExpectTilde;
-                    },
-                    '9' => {
-                        pending = key.F8;
-                        state = .ExpectTilde;
-                    },
+                    '5' => expectTildeThenUp(key.F5),
+                    '7' => expectTildeThenUp(key.F6),
+                    '8' => expectTildeThenUp(key.F7),
+                    '9' => expectTildeThenUp(key.F8),
                     else => resetPending(),
                 }
             } else if (pending == '2') {
                 switch (ch) {
-                    '0' => {
-                        pending = key.F9;
-                        state = .ExpectTilde;
-                    },
-                    '1' => {
-                        pending = key.F10;
-                        state = .ExpectTilde;
-                    },
-                    '3' => {
-                        pending = key.F11;
-                        state = .ExpectTilde;
-                    },
-                    '4' => {
-                        pending = key.F12;
-                        state = .ExpectTilde;
-                    },
+                    '0' => expectTildeThenUp(key.F9),
+                    '1' => expectTildeThenUp(key.F10),
+                    '3' => expectTildeThenUp(key.F11),
+                    '4' => expectTildeThenUp(key.F12),
                     else => resetPending(),
                 }
             } else {
@@ -198,13 +155,21 @@ pub fn in(ch: u8) void {
         },
         else => {
             switch (ch) {
-                ascii.ESCAPE => {
-                    state = .ESC1;
-                },
+                ascii.ESCAPE => state = .ESC,
                 else => up(ch),
             }
         },
     }
+}
+
+inline fn upAndReset(k: key.KeyCode) void {
+    up(k);
+    state = .Normal;
+}
+
+inline fn expectTildeThenUp(k: key.KeyCode) void {
+    pending = k;
+    state = .ExpectTilde;
 }
 
 var pending: key.Keycode = 0;
