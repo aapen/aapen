@@ -165,11 +165,76 @@ pub fn initialize(self: *Self) !void {
 
     try powerOn();
     try verifyHostControllerDevice();
-    try disableInterrupts();
+
+    core.ahb_config.global_interrupt_enable = 0;
+
+    coreInit();
     try coreReset();
-    try initializeControllerCore();
-    try initializeHostPort();
-    try initializeInterrupts();
+    setHostMode();
+
+    time.delayMillis(50);
+
+    power.* = @bitCast(@as(u32, 0));
+
+    num_host_channels = core.hardware_config_2.num_host_channels;
+
+    log.debug(@src(), "power on host port", .{});
+
+    var prt = host.port;
+    prt.power = 1;
+    prt.enabled = 0; // these are W1C
+    prt.enabled_changed = 0;
+    prt.connected_changed = 0;
+    prt.overcurrent_changed = 0;
+    host.port = prt;
+
+    time.delayMillis(200);
+
+    host.config.fs_ls_support_only = 0;
+
+    for (0..dwc_max_channels) |chid| {
+        channel_registers[chid].channel_int = @bitCast(@as(u32, 0xffff_ffff));
+        channel_registers[chid].channel_int_mask = @bitCast(@as(u32, 0));
+    }
+
+    log.debug(@src(), "clear interrupts", .{});
+
+    core.core_interrupt_mask = @bitCast(@as(u32, 0));
+    core.core_interrupt_status = @bitCast(@as(u32, 0xffff_ffff));
+
+    const rx_words: u32 = 1024; // Size of Rx FIFO in 4-byte words
+    const tx_words: u32 = 1024; // Size of Non-periodic Tx FIFO in 4-byte words
+    const ptx_words: u32 = 1024; // Size of Periodic Tx FIFO in 4-byte words
+
+    log.debug(@src(), "configure and flush fifos", .{});
+
+    // Configure FIFO sizes. Required because the defaults do not work correctly.
+    core.rx_fifo_size = @bitCast(rx_words);
+    core.nonperiodic_tx_fifo_size = @bitCast((tx_words << 16) | rx_words);
+    core.host_periodic_tx_fifo_size = @bitCast((ptx_words << 16) | (rx_words + tx_words));
+
+    try txFifoFlush(0x10);
+    try rxFifoFlush();
+
+    var ahb = core.ahb_config;
+    ahb.dma_enable = 1;
+    ahb.dma_remainder_mode = .incremental;
+    ahb.wait_for_axi_writes = 1;
+    ahb.max_axi_burst = 0x3;
+    core.ahb_config = ahb;
+
+    log.debug(@src(), "enable interrupts", .{});
+
+    // Connect interrupt handler & enable interrupts on the ARM PE
+    interrupt_controller.connect(irq_id, &irq_handler, &.{});
+    interrupt_controller.enable(irq_id);
+
+    var enable_ints: InterruptMask = core.core_interrupt_mask;
+    enable_ints.port = 1;
+    enable_ints.host_channel = 1;
+    core.core_interrupt_mask = enable_ints;
+
+    core.ahb_config.global_interrupt_enable = 1;
 }
 
 fn powerOn() !void {
@@ -225,13 +290,27 @@ fn verifyHostControllerDevice() !void {
     });
 }
 
-fn disableInterrupts() !void {
-    core.ahb_config.global_interrupt_enable = 0;
-    core.core_interrupt_mask = @bitCast(@as(u32, 0));
+fn coreInit() void {
+    log.debug(@src(), "core init", .{});
+    var usbcfg = core.usb_config;
+    usbcfg.term_sel_dl_pulse = 0;
+    usbcfg.ulpi_fsls = 0;
+    usbcfg.phy_sel = 0;
+    usbcfg.ulpi_ext_vbus_drv = 0;
+    usbcfg.ulpi_ext_vbus_indicator = 0;
+    core.usb_config = usbcfg;
+}
+
+fn setHostMode() void {
+    log.debug(@src(), "set host mode", .{});
+    var usbcfg = core.usb_config;
+    usbcfg.force_host_mode = 1;
+    usbcfg.force_device_mode = 0;
+    core.usb_config = usbcfg;
 }
 
 fn coreReset() !void {
-    // log.debug(@src(), "core controller reset", .{});
+    log.debug(@src(), "core reset", .{});
 
     // trigger the soft reset
     core.reset.soft_reset = 1;
@@ -242,6 +321,7 @@ fn coreReset() !void {
     while (time.ticks() < reset_end and core.reset.soft_reset != 0) {}
 
     if (core.reset.soft_reset != 0) {
+        log.warn(@src(), "soft reset complete not observed before timeout", .{});
         return Error.InitializationFailure;
     }
 
@@ -251,172 +331,8 @@ fn coreReset() !void {
     while (time.ticks() < ahb_idle_wait_end and core.reset.ahb_master_idle == 0) {}
 
     if (core.reset.ahb_master_idle != 1) {
+        log.warn(@src(), "ahb master idle not observed before timeout", .{});
         return Error.InitializationFailure;
-    }
-}
-
-/// Returns true if the physical interface supports USB high-speed connections
-fn isPhyHighSpeedSupported() bool {
-    return core.hardware_config_2.high_speed_physical_type != .not_supported;
-}
-
-/// Initialize the physical interface for USB high-speed connection
-fn phyHighSpeedInit() !void {
-    var usb_config = core.usb_config;
-
-    // deselect full-speed phy
-    usb_config.phy_sel = 0;
-
-    if (core.hardware_config_2.high_speed_physical_type == .ulpi) {
-        log.debug(@src(), "High-speed ULPI PHY init", .{});
-
-        usb_config.mode_select = .ulpi;
-        usb_config.phy_if_16 = ._8_bit;
-        usb_config.ddr_sel = 0;
-        usb_config.ulpi_ext_vbus_drv = 0;
-        usb_config.ulpi_ext_vbus_indicator = 0;
-        usb_config.ulpi_fsls = 0;
-        usb_config.ulpi_clk_sus_m = 0;
-    } else {
-        log.debug(@src(), "High-speed UTMI+ PHY init", .{});
-        usb_config.mode_select = .utmi_plus;
-
-        usb_config.phy_if_16 = switch (core.hardware_config_4.utmi_physical_data_width) {
-            .width_8_bit => ._8_bit,
-            .width_16_bit => ._16_bit,
-            .width_32_bit => ._16_bit, // not sure about this
-        };
-    }
-
-    // write config to register
-    core.usb_config = usb_config;
-
-    try coreReset();
-
-    // set turnaround time. can only be done after core reset
-    usb_config.usb_trdtim = switch (core.hardware_config_4.utmi_physical_data_width) {
-        .width_16_bit => 5,
-        else => 9,
-    };
-
-    core.usb_config = usb_config;
-}
-
-fn phyFullSpeedInit() !void {
-    log.debug(@src(), "Full-speed PHY init", .{});
-
-    var usb_config = core.usb_config;
-    usb_config.phy_sel = 1;
-    core.usb_config = usb_config;
-
-    try coreReset();
-
-    // set turnaround time. can only be done after core reset
-    usb_config.usb_trdtim = 5;
-    core.usb_config = usb_config;
-}
-
-fn initializeControllerCore() !void {
-    if (isPhyHighSpeedSupported()) {
-        try phyHighSpeedInit();
-    } else {
-        try phyFullSpeedInit();
-    }
-
-    num_host_channels = core.hardware_config_2.num_host_channels;
-
-    power.* = @bitCast(@as(u32, 0));
-
-    try configPhyClockSpeed();
-
-    const rx_words: u32 = 1024; // Size of Rx FIFO in 4-byte words
-    const tx_words: u32 = 1024; // Size of Non-periodic Tx FIFO in 4-byte words
-    const ptx_words: u32 = 1024; // Size of Periodic Tx FIFO in 4-byte words
-
-    // Configure FIFO sizes. Required because the defaults do not work correctly.
-    core.rx_fifo_size = @bitCast(rx_words);
-    core.nonperiodic_tx_fifo_size = @bitCast((tx_words << 16) | rx_words);
-    core.host_periodic_tx_fifo_size = @bitCast((ptx_words << 16) | (rx_words + tx_words));
-
-    try txFifoFlush(0x10);
-    try rxFifoFlush();
-
-    var ahb = core.ahb_config;
-    ahb.dma_enable = 1;
-    ahb.dma_remainder_mode = .incremental;
-    ahb.wait_for_axi_writes = 1;
-    ahb.max_axi_burst = 0;
-    core.ahb_config = ahb;
-
-    var usb_config = core.usb_config;
-    switch (core.hardware_config_2.operating_mode) {
-        .hnp_srp_capable_otg => {
-            usb_config.hnp_capable = 1;
-            usb_config.srp_capable = 1;
-        },
-        .srp_only_capable_otg, .srp_capable_device, .srp_capable_host => {
-            usb_config.hnp_capable = 0;
-            usb_config.srp_capable = 1;
-        },
-        .no_hnp_src_capable_otg, .no_srp_capable_host, .no_srp_capable_device => {
-            usb_config.hnp_capable = 0;
-            usb_config.srp_capable = 0;
-        },
-        else => {
-            usb_config.hnp_capable = 0;
-            usb_config.srp_capable = 0;
-        },
-    }
-    core.usb_config = usb_config;
-}
-
-fn initializeHostPort() !void {}
-
-fn initializeInterrupts() !void {
-    // Disable all interrupts
-    var int_mask: reg.InterruptMask = @bitCast(@as(u32, 0));
-    core.core_interrupt_mask = int_mask;
-
-    const clear_all: InterruptStatus = @bitCast(@as(u32, 0xffff_ffff));
-
-    // Clear the channels' interrupt mask and any pending interrupt
-    // bits
-    for (&channel_pool) |*ch| {
-        const chreg = channel_registers[ch.chid];
-        chreg.channel_int = @bitCast(@as(u32, 0xffff_ffff));
-        chreg.channel_int_mask = @bitCast(@as(u32, 0));
-    }
-    host.all_channel_interrupts_mask = @as(u32, 0);
-    host.all_channel_interrupts = @as(u32, 0xffff_ffff);
-
-    // Clear pending interrupts
-    core.core_interrupt_status = clear_all;
-
-    // Connect interrupt handler & enable interrupts on the ARM PE
-    interrupt_controller.connect(irq_id, &irq_handler, &.{});
-    interrupt_controller.enable(irq_id);
-
-    // Enable only host channel and port interrupts
-    int_mask.host_channel = 1;
-    int_mask.port = 1;
-    core.core_interrupt_mask = int_mask;
-
-    // Enable interrupts for the host controller (this is the DWC side)
-    core.ahb_config.global_interrupt_enable = 1;
-
-    // log.debug(@src(), "initializeInterrupts: mask = 0x{x:0>8}, status = 0x{x:0>8}", .{
-    //     @as(u32, @bitCast(core.core_interrupt_mask)),
-    //     @as(u32, @bitCast(core.core_interrupt_status)),
-    // });
-}
-
-fn configPhyClockSpeed() !void {
-    const core_config = core.usb_config;
-    const hw2 = core.hardware_config_2;
-    if (hw2.high_speed_physical_type == .ulpi and hw2.full_speed_physical_type == .dedicated and core_config.ulpi_fsls == 1) {
-        host.config.clock_rate = .clock_48_mhz;
-    } else {
-        host.config.clock_rate = .clock_30_60_mhz;
     }
 }
 
@@ -468,7 +384,10 @@ fn irqHandle(_: *InterruptController, _: IrqId, _: ?*anyopaque) void {
 
     // check for spurious interrupt, not interested
     const ints = @as(u32, @bitCast(gint_status)) & @as(u32, @bitCast(gint_mask));
-    if (ints == 0) return;
+    if (ints == 0) {
+        log.debug(@src(), "irq handle: spurious interrupt 0x{x:0>8}", .{@as(u32, @bitCast(gint_status))});
+        return;
+    }
 
     // check for port interrupt
     if (gint_status.port != 0) {
@@ -597,6 +516,8 @@ fn channelAllocate() error{NoAvailableChannel}!ChannelId {
 pub fn channelFree(channel: ChannelId) void {
     channel_pool[channel].urb = null;
     channel_pool[channel].busy = false;
+
+    host.all_channel_interrupts_mask &= ~(@as(u32, 1) << channel);
 
     channel_assignments.free(channel);
 }
@@ -801,7 +722,7 @@ fn urbFail(urb: *usb.URB, detail: usb.URB.StatusDetail) void {
 }
 
 // ----------------------------------------------------------------------
-// New Style Transfer Handling
+// Transfer Handling
 // ----------------------------------------------------------------------
 
 pub fn rootHubControl(setup: *usb.SetupPacket, data: ?[]u8) usb.URB.Status {

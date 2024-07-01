@@ -2,9 +2,7 @@ const std = @import("std");
 
 const time = @import("../../time.zig");
 const usb = @import("../../usb.zig");
-
 const Host = @import("../dwc_otg_usb.zig");
-
 const reg = @import("registers.zig");
 
 const Self = @This();
@@ -161,7 +159,7 @@ fn hostPortSafeRead(self: *Self, host_reg: *volatile reg.HostRegisters) reg.Host
     return hw_status;
 }
 
-fn hostPortDisable(self: *Self) usb.URB.Status {
+pub fn hostPortDisable(self: *Self) usb.URB.Status {
     if (self.host_registers) |host_reg| {
         Host.log.debug(@src(), "hostPortDisable", .{});
 
@@ -174,7 +172,7 @@ fn hostPortDisable(self: *Self) usb.URB.Status {
     return .OK;
 }
 
-fn hostPortPowerOn(self: *Self) usb.URB.Status {
+pub fn hostPortPowerOn(self: *Self) usb.URB.Status {
     if (self.host_registers) |host_reg| {
         Host.log.debug(@src(), "hostPortPowerOn", .{});
 
@@ -187,7 +185,7 @@ fn hostPortPowerOn(self: *Self) usb.URB.Status {
     return .OK;
 }
 
-fn hostPortPowerOff(self: *Self) usb.URB.Status {
+pub fn hostPortPowerOff(self: *Self) usb.URB.Status {
     if (self.host_registers) |host_reg| {
         var hw_status = self.hostPortSafeRead(host_reg);
 
@@ -198,7 +196,7 @@ fn hostPortPowerOff(self: *Self) usb.URB.Status {
     return .OK;
 }
 
-fn hostPortReset(self: *Self) usb.URB.Status {
+pub fn hostPortReset(self: *Self) usb.URB.Status {
     const regs = self.host_registers orelse return .Failed;
 
     var port = self.hostPortSafeRead(regs);
@@ -218,14 +216,14 @@ fn hostPortReset(self: *Self) usb.URB.Status {
     time.delayMillis(100);
 
     // we should see enabled go high within a short time.
-    const enable_wait_end = time.deadlineMillis(200);
+    const enable_wait_end = time.deadlineMillis(2000);
     while (regs.port.enabled == 0 and time.ticks() < enable_wait_end) {
         time.delayMillis(10);
     }
 
     if (regs.port.enabled == 0) {
-        Host.log.err(@src(), "port enabled bit not observed before timeout", .{});
-        return .Failed;
+        Host.log.warn(@src(), "host port enabled bit not observed before timeout", .{});
+        //        return .Failed;
     }
 
     return .OK;
