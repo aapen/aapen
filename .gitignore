@@ -10,3 +10,4 @@ zig-cache
 zig-out
 .gdb_history
 /actual_output
+/.zig-cache/
