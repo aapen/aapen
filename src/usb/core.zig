@@ -155,7 +155,7 @@ pub fn controlTransfer(port: *hub.HubPort, setup: *spec.SetupPacket, data: ?[]u8
     try semaphore.wait(port.mutex);
     defer semaphore.signal(port.mutex) catch {};
 
-    var urb_slice = std.mem.asBytes(urb);
+    const urb_slice = std.mem.asBytes(urb);
     @memset(urb_slice, 0);
 
     urb.fill(port, setup, data, setup.data_size, 0, null);

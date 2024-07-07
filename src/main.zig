@@ -130,7 +130,7 @@ export fn kernelInit(core_id: usize) noreturn {
     arch.cpu.enable();
 
     // start main thread
-    _ = schedule.spawn(kernel_hooks.thread1, "init", &.{}) catch |err| {
+    _ = schedule.spawn(kernel_hooks.thread1, "init", schedule.no_args) catch |err| {
         debug.kernelError("thread create error", err);
     };
 
@@ -163,7 +163,7 @@ fn supervisor(_: *anyopaque) void {
 
 fn startHeartbeat() !void {
     const heartbeat = @import("heartbeat.zig");
-    _ = try schedule.spawn(heartbeat.heartbeat, "hb", &.{});
+    _ = try schedule.spawn(heartbeat.heartbeat, "hb", schedule.no_args);
 }
 
 fn startForty(_: *anyopaque) void {

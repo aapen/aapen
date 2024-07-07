@@ -66,7 +66,7 @@ pub fn init(prefix: []const u8, level: Level) *Logger {
         return existing_logger;
     }
 
-    var self: *Logger = create();
+    const self: *Logger = create();
     self.* = .{
         .prefix = prefix,
         .level = level,
@@ -222,7 +222,7 @@ fn writeByteNTimes(self: *const Logger, byte: u8, n: usize) void {
 fn writeBytesNTimes(self: *const Logger, bytes: []const u8, n: usize) void {
     _ = self;
     for (0..n) |_| {
-        _ = root.printf("%s", bytes);
+        _ = root.printf("%s", bytes.ptr);
     }
 }
 

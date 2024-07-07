@@ -160,12 +160,14 @@ pub const SpawnOptions = struct {
 
 pub const ThreadFunction = *const fn (*anyopaque) void;
 
+pub const no_args = &struct {}{};
+
 /// High level function to create and ready a thread in one step.
-pub fn spawn(proc: ThreadFunction, name: []const u8, args: *anyopaque) !TID {
+pub fn spawn(proc: ThreadFunction, name: []const u8, args: *const anyopaque) !TID {
     return spawnWithOptions(proc, args, &SpawnOptions{ .name = name });
 }
 
-pub fn spawnWithOptions(proc: ThreadFunction, args: *anyopaque, options: *const SpawnOptions) !TID {
+pub fn spawnWithOptions(proc: ThreadFunction, args: *const anyopaque, options: *const SpawnOptions) !TID {
     const tid = try create(
         @intFromPtr(proc),
         options.stack_size,

@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const le = std.builtin.Endian.Little;
+const le = std.builtin.Endian.little;
 
 const Parser = @import("dwarf/Parser.zig");
 const DebugSymbol = @import("dwarf/DebugSymbol.zig");

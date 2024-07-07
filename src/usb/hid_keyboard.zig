@@ -119,7 +119,7 @@ pub fn pollKeyboard(_: *anyopaque) void {
 }
 
 pub fn startPolling() !void {
-    _ = try schedule.spawn(pollKeyboard, "usb-kbd", &.{});
+    _ = try schedule.spawn(pollKeyboard, "usb-kbd", schedule.no_args);
 }
 
 pub fn stopPolling() void {

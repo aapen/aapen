@@ -155,7 +155,7 @@ pub fn init(allocator: Allocator, register_base: u64) !*Self {
     return self;
 }
 
-pub fn connect(self: *Self, id: IrqId, handler: *IrqHandler, private: *anyopaque) void {
+pub fn connect(self: *Self, id: IrqId, handler: *IrqHandler, private: ?*anyopaque) void {
     self.routing_lock.acquire();
     defer self.routing_lock.release();
 
@@ -225,7 +225,7 @@ fn invokeHandler(self: *Self, id: IrqId) void {
 pub fn irqHandle(self: *Self, context: *const ExceptionContext) void {
     _ = context;
 
-    var core_interrupts = self.core_sources[0].*;
+    const core_interrupts = self.core_sources[0].*;
 
     var basic_interrupts = self.registers.irq_pending[0];
     var pending_1_received: bool = false;

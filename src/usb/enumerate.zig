@@ -33,7 +33,7 @@ pub fn later(port: *hub.HubPort) !void {
 }
 
 pub fn enumerate(args: *anyopaque) void {
-    var port: *hub.HubPort = @ptrCast(@alignCast(args));
+    const port: *hub.HubPort = @ptrCast(@alignCast(args));
 
     initializePort(port) catch |err| {
         log.err(@src(), "failed to schedule port enumeration: {}", .{err});
@@ -115,7 +115,7 @@ fn initializePort(port: *hub.HubPort) !void {
 
     try parseDeviceDescriptor(port, @ptrCast(@alignCast(ep0_req_buf)), spec.DeviceDescriptor.STANDARD_LENGTH);
 
-    var config_index: u8 = 0;
+    const config_index: u8 = 0;
 
     // read the first part of the config descriptor
     setup.request_type = spec.USB_REQUEST_TYPE_DEVICE_STANDARD_IN;

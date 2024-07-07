@@ -80,7 +80,7 @@ pub const HubPort = struct {
     mutex: semaphore.SID,
 
     pub fn init(parent: *Hub, port_number: u7) !HubPort {
-        var self: HubPort = .{
+        const self: HubPort = .{
             .parent = parent,
             .port = port_number,
             .speed = spec.USB_SPEED_FULL,
@@ -101,7 +101,7 @@ pub const HubPort = struct {
     }
 
     pub fn create(alloc: Allocator, parent: *Hub, port_number: u7) !*HubPort {
-        var hp = try alloc.create(HubPort);
+        const hp = try alloc.create(HubPort);
         hp.* = init(parent, port_number);
         return hp;
     }
@@ -391,7 +391,7 @@ pub const Hub = struct {
         } else {
             const port = self.parent orelse return core.Error.InvalidData;
 
-            var setup: *spec.SetupPacket = &port.setup;
+            const setup: *spec.SetupPacket = &port.setup;
             setup.* = .{
                 .request_type = req_type,
                 .request = req,
@@ -413,7 +413,7 @@ pub const Hub = struct {
 };
 
 fn statusChangeCompletion(urb: *usb.URB, actual_length: spec.TransferBytes) void {
-    const self: *Hub = @fieldParentPtr(Hub, "status_change_urb", urb);
+    const self: *Hub = @alignCast(@fieldParentPtr("status_change_urb", urb));
     log.debug(@src(), "hub {d} finished interrupt transfer, status {any}:{any} length {d}", .{ self.index, urb.status, urb.status_detail, actual_length });
 
     log.sliceDump(@src(), urb.transfer_buffer.?[0..actual_length]);
@@ -572,7 +572,7 @@ pub fn hubClassDriverInitialize(alloc: Allocator) !void {
     hub_status_change_semaphore = try semaphore.create(0);
     hubs_with_pending_status_change = 0;
 
-    hub_thread = try schedule.spawn(hubThread, "hub thread", &.{});
+    hub_thread = try schedule.spawn(hubThread, "hub thread", schedule.no_args);
 }
 
 fn hubClassDriverBind(port: *HubPort, interface: u8) core.Error!void {

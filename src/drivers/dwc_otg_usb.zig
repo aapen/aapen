@@ -226,7 +226,7 @@ pub fn initialize(self: *Self) !void {
     log.debug(@src(), "enable interrupts", .{});
 
     // Connect interrupt handler & enable interrupts on the ARM PE
-    interrupt_controller.connect(irq_id, &irq_handler, &.{});
+    interrupt_controller.connect(irq_id, &irq_handler, null);
     interrupt_controller.enable(irq_id);
 
     var enable_ints: InterruptMask = core.core_interrupt_mask;
@@ -534,7 +534,7 @@ pub fn isAligned(ptr: [*]u8) bool {
 // ----------------------------------------------------------------------
 
 fn calculatePacketCount(input_size_in: usb.TransferBytes, mps: usb.PacketSize, size_out: *usb.TransferBytes) usb.TransferPackets {
-    var input_size = input_size_in;
+    const input_size = input_size_in;
     var num_packets: u32 = (input_size + mps - 1) / mps;
 
     if (num_packets > 256) {

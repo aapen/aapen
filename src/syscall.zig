@@ -20,39 +20,18 @@ const Syscall = struct {
     name: []const u8,
     fptr: ?Fptr,
     argcount: u8,
-
-    fn fromSpec(tuple: struct { u16, []const u8, Fptr, u8 }) Syscall {
-        return .{
-            .name = tuple[1],
-            .fptr = tuple[2],
-            .argcount = tuple[3],
-        };
-    }
 };
 
-const syscall_specs = .{
-    .{ 1, "emit", sysEmit, 1 },
+fn S(name: []const u8, f: Fptr, arity: u8) Syscall {
+    return .{ .name = name, .fptr = f, .argcount = arity };
+}
+
+const syscalls: []const Syscall = &[_]Syscall{
+    S("", sysDummy, 0),
+    S("emit", sysEmit, 1),
 };
 
-const syscall_max: u32 = max: {
-    var max_syscall_num = 0;
-    for (syscall_specs) |spec| {
-        max_syscall_num = @max(spec[0], max_syscall_num);
-    }
-    break :max max_syscall_num;
-};
-
-const syscalls: []Syscall = init: {
-    var initial_value: [syscall_max + 1]Syscall = undefined;
-    for (&initial_value) |*s| {
-        s.* = .{ .name = "", .fptr = null, .argcount = 0 };
-    }
-
-    for (syscall_specs) |s| {
-        initial_value[s[0]] = Syscall.fromSpec(s);
-    }
-    break :init &initial_value;
-};
+const syscall_max: u32 = syscalls.len;
 
 // ----------------------------------------------------------------------
 // Dispatcher
@@ -63,7 +42,7 @@ pub fn wordSyscall(forth: *Forth, _: *Header) ForthError!void {
 
     const syscall_number = try stack.pop();
 
-    if (syscall_number > syscall_max) {
+    if (syscall_number > syscall_max - 1) {
         try stack.push(0);
         return ForthError.BadOperation;
     }
@@ -93,6 +72,10 @@ pub fn wordSyscall(forth: *Forth, _: *Header) ForthError!void {
 // Stubs where the syscall signature is wrong (these should be
 // temporary)
 // ----------------------------------------------------------------------
+
+fn sysDummy(_: []const u64) u64 {
+    return 0;
+}
 
 fn sysEmit(args: []const u64) u64 {
     const a = args[0];

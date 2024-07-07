@@ -423,7 +423,8 @@ fn doDataTransfer(self: *Self, cmd: Cmd) bool {
     var block: u32 = 0;
     while (block < self.device.transfer_blocks) {
         _ = waitRegister(&self.registers.int_flags, wrIrpt | 0x8000, true, 2000);
-        var intr_val = self.registers.int_flags;
+        const intr_val = self.registers.int_flags;
+
         self.registers.int_flags = wrIrpt | 0x8000;
 
         if ((intr_val & (0xffff0000 | wrIrpt)) != wrIrpt) {
@@ -714,7 +715,7 @@ fn selectCard(self: *Self) bool {
         return false;
     }
 
-    var status: u32 = (self.device.last_response[0] >> 9) & 0xF;
+    const status: u32 = (self.device.last_response[0] >> 9) & 0xF;
 
     if ((status != 3) and (status != 4)) {
         _ = printf("emmc: Invalid status: %d\n", status);
@@ -751,16 +752,16 @@ fn setSCR(self: *Self) bool {
     self.device.block_size = 512;
 
     const scr_value = self.device.scr.scr[0];
-    var scr0 =
+    const scr0 =
         ((scr_value << 24) & 0xff000000) |
         ((scr_value << 8) & 0x00ff0000) |
         ((scr_value >> 8) & 0x0000ff00) |
         ((scr_value >> 24) & 0x000000ff);
 
     self.device.scr.version = 0xFFFFFFFF;
-    var spec: u32 = (scr0 >> (56 - 32)) & 0xf;
-    var spec3: u32 = (scr0 >> (47 - 32)) & 0x1;
-    var spec4: u32 = (scr0 >> (42 - 32)) & 0x1;
+    const spec: u32 = (scr0 >> (56 - 32)) & 0xf;
+    const spec3: u32 = (scr0 >> (47 - 32)) & 0x1;
+    const spec4: u32 = (scr0 >> (42 - 32)) & 0x1;
 
     if (spec == 0) {
         self.device.scr.version = 1;
@@ -815,7 +816,7 @@ fn doDataCommand(self: *Self, write: bool, b: [*]u32, bsize: u32, bn: u32) bool 
     }
 
     var retry_count: u32 = 0;
-    var max_retries: u32 = 3;
+    const max_retries: u32 = 3;
 
     _ = printf("emmc: Sending command: %d\n", @as(u32, command.index));
 
@@ -862,7 +863,7 @@ fn getClockDivider(_: *Self, base_clock: u32, target_rate: u32) u32 {
 
     var fb: u5 = 31;
     for (0..31) |_| {
-        var bt: u32 = @as(u32, 1) << fb;
+        const bt: u32 = @as(u32, 1) << fb;
 
         if (isNotZero(target_div & bt)) {
             div = fb;
@@ -894,9 +895,9 @@ fn getClockDivider(_: *Self, base_clock: u32, target_rate: u32) u32 {
     }
 
     const udiv: u32 = @intCast(div);
-    var freqSel: u32 = udiv & 0xff;
-    var upper: u32 = (udiv >> 8) & 0x3;
-    var ret: u32 = (freqSel << 8) | (upper << 6) | (0 << 5);
+    const freqSel: u32 = udiv & 0xff;
+    const upper: u32 = (udiv >> 8) & 0x3;
+    const ret: u32 = (freqSel << 8) | (upper << 6) | (0 << 5);
 
     return ret;
 }

@@ -107,7 +107,7 @@ pub fn pollMouse(_: *anyopaque) void {
 }
 
 pub fn startPolling() !void {
-    _ = try schedule.spawn(pollMouse, "usb-mouse", &.{});
+    _ = try schedule.spawn(pollMouse, "usb-mouse", schedule.no_args);
 }
 
 pub fn stopPolling() void {

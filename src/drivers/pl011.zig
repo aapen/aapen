@@ -278,7 +278,7 @@ pub fn putc(self: *Self, ch: u8) void {
 }
 
 fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
-    var self: *Self = @ptrCast(@alignCast(private));
+    const self: *Self = @ptrCast(@alignCast(private));
 
     if (self.registers.raw_interrupt_status.receive_interrupt_status == 1) {
         const ch: u8 = self.registers.data.data;

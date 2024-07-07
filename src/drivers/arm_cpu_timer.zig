@@ -124,7 +124,7 @@ pub fn frequency(self: *Self) u32 {
 // Interrupt handling
 // ----------------------------------------------------------------------
 fn irqHandle(_: *InterruptController, _: IrqId, private: ?*anyopaque) void {
-    var self: *Self = @ptrCast(@alignCast(private));
+    const self: *Self = @ptrCast(@alignCast(private));
 
     if (self.callback) |cb| {
         cb(self);
