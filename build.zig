@@ -54,6 +54,7 @@ pub fn build(b: *std.Build) !void {
     compile_kernel.addCSourceFile(.{ .file = b.path("src/printf.c"), .flags = &[_][]const u8{} });
     compile_kernel.addCSourceFile(.{ .file = b.path("src/disassemble.c"), .flags = &[_][]const u8{} });
     compile_kernel.addIncludePath(b.path("include"));
+    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/armforth.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/atomic.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/boot.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/context_switch.S"));
