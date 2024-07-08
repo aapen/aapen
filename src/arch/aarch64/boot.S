@@ -52,7 +52,15 @@
         cbnz      x5, skip_bss_init             // Are we on the boot core? Only init BSS on the boot core.
 
         // We're on the main core. Zero out the BSS.
-        bl        bssInit
+        ldr      x0, =__bss_start
+        ldr      x1, =__bss_end_exclusive
+1:
+        stp      xzr, xzr, [x0], #16
+        cmp      x0, x1
+        bne      1b
+
+        // Enable the UART - do this only once from the boot core
+        bl      _uart_init
 
 skip_bss_init:
         // Prepare for the transition to EL1
@@ -82,24 +90,17 @@ skip_bss_init:
         msr       sp_el1, x19
 
         mov       x0, x5                        // pass the core id as argument
-        LDR_REL   (x1, kernelInit)
+        LDR_REL   (x1, _forth_start)
         msr       elr_el2, x1
         eret
-
         // unreachable
-
-        .global pe_hang
-        .type pe_hang, @function
-        // Park the PE
-pe_hang:
-        wfe                                     // wait for an event
-        b         pe_hang                       // if one arrives, loop and wait some more
-
         END(_start)
 
-        .section .data.boot
+        ENTRY(pe_hang)                          // park the PE
+        wfe                                     // wait for an event
+        b         pe_hang                       // if one arrives, loop and wait some more
+        END(pe_hang)
 
-        .align 8
-        .global __fdt_address
-__fdt_address:
-        .quad   0
+        ENTRY(_forth_error)
+        b         pe_hang
+        END(_forth_error)

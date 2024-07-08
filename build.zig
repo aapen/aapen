@@ -60,6 +60,7 @@ pub fn build(b: *std.Build) !void {
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/context_switch.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/exceptions.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/mmu.S"));
+    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/uart.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/util.S"));
     compile_kernel.setLinkerScriptPath(b.path("src/arch/aarch64/kernel.ld"));
 

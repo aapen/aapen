@@ -40,12 +40,9 @@
           SYS_CLOSE, SYS_READ, SYS_WRITE, and very crucially, SYS_BRK
         - Accordingly, the SYSCALL0 .. SYSCALL4 words are removed
         - Instead of asking operating system for memory, the start & end of allowed memory is
-          supplied by linker symbols: _forth_pstack_low, _forth_pstack_high_exclusive,
-          _forth_rstack_low, _forth_rstack_high_exclusive
+          reserved as BSS
         - KEY doesn't get to call SYS_READ... it uses an input routine supplied by the
           kernel as _forth_getch
-        - The "bootstrap" file is linked into the kernel, with the symbol _forth_init. The
-          first version of "KEY" reads this.
 
 */
 
@@ -597,7 +594,7 @@ U3b     .req    w7      // U3 as a short
 /* DOCOL - the interpreter! */
 	.text
 	.align 2
-DOCOL:
+docol:
 	PUSHRSP	NIP		// push NIP on return stack
 	add	NIP, T0, #8	// skip codeword, make NIP the first dataword
 	next
@@ -666,16 +663,14 @@ stack points ->	| addr of DOUBLE   |	   + 4 =   +------------------+
 
 	.text
 	.align 2
-	.global _start
-_start:
-        ldr     T0, =_forth_pstack_high // get the linker-supplied top of pstack
+	.global _forth_start
+_forth_start:
+        ldr     T0, =data_stack_top     // get the top of the data stack
         ldr     T1, =var_s0             // save initial data stack pointer in FORTH variable S0
         str     T0, [T1]
         mov     PSP, T0                 // initialize parameter stack
 
-        ldr     T0, =_forth_rstack_high // get the linker-supplied top of rstack
         ldr     T1, =return_stack_top
-        str     T0, [T1]                // remember it as return_stack_top
         mov     RSP, T0                 // initialize return stack
 
 	ldr	NIP, =cold_start        // initialize interpreter
@@ -683,7 +678,8 @@ _start:
 
 	.section .rodata
 cold_start:
-	.quad    QUIT
+	.quad    quit
+
 
 //	BUILT-IN WORDS ----------------------------------------------------------------------
 //
@@ -727,26 +723,25 @@ cold_start:
 //	Don't worry too much about the exact implementation details of this macro - it's complicated!
 
         // Flags - these are discussed later.
-	.set F_IMMED,0x80
-	.set F_HIDDEN,0x20
-	.set F_LENMASK,0x1f
+	.set f_immed,0x80
+	.set f_hidden,0x20
+	.set f_lenmask,0x1f
 
         // Store the chain of links
-	.set link,0
+	// .set link,0
 
-	.macro defword name, namelen, flags=0, label
+	.macro defword name, namelen, flags=0, label, link
 	.section .rodata
 	.align 2
 	.global name_\label
 name_\label :
-	.quad link                      // link
-	.set link,name_\label
+	.quad name_\link                // link word
 	.byte \flags+\namelen           // flags + length byte
 	.ascii "\name"                  // the name
 	.align 	2                       // padding to next 4 byte boundary
 	.global \label
 \label :
-	.quad DOCOL                     // codeword - the interpreter
+	.quad docol                     // codeword - the interpreter
 	// list of word pointers follows
 	.endm
 
@@ -772,13 +767,12 @@ name_\label :
 //
 //	Again, for brevity in writing the header I'm going to write an assembler macro called defcode.
 
-	.macro defcode name, namelen, flags=0, label
+	.macro defcode name, namelen, flags=0, label, link
 	.section .rodata
 	.align 2
 	.global name_\label
 name_\label :
-	.quad link
-	.set link,name_\label
+	.quad name_\link                // link word
 	.byte \flags+\namelen
 	.ascii "\name"
 	.align 2
@@ -803,13 +797,15 @@ code_\label :
 	you can skip the details.
 */
 
+name_0: .quad 0
+
 	// DROP (a -- )
-	defcode "drop",4,,DROP
+	defcode "drop",4,,drop,0
 	add	PSP, PSP, #8
 	next
 
 	// SWAP (a b -- b a)
-	defcode "swap",4,,SWAP
+	defcode "swap",4,,swap,drop
 	ldr	T0, [PSP]
 	ldr	T1, [PSP, #8]
 	str	T0, [PSP, #8]
@@ -817,19 +813,19 @@ code_\label :
 	next
 
 	// DUP (a -- a a)
-	defcode "dup",3,,DUP
+	defcode "dup",3,,dup,swap
 	ldr	T0, [PSP]
 	PUSHPSP	T0
 	next
 
 	// OVER (a b -- a b a)
-	defcode "over",4,,OVER
+	defcode "over",4,,over,dup
 	ldr	T0, [PSP, #8]
 	PUSHPSP	T0
 	next
 
 	// ROT ( n1 n2 n3 -- n2 n3 n1 )
-	defcode "rot",3,,ROT
+	defcode "rot",3,,rot,over
         POPPSP  T0                      // n3
         POPPSP  T1                      // n2
         POPPSP  T2                      // n1
@@ -840,7 +836,7 @@ code_\label :
 	next
 
 	// -ROT ( n1 n2 n3 -- n3 n1 n2 )
-	defcode "-rot",4,,NROT
+	defcode "-rot",4,,nrot,rot
         POPPSP  T0                      // n3
         POPPSP  T1                      // n2
         POPPSP  T2                      // n1
@@ -850,53 +846,53 @@ code_\label :
         PUSHPSP T1                      // n2
 	next
 
-        defcode "?dup",4,,QDUP          // duplicate top of stack if it is non-zero
+        defcode "?dup",4,,qdup,nrot     // duplicate top of stack if it is non-zero
         ldr     T0, [PSP]
         cmp     T0, #0
         beq     1f
         PUSHPSP T0
 1:      next
 
-        defcode "1+",2,,INCR
+        defcode "1+",2,,incr,qdup
         POPP    T0
         add     T0, T0, #1
         PUSHP   T0
         next
 
-        defcode "1-",2,,DECR
+        defcode "1-",2,,decr,incr
         POPP    T0
         sub     T0, T0, #1
         PUSHP   T0
         next
 
-        defcode "4+",2,,INCR4
+        defcode "4+",2,,incr4,decr
         POPP    T0
         add     T0,T0,#4
         PUSHP   T0
         next
 
-        defcode "4-",2,,DECR4
+        defcode "4-",2,,decr4,incr4
         POPP    T0
         sub     T0,T0,#4
         PUSHP   T0
         next
 
 	// + (a b -- a+b)
-	defcode "+",1,,ADD
+	defcode "+",1,,add,decr4
 	POPP	T0, T1
 	add	T0, T1, T0
 	PUSHP	T0
 	next
 
         // - (a b -- a-b)
-	defcode "-",1,,SUB
+	defcode "-",1,,sub,add
 	POPP	T0, T1
 	sub	T0, T1, T0
 	PUSHP	T0
 	next
 
 	// * (a b -- a*b)
-	defcode "*",1,,MUL
+	defcode "*",1,,mul,sub
 	POPP	T0, T1
 	mul	T0, T1, T0
 	PUSHP	T0
@@ -906,7 +902,7 @@ code_\label :
 //      the / and MOD words in terms of the primitive /MOD.
 
 	// /MOD (a b -- a%b a/b)
-	defcode "/mod",4,,DIVMOD
+	defcode "/mod",4,,divmod,mul
         POPP    T2, T1
         udiv    T0, T1, T2              // T0 = T1 / T2
         msub    T3, T0, T2, T1          // T3 = T1 - (T0 * T2)
@@ -915,12 +911,12 @@ code_\label :
 	next
 
 // for debugging, use this for gdb breakpoints
-// In gdb, run `b code_BRK`
-        defcode "brk",3,,BRK
+// In gdb, run `b code_brk`
+        defcode "brk",3,,brk,divmod
         next
 
 // for debugging, switch PONG messages ON/OFF
-	defcode "dong",4,,DONG
+	defcode "dong",4,,dong,brk
 	ldr	T0, =var_pong
 	ldr	T1, [T0]
 	mvn	T1, T1
@@ -937,7 +933,7 @@ code_\label :
 //	1 meaning TRUE and 0 meaning FALSE.
 
 	// = (a b -- a=b)
-	defcode "=",1,,EQU
+	defcode "=",1,,equ,dong
 	POPP	T0, T1
 	cmp	T1, T0
         csinc   T0, xzr, xzr, ne
@@ -945,7 +941,7 @@ code_\label :
 	next
 
 	// <> (a b -- a<>b)
-	defcode "<>",2,,NEQU
+	defcode "<>",2,,nequ,equ
 	POPP	T0, T1
 	cmp	T1, T0
         csinc   T0, xzr, xzr, eq
@@ -953,7 +949,7 @@ code_\label :
 	next
 
 	// < (a b -- a<b)
-	defcode "<",1,,LT
+	defcode "<",1,,lt,nequ
 	POPP	T0, T1
 	cmp	T1, T0
         csinc   T0, xzr, xzr, ge
@@ -961,7 +957,7 @@ code_\label :
 	next
 
 	// > (a b -- a>b)
-	defcode ">",1,,GT
+	defcode ">",1,,gt,lt
 	POPP	T0, T1
 	cmp	T1, T0
         csinc   T0, xzr, xzr, le
@@ -969,7 +965,7 @@ code_\label :
 	next
 
 	// <= (a b -- a<=b)
-	defcode "<=",2,,LE
+	defcode "<=",2,,le,gt
 	POPP	T0, T1
 	cmp	T1, T0
         csinc   T0, xzr, xzr, gt
@@ -977,7 +973,7 @@ code_\label :
 	next
 
 	// >= (a b -- a>=b)
-	defcode ">=",2,,GE
+	defcode ">=",2,,ge,le
 	POPP	T0, T1
 	cmp	T1, T0
         csinc   T0, xzr, xzr, lt
@@ -985,7 +981,7 @@ code_\label :
 	next
 
         // 0= (a -- a == 0)
-        defcode "0=",2,,ZEROEQ
+        defcode "0=",2,,zeroeq,ge
         POPP    T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, ne
@@ -993,7 +989,7 @@ code_\label :
         next
 
         // 0<> (a -- a <> 0)
-        defcode "0<>",3,,ZERONE
+        defcode "0<>",3,,zerone,zeroeq
         POPP    T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, eq
@@ -1001,7 +997,7 @@ code_\label :
         next
 
         // 0< (a -- a<0)
-        defcode "0<",2,,ZLT
+        defcode "0<",2,,zlt,zerone
         POPP    T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, ge
@@ -1009,7 +1005,7 @@ code_\label :
         next
 
         // 0> (a -- a>0)
-        defcode "0>",2,,ZGT
+        defcode "0>",2,,zgt,zlt
         POPP    T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, le
@@ -1017,7 +1013,7 @@ code_\label :
         next
 
         // 0<= (a -- a<=0)
-        defcode "0<=",3,,ZLE
+        defcode "0<=",3,,zle,zgt
         POPP    T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, gt
@@ -1025,7 +1021,7 @@ code_\label :
         next
 
         // 0>= (a -- a>=0)
-        defcode "0>=",3,,ZGE
+        defcode "0>=",3,,zge,zle
         POPP    T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, lt
@@ -1033,28 +1029,28 @@ code_\label :
         next
 
 	// AND (a b -- a&b)
-	defcode "and",3,,AND
+	defcode "and",3,,and,zge
 	POPP	T0, T1
 	and	T0, T1, T0
 	PUSHPSP	T0
 	next
 
 	// OR (a b -- a|b)
-	defcode "or",2,,OR
+	defcode "or",2,,or,and
 	POPP	T0, T1
 	orr	T0, T1, T0
 	PUSHPSP	T0
 	next
 
 	// XOR (a b -- a^b)
-	defcode "xor",3,,XOR
+	defcode "xor",3,,xor,or
 	POPP	T0, T1
 	eor	T0, T1, T0
 	PUSHPSP	T0
 	next
 
 	// INVERT (a -- ~a)
-	defcode "invert",6,,INVERT
+	defcode "invert",6,,invert,xor
 	ldr	T0, [PSP]
 	mvn	T0, T0
 	str	T0, [PSP]
@@ -1083,7 +1079,7 @@ code_\label :
 	What happens when the + function does next?  Well, the following code is executed.
 */
 
-	defcode "exit",4,,EXIT
+	defcode "exit",4,,exit,invert
 	POPRSP	NIP
 	next
 
@@ -1130,7 +1126,7 @@ code_\label :
 
 */
 
-	defcode "lit",3,,LIT
+	defcode "lit",3,,lit,exit
 	ldr	T0, [NIP], #8	// load word from NIP, then increment NIP
 	PUSHPSP	T0		// push the word
 	next
@@ -1144,20 +1140,20 @@ code_\label :
 */
 
 	// ! (value address -- ) M[address] = value
-	defcode "!",1,,STORE
+	defcode "!",1,,store,lit
 	POPP	T0, T1
 	str	T1, [T0]
 	next
 
 	// // (address -- value) value = M[address]
-	defcode "@",1,,FETCH
+	defcode "@",1,,fetch,store
 	POPPSP	T0
 	ldr	T1, [T0]
 	PUSHPSP	T1
 	next
 
 	// +! (value address -- ) M[address] += value
-	defcode "+!",2,,ADDSTORE
+	defcode "+!",2,,addstore,fetch
 	POPP	T0, T1
 	ldr	T2, [T0]
 	add	T2, T2, T1
@@ -1165,7 +1161,7 @@ code_\label :
 	next
 
 	// -! (value address -- ) M[address] -= value
-	defcode "-!",2,,SUBSTORE
+	defcode "-!",2,,substore,addstore
 	POPP	T0, T1
 	ldr	T2, [T0]
 	sub	T2, T2, T1
@@ -1179,20 +1175,20 @@ code_\label :
 
 */
 
-	defcode "c!",2,,STOREBYTE
+	defcode "c!",2,,storebyte,substore
 	POPPSP	T0		// address
 	POPPSP	T1		// value
 	strb	T1b, [T0]	// store
 	next
 
-	defcode "c@",2,,FETCHBYTE
+	defcode "c@",2,,fetchbyte,storebyte
 	POPPSP	T0		// address
 	ldrb	T1b, [T0]	// load and sign extend
 	PUSHPSP	T1
 	next
 
 /* C@C! is a useful byte copy operation */
-	defcode "c@c!",4,,CCOPY
+	defcode "c@c!",4,,ccopy,fetchbyte
 	ldr	T0, [PSP, #8]	// source address
 	ldr	T1, [PSP]	// destination address
 	ldrb	T2b, [T0], #1	// load and increment
@@ -1202,7 +1198,7 @@ code_\label :
 	next
 
 /* and CMOVE is a block copy operation. */
-	defcode "cmove",5,,CMOVE
+	defcode "cmove",5,,cmove,ccopy
 	POPPSP	T0		// length
 	POPPSP	T1		// destination address
 	POPPSP	T2		// source address
@@ -1230,8 +1226,8 @@ code_\label :
 	defcode above.  (In fact the defvar macro uses defcode to do the dictionary header).
 */
 
-	.macro defvar name, namelen, flags=0, label, initial=0
-	defcode \name,\namelen,\flags,\label
+	.macro defvar name, namelen, flags=0, label, link, initial=0
+	defcode \name,\namelen,\flags,\label,\link
 	ldr	T0, =var_\name	// load address
 	PUSHPSP	T0		// push address
 	next
@@ -1253,13 +1249,13 @@ var_\name :
 
 */
 
-	defvar "state",5,,STATE
-	defvar "here",4,,HERE
-	defvar "latest",6,,LATEST,name_SYSCALL0 // SYSCALL0 must be last in built-in dictionary
-	defvar "s0",2,,SZ
-	defvar "base",4,,BASE,10
+	defvar "state",5,,state,ccopy
+	defvar "here",4,,here,state
+	defvar "latest",6,,latest,here,name_execute
+	defvar "s0",2,,sz,latest
+	defvar "base",4,,base,sz,10
 // for debugging
-	defvar	"pong",4,,PONG
+	defvar	"pong",4,,pong,base
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
@@ -1278,19 +1274,16 @@ var_\name :
 
 */
 
-	.macro defconst name, namelen, flags=0, label, value
-	defcode \name,\namelen,\flags,\label
+	.macro defconst name, namelen, flags=0, label, link, value
+	defcode \name,\namelen,\flags,\label,\link
 	ldr	T0, =\value
 	PUSHPSP	T0
 	next
 	.endm
 
-	defconst "VERSION",7,,VERSION,JONES_VERSION
-	defconst "R0",2,,RZ,return_stack_top
-	defconst "DOCOL",5,,__DOCOL,DOCOL
-	defconst "F_IMMED",7,,__F_IMMED,F_IMMED
-	defconst "F_HIDDEN",8,,__F_HIDDEN,F_HIDDEN
-	defconst "F_LENMASK",9,,__F_LENMASK,F_LENMASK
+	defconst "version",7,,version,pong,JONES_VERSION
+	defconst "r0",2,,rz,version,return_stack_top
+	defconst "docol",5,,__docol,rz,docol
 
 /*
 	RETURN STACK ----------------------------------------------------------------------
@@ -1299,25 +1292,25 @@ var_\name :
 	the top of the return stack.
 */
 
-	defcode ">r",2,,TOR
+	defcode ">r",2,,tor,__docol
 	POPPSP	T0                      // pop parameter stack into T0
 	PUSHRSP	T0                      // and push it onto the return stack
 	next
 
-	defcode "r>",2,,FROMR
+	defcode "r>",2,,fromr,tor
 	POPRSP	T0                      // pop return stack into T0
 	PUSHPSP	T0                      // and push it onto the parameter stack
 	next
 
-	defcode "rsp@",4,,RSPFETCH
+	defcode "rsp@",4,,rspfetch,fromr
 	PUSHPSP	RSP                     // get the top of the return stack
 	next
 
-	defcode "rsp!",4,,RSPSTORE
+	defcode "rsp!",4,,rspstore,rspfetch
 	POPPSP	RSP                     // set the top of the return stack
 	next
 
-	defcode "rdrop",5,,RDROP
+	defcode "rdrop",5,,rdrop,rspstore
 	add	RSP, RSP, #8            // drop the top of the return stack
 	next
 
@@ -1328,12 +1321,12 @@ var_\name :
 	stack for us, and it is accessed through x28.
 */
 
-	defcode "dsp@",4,,DSPFETCH
+	defcode "dsp@",4,,dspfetch,rdrop
 	mov	T0, PSP
 	PUSHPSP	T0
 	next
 
-	defcode "dsp!",4,,DSPSTORE
+	defcode "dsp!",4,,dspstore,dspfetch
 	POPPSP	T0
 	mov	PSP, T0
 	next
@@ -1377,11 +1370,11 @@ var_\name :
 
 */
 
-	defcode "key",3,,KEY
-	bl	_KEY
+	defcode "key",3,,key,dspstore
+	bl	_key
 	PUSHPSP	T0
 	next
-_KEY:
+_key:
 	// KEY () (char: T0)
 	PUSHP	U2, U3
 3:
@@ -1396,21 +1389,17 @@ _KEY:
 	POPP	U2, U3
 	ret
 1:
-	mov	x8, #__NR_read
-	mov	T0, #stdin
-	ldr	T1, =buffer
-	mov	T2, #BUFFER_SIZE
-	svc	#0
+        bl      _forth_getch            // T0 <- key
 	cmp	T0, #0			// <= 0?
 	ble	2f			// yes, fatal error
-	ldr	T1, =buffer
+	ldr	T1, =buffer             // address of buffer
+        str     T0, [T1]                // store the key
 	str	T1, [U3]		// reset currkey (to beginning of buffer)
-	add	T1, T1, T0
-	str	T1, [U2]		// update bufftop (with length we read)
+	add	T1, T1, #1              // buffer length 1
+	str	T1, [U2]		// update bufftop
 	b	3b			// try fast path again
 2:
-	mov	x8, #__NR_exit
-	svc	#0			// exit (with error code from NR_read)
+	bl      _forth_error            // exit
 
 	.data
 	.align 2
@@ -1432,13 +1421,13 @@ bufftop:
 
         // caution: len must always be at least 1
         .macro OUTS addreg, lenreg
-1:      ldr     x0, [\addreg], #1       // put the next byte in x0 & increment ptr
+.L_\@:  ldrb    w0, [\addreg], #1       // put the next byte in x0 & increment ptr
         OUTB                            // emit the byte
         subs    \lenreg, \lenreg, #1    // decrement length
-        bne     1b                      // if not done, loop
+        bne     .L_\@\()                // if not done, loop
         .endm
 
-	defcode "emit",4,,EMIT
+	defcode "emit",4,,emit,key
 	POPPSP	T0
         OUTB
 	next
@@ -1472,16 +1461,16 @@ bufftop:
 	and immediate mode, and you'll understand why.
 */
 
-	defcode "word",4,,WORD
-	bl _WORD
+	defcode "word",4,,word,emit
+	bl _word
 	PUSHPSP	T0			// address
 	PUSHPSP	T1			// length
 	next
-_WORD:
+_word:
 	// WORD () (address: T0, length: T1)
 	PUSHP	U0, lr
 1:
-	bl	_KEY
+	bl	_key
 	cmp	T0, #'\\'		// == \?
 	beq	3f			// skip comment
 	cmp	T0, #' '		// <= ' '?
@@ -1490,7 +1479,7 @@ _WORD:
 	ldr	U0, =word_buffer	// address
 2:
 	strb	T0b, [U0], #1		// store character, increment pointer
-	bl	_KEY
+	bl	_key
 	cmp	T0, #' '		// > ' '?
 	bgt	2b			// keep looking
 
@@ -1500,7 +1489,7 @@ _WORD:
 	POPP	U0, lr
         ret
 3:
-	bl	_KEY
+	bl	_key
 	cmp	T0, #'\n'		// eol?
 	bne	3b			// keep looking
 	b	1b
@@ -1526,14 +1515,14 @@ word_buffer:
 	partial value if there was an error.
 */
 
-	defcode "number",6,,NUMBER
+	defcode "number",6,,number,word
 	POPPSP	T1		// length of string
 	POPPSP	T0		// address of string
-	bl	_NUMBER
+	bl	_number
 	PUSHPSP	T0		// number
 	PUSHPSP	T1		// # unparsed
 	next
-_NUMBER:
+_number:
 	// NUMBER(address: T0, length: T1) (number: T0, unparsed: T1)
 	PUSHP	U0,U1,U2,U3,lr
 
@@ -1606,13 +1595,13 @@ _NUMBER:
 	FIND doesn't find dictionary entries which are flagged as HIDDEN.  See below for why.
 */
 
-	defcode "find",4,,FIND
+	defcode "find",4,,find,number
 	POPPSP	T1			// length of string
 	POPPSP	T0			// address of string
-	bl	_FIND
+	bl	_find
 	PUSHPSP	T0			// address of dictionary entry (or 0)
 	next
-_FIND:
+_find:
 	// FIND (address: T0, length: T1) (address: T0)
 	PUSHP	U0,U1,U2,U3,lr
 
@@ -1625,7 +1614,7 @@ _FIND:
 	beq	4f			// end of list!
 
 	ldrb	T3b, [T0, #8]		// flags+length field
-	and	T3, T3, #(F_HIDDEN|F_LENMASK)
+	and	T3, T3, #(f_hidden|f_lenmask)
 	cmp	T3, T2			// length the same? HUGE BUG T2, T2!!!
 	bne	2f			// nope, skip this entry
 
@@ -1682,17 +1671,17 @@ _FIND:
 	What does CFA stand for?  My best guess is "Code Field Address".
 */
 
-	defcode ">cfa",4,,TCFA
+	defcode ">cfa",4,,tcfa,find
 	POPPSP	T0
-	bl	_TCFA
+	bl	_tcfa
 	PUSHPSP	T0
 	next
-_TCFA:
+_tcfa:
 	// TCFA (address: T0) (address: T0)
 	add	T0, T0, #8		// skip link pointer
 	ldrb	T1b, [T0]		// load flags+len
 	add	T0, T0, #1		// skip flags+len bytes
-	and	T1, T1, #F_LENMASK	// mask out flags
+	and	T1, T1, #f_lenmask	// mask out flags
 	add	T0, T0, T1		// skip name
 	add	T0, T0, #3		// align to 4-byte boundary
 	and	T0, T0, #~3
@@ -1719,11 +1708,11 @@ _TCFA:
 	You can see that >dfa is easily defined in FORTH just by adding 4 to the result of >CFA.
 */
 
-	defword ">dfa",4,,TDFA
-	.quad TCFA		// >CFA		(get code field address)
-	.quad INCR4		// 4+		(add 8 to it to get to next word)
-        .quad INCR4		// 4+
-	.quad EXIT		// EXIT		(return from FORTH word)
+	defword ">dfa",4,,tdfa,tcfa
+	.quad tcfa		// >CFA		(get code field address)
+	.quad incr4		// 4+		(add 8 to it to get to next word)
+        .quad incr4		// 4+
+	.quad exit		// EXIT		(return from FORTH word)
 
 /*
 	COMPILING ----------------------------------------------------------------------
@@ -1875,7 +1864,7 @@ _TCFA:
 	constants and other data).
 */
 
-	defcode "create",6,,CREATE      // ( addr len -- )
+	defcode "create",6,,create,tdfa // ( addr len -- )
 	POPPSP	T1                      // name length
 	POPPSP	T0                      // name address
 
@@ -1927,11 +1916,11 @@ _TCFA:
 	to the current word that is being compiled.
 */
 
-	defcode ",",1,,COMMA
+	defcode ",",1,,comma,create
 	POPPSP	T0                      // Code pointer to store.
-	bl	_COMMA
+	bl	_comma
 	next
-_COMMA:
+_comma:
 	// COMMA (codeword: T0) ()
 	ldr	T1, =var_here           // address of HERE
 	ldr	T2, [T1]                // value of HERE
@@ -1958,12 +1947,12 @@ _COMMA:
 	the word runs immediately, switching us back to immediate mode.
 */
 
-	defcode "[",1,F_IMMED,LBRAC
+	defcode "[",1,f_immed,lbrac,comma
 	ldr	T0, =var_state          // address of STATE
 	str	xzr, [T0]               // store 0 in STATE
 	next
 
-	defcode "]",1,,RBRAC
+	defcode "]",1,,rbrac,lbrac
 	ldr	T0, =var_state          // address of STATE
 	mov	T1, #1                  // put a 1 in the register
 	str	T1, [T0]                // store 1 in STATE
@@ -1974,23 +1963,23 @@ _COMMA:
 	the word HIDDEN and goes into compile mode.
 */
 
-	defword ":",1,,COLON
-	.quad WORD                      // Get the name of the new word
-	.quad CREATE                    // CREATE the dictionary entry / header
-	.quad LIT, DOCOL, COMMA         // Append DOCOL  (the codeword).
-	.quad LATEST, FETCH, HIDDEN     // Make the word hidden (see below for definition).
-	.quad RBRAC                     // Go into compile mode.
-	.quad EXIT                      // Return from the function.
+	defword ":",1,,colon,rbrac
+	.quad word                      // Get the name of the new word
+	.quad create                    // CREATE the dictionary entry / header
+	.quad lit, docol, comma         // Append DOCOL  (the codeword).
+	.quad latest, fetch, hidden     // Make the word hidden (see below for definition).
+	.quad rbrac                     // Go into compile mode.
+	.quad exit                      // Return from the function.
 
 /*
 	; (SEMICOLON) is also elegantly simple.  Notice the F_IMMED flag.
 */
 
-	defword ";",1,F_IMMED,SEMICOLON
-	.quad LIT, EXIT, COMMA          // Append EXIT (so the word will return).
-	.quad LATEST, FETCH, HIDDEN     // Toggle hidden flag -- unhide the word (see below for definition).
-	.quad LBRAC                     // Go back to IMMEDIATE mode.
-	.quad EXIT                      // Return from the function.
+	defword ";",1,f_immed,semicolon,colon
+	.quad lit, exit, comma          // Append EXIT (so the word will return).
+	.quad latest, fetch, hidden     // Toggle hidden flag -- unhide the word (see below for definition).
+	.quad lbrac                     // Go back to IMMEDIATE mode.
+	.quad exit                      // Return from the function.
 
 /*
 	EXTENDING THE COMPILER ----------------------------------------------------------------------
@@ -2020,11 +2009,11 @@ _COMMA:
 	The two usages are equivalent, to a first approximation.
 */
 
-	defcode "immediate",9,F_IMMED,IMMEDIATE
+	defcode "immediate",9,f_immed,immediate,semicolon
 	ldr	T0, =var_latest		// address of LATEST
 	ldr	T0, [T0]		// value of LATEST
 	ldrb	T1b, [T0, #8]		// get length/flag byte
-	eor	T1, T1, #F_IMMED	// toggle IMMED bit
+	eor	T1, T1, #f_immed	// toggle IMMED bit
 	strb	T1b, [T0, #8]		// update length/flag byte
 	next
 
@@ -2050,18 +2039,18 @@ _COMMA:
 	After this, only MAIN is 'exported' or seen by the rest of the program.
 */
 
-	defcode "hidden",6,,HIDDEN
+	defcode "hidden",6,,hidden,immediate
 	POPPSP	T0			// dictionary entry
 	ldrb	T1b, [T0, #8]		// get length/flag byte
-	eor	T1, T1, #F_HIDDEN	// toggle HIDDEN bit
+	eor	T1, T1, #f_hidden	// toggle HIDDEN bit
 	strb	T1b, [T0, #8]		// update length/flag byte
 	next
 
-        defword "hide",4,,HIDE
-	.quad WORD		// Get the word (after hide).
-	.quad FIND		// Look up in the dictionary.
-	.quad HIDDEN		// Set F_HIDDEN flag.
-	.quad EXIT		// Retu
+        defword "hide",4,,hide,hidden
+	.quad word		// Get the word (after HIDE).
+	.quad find		// Look up in the dictionary.
+	.quad hidden		// Set F_HIDDEN flag.
+	.quad exit		// Retu
 
 /*
 	' (TICK) is a standard FORTH word which returns the codeword pointer of the next word.
@@ -2092,7 +2081,7 @@ _COMMA:
 	immediate mode too.
 */
 
-	defcode "'",1,,TICK
+	defcode "'",1,,tick,hide
 	ldr	T0, [NIP], #8   	// load address of next word from NIP, increment NIP to skip it
 	PUSHPSP	T0
 	next
@@ -2138,15 +2127,15 @@ _COMMA:
 					  +-------------+
 */
 
-	defcode "branch",6,,BRANCH
+	defcode "branch",6,,branch,tick
 	ldr	T0, [NIP]	// offset to add
 	add	NIP, NIP, T0	// add it!
 	next
 
-	defcode "0branch",7,,ZBRANCH
+	defcode "0branch",7,,zbranch,branch
 	POPPSP	T0
 	cmp	T0, #0		// top of stack zero?
-	beq	code_BRANCH	// yes, do the branch
+	beq	code_branch	// yes, do the branch
 	add	NIP, NIP, #8	// no, skip the offset
 	next
 
@@ -2160,7 +2149,7 @@ _COMMA:
 	can make it a single Linux syscall.
 */
 
-	defcode "litstring",9,,LITSTRING
+	defcode "litstring",9,,litstring,zbranch
 	ldr	T0, [NIP], #8	// get length of string, increment
 	PUSHPSP	NIP		// push address of string
 	PUSHPSP	T0		// push length of string
@@ -2169,18 +2158,11 @@ _COMMA:
 	and	NIP, NIP, #~7
 	next
 
-	defcode "tell",4,,TELL
+	defcode "tell",4,,tell,litstring
 	POPPSP	T1		// length
-	POPPSP	T0		// address
-	bl	_TELL
+	POPPSP	T2		// address
+        OUTS    T2, T1
 	next
-_TELL:
-	mov	T2, T1		// length
-	mov	T1, T0		// address
-	mov	T0, #stdout
-	mov	x8, #__NR_write // "write" syscall number
-	svc	#0              // invoke syscall
-	ret
 
 /*
 	QUIT AND INTERPRET ----------------------------------------------------------------------
@@ -2195,32 +2177,32 @@ _TELL:
 	description -- see: http://en.wikipedia.org/wiki/REPL).
 */
 
-	defword "quit",4,,QUIT
-	.quad RZ,RSPSTORE	// R0 RSP!, clear the return stack
-	.quad INTERPRET		// interpret the next word
-	.quad BRANCH,-16	// and loop (indefinitely)
+	defword "quit",4,,quit,tell
+	.quad rz,rspstore	// R0 RSP!, clear the return stack
+	.quad interpret		// interpret the next word
+	.quad branch,-16	// and loop (indefinitely)
 
 /*
 	This interpreter is pretty simple, but remember that in FORTH you can always override
 	it later with a more powerful one!
  */
 
-	defcode "interpret",9,,INTERPRET
+	defcode "interpret",9,,interpret,quit
 	mov	U3, #0			// reset interpret_is_lit flag
 
-	bl	_WORD			// returns T0 = address, T1 = length
+	bl	_word			// returns T0 = address, T1 = length
 	mov	U0, T0			// address
 	mov	U1, T1			// length
 
         // is it in the dictionary?
-	bl	_FIND			// returns T0 = dictionary entry
+	bl	_find			// returns T0 = dictionary entry
 	cmp	T0, #0			// = NULL?
 	beq	1f			// not found!
 
 	// found in dictionary, check if it's immediate
 	ldrb	U2b, [T0, #8]		// load length/flags byte
-	bl	_TCFA			// returns T0 = codeword pointer
-	tst	U2, #F_IMMED		// test immediate flag
+	bl	_tcfa			// returns T0 = codeword pointer
+	tst	U2, #f_immed		// test immediate flag
 	bne	4f			// if IMMED, jump straight to executing
 	b	2f			// else, jump to compile/execute
 
@@ -2228,12 +2210,12 @@ _TELL:
 	add	U3, U3, #1		// set interpret_is_lit flag
 	mov	T0, U0			// address
 	mov	T1, U1			// length
-	bl	_NUMBER			// returns T0 = number, T1 = unparsed
+	bl	_number			// returns T0 = number, T1 = unparsed
 	cmp	T1, #0			// unparsed > 0?
 	bne	6f			// error!
 
 	mov	U2, T0			// number
-	ldr	T0, =LIT		// codeword is LIT
+	ldr	T0, =lit		// codeword is LIT
 
 2:	// are we compiling or executing?
 	ldr	T2, =var_state		// address of STATE
@@ -2242,12 +2224,12 @@ _TELL:
 	beq	4f			// jump straight to execute!
 
 	// compiling, append word to current dictionary definition
-	bl	_COMMA			// expects codeword in T0
+	bl	_comma			// expects codeword in T0
 	cmp	U3, #0			// interpret_is_lit == 0?
 	beq	3f			// yep, so we're done
 
 	mov	T0, U2			// number
-	bl	_COMMA			// expects codeword in T0
+	bl	_comma			// expects codeword in T0
 3:
 	next
 
@@ -2266,11 +2248,9 @@ _TELL:
 
 6:
 	// parse error, print context from input buffer
-	mov	T0, #stderr
 	ldr	T1, =errmsg		// address
 	mov	T2, #errmsgend-errmsg	// length
-	mov	x8, #__NR_write
-	svc	#0
+        OUTS    T1, T2
 
 	mov	T0, #stderr
 	ldr	T1, =currkey		// address of currkey
@@ -2281,14 +2261,11 @@ _TELL:
 //        mov     T1, #40                 // Move 40 into a temporary register x1
 //        csel    T2, T2, T1, le          // Conditionally select: if T2 <= 40, keep T2; if T2 > 40, set T2 to 40
 //	sub	T1, T1, T2		// buffer_to_print = currkey - capped_length
-	mov	x8, #__NR_write         // "write" syscall
-	svc	#0                      // invoke syscall
+        OUTS    T1, T2
 
-	mov	T0, #stderr
 	ldr	T1, =errmsgnl		// address
-	mov	T2, #1			// length
-	mov	x8, #__NR_write
-	svc	#0
+	mov	T2, #2			// length
+        OUTS    T1, T2
 	next
 
 	.section .rodata
@@ -2312,13 +2289,13 @@ errmsgnl: .ascii "'\n"
 
 */
 
-	defcode "char",4,,CHAR
-	bl	_WORD			// returns T0 = address, T1 = length
+	defcode "char",4,,char,interpret
+	bl	_word			// returns T0 = address, T1 = length
 	ldrb	T0b, [T0]		// get first character
 	PUSHPSP	T0			// push it
 	next
 
-	defcode "execute",7,,EXECUTE
+	defcode "execute",7,,execute,char
 	POPPSP	T0			// grab execution token, whatever that is?
 	br	T0			// jump to it (execution token's next will continue)
 
@@ -2396,18 +2373,24 @@ rmsgnl: .ascii "\n"
 	We allocate static buffers for the return static and input buffer (used when
 	reading in files and text that the user types in).
 */
-	.set RETURN_STACK_SIZE,8192
+	.set RETURN_STACK_SIZE,512*1024
+        .set DATA_STACK_SIZE,512*1024
         .set BUFFER_SIZE,4096
 
-/* FORTH return stack */
 	.bss
+/* FORTH return stack */
 	.align 12
 return_stack:
 	.space RETURN_STACK_SIZE
 return_stack_top:
 
-/* This is used as a temporary input buffer when reading from files or the terminal. */
+        .align 12
+data_stack:
+        .space DATA_STACK_SIZE
+data_stack_top:
+
 	.align 12
+/* This is used as a temporary input buffer when reading from files or the terminal. */
 buffer:
 	.space BUFFER_SIZE
 
