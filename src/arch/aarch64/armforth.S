@@ -206,8 +206,8 @@
 	In FORTH as you will know, functions are called "words", and just as in other languages they
 	have a name and a definition.  Here are two FORTH words:
 
-	: DOUBLE DUP + ;		\ name is "DOUBLE", definition is "DUP +"
-	: QUADRUPLE DOUBLE DOUBLE ;	\ name is "QUADRUPLE", definition is "DOUBLE DOUBLE"
+	: double DUP + ;		\ name is "double", definition is "DUP +"
+	: quadruple double double ;	\ name is "quadruple", definition is "double double"
 
 	Words, both built-in ones and ones which the programmer defines later, are stored in a dictionary
 	which is just a linked list of dictionary entries.
@@ -229,7 +229,7 @@
 	A FORTH variable called LATEST contains a pointer to the most recently defined word, in
 	other words, the head of this linked list.
 
-	DOUBLE and QUADRUPLE might look like this:
+	double and quadruple might look like this:
 
 	  pointer to previous word
 	   ^
@@ -340,15 +340,15 @@
 	And that brings us to our first piece of actual code!  Well, it's a macro.
 */
 
-	.macro NEXT
+	.macro next
 	ldr	T0, [NIP], #8	// load WORD from NIP, increment NIP
 	ldr	T1, [T0]	// load CODEWORD (offset 0 of WORD)
 	br	T1		// jump to CODEWORD
 	.endm
 
-/*	The macro is called NEXT.  That's a FORTH-ism.  It expands to those two instructions.
+/*	The macro is called next.  That's a FORTH-ism.  It expands to those two instructions.
 
-	Every FORTH primitive that we write has to be ended by NEXT.  Think of it kind of like
+	Every FORTH primitive that we write has to be ended by next.  Think of it kind of like
 	a return.
 
 	The above describes what is known as direct threaded code.
@@ -359,10 +359,10 @@
 
 	I'll just give you a hint of what is to come by saying that a FORTH definition such as:
 
-	: QUADRUPLE DOUBLE DOUBLE ;
+	: quadruple double double ;
 
 	actually compiles (almost, not precisely but we'll see why in a moment) to a list of
-	function addresses for DOUBLE, DOUBLE and a special function called EXIT to finish off.
+	function addresses for double, double and a special function called EXIT to finish off.
 
 	At this point, REALLY EAGLE-EYED ASSEMBLY EXPERTS are saying "JONES, YOU'VE MADE A MISTAKE!".
 
@@ -371,38 +371,38 @@
 	INDIRECT THREADED CODE ----------------------------------------------------------------------
 
 	It turns out that direct threaded code is interesting but only if you want to just execute
-	a list of functions written in assembly language.  So QUADRUPLE would work only if DOUBLE
-	was an assembly language function.  In the direct threaded code, QUADRUPLE would look like:
+	a list of functions written in assembly language.  So quadruple would work only if double
+	was an assembly language function.  In the direct threaded code, quadruple would look like:
 
 		+------------------+
-		| addr of DOUBLE  --------------------> (assembly code to do the double)
-		+------------------+                    NEXT
-	%esi ->	| addr of DOUBLE   |
+		| addr of double  --------------------> (assembly code to do the double)
+		+------------------+                    next
+	%esi ->	| addr of double   |
 		+------------------+
 
 	We can add an extra indirection to allow us to run both words written in assembly language
 	(primitives written for speed) and words written in FORTH themselves as lists of addresses.
 
-	The extra indirection is the reason for the brackets in JMP *(%eax).
+	The extra indirection is the reason for the brackets in jmp *(%eax).
 
-	Let's have a look at how QUADRUPLE and DOUBLE really look in FORTH:
+	Let's have a look at how quadruple and double really look in FORTH:
 
-	        : QUADRUPLE DOUBLE DOUBLE ;
+	        : quadruple double double ;
 
 		+------------------+
-		| codeword         |		   : DOUBLE DUP + ;
+		| codeword         |		   : double dup + ;
 		+------------------+
-		| addr of DOUBLE  ---------------> +------------------+
+		| addr of double  ---------------> +------------------+
 		+------------------+               | codeword         |
-		| addr of DOUBLE   |		   +------------------+
-		+------------------+	   	   | addr of DUP   --------------> +------------------+
-		| addr of EXIT	   |		   +------------------+            | codeword      -------+
+		| addr of double   |		   +------------------+
+		+------------------+	   	   | addr of dup   --------------> +------------------+
+		| addr of exit	   |		   +------------------+            | codeword      -------+
 		+------------------+	   %esi -> | addr of +     --------+	   +------------------+   |
 						   +------------------+	   |	   | assembly to    <-----+
-						   | addr of EXIT     |    |       | implement DUP    |
+						   | addr of exit     |    |       | implement dup    |
 						   +------------------+	   |	   |	..	      |
 									   |	   |    ..            |
-									   |	   | NEXT             |
+									   |	   | next             |
 									   |	   +------------------+
 									   |
 									   +-----> +------------------+
@@ -412,7 +412,7 @@
 										   | implement +      |
 										   | 	..            |
 										   | 	..            |
-										   | NEXT      	      |
+										   | next      	      |
 										   +------------------+
 
 	This is the part where you may need an extra cup of tea/coffee/favourite caffeinated
@@ -422,14 +422,14 @@
 	assembly language, the "interpreter" just points to the actual assembly code itself.
 	They don't need interpreting, they just run.
 
-	In words written in FORTH (like QUADRUPLE and DOUBLE), the codeword points to an interpreter
+	In words written in FORTH (like quadruple and double), the codeword points to an interpreter
 	function.
 
 	I'll show you the interpreter function shortly, but let's recall our indirect
-	JMP *(%eax) with the "extra" brackets.  Take the case where we're executing DOUBLE
+	jmp *(%eax) with the "extra" brackets.  Take the case where we're executing double
 	as shown, and DUP has been called.  Note that %esi is pointing to the address of +
 
-	The assembly code for DUP eventually does a NEXT.  That:
+	The assembly code for dup eventually does a next.  That:
 
 	(1) reads the address of + into %eax		%eax points to the codeword of +
 	(2) increments %esi by 4
@@ -439,17 +439,17 @@
 		+------------------+
 		| codeword         |
 		+------------------+
-		| addr of DOUBLE  ---------------> +------------------+
+		| addr of double  ---------------> +------------------+
 		+------------------+               | codeword         |
-		| addr of DOUBLE   |		   +------------------+
-		+------------------+	   	   | addr of DUP   --------------> +------------------+
-		| addr of EXIT	   |		   +------------------+            | codeword      -------+
+		| addr of double   |		   +------------------+
+		+------------------+	   	   | addr of dup   --------------> +------------------+
+		| addr of exit	   |		   +------------------+            | codeword      -------+
 		+------------------+	   	   | addr of +     --------+	   +------------------+   |
 						   +------------------+	   |	   | assembly to    <-----+
-					   %esi -> | addr of EXIT     |    |       | implement DUP    |
+					   %esi -> | addr of exit     |    |       | implement dup    |
 						   +------------------+	   |	   |	..	      |
 									   |	   |    ..            |
-									   |	   | NEXT             |
+									   |	   | next             |
 									   |	   +------------------+
 									   |
 									   +-----> +------------------+
@@ -459,10 +459,10 @@
 									executing  | implement +      |
 									this	   | 	..            |
 									function   | 	..            |
-										   | NEXT      	      |
+										   | next      	      |
 										   +------------------+
 
-	So I hope that I've convinced you that NEXT does roughly what you'd expect.  This is
+	So I hope that I've convinced you that next does roughly what you'd expect.  This is
 	indirect threaded code.
 
 	I've glossed over four things.  I wonder if you can guess without reading on what they are?
@@ -587,10 +587,10 @@ U3b     .req    w7      // U3 as a short
 
 	The "interpreter" (it's not really "interpreting") just needs to push the old NIP (next
 	instruction pointer) on the return stack and set NIP to the first word in the definition.
-	Remember that we jumped to the function using the NEXT macro?  Well a consequence of that is
+	Remember that we jumped to the function using the next macro?  Well a consequence of that is
 	that conveniently T0 contains the address the word, so just by adding 8 to it we get the
 	address of the first data word which is our new NIP.  Finally after setting up NIP, it just
-	does NEXT which causes that first word to run.
+	does next which causes that first word to run.
 
 */
 
@@ -600,7 +600,7 @@ U3b     .req    w7      // U3 as a short
 DOCOL:
 	PUSHRSP	NIP		// push NIP on return stack
 	add	NIP, T0, #8	// skip codeword, make NIP the first dataword
-	NEXT
+	next
 
 /*
 	Just to make this absolutely clear, let's see how DOCOL works when jumping from QUADRUPLE
@@ -632,7 +632,7 @@ stack points ->	| addr of DOUBLE   |	   + 4 =   +------------------+
 		| addr of EXIT	   |		   +------------------+
 		+------------------+               | etc.             |
 
-	Then we do NEXT, and because of the magic of threaded code that increments %esi again
+	Then we do next, and because of the magic of threaded code that increments %esi again
 	and calls DUP.
 
 	Well, it seems to work.
@@ -669,7 +669,7 @@ stack points ->	| addr of DOUBLE   |	   + 4 =   +------------------+
 	.global _start
 _start:
         ldr     T0, =_forth_pstack_high // get the linker-supplied top of pstack
-        ldr     T1, =var_S0             // save initial data stack pointer in FORTH variable S0
+        ldr     T1, =var_s0             // save initial data stack pointer in FORTH variable S0
         str     T0, [T1]
         mov     PSP, T0                 // initialize parameter stack
 
@@ -679,7 +679,7 @@ _start:
         mov     RSP, T0                 // initialize return stack
 
 	ldr	NIP, =cold_start        // initialize interpreter
-	NEXT                            // run interpreter
+	next                            // run interpreter
 
 	.section .rodata
 cold_start:
@@ -763,7 +763,7 @@ name_\label :
 //	+--|------+---+---+---+---+---+------------+
 //	| LINK    | 3 | D | U | P | 0 | code_DUP -----------------> points to the assembly
 //	+---------+---+---+---+---+---+------------+                code used to write DUP,
-//           ^       len              codeword			    which ends with NEXT.
+//           ^       len              codeword			    which ends with next.
 //           |
 //	    LINK in next word
 //
@@ -804,32 +804,32 @@ code_\label :
 */
 
 	// DROP (a -- )
-	defcode "DROP",4,,DROP
+	defcode "drop",4,,DROP
 	add	PSP, PSP, #8
-	NEXT
+	next
 
 	// SWAP (a b -- b a)
-	defcode "SWAP",4,,SWAP
+	defcode "swap",4,,SWAP
 	ldr	T0, [PSP]
 	ldr	T1, [PSP, #8]
 	str	T0, [PSP, #8]
 	str	T1, [PSP]
-	NEXT
+	next
 
 	// DUP (a -- a a)
-	defcode "DUP",3,,DUP
+	defcode "dup",3,,DUP
 	ldr	T0, [PSP]
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// OVER (a b -- a b a)
-	defcode "OVER",4,,OVER
+	defcode "over",4,,OVER
 	ldr	T0, [PSP, #8]
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// ROT ( n1 n2 n3 -- n2 n3 n1 )
-	defcode "ROT",3,,ROT
+	defcode "rot",3,,ROT
         POPPSP  T0                      // n3
         POPPSP  T1                      // n2
         POPPSP  T2                      // n1
@@ -837,10 +837,10 @@ code_\label :
         PUSHPSP T1                      // n2
         PUSHPSP T0                      // n3
         PUSHPSP T2                      // n1
-	NEXT
+	next
 
 	// -ROT ( n1 n2 n3 -- n3 n1 n2 )
-	defcode "-ROT",4,,NROT
+	defcode "-rot",4,,NROT
         POPPSP  T0                      // n3
         POPPSP  T1                      // n2
         POPPSP  T2                      // n1
@@ -848,84 +848,84 @@ code_\label :
         PUSHPSP T0                      // n3
         PUSHPSP T2                      // n1
         PUSHPSP T1                      // n2
-	NEXT
+	next
 
-        defcode "?DUP",4,,QDUP          // duplicate top of stack if it is non-zero
+        defcode "?dup",4,,QDUP          // duplicate top of stack if it is non-zero
         ldr     T0, [PSP]
         cmp     T0, #0
         beq     1f
         PUSHPSP T0
-1:      NEXT
+1:      next
 
         defcode "1+",2,,INCR
         POPP    T0
         add     T0, T0, #1
         PUSHP   T0
-        NEXT
+        next
 
         defcode "1-",2,,DECR
         POPP    T0
         sub     T0, T0, #1
         PUSHP   T0
-        NEXT
+        next
 
         defcode "4+",2,,INCR4
         POPP    T0
         add     T0,T0,#4
         PUSHP   T0
-        NEXT
+        next
 
         defcode "4-",2,,DECR4
         POPP    T0
         sub     T0,T0,#4
         PUSHP   T0
-        NEXT
+        next
 
 	// + (a b -- a+b)
 	defcode "+",1,,ADD
 	POPP	T0, T1
 	add	T0, T1, T0
 	PUSHP	T0
-	NEXT
+	next
 
         // - (a b -- a-b)
 	defcode "-",1,,SUB
 	POPP	T0, T1
 	sub	T0, T1, T0
 	PUSHP	T0
-	NEXT
+	next
 
 	// * (a b -- a*b)
 	defcode "*",1,,MUL
 	POPP	T0, T1
 	mul	T0, T1, T0
 	PUSHP	T0
-	NEXT
+	next
 
 //      In this FORTH, only /MOD is primitive.  Later we will define
 //      the / and MOD words in terms of the primitive /MOD.
 
 	// /MOD (a b -- a%b a/b)
-	defcode "/MOD",4,,DIVMOD
+	defcode "/mod",4,,DIVMOD
         POPP    T2, T1
         udiv    T0, T1, T2              // T0 = T1 / T2
         msub    T3, T0, T2, T1          // T3 = T1 - (T0 * T2)
         PUSHP   T3                      // push remainder
         PUSHP   T0                      // push quotient
-	NEXT
+	next
 
 // for debugging, use this for gdb breakpoints
 // In gdb, run `b code_BRK`
-        defcode "BRK",3,,BRK
-        NEXT
+        defcode "brk",3,,BRK
+        next
 
 // for debugging, switch PONG messages ON/OFF
-	defcode "DONG",4,,DONG
-	ldr	T0, =var_PONG
+	defcode "dong",4,,DONG
+	ldr	T0, =var_pong
 	ldr	T1, [T0]
 	mvn	T1, T1
 	str	T1, [T0]
-	NEXT
+	next
 
 	.section .rodata
 
@@ -942,7 +942,7 @@ code_\label :
 	cmp	T1, T0
         csinc   T0, xzr, xzr, ne
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// <> (a b -- a<>b)
 	defcode "<>",2,,NEQU
@@ -950,7 +950,7 @@ code_\label :
 	cmp	T1, T0
         csinc   T0, xzr, xzr, eq
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// < (a b -- a<b)
 	defcode "<",1,,LT
@@ -958,7 +958,7 @@ code_\label :
 	cmp	T1, T0
         csinc   T0, xzr, xzr, ge
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// > (a b -- a>b)
 	defcode ">",1,,GT
@@ -966,7 +966,7 @@ code_\label :
 	cmp	T1, T0
         csinc   T0, xzr, xzr, le
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// <= (a b -- a<=b)
 	defcode "<=",2,,LE
@@ -974,7 +974,7 @@ code_\label :
 	cmp	T1, T0
         csinc   T0, xzr, xzr, gt
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// >= (a b -- a>=b)
 	defcode ">=",2,,GE
@@ -982,7 +982,7 @@ code_\label :
 	cmp	T1, T0
         csinc   T0, xzr, xzr, lt
 	PUSHPSP	T0
-	NEXT
+	next
 
         // 0= (a -- a == 0)
         defcode "0=",2,,ZEROEQ
@@ -990,7 +990,7 @@ code_\label :
         cmp     T0, xzr
         csinc   T0, xzr, xzr, ne
         PUSHPSP T0
-        NEXT
+        next
 
         // 0<> (a -- a <> 0)
         defcode "0<>",3,,ZERONE
@@ -998,7 +998,7 @@ code_\label :
         cmp     T0, xzr
         csinc   T0, xzr, xzr, eq
         PUSHPSP T0
-        NEXT
+        next
 
         // 0< (a -- a<0)
         defcode "0<",2,,ZLT
@@ -1006,7 +1006,7 @@ code_\label :
         cmp     T0, xzr
         csinc   T0, xzr, xzr, ge
         PUSHPSP T0
-        NEXT
+        next
 
         // 0> (a -- a>0)
         defcode "0>",2,,ZGT
@@ -1014,7 +1014,7 @@ code_\label :
         cmp     T0, xzr
         csinc   T0, xzr, xzr, le
         PUSHPSP T0
-        NEXT
+        next
 
         // 0<= (a -- a<=0)
         defcode "0<=",3,,ZLE
@@ -1022,7 +1022,7 @@ code_\label :
         cmp     T0, xzr
         csinc   T0, xzr, xzr, gt
         PUSHPSP T0
-        NEXT
+        next
 
         // 0>= (a -- a>=0)
         defcode "0>=",3,,ZGE
@@ -1030,35 +1030,35 @@ code_\label :
         cmp     T0, xzr
         csinc   T0, xzr, xzr, lt
         PUSHPSP T0
-        NEXT
+        next
 
 	// AND (a b -- a&b)
-	defcode "AND",3,,AND
+	defcode "and",3,,AND
 	POPP	T0, T1
 	and	T0, T1, T0
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// OR (a b -- a|b)
-	defcode "OR",2,,OR
+	defcode "or",2,,OR
 	POPP	T0, T1
 	orr	T0, T1, T0
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// XOR (a b -- a^b)
-	defcode "XOR",3,,XOR
+	defcode "xor",3,,XOR
 	POPP	T0, T1
 	eor	T0, T1, T0
 	PUSHPSP	T0
-	NEXT
+	next
 
 	// INVERT (a -- ~a)
-	defcode "INVERT",6,,INVERT
+	defcode "invert",6,,INVERT
 	ldr	T0, [PSP]
 	mvn	T0, T0
 	str	T0, [PSP]
-	NEXT
+	next
 
 /*
 	RETURNING FROM FORTH WORDS ----------------------------------------------------------------------
@@ -1080,16 +1080,16 @@ code_\label :
 					    NIP -> | addr of EXIT     |
 						   +------------------+
 
-	What happens when the + function does NEXT?  Well, the following code is executed.
+	What happens when the + function does next?  Well, the following code is executed.
 */
 
-	defcode "EXIT",4,,EXIT
+	defcode "exit",4,,EXIT
 	POPRSP	NIP
-	NEXT
+	next
 
 /*
 	EXIT gets the old NIP which we saved from before on the return stack, and puts it in NIP.
-	So after this (but just before NEXT) we get:
+	So after this (but just before next) we get:
 
 		QUADRUPLE
 		+------------------+
@@ -1105,7 +1105,7 @@ code_\label :
 						   | addr of EXIT     |
 						   +------------------+
 
-	And NEXT just completes the job by, well, in this case just by calling DOUBLE again :-)
+	And next just completes the job by, well, in this case just by calling DOUBLE again :-)
 
 	LITERALS ----------------------------------------------------------------------
 
@@ -1130,10 +1130,10 @@ code_\label :
 
 */
 
-	defcode "LIT",3,,LIT
+	defcode "lit",3,,LIT
 	ldr	T0, [NIP], #8	// load word from NIP, then increment NIP
 	PUSHPSP	T0		// push the word
-	NEXT
+	next
 
 /*
 	MEMORY ----------------------------------------------------------------------
@@ -1147,14 +1147,14 @@ code_\label :
 	defcode "!",1,,STORE
 	POPP	T0, T1
 	str	T1, [T0]
-	NEXT
+	next
 
 	// // (address -- value) value = M[address]
 	defcode "@",1,,FETCH
 	POPPSP	T0
 	ldr	T1, [T0]
 	PUSHPSP	T1
-	NEXT
+	next
 
 	// +! (value address -- ) M[address] += value
 	defcode "+!",2,,ADDSTORE
@@ -1162,7 +1162,7 @@ code_\label :
 	ldr	T2, [T0]
 	add	T2, T2, T1
 	str	T2, [T0]
-	NEXT
+	next
 
 	// -! (value address -- ) M[address] -= value
 	defcode "-!",2,,SUBSTORE
@@ -1170,7 +1170,7 @@ code_\label :
 	ldr	T2, [T0]
 	sub	T2, T2, T1
 	str	T2, [T0]
-	NEXT
+	next
 
 /*
 
@@ -1179,30 +1179,30 @@ code_\label :
 
 */
 
-	defcode "C!",2,,STOREBYTE
+	defcode "c!",2,,STOREBYTE
 	POPPSP	T0		// address
 	POPPSP	T1		// value
 	strb	T1b, [T0]	// store
-	NEXT
+	next
 
-	defcode "C@",2,,FETCHBYTE
+	defcode "c@",2,,FETCHBYTE
 	POPPSP	T0		// address
 	ldrb	T1b, [T0]	// load and sign extend
 	PUSHPSP	T1
-	NEXT
+	next
 
 /* C@C! is a useful byte copy operation */
-	defcode "C@C!",4,,CCOPY
+	defcode "c@c!",4,,CCOPY
 	ldr	T0, [PSP, #8]	// source address
 	ldr	T1, [PSP]	// destination address
 	ldrb	T2b, [T0], #1	// load and increment
 	strb	T2b, [T1], #1	// store and increment
 	str	T0, [PSP, #8]	// update source
 	str	T1, [PSP]	// update destination
-	NEXT
+	next
 
 /* and CMOVE is a block copy operation. */
-	defcode "CMOVE",5,,CMOVE
+	defcode "cmove",5,,CMOVE
 	POPPSP	T0		// length
 	POPPSP	T1		// destination address
 	POPPSP	T2		// source address
@@ -1213,7 +1213,7 @@ code_\label :
 	subs	T0, T0, #1	// decrement counter
 	b.gt	1b		// until length = 0
 2:
-	NEXT
+	next
 
 /*
 	BUILT-IN VARIABLES ----------------------------------------------------------------------
@@ -1234,7 +1234,7 @@ code_\label :
 	defcode \name,\namelen,\flags,\label
 	ldr	T0, =var_\name	// load address
 	PUSHPSP	T0		// push address
-	NEXT
+	next
 	.data
 	.align 2
 var_\name :
@@ -1253,13 +1253,13 @@ var_\name :
 
 */
 
-	defvar "STATE",5,,STATE
-	defvar "HERE",4,,HERE
-	defvar "LATEST",6,,LATEST,name_SYSCALL0 // SYSCALL0 must be last in built-in dictionary
-	defvar "S0",2,,SZ
-	defvar "BASE",4,,BASE,10
+	defvar "state",5,,STATE
+	defvar "here",4,,HERE
+	defvar "latest",6,,LATEST,name_SYSCALL0 // SYSCALL0 must be last in built-in dictionary
+	defvar "s0",2,,SZ
+	defvar "base",4,,BASE,10
 // for debugging
-	defvar	"PONG",4,,PONG
+	defvar	"pong",4,,PONG
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
@@ -1282,7 +1282,7 @@ var_\name :
 	defcode \name,\namelen,\flags,\label
 	ldr	T0, =\value
 	PUSHPSP	T0
-	NEXT
+	next
 	.endm
 
 	defconst "VERSION",7,,VERSION,JONES_VERSION
@@ -1299,27 +1299,27 @@ var_\name :
 	the top of the return stack.
 */
 
-	defcode ">R",2,,TOR
+	defcode ">r",2,,TOR
 	POPPSP	T0                      // pop parameter stack into T0
 	PUSHRSP	T0                      // and push it onto the return stack
-	NEXT
+	next
 
-	defcode "R>",2,,FROMR
+	defcode "r>",2,,FROMR
 	POPRSP	T0                      // pop return stack into T0
 	PUSHPSP	T0                      // and push it onto the parameter stack
-	NEXT
+	next
 
-	defcode "RSP@",4,,RSPFETCH
+	defcode "rsp@",4,,RSPFETCH
 	PUSHPSP	RSP                     // get the top of the return stack
-	NEXT
+	next
 
-	defcode "RSP!",4,,RSPSTORE
+	defcode "rsp!",4,,RSPSTORE
 	POPPSP	RSP                     // set the top of the return stack
-	NEXT
+	next
 
-	defcode "RDROP",5,,RDROP
+	defcode "rdrop",5,,RDROP
 	add	RSP, RSP, #8            // drop the top of the return stack
-	NEXT
+	next
 
 /*
 	PARAMETER (DATA) STACK ----------------------------------------------------------------------
@@ -1328,15 +1328,15 @@ var_\name :
 	stack for us, and it is accessed through x28.
 */
 
-	defcode "DSP@",4,,DSPFETCH
+	defcode "dsp@",4,,DSPFETCH
 	mov	T0, PSP
 	PUSHPSP	T0
-	NEXT
+	next
 
-	defcode "DSP!",4,,DSPSTORE
+	defcode "dsp!",4,,DSPSTORE
 	POPPSP	T0
 	mov	PSP, T0
-	NEXT
+	next
 
 /*
 	INPUT AND OUTPUT ----------------------------------------------------------------------
@@ -1377,10 +1377,10 @@ var_\name :
 
 */
 
-	defcode "KEY",3,,KEY
+	defcode "key",3,,KEY
 	bl	_KEY
 	PUSHPSP	T0
-	NEXT
+	next
 _KEY:
 	// KEY () (char: T0)
 	PUSHP	U2, U3
@@ -1438,10 +1438,10 @@ bufftop:
         bne     1b                      // if not done, loop
         .endm
 
-	defcode "EMIT",4,,EMIT
+	defcode "emit",4,,EMIT
 	POPPSP	T0
         OUTB
-	NEXT
+	next
 
 /*
 	Back to input, WORD is a FORTH word which reads the next full word of input.
@@ -1472,11 +1472,11 @@ bufftop:
 	and immediate mode, and you'll understand why.
 */
 
-	defcode "WORD",4,,WORD
+	defcode "word",4,,WORD
 	bl _WORD
 	PUSHPSP	T0			// address
 	PUSHPSP	T1			// length
-	NEXT
+	next
 _WORD:
 	// WORD () (address: T0, length: T1)
 	PUSHP	U0, lr
@@ -1526,13 +1526,13 @@ word_buffer:
 	partial value if there was an error.
 */
 
-	defcode "NUMBER",6,,NUMBER
+	defcode "number",6,,NUMBER
 	POPPSP	T1		// length of string
 	POPPSP	T0		// address of string
 	bl	_NUMBER
 	PUSHPSP	T0		// number
 	PUSHPSP	T1		// # unparsed
-	NEXT
+	next
 _NUMBER:
 	// NUMBER(address: T0, length: T1) (number: T0, unparsed: T1)
 	PUSHP	U0,U1,U2,U3,lr
@@ -1542,7 +1542,7 @@ _NUMBER:
 	cmp	T1, #0		// length <= 0?
 	ble	5f		// really an error, but returns 0 anyway
 
-	ldr	U0, =var_BASE
+	ldr	U0, =var_base
 	ldr	U0, [U0]	// get BASE
 	ldrb	U1b, [T2], #1	// get character and increment address
 	mov	U3, #0		// set negative flag false
@@ -1601,24 +1601,24 @@ _NUMBER:
 	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
 	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
 
-	See also >CFA and >DFA.
+	See also >CFA and >dfa.
 
 	FIND doesn't find dictionary entries which are flagged as HIDDEN.  See below for why.
 */
 
-	defcode "FIND",4,,FIND
+	defcode "find",4,,FIND
 	POPPSP	T1			// length of string
 	POPPSP	T0			// address of string
 	bl	_FIND
 	PUSHPSP	T0			// address of dictionary entry (or 0)
-	NEXT
+	next
 _FIND:
 	// FIND (address: T0, length: T1) (address: T0)
 	PUSHP	U0,U1,U2,U3,lr
 
 	mov	T2, T1			// length
 	mov	T1, T0			// address
-	ldr	T0, =var_LATEST
+	ldr	T0, =var_latest
 	ldr	T0, [T0]		// current dictionary pointer
 1:
 	cmp	T0, #0			// NULL?
@@ -1682,11 +1682,11 @@ _FIND:
 	What does CFA stand for?  My best guess is "Code Field Address".
 */
 
-	defcode ">CFA",4,,TCFA
+	defcode ">cfa",4,,TCFA
 	POPPSP	T0
 	bl	_TCFA
 	PUSHPSP	T0
-	NEXT
+	next
 _TCFA:
 	// TCFA (address: T0) (address: T0)
 	add	T0, T0, #8		// skip link pointer
@@ -1699,13 +1699,13 @@ _TCFA:
 	ret
 
 /*
-	Related to >CFA is >DFA which takes a dictionary entry address as returned by FIND and
+	Related to >CFA is >dfa which takes a dictionary entry address as returned by FIND and
 	returns a pointer to the first data field.
 
 	FIND returns a pointer to this
 	|				>CFA converts it to a pointer to this
 	|					   |
-	|					   |	>DFA converts it to a pointer to this
+	|					   |	>dfa converts it to a pointer to this
 	|					   |		 |
 	V					   V		 V
 	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
@@ -1713,13 +1713,13 @@ _TCFA:
 	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
 						   codeword
 
-	(Note to those following the source of FIG-FORTH / ciforth: My >DFA definition is
+	(Note to those following the source of FIG-FORTH / ciforth: My >dfa definition is
 	different from theirs, because they have an extra indirection).
 
-	You can see that >DFA is easily defined in FORTH just by adding 4 to the result of >CFA.
+	You can see that >dfa is easily defined in FORTH just by adding 4 to the result of >CFA.
 */
 
-	defword ">DFA",4,,TDFA
+	defword ">dfa",4,,TDFA
 	.quad TCFA		// >CFA		(get code field address)
 	.quad INCR4		// 4+		(add 8 to it to get to next word)
         .quad INCR4		// 4+
@@ -1875,13 +1875,13 @@ _TCFA:
 	constants and other data).
 */
 
-	defcode "CREATE",6,,CREATE      // ( addr len -- )
+	defcode "create",6,,CREATE      // ( addr len -- )
 	POPPSP	T1                      // name length
 	POPPSP	T0                      // name address
 
-	ldr	T2, =var_HERE           // address of HERE
+	ldr	T2, =var_here           // address of HERE
 	ldr	T3, [T2]                // T3 <- value of HERE, address of new header
-	ldr	U0, =var_LATEST         // address of LATEST
+	ldr	U0, =var_latest         // address of LATEST
 	ldr	U1, [U0]                // U1 <- value of LATEST, link pointer
 	str	T3, [U0]                // update LATEST to refer to new header
 	str	U1, [T3], #8            // store link pointer in header, increment header
@@ -1902,7 +1902,7 @@ _TCFA:
 	and	T3, T3, #~3
 
 	str	T3, [T2]                // update HERE
-	NEXT
+	next
 
 /*
 	Because I want to define : (COLON) in FORTH, not assembler, we need a few more FORTH words
@@ -1930,10 +1930,10 @@ _TCFA:
 	defcode ",",1,,COMMA
 	POPPSP	T0                      // Code pointer to store.
 	bl	_COMMA
-	NEXT
+	next
 _COMMA:
 	// COMMA (codeword: T0) ()
-	ldr	T1, =var_HERE           // address of HERE
+	ldr	T1, =var_here           // address of HERE
 	ldr	T2, [T1]                // value of HERE
 	str	T0, [T2], #8            // store it and increment T2
 	str	T2, [T1]	        // update HERE
@@ -1959,15 +1959,15 @@ _COMMA:
 */
 
 	defcode "[",1,F_IMMED,LBRAC
-	ldr	T0, =var_STATE          // address of STATE
+	ldr	T0, =var_state          // address of STATE
 	str	xzr, [T0]               // store 0 in STATE
-	NEXT
+	next
 
 	defcode "]",1,,RBRAC
-	ldr	T0, =var_STATE          // address of STATE
+	ldr	T0, =var_state          // address of STATE
 	mov	T1, #1                  // put a 1 in the register
 	str	T1, [T0]                // store 1 in STATE
-	NEXT
+	next
 
 /*
 	Now we can define : (COLON) using CREATE.  It just calls CREATE, appends DOCOL (the codeword), sets
@@ -2020,13 +2020,13 @@ _COMMA:
 	The two usages are equivalent, to a first approximation.
 */
 
-	defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
-	ldr	T0, =var_LATEST		// address of LATEST
+	defcode "immediate",9,F_IMMED,IMMEDIATE
+	ldr	T0, =var_latest		// address of LATEST
 	ldr	T0, [T0]		// value of LATEST
 	ldrb	T1b, [T0, #8]		// get length/flag byte
 	eor	T1, T1, #F_IMMED	// toggle IMMED bit
 	strb	T1b, [T0, #8]		// update length/flag byte
-	NEXT
+	next
 
 /*
 	'addr HIDDEN' toggles the hidden flag (F_HIDDEN) of the word defined at addr.  To hide the
@@ -2034,7 +2034,7 @@ _COMMA:
 
 		LATEST @ HIDDEN
 
-	'HIDE word' toggles the flag on a named 'word'.
+	'hide word' toggles the flag on a named 'word'.
 
 	Setting this flag stops the word from being found by FIND, and so can be used to make 'private'
 	words.  For example, to break up a large word into smaller parts you might do:
@@ -2043,22 +2043,22 @@ _COMMA:
 		: SUB2 ... subword ... ;
 		: SUB3 ... subword ... ;
 		: MAIN ... defined in terms of SUB1, SUB2, SUB3 ... ;
-		HIDE SUB1
-		HIDE SUB2
-		HIDE SUB3
+		hide SUB1
+		hide SUB2
+		hide SUB3
 
 	After this, only MAIN is 'exported' or seen by the rest of the program.
 */
 
-	defcode "HIDDEN",6,,HIDDEN
+	defcode "hidden",6,,HIDDEN
 	POPPSP	T0			// dictionary entry
 	ldrb	T1b, [T0, #8]		// get length/flag byte
 	eor	T1, T1, #F_HIDDEN	// toggle HIDDEN bit
 	strb	T1b, [T0, #8]		// update length/flag byte
-	NEXT
+	next
 
-        defword "HIDE",4,,HIDE
-	.quad WORD		// Get the word (after HIDE).
+        defword "hide",4,,HIDE
+	.quad WORD		// Get the word (after hide).
 	.quad FIND		// Look up in the dictionary.
 	.quad HIDDEN		// Set F_HIDDEN flag.
 	.quad EXIT		// Retu
@@ -2082,7 +2082,7 @@ _COMMA:
 
 	So you could do:
 
-	: DOUBLE LIT2 * ;
+	: double LIT2 * ;
 
 	(If you don't understand how LIT2 works, then you should review the material about compiling words
 	and immediate mode).
@@ -2095,7 +2095,7 @@ _COMMA:
 	defcode "'",1,,TICK
 	ldr	T0, [NIP], #8   	// load address of next word from NIP, increment NIP to skip it
 	PUSHPSP	T0
-	NEXT
+	next
 
 /*
 	BRANCHING ----------------------------------------------------------------------
@@ -2117,7 +2117,7 @@ _COMMA:
 								   |  +-----------------------+
 								  %esi added to offset
 
-	The offset is added to %esi to make the new %esi, and the result is that when NEXT runs, execution
+	The offset is added to %esi to make the new %esi, and the result is that when next runs, execution
 	continues at the branch target.  Negative offsets work as expected.
 
 	0BRANCH is the same except the branch happens conditionally.
@@ -2138,17 +2138,17 @@ _COMMA:
 					  +-------------+
 */
 
-	defcode "BRANCH",6,,BRANCH
+	defcode "branch",6,,BRANCH
 	ldr	T0, [NIP]	// offset to add
 	add	NIP, NIP, T0	// add it!
-	NEXT
+	next
 
-	defcode "0BRANCH",7,,ZBRANCH
+	defcode "0branch",7,,ZBRANCH
 	POPPSP	T0
 	cmp	T0, #0		// top of stack zero?
 	beq	code_BRANCH	// yes, do the branch
 	add	NIP, NIP, #8	// no, skip the offset
-	NEXT
+	next
 
 /*
 	LITERAL STRINGS ----------------------------------------------------------------------
@@ -2160,20 +2160,20 @@ _COMMA:
 	can make it a single Linux syscall.
 */
 
-	defcode "LITSTRING",9,,LITSTRING
+	defcode "litstring",9,,LITSTRING
 	ldr	T0, [NIP], #8	// get length of string, increment
 	PUSHPSP	NIP		// push address of string
 	PUSHPSP	T0		// push length of string
 	add	NIP, NIP, T0	// skip past the string
 	add	NIP, NIP, #7	// align
 	and	NIP, NIP, #~7
-	NEXT
+	next
 
-	defcode "TELL",4,,TELL
+	defcode "tell",4,,TELL
 	POPPSP	T1		// length
 	POPPSP	T0		// address
 	bl	_TELL
-	NEXT
+	next
 _TELL:
 	mov	T2, T1		// length
 	mov	T1, T0		// address
@@ -2195,7 +2195,7 @@ _TELL:
 	description -- see: http://en.wikipedia.org/wiki/REPL).
 */
 
-	defword "QUIT",4,,QUIT
+	defword "quit",4,,QUIT
 	.quad RZ,RSPSTORE	// R0 RSP!, clear the return stack
 	.quad INTERPRET		// interpret the next word
 	.quad BRANCH,-16	// and loop (indefinitely)
@@ -2205,7 +2205,7 @@ _TELL:
 	it later with a more powerful one!
  */
 
-	defcode "INTERPRET",9,,INTERPRET
+	defcode "interpret",9,,INTERPRET
 	mov	U3, #0			// reset interpret_is_lit flag
 
 	bl	_WORD			// returns T0 = address, T1 = length
@@ -2236,7 +2236,7 @@ _TELL:
 	ldr	T0, =LIT		// codeword is LIT
 
 2:	// are we compiling or executing?
-	ldr	T2, =var_STATE		// address of STATE
+	ldr	T2, =var_state		// address of STATE
 	ldr	T2, [T2]		// value of STATE
 	cmp	T2, #0			// STATE == 0?
 	beq	4f			// jump straight to execute!
@@ -2249,20 +2249,20 @@ _TELL:
 	mov	T0, U2			// number
 	bl	_COMMA			// expects codeword in T0
 3:
-	NEXT
+	next
 
 4:	// executing, so run the word
 	cmp	U3, #0			// interpret_is_lit != 0?
 	bne	5f			// yep, so let's push
 
-	// not a literal, execute! never returns, but eventually NEXT will get
+	// not a literal, execute! never returns, but eventually next will get
 	// called and reenter the loop in QUIT
 	ldr	T1, [T0]
 	br	T1
 
 5:	// execute literal, which means push it
 	PUSHPSP	U2
-	NEXT
+	next
 
 6:
 	// parse error, print context from input buffer
@@ -2289,7 +2289,7 @@ _TELL:
 	mov	T2, #1			// length
 	mov	x8, #__NR_write
 	svc	#0
-	NEXT
+	next
 
 	.section .rodata
 errmsg: .ascii "PARSE ERROR: '"
@@ -2312,15 +2312,15 @@ errmsgnl: .ascii "'\n"
 
 */
 
-	defcode "CHAR",4,,CHAR
+	defcode "char",4,,CHAR
 	bl	_WORD			// returns T0 = address, T1 = length
 	ldrb	T0b, [T0]		// get first character
 	PUSHPSP	T0			// push it
-	NEXT
+	next
 
-	defcode "EXECUTE",7,,EXECUTE
+	defcode "execute",7,,EXECUTE
 	POPPSP	T0			// grab execution token, whatever that is?
-	br	T0			// jump to it (execution token's NEXT will continue)
+	br	T0			// jump to it (execution token's next will continue)
 
 /*
 	DATA SEGMENT ----------------------------------------------------------------------
@@ -2365,7 +2365,7 @@ debug_pong:
 	mov	U0, T0
 	mov	U1, T1
 
-	ldr	T0, =var_PONG
+	ldr	T0, =var_pong
 	ldr	T0, [T0]
 	cmp	T0, #0
 	beq	1f
