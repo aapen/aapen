@@ -673,6 +673,11 @@ _forth_start:
         ldr     T1, =return_stack_top
         mov     RSP, T0                 // initialize return stack
 
+        mov     T0, #'F'                // emit an 'F' to show we're connected
+        PUSHP   x1, lr
+        bl      _forth_putch
+        POPP    x1, lr
+
 	ldr	NIP, =cold_start        // initialize interpreter
 	next                            // run interpreter
 
@@ -1389,7 +1394,9 @@ _key:
 	POPP	U2, U3
 	ret
 1:
+        PUSHP   T1, lr
         bl      _forth_getch            // T0 <- key
+        POPP    T1, lr
 	cmp	T0, #0			// <= 0?
 	ble	2f			// yes, fatal error
 	ldr	T1, =buffer             // address of buffer
@@ -1416,7 +1423,9 @@ bufftop:
 */
 
         .macro OUTB
-        bl _forth_putch
+        PUSHP   x1, x2, lr
+        bl      _forth_putch
+        POPP    x1, x2, lr
         .endm
 
         // caution: len must always be at least 1
@@ -2256,13 +2265,13 @@ _comma:
 	ldr	T1, =currkey		// address of currkey
 	ldr	T1, [T1]		// value of currkey, pointer in buffer
 	ldr	T2, =buffer		// address of buffer
-	sub	T2, T2, T1		// length = currkey - buffer
-//        cmp     T2, #40                 // T2 > 40 ?
-//        mov     T1, #40                 // Move 40 into a temporary register x1
-//        csel    T2, T2, T1, le          // Conditionally select: if T2 <= 40, keep T2; if T2 > 40, set T2 to 40
-//	sub	T1, T1, T2		// buffer_to_print = currkey - capped_length
+	subs    T2, T1, T2		// length = currkey - buffer
+        cmp     T2, #40                 // T2 > 40 ?
+        mov     T1, #40                 // Move 40 into a temporary register x1
+        csel    T2, T2, T1, le          // Conditionally select: if T2 <= 40, keep T2; if T2 > 40, set T2 to 40
+	sub	T1, T1, T2		// buffer_to_print = currkey - capped_length
         OUTS    T1, T2
-
+7:
 	ldr	T1, =errmsgnl		// address
 	mov	T2, #2			// length
         OUTS    T1, T2

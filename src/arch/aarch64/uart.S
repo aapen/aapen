@@ -112,9 +112,6 @@
         // TODO: check for serial line errors
 
         ENTRY(_forth_getch)
-        stp     x29, x30, [sp, -16]!
-        stp     x0, x1, [sp, -16]!
-        mov     x29, sp
 
         // wait for data available
         LDR_IMM64 x1, FR
@@ -128,7 +125,6 @@
         and     w0, w0, #0xff   // keep lower byte
 
         // return it
-        ldp     x29, x30, [sp], 16
         ret
         END(_forth_getch)
 
@@ -138,19 +134,12 @@
 //
 // Arguments: x0 - byte
 // Returns: nothing
-// Clobbers: none
+// Clobbers: x1, x2
 // ----------------------------------------------------------------------
 
         ENTRY(_forth_putch)
-        stp     x29, x30, [sp, -16]!
-        stp     x0, x1, [sp, -16]!
-        str     x2, [sp, -8]!
-        mov     x29, sp
-
         // wait for space available
         LDR_IMM64 x1, FR
-        mov     x29, sp
-
 1:      ldr     w2, [x1]        // get flags
         ands    w2, w2, #0x20   // check transmit_fifo_full bit
         bne     1b              // full bit -> no space to send, loop
@@ -158,9 +147,5 @@
         // space is available
         LDR_IMM64 x1, DR
         str     w0, [x1]        // write the data byte
-
-        ldr     x2, [sp],8
-        ldp     x0, x1, [sp], 16
-        ldp     x29, x30, [sp], 16
         ret
         END(_forth_putch)
