@@ -2202,6 +2202,8 @@ _comma:
 	bl	_word			// returns T0 = address, T1 = length
 	mov	U0, T0			// address
 	mov	U1, T1			// length
+	mov	X16, T0			// address - Hack to hang onto word addr
+	mov	X17, T1			// length - Hack to hang onto word len
 
         // is it in the dictionary?
 	bl	_find			// returns T0 = dictionary entry
@@ -2265,12 +2267,20 @@ _comma:
 	ldr	T1, =currkey		// address of currkey
 	ldr	T1, [T1]		// value of currkey, pointer in buffer
 	ldr	T2, =buffer		// address of buffer
+
+	// Not 100% sure what we are doing here, but we seem to 
+	// lose the addr and length of the word that we are having
+	// problems with.
+
 	subs    T2, T1, T2		// length = currkey - buffer
         cmp     T2, #40                 // T2 > 40 ?
         mov     T1, #40                 // Move 40 into a temporary register x1
         csel    T2, T2, T1, le          // Conditionally select: if T2 <= 40, keep T2; if T2 > 40, set T2 to 40
 	sub	T1, T1, T2		// buffer_to_print = currkey - capped_length
-        OUTS    T1, T2
+
+	// Bit of a hack, use the saved word in 16 and 17 to print the error.
+        //OUTS    T1, T2
+	OUTS	X16, X17
 7:
 	ldr	T1, =errmsgnl		// address
 	mov	T2, #3			// length
