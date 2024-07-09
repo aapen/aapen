@@ -655,23 +655,15 @@ stack points ->	| addr of DOUBLE   |	   + 4 =   +------------------+
 	to "quit" your program and go back to interpreting).
 */
 
-
-// Here comes the assembler entry point. Note that var_S0 is a FORTH variable
-// that's supposed to hold the "start" of the parameter stack. It's
-// used in jonesforth.f to implement some fancy stack stuff, but it's
-// not used here.
-
 	.text
 	.align 2
 	.global _forth_start
 _forth_start:
-        ldr     T0, =data_stack_top     // get the top of the data stack
-        ldr     T1, =var_s0             // save initial data stack pointer in FORTH variable S0
-        str     T0, [T1]
+        ldr     T0, =data_stack_top     // get the top of the parameter stack
         mov     PSP, T0                 // initialize parameter stack
 
-        ldr     T1, =return_stack_top
-        mov     RSP, T0                 // initialize return stack
+        ldr     T1, =return_stack_top   // get the top of the return stack
+        mov     RSP, T1                 // initialize return stack
 
         mov     T0, #'F'                // emit an 'F' to show we're connected
         PUSHP   x1, lr
@@ -1245,22 +1237,24 @@ var_\name :
 /*
 	The built-in variables are:
 
-	STATE		Is the interpreter executing code (0) or compiling a word (non-zero)?
-	LATEST		Points to the latest (most recently defined) word in the dictionary.
-	HERE		Points to the next free byte of memory.  When compiling, compiled words go here.
-	S0		Stores the address of the top of the parameter stack.
-	BASE		The current base for printing and reading numbers.
-        PONG            Debug-print each word as it is interpreted
+	state		Is the interpreter executing code (0) or compiling a word (non-zero)?
+	latest		Points to the latest (most recently defined) word in the dictionary.
+	here		Points to the next free byte of memory.  When compiling, compiled words go here.
+	s0		Stores the address of the top of the parameter stack.
+	base		The current base for printing and reading numbers.
+        echo            Echo keys as they are received
+        pong            Debug-print each word as it is interpreted
 
 */
 
 	defvar "state",5,,state,ccopy
-	defvar "here",4,,here,state
+	defvar "here",4,,here,state,data_segment
 	defvar "latest",6,,latest,here,name_execute
-	defvar "s0",2,,sz,latest
+	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
+        defvar "echo",4,,echo,base,1
 // for debugging
-	defvar	"pong",4,,pong,base,1
+	defvar	"pong",4,,pong,echo,1
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
@@ -1382,7 +1376,8 @@ var_\name :
 _key:
 	// KEY () (char: T0)
 	PUSHP	U2, U3
-3:
+
+3:      // return the next character from buffer, if there is any
 	ldr	U3, =currkey		// address of currkey
 	ldr	T3, [U3]		// value of currkey (address in buffer)
 	ldr	U2, =bufftop		// address of bufftop
@@ -1393,20 +1388,28 @@ _key:
 	str	T3, [U3]		// update currkey
 	POPP	U2, U3
 	ret
-1:
+
+1:      // read a key
         PUSHP   T1, lr
         bl      _forth_getch            // T0 <- key
         POPP    T1, lr
-	cmp	T0, #0			// <= 0?
-	ble	2f			// yes, fatal error
+
+        // check whether we are echoing characters
+        ldr     x11, =var_echo          // address of echo
+        ldr     x9, [x11]               // value of echo
+        cmp     x9, #0                  // == 0?
+        beq     2f                      // skip it
+        PUSHP   T1, T2, lr
+        bl      _forth_putch            // echo the character
+        POPP    T1, T2, lr
+
+2:      // add character to buffer
 	ldr	T1, =buffer             // address of buffer
         str     T0, [T1]                // store the key
 	str	T1, [U3]		// reset currkey (to beginning of buffer)
 	add	T1, T1, #1              // buffer length 1
 	str	T1, [U2]		// update bufftop
 	b	3b			// try fast path again
-2:
-	bl      _forth_error            // exit
 
 	.data
 	.align 2
@@ -2392,9 +2395,10 @@ rmsgnl: .ascii "\r\n"
 	We allocate static buffers for the return static and input buffer (used when
 	reading in files and text that the user types in).
 */
-	.set RETURN_STACK_SIZE,512*1024
-        .set DATA_STACK_SIZE,512*1024
-        .set BUFFER_SIZE,4096
+	.set RETURN_STACK_SIZE,512*1024      // 512K
+        .set DATA_STACK_SIZE,512*1024        // 512K
+        .set BUFFER_SIZE,4096                // 4K
+        .set DATA_SEGMENT_SIZE,10*1024*1024  // 10M
 
 	.bss
 /* FORTH return stack */
@@ -2412,6 +2416,10 @@ data_stack_top:
 /* This is used as a temporary input buffer when reading from files or the terminal. */
 buffer:
 	.space BUFFER_SIZE
+
+        .align 12
+data_segment:
+        .space DATA_SEGMENT_SIZE
 
 /*
 	START OF FORTH CODE ----------------------------------------------------------------------
