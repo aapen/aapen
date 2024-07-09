@@ -593,7 +593,7 @@ U3b     .req    w7      // U3 as a short
 
 /* DOCOL - the interpreter! */
 	.text
-	.align 2
+	.align 3
 docol:
 	PUSHRSP	NIP		// push NIP on return stack
 	add	NIP, T0, #8	// skip codeword, make NIP the first dataword
@@ -656,7 +656,7 @@ stack points ->	| addr of DOUBLE   |	   + 4 =   +------------------+
 */
 
 	.text
-	.align 2
+	.align 3
 	.global _forth_start
 _forth_start:
         ldr     T0, =data_stack_top     // get the top of the parameter stack
@@ -674,6 +674,7 @@ _forth_start:
 	next                            // run interpreter
 
 	.section .rodata
+        .align 3
 cold_start:
 	.quad    quit
 
@@ -729,13 +730,13 @@ cold_start:
 
 	.macro defword name, namelen, flags=0, label, link
 	.section .rodata
-	.align 2
+	.align 3
 	.global name_\label
 name_\label :
 	.quad name_\link                // link word
 	.byte \flags+\namelen           // flags + length byte
 	.ascii "\name"                  // the name
-	.align 	2                       // padding to next 4 byte boundary
+	.align 	3                       // padding to next 8 byte boundary
 	.global \label
 \label :
 	.quad docol                     // codeword - the interpreter
@@ -752,27 +753,27 @@ name_\label :
 //	  pointer to previous word
 //	   ^
 //	   |
-//	+--|------+---+---+---+---+---+------------+
-//	| LINK    | 3 | D | U | P | 0 | code_DUP -----------------> points to the assembly
-//	+---------+---+---+---+---+---+------------+                code used to write DUP,
-//           ^       len              codeword			    which ends with next.
+//	+--|------+---+---+---+---+---+---+---+---+------------+
+//	| LINK    | 3 | D | U | P | 0 | 0 | 0 | 0 | code_DUP -----------------> points to the assembly
+//	+---------+---+---+---+---+---+---+---+---+------------+                code used to write DUP,
+//           ^       len                            codeword			which ends with next.
 //           |
 //	    LINK in next word
 //
-//      The extra 0 after the name is padding required by the ARM CPU
-//      to make the code words align to a 4-byte boundary.
+//      The extra 0's after the name are padding required by the ARM CPU
+//      to make the code words align to a 8-byte boundary.
 //
 //	Again, for brevity in writing the header I'm going to write an assembler macro called defcode.
 
 	.macro defcode name, namelen, flags=0, label, link
 	.section .rodata
-	.align 2
+	.align 3
 	.global name_\label
 name_\label :
 	.quad name_\link                // link word
 	.byte \flags+\namelen
 	.ascii "\name"
-	.align 2
+	.align 3
 	.global \label
 \label :
 	.quad code_\label
@@ -1229,7 +1230,7 @@ name_0: .quad 0
 	PUSHPSP	T0		// push address
 	next
 	.data
-	.align 2
+	.align 3
 var_\name :
 	.quad \initial
 	.endm
@@ -1254,7 +1255,7 @@ var_\name :
 	defvar "base",4,,base,sz,10
         defvar "echo",4,,echo,base,1
 // for debugging
-	defvar	"pong",4,,pong,echo,1
+	defvar	"pong",4,,pong,echo
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
@@ -1412,7 +1413,7 @@ _key:
 	b	3b			// try fast path again
 
 	.data
-	.align 2
+	.align 3
 currkey:
 	.quad buffer		// Current place in input buffer (next character to read).
 bufftop:
@@ -1727,8 +1728,8 @@ _tcfa:
 	add	T0, T0, #1		// skip flags+len bytes
 	and	T1, T1, #f_lenmask	// mask out flags
 	add	T0, T0, T1		// skip name
-	add	T0, T0, #3		// align to 4-byte boundary
-	and	T0, T0, #~3
+	add	T0, T0, #7		// align to 8-byte boundary
+	and	T0, T0, #~7
 	ret
 
 /*
@@ -1931,8 +1932,8 @@ _tcfa:
 	subs	T1, T1, #1              // decrement length
 	bne	1b
 2:
-	add	T3, T3, #3              // align to 4 byte (TODO: should be 8?)
-	and	T3, T3, #~3
+	add	T3, T3, #7              // align to 8 byte boundary
+	and	T3, T3, #~7
 
 	str	T3, [T2]                // update HERE
 	next
@@ -2420,7 +2421,7 @@ rmsg: .ascii "WORD: "
 rmsgend:
 rmsgnl: .ascii "\r\n"
 
-        .align 2
+        .align 3
 initfile:
         .incbin "jonesforth.f"
         .quad 0
