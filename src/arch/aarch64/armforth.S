@@ -1510,6 +1510,38 @@ _word:
 word_buffer:
 	.space 32
 
+	defcode "?words",6,,qwords,word
+	PUSHP	U0,U1,U2,U3,lr,x22
+
+	ldr	T0, =var_latest
+	ldr	T0, [T0]		// current dictionary pointer
+1:
+	cmp	T0, #0			// NULL?
+	beq	4f			// end of list!
+
+	// Find the length and pointer for this entry.
+	ldrb	T3b, [T0, #8]		// flags+length field
+	and	T3, T3, #(f_hidden|f_lenmask)
+	add	x22, T0, #9
+
+	// And print it out with a cr/nl pair.
+	PUSHP	x0,x1,x2,x3,x4
+        OUTS    x22, T3
+	mov	x0, #0x0d
+	OUTB
+	mov	x0, #0x0a
+	OUTB
+	POPP	x0,x1,x2,x3,x4
+
+
+	// T2 = T3, but T3 can be destroyed in the loop
+	ldr	T0, [T0]		// previous dictionary pointer
+	b	1b			// try again
+4:
+	POPP	U0,U1,U2,U3,lr
+	next
+
+
 /*
 	As well as reading in words we'll need to read in numbers and for that we are using a function
 	called NUMBER.  This parses a numeric string such as one returned by WORD and pushes the
@@ -1527,7 +1559,7 @@ word_buffer:
 	partial value if there was an error.
 */
 
-	defcode "number",6,,number,word
+	defcode "number",6,,number,qwords
 	POPPSP	T1		// length of string
 	POPPSP	T0		// address of string
 	bl	_number
