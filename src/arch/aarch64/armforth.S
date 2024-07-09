@@ -2273,14 +2273,14 @@ _comma:
         OUTS    T1, T2
 7:
 	ldr	T1, =errmsgnl		// address
-	mov	T2, #2			// length
+	mov	T2, #3			// length
         OUTS    T1, T2
 	next
 
 	.section .rodata
 errmsg: .ascii "PARSE ERROR: '"
 errmsgend:
-errmsgnl: .ascii "'\n"
+errmsgnl: .ascii "'\r\n"
 
 /*
 	ODDS AND ENDS ----------------------------------------------------------------------
@@ -2365,7 +2365,7 @@ debug_pong:
         OUTS    T1, T2
 
 	ldr	T1, =rmsgnl		// address
-	mov	T2, #1			// length
+	mov	T2, #3			// length
         OUTS    T1, T2
 1:
 	ret
@@ -2373,7 +2373,7 @@ debug_pong:
 	.section .rodata
 rmsg: .ascii "WORD: "
 rmsgend:
-rmsgnl: .ascii "\n"
+rmsgnl: .ascii "\r\n"
 
 	.text
 	.align 2
