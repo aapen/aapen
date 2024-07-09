@@ -1260,7 +1260,7 @@ var_\name :
 	defvar "s0",2,,sz,latest
 	defvar "base",4,,base,sz,10
 // for debugging
-	defvar	"pong",4,,pong,base
+	defvar	"pong",4,,pong,base,1
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
