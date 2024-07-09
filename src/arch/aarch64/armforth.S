@@ -2388,8 +2388,10 @@ rmsg: .ascii "WORD: "
 rmsgend:
 rmsgnl: .ascii "\r\n"
 
-	.text
-	.align 2
+        .align 2
+initfile:
+        .incbin "jonesforth.f"
+        .quad 0
 
 /*
 	We allocate static buffers for the return static and input buffer (used when
