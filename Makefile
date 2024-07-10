@@ -113,5 +113,5 @@ sdfiles/infloop.bin:
 	echo "0000: 0000 0014" | xxd -r - sdfiles/infloop.bin
 
 clean:
-	rm -rf zig-cache
+	rm -rf .zig-cache
 	rm -rf zig-out/*
