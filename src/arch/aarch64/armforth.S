@@ -2326,6 +2326,8 @@ _comma:
 errmsg: .ascii "PARSE ERROR: '"
 errmsgend:
 errmsgnl: .ascii "'\r\n"
+hellomsg: .ascii "Hello world!\r\n"
+hellomsgend:
 
 /*
 	ODDS AND ENDS ----------------------------------------------------------------------
@@ -2343,7 +2345,21 @@ errmsgnl: .ascii "'\r\n"
 
 */
 
-	defcode "char",4,,char,interpret
+	// Simple test word.
+        defcode "hello",5,,hello,interpret
+	ldr	T1, =hellomsg		// address
+	mov	T2, #hellomsgend-hellomsg	// length
+        OUTS    T1, T2
+	next
+
+	// Example of a secondary in assembly.
+        defword "hellohello",10,,hellohello,hello
+	.quad hello
+	.quad hello 
+	.quad exit		// Return
+
+
+	defcode "char",4,,char,hellohello
 	bl	_word			// returns T0 = address, T1 = length
 	ldrb	T0b, [T0]		// get first character
 	PUSHPSP	T0			// push it
