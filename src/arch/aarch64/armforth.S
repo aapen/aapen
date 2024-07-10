@@ -215,6 +215,9 @@
 	|			 | FLAGS  |     	      |
 	+--- (4 bytes) ----------+- byte -+- n bytes  - - - - +----------- - - - -
 
+	link_pointer[4] flags[1] namelen[1] name[n] definition 
+
+
 	I'll come to the definition of the word later.  For now just look at the header.  The first
 	4 bytes are the link pointer.  This points back to the previous word in the dictionary, or, for
 	the first word in the dictionary it is just a NULL pointer.  Then comes a length/flags byte.
@@ -507,6 +510,7 @@
 PSP	.req	x28	// parameter stack pointer
 RSP	.req	x29	// return stack pointer
 NIP	.req	x10	// next instruction pointer
+
 T0	.req	x0	// caller-saved (our FORTH convention)
 T0b     .req    w0      // T0 as a short
 T1	.req	x1
@@ -723,7 +727,6 @@ cold_start:
         // Flags - these are discussed later.
 	.set f_immed,0x80
 	.set f_hidden,0x20
-	.set f_lenmask,0x1f
 
         // Store the chain of links
 	// .set link,0
@@ -734,7 +737,8 @@ cold_start:
 	.global name_\label
 name_\label :
 	.quad name_\link                // link word
-	.byte \flags+\namelen           // flags + length byte
+	.byte \flags                   // flags byte
+	.byte \namelen           	// name length byte
 	.ascii "\name"                  // the name
 	.align 	3                       // padding to next 8 byte boundary
 	.global \label
@@ -771,7 +775,8 @@ name_\label :
 	.global name_\label
 name_\label :
 	.quad name_\link                // link word
-	.byte \flags+\namelen
+	.byte \flags
+	.byte \namelen
 	.ascii "\name"
 	.align 3
 	.global \label
@@ -1270,7 +1275,6 @@ var_\name :
 	DOCOL		Pointer to DOCOL.
 	F_IMMED		The IMMEDIATE flag's actual value.
 	F_HIDDEN	The HIDDEN flag's actual value.
-	F_LENMASK	The length mask in the flags/len byte.
 
 */
 
@@ -1512,34 +1516,45 @@ word_buffer:
 	.space 32
 
 	defcode "?words",6,,qwords,word
-	PUSHP	U0,U1,U2,U3,lr,x22
+	PUSHP	U0,U1,U2,U3,lr,x21,x22,x23
 
-	ldr	T0, =var_latest
-	ldr	T0, [T0]		// current dictionary pointer
+	ldr	x1, =crnl		// cr newline
+	mov	x2, #2
+        OUTS    x1, x2
+
+	ldr	x0, =var_latest
+	ldr	x0, [x0]		// current dictionary pointer
 1:
-	cmp	T0, #0			// NULL?
+	cmp	x0, #0			// NULL?
 	beq	4f			// end of list!
 
-	// Find the length and pointer for this entry.
-	ldrb	T3b, [T0, #8]		// flags+length field
-	and	T3, T3, #(f_hidden|f_lenmask)
-	add	x22, T0, #9
+	// Find the name length and pointer for this entry.
+	ldrb	w3,  [x0, #8]		// flags
+	and	x21, x3, #(f_hidden)	// hidden flag
+	ldrb	w22, [x0, #9]		// name length
+	add	x23, x0, #10		// name pointer
 
 	// And print it out with a cr/nl pair.
 	PUSHP	x0,x1,x2,x3,x4
-        OUTS    x22, T3
-	mov	x0, #0x0d
-	OUTB
-	mov	x0, #0x0a
-	OUTB
+        OUTS    x23, x22
+
+	cbz	x21, 2f 		// branch if hidden zero
+	ldr	x1, =hmsg		// address of hidden msg
+	mov	x2, #hmsgend-hmsg	// length of hidden msg
+        OUTS    x1, x2			// output hidden msg
+
+2:	ldr	x1, =crnl		// cr newline
+	mov	x2, #2
+        OUTS    x1, x2
+
 	POPP	x0,x1,x2,x3,x4
 
 
 	// T2 = T3, but T3 can be destroyed in the loop
-	ldr	T0, [T0]		// previous dictionary pointer
+	ldr	x0, [x0]		// previous dictionary pointer
 	b	1b			// try again
 4:
-	POPP	U0,U1,U2,U3,lr
+	POPP	U0,U1,U2,U3,lr,x21,x22,x23
 	next
 
 
@@ -1658,16 +1673,16 @@ _find:
 	cmp	T0, #0			// NULL?
 	beq	4f			// end of list!
 
-	ldrb	T3b, [T0, #8]		// flags+length field
-	and	T3, T3, #(f_hidden|f_lenmask)
-	cmp	T3, T2			// length the same? HUGE BUG T2, T2!!!
-	bne	2f			// nope, skip this entry
+	ldrb	T3b, [T0, #8]		// flags
+	and	T3, T3, #(f_hidden)
+	cbnz	T3, 2f 			// branch if hidden non zero
+	ldrb	T3b, [T0, #9]		// name len
 
 	// T2 = T3, but T3 can be destroyed in the loop
 
 	mov	U0, T1			// current char in string A
 	mov	U1, T0
-	add	U1, U1, #9		// current char in string B
+	add	U1, U1, #10		// current char in string B
 10:
 	ldrb 	U2b, [U0], #1		// char A, increment
 	ldrb	U3b, [U1], #1		// char B, increment
@@ -1723,11 +1738,10 @@ _find:
 	next
 _tcfa:
 	// TCFA (address: T0) (address: T0)
-	add	T0, T0, #8		// skip link pointer
-	ldrb	T1b, [T0]		// load flags+len
-	add	T0, T0, #1		// skip flags+len bytes
-	and	T1, T1, #f_lenmask	// mask out flags
-	add	T0, T0, T1		// skip name
+	add	T0, T0, #8+1		// T0 now has address of namelen
+	ldrb	T1b, [T0]		// Load namelen
+	add	T0, T0, #1		// T0 now has address of name
+	add	T0, T0, T1		// Skip name
 	add	T0, T0, #7		// align to 8-byte boundary
 	and	T0, T0, #~7
 	ret
@@ -1920,7 +1934,8 @@ _tcfa:
 	str	T3, [U0]                // update LATEST to refer to new header
 	str	U1, [T3], #8            // store link pointer in header, increment header
 
-	strb	T1b, [T3], #1	        // store length/flags byte, increment header
+	strb	wzr, [T3], #1	        // store name length byte, increment header
+	strb	T1b, [T3], #1	        // store name length byte, increment header
 
 	// we don't need the length in T1 anymore now, so we can destroy it
 	// U0 and U1 are also free again
@@ -2057,9 +2072,9 @@ _comma:
 	defcode "immediate",9,f_immed,immediate,semicolon
 	ldr	T0, =var_latest		// address of LATEST
 	ldr	T0, [T0]		// value of LATEST
-	ldrb	T1b, [T0, #8]		// get length/flag byte
+	ldrb	T1b, [T0, #8]		// get flag byte
 	eor	T1, T1, #f_immed	// toggle IMMED bit
-	strb	T1b, [T0, #8]		// update length/flag byte
+	strb	T1b, [T0, #8]		// update flag byte
 	next
 
 /*
@@ -2086,9 +2101,9 @@ _comma:
 
 	defcode "hidden",6,,hidden,immediate
 	POPPSP	T0			// dictionary entry
-	ldrb	T1b, [T0, #8]		// get length/flag byte
+	ldrb	T1b, [T0, #8]		// get flag byte
 	eor	T1, T1, #f_hidden	// toggle HIDDEN bit
-	strb	T1b, [T0, #8]		// update length/flag byte
+	strb	T1b, [T0, #8]		// update flag byte
 	next
 
         defword "hide",4,,hide,hidden
@@ -2327,6 +2342,12 @@ _comma:
 errmsg: .ascii "PARSE ERROR: '"
 errmsgend:
 errmsgnl: .ascii "'\r\n"
+
+crnl:	.ascii "\r\n"
+
+hmsg: .ascii " (hidden) "
+hmsgend:
+
 hellomsg: .ascii "Hello world!\r\n"
 hellomsgend:
 
