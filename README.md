@@ -42,11 +42,11 @@ Currently supports Raspberry Pi 3b only.
 
 ### One-time host setup for cross-compilation
 
-We are currently using Zig build: 0.12.0-dev.494+a8d2ed806
+We are currently using Zig build: 0.13.0
 
-- Linux download: https://ziglang.org/builds/zig-linux-x86_64-0.12.0-dev.494+a8d2ed806.tar.xz
-- Mac (on Apple Silicon) download: https://ziglang.org/builds/zig-macos-aarch64-0.12.0-dev.494+a8d2ed806.tar.xz
-- Mac (on Intel) download: https://ziglang.org/builds/zig-macos-x86_64-0.12.0-dev.494+a8d2ed806.tar.xz
+- Linux download: https://ziglang.org/builds/zig-linux-x86_64-0.13.0.tar.xz
+- Mac (on Apple Silicon) download: https://ziglang.org/builds/zig-macos-aarch64-0.13.0.tar.xz
+- Mac (on Intel) download: https://ziglang.org/builds/zig-macos-x86_64-0.13.0.tar.xz
 
 ### One-time project setup for firmware
 
