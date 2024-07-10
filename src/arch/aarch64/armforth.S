@@ -6,6 +6,8 @@
 	gcc -nostdlib -static -Wl,-Ttext,0 -Wl,--build-id=none -o jonesforth jonesforth.S
 */
 
+#include <asm/macro.h>
+
 	.set JONES_VERSION,47
 
 /*
@@ -507,41 +509,13 @@
 	(pop top of return stack into T0).
 */
 
-PSP	.req	x28	// parameter stack pointer
-RSP	.req	x29	// return stack pointer
-NIP	.req	x10	// next instruction pointer
-
-T0	.req	x0	// caller-saved (our FORTH convention)
-T0b     .req    w0      // T0 as a short
-T1	.req	x1
-T1b     .req    w1      // T1 as a short
-T2	.req	x2
-T2b	.req	w2      // T2 as a short
-T3	.req	x3
-T3b	.req	w3      // T3 as a short
-U0	.req	x4	// callee-saved (our FORTH convention)
-U0b	.req	w4	// U0 as a short
-U1	.req	x5	// (these were S0-S3 for MIPS-appeal originally)
-U1b     .req    w5      // U1 as a short
-U2	.req	x6
-U2b     .req    w6      // U2 as a short
-U3	.req	x7
-U3b     .req    w7      // U3 as a short
-
-// Note that we avoided x8 it is "special". On Aarch64 Linux, it holds the syscall number for kernel
-// calls.
-
-	.set	stdin,0
-	.set	stdout,1
-	.set	stderr,2
-
         // Return stack manipulation
 	.macro PUSHRSP reg
 	str	\reg, [RSP, #-8]!	// store at RSP-8, decrement RSP
 	.endm
 
 	.macro POPRSP reg
-	ldr	\reg, [RSP], #8		// load from RSP, increment RSP
+	ldr	\reg, [RSP], #8		// load from RSP, post-increment RSP
 	.endm
 
         // Parameter stack manipulation
@@ -550,9 +524,17 @@ U3b     .req    w7      // U3 as a short
         .endm
 
         .macro POPPSP reg
-        ldr \reg, [PSP], #8             // load from PSP, increment PSP
+        ldr \reg, [PSP], #8             // load from PSP, post-increment PSP
         .endm
 
+        // Input stack manipulation
+	.macro PUSHI reg1,reg2
+        stp     \reg1,\reg2, [ISP, #-16]!
+	.endm
+
+	.macro POPI reg1,reg2
+        ldp     \reg1,\reg2, [ISP], #16
+	.endm
 
         // More complicated stack macros for pushing and popping multiple
         // registers on the parameter stack. (These are not yet used
@@ -579,6 +561,54 @@ U3b     .req    w7      // U3 as a short
         ldr     \reg1, [PSP], #8
         .endif
 	.endm
+
+
+PSP	.req	x28	// parameter stack pointer
+RSP	.req	x29	// return stack pointer
+NIP	.req	x10	// next instruction pointer
+ISP     .req    x27     // input stack pointer
+T0	.req	x0	// caller-saved (our FORTH convention)
+T0b     .req    w0      // T0 as a short
+T1	.req	x1
+T1b     .req    w1      // T1 as a short
+T2	.req	x2
+T2b	.req	w2      // T2 as a short
+T3	.req	x3
+T3b	.req	w3      // T3 as a short
+U0	.req	x4	// callee-saved (our FORTH convention)
+U0b	.req	w4	// U0 as a short
+U1	.req	x5	// (these were S0-S3 for MIPS-appeal originally)
+U1b     .req    w5      // U1 as a short
+U2	.req	x6
+U2b     .req    w6      // U2 as a short
+U3	.req	x7
+U3b     .req    w7      // U3 as a short
+
+// Note that we avoided x8 it is "special". On Aarch64 Linux, it holds the syscall number for kernel
+// calls.
+
+
+// ----------------------------------------------------------------------
+// Hardware Constants
+// ----------------------------------------------------------------------
+        .set PERIPH_BASE , 0x3f000000
+
+        .set UART_BASE   , PERIPH_BASE + 0x201000
+        .set UART_DR     , UART_BASE
+        .set UART_RSRECR , UART_BASE + 0x04
+        .set UART_FR     , UART_BASE + 0x18
+        .set UART_IBRD   , UART_BASE + 0x24
+        .set UART_FBRD   , UART_BASE + 0x28
+        .set UART_LCRH   , UART_BASE + 0x2c
+        .set UART_CR     , UART_BASE + 0x30
+        .set UART_IMSC   , UART_BASE + 0x38
+        .set UART_ICR    , UART_BASE + 0x44
+
+        .set GPIO_BASE   , PERIPH_BASE + 0x200000
+        .set GPFSEL1     , GPIO_BASE + 0x04
+        .set GPPUD       , GPIO_BASE + 0x94
+        .set GPPUDCLK0   , GPIO_BASE + 0x98
+
 
 /*
 	And with that we can now talk about the interpreter.
@@ -663,16 +693,24 @@ stack points ->	| addr of DOUBLE   |	   + 4 =   +------------------+
 	.align 3
 	.global _forth_start
 _forth_start:
-        ldr     T0, =data_stack_top     // get the top of the parameter stack
-        mov     PSP, T0                 // initialize parameter stack
+        bl      _con_init               // initialize serial port
 
-        ldr     T1, =return_stack_top   // get the top of the return stack
-        mov     RSP, T1                 // initialize return stack
+        ldr     x0, =data_stack_top     // get the top of the parameter stack
+        mov     PSP, x0                 // initialize parameter stack
 
-        mov     T0, #'F'                // emit an 'F' to show we're connected
-        PUSHP   x1, lr
-        bl      _forth_putch
-        POPP    x1, lr
+        ldr     x1, =return_stack_top   // get the top of the return stack
+        mov     RSP, x1                 // initialize return stack
+
+        mov     x0, #'F'                // emit an 'F' to show we're connected
+        bl      _con_out
+
+        ldr     x2, =input_stack_top    // get the top of the input stack
+        mov     ISP, x2                 // initialize input stack
+        ldr     x2, =_con_in            // first input source is the console
+        PUSHI   x2, xzr                 // put the console reader on the input stack
+        ldr     x1, =_frombuf           // second input source is a buffer
+        ldr     x2, =initfile           // use the initfile as its context
+        PUSHI   x1, x2                  // put the buffer reader on the input stack
 
 	ldr	NIP, =cold_start        // initialize interpreter
 	next                            // run interpreter
@@ -1336,6 +1374,52 @@ var_\name :
 	next
 
 /*
+
+        INPUT STACK ----------------------------------------------------------------------
+
+        We want to be able to read from a buffer, a file included from another file, or from the
+        console if there's no other source. We can do this by making a stack of sources. Each stack
+        entry consists of 2 words. The word with the lowest address has the CFA of the routine for
+        reading a byte of input. The word with the higher address is available as 'context' whose
+        meaning is determined by the byte-reading routine.
+
+*/
+
+        // ( ctx word -- )
+	defcode ">inp",4,,toinp, dspstore
+	POPP	x0, x1                  // x0 <- word, x1 <- ctx from pstack
+        PUSHI   x0, x1                  // push with word at lower address
+	next
+
+        // ( -- ctx word )
+	defcode "inp>",4,,frominp,toinp
+	POPI	x0, x1                  // x0 <- word, x1 <- ctx
+        PUSHP   x0, x1                  // push with word at lower address
+	next
+
+        // ( -- ctx word )
+	defcode "inp@",4,,inpfetch,frominp
+        ldp     x0, x1, [ISP]           // x0 <- word, x1 <- ctx (without changing ISP)
+        PUSHP   x0, x1                  // push with word at lower address
+	next
+
+        // ( ctx word -- )
+	defcode "inp!",4,,inpstore,inpfetch
+        POPP    x0, x1                  // x0 <- word, x1 <- ctx from pstack
+        stp     x0, x1, [ISP]           // store on input stack (without changing ISP)
+	next
+
+	defcode "inpdrop",7,,inpdrop,inpstore
+	add	ISP, ISP, #16           // drop the top pair of the input stack
+	next
+
+        // ( ctx -- )  update the context field without changing the word
+        defcode "inpc!",5,,inpctx,inpdrop
+        POPP    x0
+        str     x0, [ISP, #8]
+        next
+
+/*
 	INPUT AND OUTPUT ----------------------------------------------------------------------
 
 	These are our first really meaty/complicated FORTH primitives.  I have chosen to write them in
@@ -1346,7 +1430,7 @@ var_\name :
 
 	Let's discuss input first.
 
-	The FORTH word KEY reads the next byte from stdin (and pushes it on the parameter stack).
+	The FORTH word KEY reads the next byte from current input (and pushes it on the parameter stack).
 	So if KEY is called and someone hits the space key, then the number 32 (ASCII code of space)
 	is pushed on the stack.
 
@@ -1354,67 +1438,140 @@ var_\name :
 	and compiling code, we might be reading words to execute, we might be asking for the user
 	to type their name -- ultimately it all comes in through KEY.
 
-	The implementation of KEY uses an input buffer of a certain size (defined at the start of this
-	file).  It calls the Linux read(2) system call to fill this buffer and tracks its position
-	in the buffer using a couple of variables, and if it runs out of input buffer then it refills
-	it automatically.  The other thing that KEY does is if it detects that stdin has closed, it
-	exits the program, which is why when you hit ^D the FORTH system cleanly exits.
-
-     buffer			      bufftop
-	|				 |
-	V				 V
-	+-------------------------------+--------------------------------------+
-	| INPUT READ FROM STDIN ....... | unused part of the buffer            |
-	+-------------------------------+--------------------------------------+
-	                  ^
-			  |
-		       currkey (next character to read)
-
-	<---------------------- BUFFER_SIZE (4096 bytes) ---------------------->
+        The implementation of KEY uses the input stack to determine how to get the next byte. The
+        top of the input stack has the CFA of a word to read from the current input source.
 
 */
 
-	defcode "key",3,,key,dspstore
+        defcode "key",3,,key,dspstore  // ( -- key)
 	bl	_key
-	PUSHPSP	T0
+	PUSHP	x0
 	next
 _key:
 	// KEY () (char: T0)
-	PUSHP	U2, U3
+        // read a key
+        PUSHP   x1, x2, lr
+        ldr     x1, [ISP]               // get the byte-reading word
+        blr     x1                      // jump there
 
-3:      // return the next character from buffer, if there is any
-	ldr	U3, =currkey		// address of currkey
-	ldr	T3, [U3]		// value of currkey (address in buffer)
-	ldr	U2, =bufftop		// address of bufftop
-	ldr	T2, [U2]		// value of bufftop (address in buffer)
-	cmp	T3, T2			// currkey >= bufftop?
-	bge	1f			// yes, need more input
-	ldrb	T0b, [T3], #1		// load character and increment currkey
-	str	T3, [U3]		// update currkey
-	POPP	U2, U3
-	ret
+        // next byte is returned in x0
+        cmp     x0, #0
+        bne     1f                      // if not null we have a byte
 
-1:      // read a key
-        PUSHP   T1, lr
-        bl      _forth_getch            // T0 <- key
-        POPP    T1, lr
+        // else input is exhausted
+        bl      inpdrop
+        b       2f
 
+1:
         // check whether we are echoing characters
-        ldr     x11, =var_echo          // address of echo
-        ldr     x9, [x11]               // value of echo
-        cmp     x9, #0                  // == 0?
+        ldr     x2, =var_echo           // address of echo
+        ldr     x1, [x2]                // value of echo
+        cmp     x1, #0                  // == 0?
         beq     2f                      // skip it
-        PUSHP   T1, T2, lr
-        bl      _forth_putch            // echo the character
-        POPP    T1, T2, lr
+        bl      _con_out                // echo the character
+2:      POPP    x1, x2, lr
+        ret
 
-2:      // add character to buffer
-	ldr	T1, =buffer             // address of buffer
-        str     T0, [T1]                // store the key
-	str	T1, [U3]		// reset currkey (to beginning of buffer)
-	add	T1, T1, #1              // buffer length 1
-	str	T1, [U2]		// update bufftop
-	b	3b			// try fast path again
+/*
+
+        SERIAL PORT ----------------------------------------------------------------------
+
+*/
+
+	defcode "<con",4,,con_in,key    // ( -- key )
+        PUSHP   x1                      // save this register
+        bl      _con_in
+        POPP    x1
+        PUSHP   x0
+        next
+_con_in:                                // return char in x0
+        // wait for data available
+        LDR_IMM64 x1, UART_FR           // address of flags register
+1:      ldr     w0, [x1]                // get flags
+        ands    w0, w0, #0x10           // check receive_fifo_empty bit
+        bne     1b
+
+        // data is available
+        LDR_IMM64 x1, UART_DR           // address of data register
+        ldr     w0, [x1]                // get data
+        and     w0, w0, #0xff           // keep lower byte
+        ret
+
+
+        defcode ">con",4,,con_out,con_in // ( byte -- )
+        POPP    x0
+        bl      _con_out
+        next
+_con_out:                               // take char in x0
+        PUSHP   x1, x2
+        // wait for space available
+        LDR_IMM64 x1, UART_FR           // address of flags register
+1:      ldr     w2, [x1]                // get flags
+        ands    w2, w2, #0x20           // check transmit_fifo_full bit
+        bne     1b
+
+        // space is available
+        LDR_IMM64 x1, UART_DR           // address of data register
+        str     w0, [x1]                // write the data byte
+        POPP    x1, x2
+        ret
+
+_con_init:
+        // set GPIO 14 & 15 to output
+        LDR_IMM64 x1, GPFSEL1   // Address of GPFSEL1 register
+        movz    w0, #0x9000     // FSEL output for pins 14 & 15
+        str     w0, [x1]        // write the register
+
+        // enable GPIO 14 & 15
+        LDR_IMM64 x1, GPPUD     // Address of GPPUD register
+        str     wzr, [x1]       // zero it
+        movz    x0, #150        // we need to spin 150 cycles
+1:      subs    x0, x0, #1
+        bne     1b
+
+        LDR_IMM64 x2, GPPUDCLK0 // Address of GPPUDCLK0 register
+        movz    w0, #0xc000     // (1 << 14) | (1 << 15)
+        str     w0, [x2]        // clock in the 'enable' for pins 14 & 15
+        movz    x0, #150        // we need to spin another 150 cycles
+2:      subs    x0, x0, #1
+        bne     2b
+
+        str     wzr, [x1]       // deassert the PU/PD enable
+        str     wzr, [x2]       // deassert the CLK
+
+        // turn off uart while initializing
+        LDR_IMM64 x1, UART_CR   // Address of CR
+        str     wzr, [x1]       // zero it
+
+        // flush the xmit fifo
+        LDR_IMM64 x2, UART_LCRH // Address of LCHR (in x2 so we can use it later)
+        str     wzr, [x2]       // zero it (disables fifos)
+
+        // clear all pending interrupts
+        LDR_IMM64 x1, UART_ICR  // Address of ICR
+        str     wzr, [x1]       // zero it
+
+        // set the baud rate, 8N1 and FIFO disabled.
+        // use clock divisor 26.0417 to get 115,200 baud
+        LDR_IMM64 x1, UART_IBRD // Address of IBRD
+        movz    w0, #0x1a       // integer part of 26.0417 - the clock divisor
+        str     w0, [x1]        // set integer part
+        LDR_IMM64 x1, UART_FBRD // Address of FBRD
+        movz    w0, #0x1b       // fractional part of clock divisor
+        str     w0, [x1]        // set fractional part
+        movz    w0, #0xc0       // 8 bits word, no stop bits, even parity
+        str     w0, [x2]        // set LCRH
+
+        // disable interrupts
+        LDR_IMM64 x1, UART_IMSC // Address of IMSC register
+        str     wzr, [x1]       // zero it
+
+        // enable the uart
+        LDR_IMM64 x1, UART_CR   // Address of control register
+        movz    w0, #0x301      // xmit enable, recv enable, uart enable
+        str     w0, [x1]        // enable the uart
+        ret
+
 
 	.data
 	.align 3
@@ -1424,29 +1581,48 @@ bufftop:
 	.quad buffer		// Last valid data in input buffer + 1.
 
 /*
+
+        BUFFER INPUT ---------------------------------------------------------------------
+
+        Sometimes we want to interpret the contents of a buffer. In this case the byte-reading word
+        will be "<buf" (read as "from buf") and the context will be the pointer to the next byte to
+        read. It is very important that the buffer ends with a null!
+
+*/
+
+        defcode "<buf",4,,frombuf,con_out
+        bl _frombuf
+        PUSHP   x0
+        next
+_frombuf:
+        ldr     x1, [ISP, 8]            // peek at the context word
+        ldrb    w0, [x1], #1            // get the next byte and increment the pointer
+        str     x1, [ISP, 8]            // update the context word
+        ret
+
+/*
+
 	By contrast, output is much simpler.  The FORTH word EMIT writes out a single byte to stdout.
         The kernel must supply a routine that takes a single byte in w0 and outputs it. This routine
         must be linked as _forth_putch.
 
 */
 
-        .macro OUTB
+        // caution: len must always be at least 1
+        .macro OUTS addreg, lenreg
         PUSHP   x1, x2, lr
-        bl      _forth_putch
+.L_\@:  ldrb    w0, [\addreg], #1       // put the next byte in x0 & increment ptr
+        bl      _con_out                // emit the byte
+        subs    \lenreg, \lenreg, #1    // decrement length
+        bgt     .L_\@\()                // if not done, loop
         POPP    x1, x2, lr
         .endm
 
-        // caution: len must always be at least 1
-        .macro OUTS addreg, lenreg
-.L_\@:  ldrb    w0, [\addreg], #1       // put the next byte in x0 & increment ptr
-        OUTB                            // emit the byte
-        subs    \lenreg, \lenreg, #1    // decrement length
-        bne     .L_\@\()                // if not done, loop
-        .endm
-
-	defcode "emit",4,,emit,key
-	POPPSP	T0
-        OUTB
+	defcode "emit",4,,emit,frombuf
+        POPPSP	T0
+        PUSHP   lr
+        bl      _con_out
+        POPP    lr
 	next
 
 /*
@@ -2019,8 +2195,10 @@ _comma:
 	next
 
 /*
+
 	Now we can define : (COLON) using CREATE.  It just calls CREATE, appends DOCOL (the codeword), sets
 	the word HIDDEN and goes into compile mode.
+
 */
 
 	defword ":",1,,colon,rbrac
@@ -2314,7 +2492,6 @@ _comma:
 	mov	T2, #errmsgend-errmsg	// length
         OUTS    T1, T2
 
-	mov	T0, #stderr
 	ldr	T1, =currkey		// address of currkey
 	ldr	T1, [T1]		// value of currkey, pointer in buffer
 	ldr	T2, =buffer		// address of buffer
@@ -2464,11 +2641,11 @@ initfile:
         .quad 0
 
 /*
-	We allocate static buffers for the return static and input buffer (used when
-	reading in files and text that the user types in).
+	We allocate static space for the various stacks and buffers.
 */
 	.set RETURN_STACK_SIZE,512*1024      // 512K
         .set DATA_STACK_SIZE,512*1024        // 512K
+        .set INPUT_STACK_SIZE,64*8           // 128b
         .set BUFFER_SIZE,4096                // 4K
         .set DATA_SEGMENT_SIZE,10*1024*1024  // 10M
 
@@ -2479,10 +2656,17 @@ return_stack:
 	.space RETURN_STACK_SIZE
 return_stack_top:
 
+/* FORTH parameter stack */
         .align 12
 data_stack:
         .space DATA_STACK_SIZE
 data_stack_top:
+
+/* Input stack */
+        .align 12
+input_stack:
+        .space INPUT_STACK_SIZE
+input_stack_top:
 
 	.align 12
 /* This is used as a temporary input buffer when reading from files or the terminal. */

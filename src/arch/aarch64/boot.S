@@ -59,9 +59,6 @@
         cmp      x0, x1
         bne      1b
 
-        // Enable the UART - do this only once from the boot core
-        bl      _uart_init
-
 skip_bss_init:
         // Prepare for the transition to EL1
         LDR_IMM64 x0, SCTLR_EL1_VALUE
