@@ -217,7 +217,7 @@
 	|			 | FLAGS  |     	      |
 	+--- (4 bytes) ----------+- byte -+- n bytes  - - - - +----------- - - - -
 
-	link_pointer[4] flags[1] namelen[1] name[n] definition 
+	link_pointer[4] flags[1] namelen[1] name[n] definition
 
 
 	I'll come to the definition of the word later.  For now just look at the header.  The first
@@ -824,11 +824,11 @@ name_\label :
 	.pool
 	.global code_\label
 code_\label :
-        PUSHP x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x30
-	ldr	T0, =name_\label+9	// address
+        PUSHP   x0, x1, x2, x4, x5, x30
+	ldr	T0, =name_\label+10	// address
 	mov	T1, #\namelen		// length
 	bl	debug_pong
-        POPP x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x30
+        POPP    x0, x1, x2, x4, x5, x30
 	// assembler code follows
 	.endm
 
@@ -1291,7 +1291,7 @@ var_\name :
 
 */
 
-	defvar "state",5,,state,ccopy
+	defvar "state",5,,state,cmove
 	defvar "here",4,,here,state,data_segment
 	defvar "latest",6,,latest,here,name_execute
 	defvar "s0",2,,sz,latest,data_stack_top
@@ -1326,6 +1326,8 @@ var_\name :
 	defconst "version",7,,version,pong,JONES_VERSION
 	defconst "r0",2,,rz,version,return_stack_top
 	defconst "docol",5,,__docol,rz,docol
+	defconst "f_immed",7,,__f_immed,__docol,f_immed
+	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
 
 /*
 	RETURN STACK ----------------------------------------------------------------------
@@ -1334,7 +1336,9 @@ var_\name :
 	the top of the return stack.
 */
 
-	defcode ">r",2,,tor,__docol
+
+
+	defcode ">r",2,,tor,__f_hidden
 	POPPSP	T0                      // pop parameter stack into T0
 	PUSHRSP	T0                      // and push it onto the return stack
 	next
@@ -1451,16 +1455,17 @@ _key:
 	// KEY () (char: T0)
         // read a key
         PUSHP   x1, x2, lr
+3:
         ldr     x1, [ISP]               // get the byte-reading word
         blr     x1                      // jump there
 
-        // next byte is returned in x0
-        cmp     x0, #0
+        // next byte is returned in w0
+        cmp     w0, #0
         bne     1f                      // if not null we have a byte
 
         // else input is exhausted
-        bl      inpdrop
-        b       2f
+        bl      code_inpdrop            // fall back to the next input source
+        b       3b                      // read a character from there
 
 1:
         // check whether we are echoing characters
@@ -1608,21 +1613,12 @@ _frombuf:
 
 */
 
-        // caution: len must always be at least 1
-        .macro OUTS addreg, lenreg
-        PUSHP   x1, x2, lr
-.L_\@:  ldrb    w0, [\addreg], #1       // put the next byte in x0 & increment ptr
-        bl      _con_out                // emit the byte
-        subs    \lenreg, \lenreg, #1    // decrement length
-        bgt     .L_\@\()                // if not done, loop
-        POPP    x1, x2, lr
-        .endm
-
+        // ( ch -- ) write a byte to output
 	defcode "emit",4,,emit,frombuf
-        POPPSP	T0
-        PUSHP   lr
+        POPP	x0
+        PUSHP   x1, x2, lr
         bl      _con_out
-        POPP    lr
+        POPP    x1, x2, lr
 	next
 
 /*
@@ -1696,7 +1692,7 @@ word_buffer:
 
 	ldr	x1, =crnl		// cr newline
 	mov	x2, #2
-        OUTS    x1, x2
+        bl      _tell
 
 	ldr	x0, =var_latest
 	ldr	x0, [x0]		// current dictionary pointer
@@ -1712,16 +1708,18 @@ word_buffer:
 
 	// And print it out with a cr/nl pair.
 	PUSHP	x0,x1,x2,x3,x4
-        OUTS    x23, x22
+        mov     x1, x23
+        mov     x2, x22
+        bl      _tell
 
 	cbz	x21, 2f 		// branch if hidden zero
 	ldr	x1, =hmsg		// address of hidden msg
 	mov	x2, #hmsgend-hmsg	// length of hidden msg
-        OUTS    x1, x2			// output hidden msg
+        bl      _tell
 
 2:	ldr	x1, =crnl		// cr newline
 	mov	x2, #2
-        OUTS    x1, x2
+        bl      _tell
 
 	POPP	x0,x1,x2,x3,x4
 
@@ -1852,24 +1850,26 @@ _find:
 	ldrb	T3b, [T0, #8]		// flags
 	and	T3, T3, #(f_hidden)
 	cbnz	T3, 2f 			// branch if hidden non zero
-	ldrb	T3b, [T0, #9]		// name len
+	ldrb	T3b, [T0, #9]		// len of word we're checking
+        cmp     T3, T2                  // check if lengths are equal
+        bne     2f                      // if not don't bother looking at the chars
 
-	// T2 = T3, but T3 can be destroyed in the loop
-
-	mov	U0, T1			// current char in string A
-	mov	U1, T0
-	add	U1, U1, #10		// current char in string B
+	// we know that T2 = T3, but T3 can be destroyed in the loop
+	mov	U0, T1			// U0 <- first letter of input word
+	mov	U1, T0                  // addr of word we're checking
+	add	U1, U1, #10		// U1 <- first letter of word we're checking
 10:
-	ldrb 	U2b, [U0], #1		// char A, increment
-	ldrb	U3b, [U1], #1		// char B, increment
+	ldrb 	U2b, [U0], #1		// get char A, increment ptr
+	ldrb	U3b, [U1], #1		// get char B, increment ptr
 	cmp	U2, U3			// A = B?
 	bne	2f			// nope
 	subs	T3, T3, #1		// decrement
-	bne	10b			// > 0, keep going
+	bne	10b			// len > 0, keep going
 
 	// strings are equal, T0 is the correct entry pointer
 	b	4f
-2:
+
+2:      // names don't match, try the previous word in the dictionary
 	ldr	T0, [T0]		// previous dictionary pointer
 	b	1b			// try again
 4:
@@ -2396,11 +2396,20 @@ _comma:
 	and	NIP, NIP, #~7
 	next
 
+        // ( addr length -- ) writes a string to output
 	defcode "tell",4,,tell,litstring
-	POPPSP	T1		// length
-	POPPSP	T2		// address
-        OUTS    T2, T1
+        POPP    x1, x2                  // x0 <- addr, x1 <- length
+        bl      _tell
 	next
+
+_tell:
+        PUSHP   x30
+1:      ldrb    w0, [x1], #1
+        bl      _con_out
+        subs    x2, x2, #1
+        bgt     1b
+        POPP    x30
+        ret
 
 /*
 	QUIT AND INTERPRET ----------------------------------------------------------------------
@@ -2426,99 +2435,84 @@ _comma:
  */
 
 	defcode "interpret",9,,interpret,quit
-	mov	U3, #0			// reset interpret_is_lit flag
+	mov	x7, #0			// interpret_is_lit = 0
 
 	bl	_word			// returns T0 = address, T1 = length
-	mov	U0, T0			// address
-	mov	U1, T1			// length
-	mov	X16, T0			// address - Hack to hang onto word addr
-	mov	X17, T1			// length - Hack to hang onto word len
+	mov	x4, x0			// save word in x4, x5
+	mov	x5, x1
 
         // is it in the dictionary?
 	bl	_find			// returns T0 = dictionary entry
-	cmp	T0, #0			// = NULL?
+	cmp	x0, #0			// = NULL?
 	beq	1f			// not found!
 
 	// found in dictionary, check if it's immediate
-	ldrb	U2b, [T0, #8]		// load length/flags byte
+	ldrb	w6, [x0, #8]		// load length/flags byte
 	bl	_tcfa			// returns T0 = codeword pointer
-	tst	U2, #f_immed		// test immediate flag
+	tst	w6, #f_immed		// test immediate flag
 	bne	4f			// if IMMED, jump straight to executing
 	b	2f			// else, jump to compile/execute
 
 1:	// not in dictionary, check if it's a number
-	add	U3, U3, #1		// set interpret_is_lit flag
-	mov	T0, U0			// address
-	mov	T1, U1			// length
+	add	x7, x7, #1		// interpret_is_lit = 1
+	mov	x0, x4			// address
+	mov	x1, x5			// length
 	bl	_number			// returns T0 = number, T1 = unparsed
-	cmp	T1, #0			// unparsed > 0?
+	cmp	x1, #0			// unparsed > 0?
 	bne	6f			// error!
 
-	mov	U2, T0			// number
-	ldr	T0, =lit		// codeword is LIT
+	mov	x6, x0			// number
+	ldr	x0, =lit		// codeword is LIT
 
 2:	// are we compiling or executing?
-	ldr	T2, =var_state		// address of STATE
-	ldr	T2, [T2]		// value of STATE
-	cmp	T2, #0			// STATE == 0?
+	ldr	x2, =var_state		// address of STATE
+	ldr	x2, [x2]		// value of STATE
+	cmp	x2, #0			// STATE == 0?
 	beq	4f			// jump straight to execute!
 
 	// compiling, append word to current dictionary definition
 	bl	_comma			// expects codeword in T0
-	cmp	U3, #0			// interpret_is_lit == 0?
+	cmp	x7, #0			// interpret_is_lit == 0?
 	beq	3f			// yep, so we're done
 
-	mov	T0, U2			// number
+	mov	x0, x6			// number
 	bl	_comma			// expects codeword in T0
 3:
 	next
 
 4:	// executing, so run the word
-	cmp	U3, #0			// interpret_is_lit != 0?
+	cmp	x7, #0			// interpret_is_lit != 0?
 	bne	5f			// yep, so let's push
 
-	// not a literal, execute! never returns, but eventually next will get
-	// called and reenter the loop in QUIT
-	ldr	T1, [T0]
-	br	T1
+	ldr	x1, [x0]                // not a literal, execute now
+	br	x1
 
-5:	// execute literal, which means push it
-	PUSHPSP	U2
+5:	// push literal on the stack
+	PUSHPSP	x6
 	next
 
 6:
-	// parse error, print context from input buffer
-	ldr	T1, =errmsg		// address
-	mov	T2, #errmsgend-errmsg	// length
-        OUTS    T1, T2
+	// parse error
+	ldr	x1, =errmsg		// address
+	mov	x2, #errmsgend-errmsg	// length
+        bl      _tell                   // display it
 
-	ldr	T1, =currkey		// address of currkey
-	ldr	T1, [T1]		// value of currkey, pointer in buffer
-	ldr	T2, =buffer		// address of buffer
+        mov     x1, x4                  // address of word
+        mov     x2, x5                  // length of word
+        bl      _tell
 
-	// Not 100% sure what we are doing here, but we seem to 
-	// lose the addr and length of the word that we are having
-	// problems with.
 
-	subs    T2, T1, T2		// length = currkey - buffer
-        cmp     T2, #40                 // T2 > 40 ?
-        mov     T1, #40                 // Move 40 into a temporary register x1
-        csel    T2, T2, T1, le          // Conditionally select: if T2 <= 40, keep T2; if T2 > 40, set T2 to 40
-	sub	T1, T1, T2		// buffer_to_print = currkey - capped_length
 
-	// Bit of a hack, use the saved word in 16 and 17 to print the error.
-        //OUTS    T1, T2
-	OUTS	X16, X17
-7:
-	ldr	T1, =errmsgnl		// address
-	mov	T2, #3			// length
-        OUTS    T1, T2
+	ldr	x1, =errmsgnl
+	mov	x2, #errmsgnlend-errmsgnl
+        bl      _tell
 	next
 
 	.section .rodata
 errmsg: .ascii "PARSE ERROR: '"
 errmsgend:
 errmsgnl: .ascii "'\r\n"
+errmsgnlend:
 
 crnl:	.ascii "\r\n"
 
@@ -2548,15 +2542,14 @@ hellomsgend:
         defcode "hello",5,,hello,interpret
 	ldr	T1, =hellomsg		// address
 	mov	T2, #hellomsgend-hellomsg	// length
-        OUTS    T1, T2
+        bl      _tell
 	next
 
 	// Example of a secondary in assembly.
         defword "hellohello",10,,hellohello,hello
 	.quad hello
-	.quad hello 
+	.quad hello
 	.quad exit		// Return
-
 
 	defcode "char",4,,char,hellohello
 	bl	_word			// returns T0 = address, T1 = length
@@ -2606,7 +2599,10 @@ create_data_segment:
 // expects address in T0, length in T1
 // controlled by PONG FORTH variable
 // use DONG word to toggle ON/OFF
-	.text
+
+        // clobbers: x0, x1, x2, x4, x5
+
+        .text
 debug_pong:
 	mov	U0, T0
 	mov	U1, T1
@@ -2618,15 +2614,15 @@ debug_pong:
 
 	ldr	T1, =rmsg		// address
 	mov	T2, #rmsgend-rmsg	// length
-        OUTS    T1, T2
+        bl      _tell
 
 	mov	T1, U0                  // address
 	mov	T2, U1                  // length
-        OUTS    T1, T2
+        bl      _tell
 
 	ldr	T1, =rmsgnl		// address
 	mov	T2, #3			// length
-        OUTS    T1, T2
+        bl      _tell
 1:
 	ret
 
@@ -2639,6 +2635,7 @@ rmsgnl: .ascii "\r\n"
 initfile:
         .incbin "jonesforth.f"
         .quad 0
+
 
 /*
 	We allocate static space for the various stacks and buffers.

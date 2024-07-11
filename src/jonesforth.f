@@ -483,7 +483,7 @@
 		here @		( save the address of the length word on the stack )
 		0 ,		( dummy length - we don't know what it is yet )
 		begin
-			key 		( get next character of the string )
+			key		( get next character of the string )
 			dup '"' <>
 		while
 			c,		( copy character )
@@ -491,7 +491,7 @@
 		drop		( drop the double quote character at the end )
 		dup		( get the saved address of the length word )
 		here @ swap -	( calculate the length )
-		8-		( subtract 4 (because we measured from the start of the length word) )
+		9 -		( subtract 4 (because we measured from the start of the length word) )
 		swap !		( and back-fill the length location )
 		align		( round up to next multiple of 4 bytes for the remaining code )
 	else		( immediate mode )
@@ -506,7 +506,7 @@
 		drop		( drop the final " character )
 		here @ -	( calculate the length )
 		here @		( push the start address )
-		swap 		( addr len )
+		swap		( addr len )
 	then
 ;
 
@@ -754,9 +754,8 @@
 	For example: LATEST @ ID. would print the name of the last word that was defined.
 )
 : id.
-	8+		( skip over the link pointer )
-	dup c@		( get the flags/length byte )
-	f_lenmask and	( mask out the flags - just want the length )
+	9 +		( skip over the link pointer )
+	dup c@		( get the length byte )
 
 	begin
 		dup 0>		( length > 0? )
@@ -775,12 +774,12 @@
 	'WORD word FIND ?IMMEDIATE' returns true if 'word' is flagged as immediate.
 )
 : ?hidden
-	8+		( skip over the link pointer )
+	9 +		( skip over the link pointer )
 	c@		( get the flags/length byte )
 	f_hidden and	( mask the f_hidden flag and return it (as a truth value) )
 ;
 : ?immediate
-	8+		( skip over the link pointer )
+	9 +		( skip over the link pointer )
 	c@		( get the flags/length byte )
 	f_immed and	( mask the F_IMMED flag and return it (as a truth value) )
 ;
@@ -1036,6 +1035,8 @@
 )
 : see
 	word find	( find the dictionary entry to decompile )
+
+        dup 0= if ." not found " exit then
 
 	( Now we search again, looking for the next word in the dictionary.  This gives us
 	  the length of the word that we will be decompiling.  (Well, mostly it does). )
@@ -1488,6 +1489,14 @@
 	Print the version and OK prompt.
 )
 
+(
+
+
+I've commented this out because it causes us to print endless garbage. We've got some pointer malfunction or register collision.
+
+I think it's related to using s" in compile mode, perhaps with address calculation & splitting the flags from name length.
+
+
 : welcome
 	s" test-mode" find not if
 		." jonesforth version " version . cr
@@ -1497,3 +1506,6 @@
 
 welcome
 hide welcome
+)
+
+
