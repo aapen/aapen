@@ -454,7 +454,7 @@
 (
 	STRINGS ----------------------------------------------------------------------
 
-	S" string" is used in FORTH to define strings.  It leaves the address of the string and
+	s" string" is used in FORTH to define strings.  It leaves the address of the string and
 	its length on the stack, (length at the top of stack).  The space following S" is the normal
 	space between FORTH words and is not a part of the string.
 
@@ -491,7 +491,7 @@
 		drop		( drop the double quote character at the end )
 		dup		( get the saved address of the length word )
 		here @ swap -	( calculate the length )
-		9 -		( subtract 4 (because we measured from the start of the length word) )
+		8 -		( subtract 8 (because we measured from the start of the length word) )
 		swap !		( and back-fill the length location )
 		align		( round up to next multiple of 4 bytes for the remaining code )
 	else		( immediate mode )
@@ -1489,14 +1489,6 @@
 	Print the version and OK prompt.
 )
 
-(
-
-
-I've commented this out because it causes us to print endless garbage. We've got some pointer malfunction or register collision.
-
-I think it's related to using s" in compile mode, perhaps with address calculation & splitting the flags from name length.
-
-
 : welcome
 	s" test-mode" find not if
 		." jonesforth version " version . cr
@@ -1506,6 +1498,4 @@ I think it's related to using s" in compile mode, perhaps with address calculati
 
 welcome
 hide welcome
-)
-
 
