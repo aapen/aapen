@@ -920,32 +920,46 @@ name_0: .quad 0
         PUSHP   T0
         next
 
-	// + (a b -- a+b)
+	// + ( a b -- a+b )
 	defcode "+",1,,add,decr4
 	POPP	T0, T1
 	add	T0, T1, T0
 	PUSHP	T0
 	next
 
-        // - (a b -- a-b)
+        // - ( a b -- a-b )
 	defcode "-",1,,sub,add
 	POPP	T0, T1
 	sub	T0, T1, T0
 	PUSHP	T0
 	next
 
-	// * (a b -- a*b)
+	// * ( a b -- a*b )
 	defcode "*",1,,mul,sub
 	POPP	T0, T1
 	mul	T0, T1, T0
 	PUSHP	T0
 	next
 
+        // << ( x u -- x<<u )
+        defcode "lshift",6,,lshift,mul
+        POPP    x0, x1                  // x1 <- x, x0 <- u
+        lsl     x1, x1, x0
+        PUSHP   x1
+        next
+
+        // >> ( x u -- x>>u )
+        defcode "rshift",6,,rshift,lshift
+        POPP    x0, x1                  // x1 <- x, x0 <- u
+        lsr     x1, x1, x0
+        PUSHP   x1
+        next
+
 //      In this FORTH, only /MOD is primitive.  Later we will define
 //      the / and MOD words in terms of the primitive /MOD.
 
 	// /MOD (a b -- a%b a/b)
-	defcode "/mod",4,,divmod,mul
+	defcode "/mod",4,,divmod,rshift
         POPP    T2, T1
         udiv    T0, T1, T2              // T0 = T1 / T2
         msub    T3, T0, T2, T1          // T3 = T1 - (T0 * T2)
