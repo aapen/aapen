@@ -771,14 +771,16 @@ cold_start:
 
 	.macro defword name, namelen, flags=0, label, link
 	.section .rodata
-	.ascii "wordQQQQ"
 	.align 3
 	.global name_\label
 name_\label :
 	.quad name_\link                // link word
-	.byte \flags                   // flags byte
+	.byte \flags                    // flags byte
 	.byte \namelen           	// name length byte
 	.ascii "\name"                  // the name
+	.rept 30-\namelen		// pad the name to 30 bytes long with commas
+	.ascii ","
+	.endr
 	.align 	3                       // padding to next 8 byte boundary
 	.global \label
 \label :
@@ -810,14 +812,16 @@ name_\label :
 
 	.macro defcode name, namelen, flags=0, label, link
 	.section .rodata
-	.ascii "codeQQQQ"
 	.align 3
 	.global name_\label
 name_\label :
 	.quad name_\link                // link word
-	.byte \flags
-	.byte \namelen
-	.ascii "\name"
+	.byte \flags			// insert flag
+	.byte \namelen			// insert name length
+	.ascii "\name"			// insert name
+	.rept 30-\namelen		// pad name to 30 bytes with commas
+	.ascii ","
+	.endr
 	.align 3
 	.global \label
 \label :
@@ -1930,12 +1934,7 @@ _find:
 	next
 _tcfa:
 	// TCFA (address: T0) (address: T0)
-	add	T0, T0, #8+1		// T0 now has address of namelen
-	ldrb	T1b, [T0]		// Load namelen
-	add	T0, T0, #1		// T0 now has address of name
-	add	T0, T0, T1		// Skip name
-	add	T0, T0, #7		// align to 8-byte boundary
-	and	T0, T0, #~7
+	add	T0, T0, #8+2+30		// header length is 40 bytes.
 	ret
 
 /*
@@ -2129,8 +2128,10 @@ _tcfa:
 	strb	wzr, [T3], #1	        // store flag byte, increment header
 	strb	T1b, [T3], #1	        // store name length byte, increment header
 
-	// we don't need the length in T1 anymore now, so we can destroy it
-	// U0 and U1 are also free again
+	mov	x16, #30
+	sub	x16, x16, T1
+
+	// Copy the name into the definition.
 1:
 	cmp	T1, #0
         b.eq    2f
@@ -2138,7 +2139,18 @@ _tcfa:
 	strb	U0b, [T3], #1	        // put character, increment header
 	subs	T1, T1, #1              // decrement length
 	bne	1b
+
+	// Pad out the name to 30 bytes with commas.
 2:
+	mov	w15, ','
+3:
+	cmp	x16, #0
+        b.eq    4f
+	strb	w15, [T3], #1	        // put character, increment header
+	subs	x16, x16, #1            // decrement length
+	bne	3b
+
+4:
 	add	T3, T3, #7              // align to 8 byte boundary
 	and	T3, T3, #~7
 

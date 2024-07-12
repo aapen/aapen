@@ -774,13 +774,13 @@
 	'WORD word FIND ?IMMEDIATE' returns true if 'word' is flagged as immediate.
 )
 : ?hidden
-	9 +		( skip over the link pointer )
-	c@		( get the flags/length byte )
+	8 +		( skip over the link pointer )
+	c@		( get the flags byte )
 	f_hidden and	( mask the f_hidden flag and return it (as a truth value) )
 ;
 : ?immediate
-	9 +		( skip over the link pointer )
-	c@		( get the flags/length byte )
+	8 +		( skip over the link pointer )
+	c@		( get the flags byte )
 	f_immed and	( mask the F_IMMED flag and return it (as a truth value) )
 ;
 
