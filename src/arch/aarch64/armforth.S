@@ -771,6 +771,7 @@ cold_start:
 
 	.macro defword name, namelen, flags=0, label, link
 	.section .rodata
+	.ascii "wordQQQQ"
 	.align 3
 	.global name_\label
 name_\label :
@@ -809,6 +810,7 @@ name_\label :
 
 	.macro defcode name, namelen, flags=0, label, link
 	.section .rodata
+	.ascii "codeQQQQ"
 	.align 3
 	.global name_\label
 name_\label :
@@ -1887,12 +1889,12 @@ _find:
 
 	FIND returns a pointer to this
 	|				>CFA converts it to a pointer to this
-	|					   |
-	V					   V
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-						   codeword
+	|					        |
+	V		  			        V
+	+-------+-------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
+	| LINK  | FLAGS | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
+	+-------+-------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
+						         codeword
 
 	Notes:
 
@@ -2110,7 +2112,7 @@ _tcfa:
 	str	T3, [U0]                // update LATEST to refer to new header
 	str	U1, [T3], #8            // store link pointer in header, increment header
 
-	strb	wzr, [T3], #1	        // store name length byte, increment header
+	strb	wzr, [T3], #1	        // store flag byte, increment header
 	strb	T1b, [T3], #1	        // store name length byte, increment header
 
 	// we don't need the length in T1 anymore now, so we can destroy it
@@ -2398,7 +2400,7 @@ _comma:
 
         // ( addr length -- ) writes a string to output
 	defcode "tell",4,,tell,litstring
-        POPP    x1, x2                  // x0 <- addr, x1 <- length
+        POPP    x2, x1                  // x1 <- addr, x2 <- length
         bl      _tell
 	next
 
