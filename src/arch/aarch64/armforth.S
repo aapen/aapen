@@ -1532,13 +1532,13 @@ _key:
         next
 _con_in:                                // return char in x0
         // wait for data available
-        LDR_IMM64 x1, UART_FR           // address of flags register
+        ldr     x1, =UART_FR            // address of flags register
 1:      ldr     w0, [x1]                // get flags
         ands    w0, w0, #0x10           // check receive_fifo_empty bit
         bne     1b
 
         // data is available
-        LDR_IMM64 x1, UART_DR           // address of data register
+        ldr     x1, =UART_DR            // address of data register
         ldr     w0, [x1]                // get data
         and     w0, w0, #0xff           // keep lower byte
         ret
@@ -1551,71 +1551,76 @@ _con_in:                                // return char in x0
 _con_out:                               // take char in x0
         PUSHP   x1, x2
         // wait for space available
-        LDR_IMM64 x1, UART_FR           // address of flags register
+        ldr     x1, =UART_FR            // address of flags register
 1:      ldr     w2, [x1]                // get flags
         ands    w2, w2, #0x20           // check transmit_fifo_full bit
         bne     1b
 
         // space is available
-        LDR_IMM64 x1, UART_DR           // address of data register
+        ldr     x1, =UART_DR            // address of data register
         str     w0, [x1]                // write the data byte
         POPP    x1, x2
         ret
 
 _con_init:
         // set GPIO 14 & 15 to output
-        LDR_IMM64 x1, GPFSEL1   // Address of GPFSEL1 register
-        movz    w0, #0x9000     // FSEL output for pins 14 & 15
-        str     w0, [x1]        // write the register
+        ldr     x1, =GPFSEL1            // Address of GPFSEL1 register
+        ldr     w0, [x1]
+        bic     w0, w0, #(7 << 12)      // clear bits 12 - 14 (fsel for pin 14)
+        bic     w0, w0, #(7 << 15)      // clear bits 15 - 17 (fsel for pin 15)
+        orr     w0, w0, #(4 << 12)      // 0b100 = Alt0 for pin 14
+        orr     w0, w0, #(4 << 15)      // 0b100 = Alt0 for pin 15
+        str     w0, [x1]                // write the register
 
         // enable GPIO 14 & 15
-        LDR_IMM64 x1, GPPUD     // Address of GPPUD register
-        str     wzr, [x1]       // zero it
-        movz    x0, #150        // we need to spin 150 cycles
+        ldr     x1, =GPPUD              // Address of GPPUD register
+        str     wzr, [x1]               // zero it to set "float" status
+
+        movz    x0, #150                // we need to spin 150 cycles
 1:      subs    x0, x0, #1
         bne     1b
 
-        LDR_IMM64 x2, GPPUDCLK0 // Address of GPPUDCLK0 register
-        movz    w0, #0xc000     // (1 << 14) | (1 << 15)
-        str     w0, [x2]        // clock in the 'enable' for pins 14 & 15
-        movz    x0, #150        // we need to spin another 150 cycles
+        ldr     x2, =GPPUDCLK0          // Address of GPPUDCLK0 register
+        mov     w0, #(1 << 14) | (1 << 15)
+        str     w0, [x2]                // clock in the 'float' for pins 14 & 15
+
+        movz    x0, #150                // we need to spin another 150 cycles
 2:      subs    x0, x0, #1
         bne     2b
 
-        str     wzr, [x1]       // deassert the PU/PD enable
-        str     wzr, [x2]       // deassert the CLK
+        str     wzr, [x2]               // deassert all in GPPUDCLK0
 
         // turn off uart while initializing
-        LDR_IMM64 x1, UART_CR   // Address of CR
-        str     wzr, [x1]       // zero it
+        ldr     x1, =UART_CR            // Address of CR
+        str     wzr, [x1]               // zero it
 
         // flush the xmit fifo
-        LDR_IMM64 x2, UART_LCRH // Address of LCHR (in x2 so we can use it later)
-        str     wzr, [x2]       // zero it (disables fifos)
+        ldr     x2, =UART_LCRH          // Address of LCHR (in x2 so we can use it later)
+        str     wzr, [x2]               // zero it (disables fifos)
 
         // clear all pending interrupts
-        LDR_IMM64 x1, UART_ICR  // Address of ICR
-        str     wzr, [x1]       // zero it
+        ldr     x1, =UART_ICR           // Address of ICR
+        str     wzr, [x1]               // zero it
 
         // set the baud rate, 8N1 and FIFO disabled.
         // use clock divisor 26.0417 to get 115,200 baud
-        LDR_IMM64 x1, UART_IBRD // Address of IBRD
-        movz    w0, #0x1a       // integer part of 26.0417 - the clock divisor
-        str     w0, [x1]        // set integer part
-        LDR_IMM64 x1, UART_FBRD // Address of FBRD
-        movz    w0, #0x1b       // fractional part of clock divisor
-        str     w0, [x1]        // set fractional part
-        movz    w0, #0xc0       // 8 bits word, no stop bits, even parity
-        str     w0, [x2]        // set LCRH
+        ldr     x1, =UART_IBRD          // Address of IBRD
+        movz    w0, #0x001a             // integer part of 26.0417 - the clock divisor
+        str     w0, [x1]                // set integer part
+        ldr     x1, =UART_FBRD          // Address of FBRD
+        movz    w0, #0x001b             // fractional part of clock divisor
+        str     w0, [x1]                // set fractional part
+        movz    w0, #(3 << 5)           // 8 bits word, no stop bits, even parity
+        str     w0, [x2]                // set LCRH
 
         // disable interrupts
-        LDR_IMM64 x1, UART_IMSC // Address of IMSC register
-        str     wzr, [x1]       // zero it
+        ldr     x1, =UART_IMSC          // Address of IMSC register
+        str     wzr, [x1]               // zero it
 
         // enable the uart
-        LDR_IMM64 x1, UART_CR   // Address of control register
-        movz    w0, #0x301      // xmit enable, recv enable, uart enable
-        str     w0, [x1]        // enable the uart
+        ldr     x1, =UART_CR            // Address of control register
+        movz    w0, #0x301              // xmit enable, recv enable, uart enable
+        str     w0, [x1]                // enable the uart
         ret
 
 
