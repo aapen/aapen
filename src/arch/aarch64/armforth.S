@@ -2689,11 +2689,10 @@ initfile:
 /*
 	We allocate static space for the various stacks and buffers.
 */
-	.set RETURN_STACK_SIZE,512*1024      // 512K
-        .set DATA_STACK_SIZE,512*1024        // 512K
-        .set INPUT_STACK_SIZE,64*8           // 128b
-        .set BUFFER_SIZE,4096                // 4K
-        .set DATA_SEGMENT_SIZE,10*1024*1024  // 10M
+	.set RETURN_STACK_SIZE,8*1024      // 8K
+        .set DATA_STACK_SIZE,8*1024        // 8K
+        .set INPUT_STACK_SIZE,64*8         // 128b ( allows 8 nested input sources )
+        .set BUFFER_SIZE,4096              // 4K
 
 	.bss
 /* FORTH return stack */
@@ -2721,7 +2720,9 @@ buffer:
 
         .align 12
 data_segment:
-        .space DATA_SEGMENT_SIZE
+        // data segment starts here and takes the rest of the memory
+        // space.
+
 
 /*
 	START OF FORTH CODE ----------------------------------------------------------------------
