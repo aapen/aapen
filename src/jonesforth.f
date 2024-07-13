@@ -471,6 +471,7 @@
 	case we put the string at HERE (but we _don't_ change HERE).  This is meant as a temporary
 	location, likely to be overwritten soon after.
 )
+
 ( C, appends a byte to the current compiled word. )
 : c,
 	here @ c!	( store the character in the compiled image )
@@ -544,19 +545,20 @@
 	then
 ;
 
+
 (
-	constants and variables ----------------------------------------------------------------------
+	Constants and variables ----------------------------------------------------------------------
 
-	in forth, global constants and variables are defined like this:
+	In forth, global constants and variables are defined like this:
 
-	10 constant ten		when ten is executed, it leaves the integer 10 on the stack
-	variable var		when var is executed, it leaves the address of var on the stack
+	10 constant ten		When ten is executed, it leaves the integer 10 on the stack
+	variable var		When var is executed, it leaves the address of var on the stack
 
-	constants can be read but not written, eg:
+	Constants can be read but not written, eg:
 
 	ten . cr		prints 10
 
-	you can read a variable (in this example called var) by doing:
+	You can read a variable (in this example called var) by doing:
 
 	var @			leaves the value of var on the stack
 	var @ . cr		prints the value of var
@@ -566,7 +568,7 @@
 
 	20 var !		sets var to 20
 
-	note that variables are uninitialised (but see value later on which provides initialised
+	Note that variables are uninitialised (but see value later on which provides initialised
 	variables with a slightly simpler syntax).
 
 	How can we define the words CONSTANT and VARIABLE?
@@ -1475,6 +1477,39 @@
         -mtnygard, 2024-07-04
 
 )
+
+(
+        Hardware interface ---------------------------------------------------------------------------
+
+        Working with modern hardware involves some complexity that wasn't a concern back when FORTH
+        was created. For example, modern hardware has memory-mapped I/O devices with registers that
+        are a different size than the native cell size for the CPU. The ARM64 CPU uses 64-bit words
+        so our cell size is 64 bits and most of our operations use the 64-bit registers. But that
+        won't work when reading and writing device registers that are 32 bits. We defined `w!` and
+        `w@` in assembly to help with that. It's helpful to have `w,` as well, but with one
+        caveat. We store the 32-bit value in a 64-bit word so we don't have to worry about access
+        alignment everywhere. It's a little bit of memory waste but a bit improvement in reliability.
+
+)
+
+( w, appends a 32-bit value to the current compiled word. )
+: w,
+	here @ w!	( store the character in the compiled image )
+	1 cells here +!	( increment here pointer by 1 cell )
+;
+
+(
+
+        Another concern that didn't exist when FORTH was created was caching. In our multicore and
+        memory-mapped world, we have to do some manual cache maintenance when handing memory off
+        between cores or devices. That means we need to be able to clean regions of the cache by
+        writing modified contents to main memory or invalidate regions.
+
+        --- this comment is a placeholder for when we figure out what these words should be ---
+
+)
+
+
 
 (
 	NOTES ----------------------------------------------------------------------

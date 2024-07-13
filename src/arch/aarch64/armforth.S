@@ -1237,39 +1237,60 @@ name_0: .quad 0
 */
 
 	defcode "c!",2,,storebyte,substore
-	POPPSP	T0		// address
-	POPPSP	T1		// value
-	strb	T1b, [T0]	// store
+	POPPSP	x0		// address
+	POPPSP	x1		// value
+	strb	w1, [x0]	// store
 	next
 
 	defcode "c@",2,,fetchbyte,storebyte
-	POPPSP	T0		// address
-	ldrb	T1b, [T0]	// load and sign extend
-	PUSHPSP	T1
+	POPPSP	x0		// address
+	ldrb	w1, [x0]	// load
+	PUSHPSP	x1
 	next
 
 /* C@C! is a useful byte copy operation */
 	defcode "c@c!",4,,ccopy,fetchbyte
-	ldr	T0, [PSP, #8]	// source address
-	ldr	T1, [PSP]	// destination address
-	ldrb	T2b, [T0], #1	// load and increment
-	strb	T2b, [T1], #1	// store and increment
-	str	T0, [PSP, #8]	// update source
-	str	T1, [PSP]	// update destination
+	ldr	x0, [PSP, #8]	// source address
+	ldr	x1, [PSP]	// destination address
+	ldrb	w2, [x0], #1	// load and increment
+	strb	w2, [x1], #1	// store and increment
+	str	x0, [PSP, #8]	// update source
+	str	x1, [PSP]	// update destination
 	next
 
 /* and CMOVE is a block copy operation. */
 	defcode "cmove",5,,cmove,ccopy
-	POPPSP	T0		// length
-	POPPSP	T1		// destination address
-	POPPSP	T2		// source address
-	cmp	T0, #0
+	POPPSP	x0		// length
+	POPPSP	x1		// destination address
+	POPPSP	x2		// source address
+	cmp	x0, #0
         b.eq    2f
-1:      ldrb	T3b, [T2], #1	// load, increment r2
-	strb	T3b, [T1], #1	// store, increment r3
-	subs	T0, T0, #1	// decrement counter
+1:      ldrb	w3, [x2], #1	// load, increment r2
+	strb	w3, [x1], #1	// store, increment r3
+	subs	x0, x0, #1	// decrement counter
 	b.gt	1b		// until length = 0
 2:
+	next
+
+/*
+
+        For reading and writing hardware registers, it's necessary to have 32-bit wide
+        operations. Otherwise the ARM processor will trigger an alignment fault if we try to use a
+        64-bit write on an address that is not 64-bit aligned... such as any hardware register with
+        a 0x04 offset.
+
+*/
+
+	defcode "w!",2,,storeword,cmove
+	POPPSP	x0		// address
+	POPPSP	x1		// value
+	strh	w1, [x0]	// store
+	next
+
+	defcode "w@",2,,fetchword,storeword
+	POPPSP	x0		// address
+	ldrh	w1, [x0]        // load
+	PUSHPSP	x1
 	next
 
 /*
@@ -1311,7 +1332,7 @@ var_\name :
 
 */
 
-	defvar "state",5,,state,cmove
+	defvar "state",5,,state,fetchword
 	defvar "here",4,,here,state,data_segment
 	defvar "latest",6,,latest,here,name_execute
 	defvar "s0",2,,sz,latest,data_stack_top
