@@ -328,7 +328,7 @@
 		'0'		( decimal digits 0..9 )
 	else
 		10 -		( hex and beyond digits a..z )
-		'a'
+		'A'
 	then
 	+
 	emit
