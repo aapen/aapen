@@ -52,10 +52,11 @@
 
 \ Define some character constants
 : '\n' 10 ;
+: '\r' 13 ;
 : bl   32 ; \ bl (BLank) is a standard FORTH word for space.
 
 \ cr prints a carriage return
-: cr '\n' emit ;
+: cr '\r' emit '\n' emit ;
 
 \ space prints a space
 : space bl emit ;
