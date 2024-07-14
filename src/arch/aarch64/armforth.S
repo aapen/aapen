@@ -1342,7 +1342,7 @@ var_\name :
 	defvar "latest",6,,latest,here,name_execute
 	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
-        defvar "echo",4,,echo,base,1
+        defvar "echo",4,,echo,base,0
 // for debugging
 	defvar	"pong",4,,pong,echo
 

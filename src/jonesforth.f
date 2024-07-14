@@ -1523,6 +1523,9 @@
 	data pointer.
 )
 
+: noecho 0 echo ! ;
+: echo 1 echo ! ;
+
 (
 	WELCOME MESSAGE ----------------------------------------------------------------------
 
@@ -1530,12 +1533,14 @@
 )
 
 : welcome
+        cr
 	s" test-mode" find not if
 		." jonesforth version " version . cr
 		." ok "
 	then
+        cr
 ;
 
 welcome
 hide welcome
-
+echo
