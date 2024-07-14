@@ -104,7 +104,7 @@
 : '(' [ char ( ] literal ;
 : ')' [ char ) ] literal ;
 : '"' [ char " ] literal ;
-: 'a' [ char a ] literal ;
+: 'A' [ char A ] literal ;
 : '0' [ char 0 ] literal ;
 : '-' [ char - ] literal ;
 : '.' [ char . ] literal ;
