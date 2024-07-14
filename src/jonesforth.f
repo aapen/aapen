@@ -382,19 +382,19 @@
 	swap		( width n )
 	dup 0< if
 		negate		( width u )
-		1		( save a flag to remember that it was negative | width n 1 )
-		rot		( 1 u width )
+		1		( save a flag to remember that it was negative | width u 1 )
 		swap		( width 1 u )
+		rot		( 1 u width )
 		1-		( 1 u width-1 )
 	else
 		0		( width u 0 )
-		rot		( 0 u width )
 		swap		( width 0 u )
+		rot		( 0 u width )
 	then
 	swap		( flag width u )
 	dup		( flag width u u )
 	uwidth		( flag width u uwidth )
-	-rot		( flag u uwidth width )
+	rot		( flag u uwidth width )
 	swap -		( flag u width-uwidth )
 
 	spaces		( flag u )
