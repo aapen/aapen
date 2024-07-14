@@ -846,56 +846,57 @@
 )
 : dump		( addr len -- )
         cr
-	base @ rot		( save the current base at the bottom of the stack )
+	base @ -rot		( base addr len | save the current base at the bottom of the stack )
 	hex			( and switch to hexadecimal mode )
 
 	begin
 		dup 0>		( while len > 0 )
 	while
-		over 8 u.r	( print the address )
+		over 8 u.r	( print the address | base addr len )
 		space
 
 		( print up to 16 words on this line )
-		2dup		( addr len addr len )
-		1- 15 and 1+	( addr len addr linelen )
+		2dup		( base addr len addr len )
+		1- 15 and 1+	( base addr len addr linelen )
 		begin
 			dup 0>		( while linelen > 0 )
 		while
-			swap		( addr len linelen addr )
-			dup c@		( addr len linelen addr byte )
-			2 .r space	( print the byte )
-			1+ swap 1-	( addr len linelen addr -- addr len addr+1 linelen-1 )
+			swap		( base addr len linelen addr )
+			dup c@		( base addr len linelen addr byte )
+			2 .r space	( base addr len linelen addr | print the byte )
+			1+ swap 1-	( base addr len linelen addr -- base addr len addr+1 linelen-1 )
 		repeat
-		2drop		( addr len )
+		2drop		( base addr len )
+                space
 
 		( print the ascii equivalents )
-		2dup 1- 15 and 1+ ( addr len addr linelen )
+		2dup 1- 15 and 1+ ( base addr len addr linelen )
 		begin
 			dup 0>		( while linelen > 0)
 		while
-			swap		( addr len linelen addr )
-			dup c@		( addr len linelen addr byte )
+			swap		( base addr len linelen addr )
+			dup c@		( base addr len linelen addr byte )
 			dup 32 128 within if	( 32 <= c < 128? )
 				emit
 			else
 				drop '.' emit
 			then
-			1+ swap 1-	( addr len linelen addr -- addr len addr+1 linelen-1 )
+			1+ swap 1-	( base addr len linelen addr -- base addr len addr+1 linelen-1 )
 		repeat
-		2drop		( addr len )
+		2drop		( base addr len )
 		cr
 
-		dup 1- 15 and 1+ ( addr len linelen )
-		dup		( addr len linelen linelen )
-		rot		( addr linelen len linelen )
-		-		( addr linelen len-linelen )
-		rot		( len-linelen addr linelen )
-		+		( len-linelen addr+linelen )
-		swap		( addr-linelen len-linelen )
+		dup 1- 15 and 1+ ( base addr len linelen )
+		dup		( base addr len linelen linelen )
+		-rot		( base addr linelen len linelen )
+		-		( base addr linelen len-linelen )
+		-rot		( base len-linelen addr linelen )
+		+		( base len-linelen addr+linelen )
+		swap		( base addr-linelen len-linelen )
 	repeat
 
-	2drop			( restore stack )
-	base !			( restore saved base )
+	2drop			( base | restore stack )
+	base !			( | restore saved base )
 ;
 
 (
