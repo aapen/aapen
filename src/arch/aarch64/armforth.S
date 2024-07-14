@@ -861,36 +861,36 @@ name_0: .quad 0
 
 	// DUP (a -- a a)
 	defcode "dup",3,,dup,swap
-	ldr	T0, [PSP]
-	PUSHPSP	T0
+	ldr	x0, [PSP]
+	PUSHP	x0
 	next
 
 	// OVER (a b -- a b a)
 	defcode "over",4,,over,dup
-	ldr	T0, [PSP, #8]
-	PUSHPSP	T0
+	ldr	x0, [PSP, #8]           // get the second element of stack
+	PUSHP	x0                      // and push it on top
 	next
 
 	// ROT ( n1 n2 n3 -- n2 n3 n1 )
 	defcode "rot",3,,rot,over
-        POPPSP  T0                      // n3
-        POPPSP  T1                      // n2
-        POPPSP  T2                      // n1
+        POPP    x3                      // n3
+        POPP    x2                      // n2
+        POPP    x1                      // n1
 
-        PUSHPSP T1                      // n2
-        PUSHPSP T0                      // n3
-        PUSHPSP T2                      // n1
+        PUSHP   x2                      // n2
+        PUSHP   x3                      // n3
+        PUSHP   x1                      // n1
 	next
 
 	// -ROT ( n1 n2 n3 -- n3 n1 n2 )
 	defcode "-rot",4,,nrot,rot
-        POPPSP  T0                      // n3
-        POPPSP  T1                      // n2
-        POPPSP  T2                      // n1
+        POPP    x3                      // n3
+        POPP    x2                      // n2
+        POPP    x1                      // n1
 
-        PUSHPSP T0                      // n3
-        PUSHPSP T2                      // n1
-        PUSHPSP T1                      // n2
+        PUSHP   x3                      // n3
+        PUSHP   x1                      // n1
+        PUSHP   x2                      // n2
 	next
 
         defcode "?dup",4,,qdup,nrot     // duplicate top of stack if it is non-zero
