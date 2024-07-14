@@ -1662,9 +1662,7 @@ _frombuf:
         // ( ch -- ) write a byte to output
 	defcode "emit",4,,emit,frombuf
         POPP	x0
-        PUSHP   x1, x2, lr
         bl      _con_out
-        POPP    x1, x2, lr
 	next
 
 /*
