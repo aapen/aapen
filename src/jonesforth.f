@@ -383,18 +383,18 @@
 	dup 0< if
 		negate		( width u )
 		1		( save a flag to remember that it was negative | width n 1 )
-		swap		( width 1 u )
 		rot		( 1 u width )
+		swap		( width 1 u )
 		1-		( 1 u width-1 )
 	else
 		0		( width u 0 )
-		swap		( width 0 u )
 		rot		( 0 u width )
+		swap		( width 0 u )
 	then
 	swap		( flag width u )
 	dup		( flag width u u )
 	uwidth		( flag width u uwidth )
-	rot		( flag u uwidth width )
+	-rot		( flag u uwidth width )
 	swap -		( flag u width-uwidth )
 
 	spaces		( flag u )
@@ -845,11 +845,12 @@
 		LATEST @ 128 DUMP
 )
 : dump		( addr len -- )
-	base @ -rot		( save the current base at the bottom of the stack )
+        cr
+	base @ rot		( save the current base at the bottom of the stack )
 	hex			( and switch to hexadecimal mode )
 
 	begin
-		?dup		( while len > 0 )
+		dup 0>		( while len > 0 )
 	while
 		over 8 u.r	( print the address )
 		space
@@ -858,19 +859,19 @@
 		2dup		( addr len addr len )
 		1- 15 and 1+	( addr len addr linelen )
 		begin
-			?dup		( while linelen > 0 )
+			dup 0>		( while linelen > 0 )
 		while
 			swap		( addr len linelen addr )
 			dup c@		( addr len linelen addr byte )
 			2 .r space	( print the byte )
 			1+ swap 1-	( addr len linelen addr -- addr len addr+1 linelen-1 )
 		repeat
-		drop		( addr len )
+		2drop		( addr len )
 
 		( print the ascii equivalents )
 		2dup 1- 15 and 1+ ( addr len addr linelen )
 		begin
-			?dup		( while linelen > 0)
+			dup 0>		( while linelen > 0)
 		while
 			swap		( addr len linelen addr )
 			dup c@		( addr len linelen addr byte )
@@ -881,16 +882,19 @@
 			then
 			1+ swap 1-	( addr len linelen addr -- addr len addr+1 linelen-1 )
 		repeat
-		drop		( addr len )
+		2drop		( addr len )
 		cr
 
 		dup 1- 15 and 1+ ( addr len linelen )
-		tuck		( addr linelen len linelen )
+		dup		( addr len linelen linelen )
+		rot		( addr linelen len linelen )
 		-		( addr linelen len-linelen )
-		>r + r>		( addr+linelen len-linelen )
+		rot		( len-linelen addr linelen )
+		+		( len-linelen addr+linelen )
+		swap		( addr-linelen len-linelen )
 	repeat
 
-	drop			( restore stack )
+	2drop			( restore stack )
 	base !			( restore saved base )
 ;
 
