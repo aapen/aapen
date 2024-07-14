@@ -1534,7 +1534,7 @@ _con_in:                                // return char in x0
         // wait for data available
         ldr     x1, =UART_FR            // address of flags register
 1:      ldr     w0, [x1]                // get flags
-        ands    w0, w0, #0x10           // check receive_fifo_empty bit
+        ands    w0, w0, #(1<<4)         // check receive_fifo_empty bit
         bne     1b
 
         // data is available
@@ -1553,7 +1553,7 @@ _con_out:                               // take char in x0
         // wait for space available
         ldr     x1, =UART_FR            // address of flags register
 1:      ldr     w2, [x1]                // get flags
-        ands    w2, w2, #0x20           // check transmit_fifo_full bit
+        ands    w2, w2, #(1<<5)         // check transmit_fifo_full bit
         bne     1b
 
         // space is available
