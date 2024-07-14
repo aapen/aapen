@@ -1488,7 +1488,7 @@ var_\name :
 
 */
 
-        defcode "key",3,,key,dspstore  // ( -- key)
+        defcode "key",3,,key,inpctx     // ( -- key)
 	bl	_key
 	PUSHP	x0
 	next
