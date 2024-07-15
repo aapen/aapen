@@ -54,6 +54,9 @@
 : '\n' 10 ;
 : bl   32 ; \ bl (BLank) is a standard FORTH word for space.
 
+: '<' 60 ;
+: '>' 62 ;
+
 \ cr prints a carriage return
 : cr '\n' emit ;
 
@@ -334,21 +337,6 @@
 	emit
 ;
 
-(
-	FORTH word .S prints the contents of the stack.  It doesn't alter the stack.
-	Very useful for debugging.
-)
-: .s		( -- )
-	dsp@		( get current stack pointer )
-	begin
-		dup s0 @ <
-	while
-		dup @ u.	( print the stack element )
-		space
-		8+		( move up )
-	repeat
-	drop
-;
 
 ( This word returns the width (in characters) of an unsigned number in the current base )
 : uwidth	( u -- width )
@@ -437,6 +425,27 @@
 : depth		( -- n )
 	s0 @ dsp@ -
 	8-			( adjust because S0 was on the stack when we pushed DSP )
+	8 /
+;
+
+(
+	FORTH word .S prints the contents of the stack.  It doesn't alter the stack.
+	Very useful for debugging.
+)
+: .s		( -- )
+	'<' emit depth 0 .r '>' emit
+	space
+
+	dsp@		( get current stack pointer )
+	begin
+		dup s0 @ <
+	while
+		dup @ u.	( print the stack element )
+		space
+		8+		( move up )
+	repeat
+	drop
+	cr
 ;
 
 (
@@ -1538,4 +1547,3 @@
 
 welcome
 hide welcome
-
