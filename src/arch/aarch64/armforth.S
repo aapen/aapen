@@ -536,33 +536,6 @@
         ldp     \reg1,\reg2, [ISP], #16
 	.endm
 
-        // More complicated stack macros for pushing and popping multiple
-        // registers on the parameter stack. (These are not yet used
-        // everywhere...)
-
-	.macro PUSHP reg1:req,reg2,regs:vararg
-        .ifnb   \reg2
-        stp     \reg1,\reg2, [PSP, #-16]!
-        .else
-        str     \reg1, [PSP, #-8]!
-        .endif
-        .ifnb   \regs
-	PUSHP	\regs
-        .endif
-	.endm
-
-	.macro POPP reg1:req,reg2,regs:vararg
-        .ifnb   \regs
-	POPP	\regs
-        .endif
-        .ifnb   \reg2
-        ldp     \reg1,\reg2, [PSP], #16
-        .else
-        ldr     \reg1, [PSP], #8
-        .endif
-	.endm
-
-
 PSP	.req	x28	// parameter stack pointer
 RSP	.req	x29	// return stack pointer
 NIP	.req	x10	// next instruction pointer
@@ -830,11 +803,25 @@ name_\label :
 	.pool
 	.global code_\label
 code_\label :
-        PUSHP   x0, x1, x2, x4, x5, x30
+        PUSHPSP x0
+        PUSHPSP x1
+        PUSHPSP x2
+        PUSHPSP x3
+        PUSHPSP x4
+        PUSHPSP x5
+        PUSHPSP x6
+        PUSHPSP x30
 	ldr	T0, =name_\label+10	// address
 	mov	T1, #\namelen		// length
 	bl	debug_pong
-        POPP    x0, x1, x2, x4, x5, x30
+        POPPSP  x30
+        POPPSP  x6
+        POPPSP  x5
+        POPPSP  x4
+        POPPSP  x3
+        POPPSP  x2
+        POPPSP  x1
+        POPPSP  x0
 	// assembler code follows
 	.endm
 
@@ -862,35 +849,35 @@ name_0: .quad 0
 	// DUP (a -- a a)
 	defcode "dup",3,,dup,swap
 	ldr	x0, [PSP]
-	PUSHP	x0
+	PUSHPSP	x0
 	next
 
 	// OVER (a b -- a b a)
 	defcode "over",4,,over,dup
 	ldr	x0, [PSP, #8]           // get the second element of stack
-	PUSHP	x0                      // and push it on top
+	PUSHPSP	x0                      // and push it on top
 	next
 
 	// ROT ( n1 n2 n3 -- n2 n3 n1 )
 	defcode "rot",3,,rot,over
-        POPP    x3                      // n3
-        POPP    x2                      // n2
-        POPP    x1                      // n1
+        POPPSP  x3                      // n3
+        POPPSP  x2                      // n2
+        POPPSP  x1                      // n1
 
-        PUSHP   x2                      // n2
-        PUSHP   x3                      // n3
-        PUSHP   x1                      // n1
+        PUSHPSP x2                      // n2
+        PUSHPSP x3                      // n3
+        PUSHPSP x1                      // n1
 	next
 
 	// -ROT ( n1 n2 n3 -- n3 n1 n2 )
 	defcode "-rot",4,,nrot,rot
-        POPP    x3                      // n3
-        POPP    x2                      // n2
-        POPP    x1                      // n1
+        POPPSP  x3                      // n3
+        POPPSP  x2                      // n2
+        POPPSP  x1                      // n1
 
-        PUSHP   x3                      // n3
-        PUSHP   x1                      // n1
-        PUSHP   x2                      // n2
+        PUSHPSP x3                      // n3
+        PUSHPSP x1                      // n1
+        PUSHPSP x2                      // n2
 	next
 
         defcode "?dup",4,,qdup,nrot     // duplicate top of stack if it is non-zero
@@ -901,62 +888,67 @@ name_0: .quad 0
 1:      next
 
         defcode "1+",2,,incr,qdup
-        POPP    T0
+        POPPSP  T0
         add     T0, T0, #1
-        PUSHP   T0
+        PUSHPSP T0
         next
 
         defcode "1-",2,,decr,incr
-        POPP    T0
+        POPPSP  T0
         sub     T0, T0, #1
-        PUSHP   T0
+        PUSHPSP T0
         next
 
         defcode "4+",2,,incr4,decr
-        POPP    T0
+        POPPSP  T0
         add     T0,T0,#4
-        PUSHP   T0
+        PUSHPSP T0
         next
 
         defcode "4-",2,,decr4,incr4
-        POPP    T0
+        POPPSP  T0
         sub     T0,T0,#4
-        PUSHP   T0
+        PUSHPSP T0
         next
 
 	// + ( a b -- a+b )
 	defcode "+",1,,add,decr4
-	POPP	T0, T1
+        POPPSP  T1
+        POPPSP  T0
 	add	T0, T1, T0
-	PUSHP	T0
+	PUSHPSP	T0
 	next
 
         // - ( a b -- a-b )
 	defcode "-",1,,sub,add
-	POPP	T0, T1
-	sub	T0, T1, T0
-	PUSHP	T0
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
+	sub	T0, T0, T1              // T0 < a - b
+	PUSHPSP	T0
 	next
 
 	// * ( a b -- a*b )
 	defcode "*",1,,mul,sub
-	POPP	T0, T1
+        POPPSP  T1
+        POPPSP  T0
 	mul	T0, T1, T0
-	PUSHP	T0
+	PUSHPSP	T0
 	next
 
         // << ( x u -- x<<u )
         defcode "lshift",6,,lshift,mul
-        POPP    x0, x1                  // x1 <- x, x0 <- u
+        POPPSP  x0                      // x0 <- u
+        POPPSP  x1                      // x1 <- x
         lsl     x1, x1, x0
-        PUSHP   x1
+        PUSHPSP	x1
         next
 
         // >> ( x u -- x>>u )
         defcode "rshift",6,,rshift,lshift
-        POPP    x0, x1                  // x1 <- x, x0 <- u
+        POPPSP  x0                      // x0 <- u
+        POPPSP  x1                      // x1 <- x
         lsr     x1, x1, x0
-        PUSHP   x1
+        PUSHPSP x1
         next
 
 //      In this FORTH, only /MOD is primitive.  Later we will define
@@ -964,11 +956,12 @@ name_0: .quad 0
 
 	// /MOD (a b -- a%b a/b)
 	defcode "/mod",4,,divmod,rshift
-        POPP    T2, T1
-        udiv    T0, T1, T2              // T0 = T1 / T2
-        msub    T3, T0, T2, T1          // T3 = T1 - (T0 * T2)
-        PUSHP   T3                      // push remainder
-        PUSHP   T0                      // push quotient
+        POPPSP  T2                      // T2 <- b
+        POPPSP  T1                      // T1 <- a
+        udiv    T0, T1, T2              // T0 = a / b
+        msub    T3, T0, T2, T1          // T3 = a - (T0 * b)
+        PUSHPSP T3                      // push remainder
+        PUSHPSP T0                      // push quotient
 	next
 
 // for debugging, use this for gdb breakpoints
@@ -995,55 +988,61 @@ name_0: .quad 0
 
 	// = (a b -- a=b)
 	defcode "=",1,,equ,dong
-	POPP	T0, T1
-	cmp	T1, T0
-        csinc   T0, xzr, xzr, ne
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
+	cmp	T0, T1                  // test a vs b
+        csinc   T0, xzr, xzr, ne        // T0 <- (a != b) ? 0 : 1
 	PUSHPSP	T0
 	next
 
 	// <> (a b -- a<>b)
 	defcode "<>",2,,nequ,equ
-	POPP	T0, T1
-	cmp	T1, T0
-        csinc   T0, xzr, xzr, eq
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
+	cmp	T0, T1                  // test a vs b
+        csinc   T0, xzr, xzr, eq        // T0 <- (a == b) ? 0 : 1
 	PUSHPSP	T0
 	next
 
 	// < (a b -- a<b)
 	defcode "<",1,,lt,nequ
-	POPP	T0, T1
-	cmp	T1, T0
-        csinc   T0, xzr, xzr, ge
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
+	cmp	T0, T1                  // test a vs b
+        csinc   T0, xzr, xzr, ge        // T0 <- (a >= b) ? 0 : 1
 	PUSHPSP	T0
 	next
 
 	// > (a b -- a>b)
 	defcode ">",1,,gt,lt
-	POPP	T0, T1
-	cmp	T1, T0
-        csinc   T0, xzr, xzr, le
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
+	cmp	T0, T1                  // test a vs b
+        csinc   T0, xzr, xzr, le        // T0 <- (a <= b) ? 0 : 1
 	PUSHPSP	T0
 	next
 
 	// <= (a b -- a<=b)
 	defcode "<=",2,,le,gt
-	POPP	T0, T1
-	cmp	T1, T0
-        csinc   T0, xzr, xzr, gt
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
+	cmp	T0, T1                  // test a vs b
+        csinc   T0, xzr, xzr, gt        // T0 <- (a > b) ? 0 : 1
 	PUSHPSP	T0
 	next
 
 	// >= (a b -- a>=b)
 	defcode ">=",2,,ge,le
-	POPP	T0, T1
-	cmp	T1, T0
-        csinc   T0, xzr, xzr, lt
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
+	cmp	T0, T1                  // test a vs b
+        csinc   T0, xzr, xzr, lt        // T0 <- (a < b) ? 0 : 1
 	PUSHPSP	T0
 	next
 
         // 0= (a -- a == 0)
         defcode "0=",2,,zeroeq,ge
-        POPP    T0
+        POPPSP  T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, ne
         PUSHPSP T0
@@ -1051,7 +1050,7 @@ name_0: .quad 0
 
         // 0<> (a -- a <> 0)
         defcode "0<>",3,,zerone,zeroeq
-        POPP    T0
+        POPPSP  T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, eq
         PUSHPSP T0
@@ -1059,7 +1058,7 @@ name_0: .quad 0
 
         // 0< (a -- a<0)
         defcode "0<",2,,zlt,zerone
-        POPP    T0
+        POPPSP  T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, ge
         PUSHPSP T0
@@ -1067,7 +1066,7 @@ name_0: .quad 0
 
         // 0> (a -- a>0)
         defcode "0>",2,,zgt,zlt
-        POPP    T0
+        POPPSP  T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, le
         PUSHPSP T0
@@ -1075,7 +1074,7 @@ name_0: .quad 0
 
         // 0<= (a -- a<=0)
         defcode "0<=",3,,zle,zgt
-        POPP    T0
+        POPPSP  T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, gt
         PUSHPSP T0
@@ -1083,7 +1082,7 @@ name_0: .quad 0
 
         // 0>= (a -- a>=0)
         defcode "0>=",3,,zge,zle
-        POPP    T0
+        POPPSP  T0
         cmp     T0, xzr
         csinc   T0, xzr, xzr, lt
         PUSHPSP T0
@@ -1091,21 +1090,24 @@ name_0: .quad 0
 
 	// AND (a b -- a&b)
 	defcode "and",3,,and,zge
-	POPP	T0, T1
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
 	and	T0, T1, T0
 	PUSHPSP	T0
 	next
 
 	// OR (a b -- a|b)
 	defcode "or",2,,or,and
-	POPP	T0, T1
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
 	orr	T0, T1, T0
 	PUSHPSP	T0
 	next
 
 	// XOR (a b -- a^b)
 	defcode "xor",3,,xor,or
-	POPP	T0, T1
+        POPPSP  T1                      // T1 <- b
+        POPPSP  T0                      // T0 <- a
 	eor	T0, T1, T0
 	PUSHPSP	T0
 	next
@@ -1202,7 +1204,8 @@ name_0: .quad 0
 
 	// ! (value address -- ) M[address] = value
 	defcode "!",1,,store,lit
-	POPP	T0, T1
+        POPPSP  T0
+        POPPSP  T1
 	str	T1, [T0]
 	next
 
@@ -1215,7 +1218,8 @@ name_0: .quad 0
 
 	// +! (value address -- ) M[address] += value
 	defcode "+!",2,,addstore,fetch
-	POPP	T0, T1
+        POPPSP  T0
+        POPPSP  T1
 	ldr	T2, [T0]
 	add	T2, T2, T1
 	str	T2, [T0]
@@ -1223,7 +1227,8 @@ name_0: .quad 0
 
 	// -! (value address -- ) M[address] -= value
 	defcode "-!",2,,substore,addstore
-	POPP	T0, T1
+        POPPSP  T0
+        POPPSP  T1
 	ldr	T2, [T0]
 	sub	T2, T2, T1
 	str	T2, [T0]
@@ -1337,7 +1342,7 @@ var_\name :
 	defvar "latest",6,,latest,here,name_execute
 	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
-        defvar "echo",4,,echo,base,1
+        defvar "echo",4,,echo,base,0
 // for debugging
 	defvar	"pong",4,,pong,echo
 
@@ -1432,25 +1437,29 @@ var_\name :
 
         // ( ctx word -- )
 	defcode ">inp",4,,toinp, dspstore
-	POPP	x0, x1                  // x0 <- word, x1 <- ctx from pstack
+        POPPSP  x0                      // x0 <- word
+        POPPSP  x1                      // x1 <- ctx
         PUSHI   x0, x1                  // push with word at lower address
 	next
 
         // ( -- ctx word )
 	defcode "inp>",4,,frominp,toinp
 	POPI	x0, x1                  // x0 <- word, x1 <- ctx
-        PUSHP   x0, x1                  // push with word at lower address
+        PUSHPSP x0
+        PUSHPSP x1
 	next
 
         // ( -- ctx word )
 	defcode "inp@",4,,inpfetch,frominp
         ldp     x0, x1, [ISP]           // x0 <- word, x1 <- ctx (without changing ISP)
-        PUSHP   x0, x1                  // push with word at lower address
+        PUSHPSP x0
+        PUSHPSP x1
 	next
 
         // ( ctx word -- )
 	defcode "inp!",4,,inpstore,inpfetch
-        POPP    x0, x1                  // x0 <- word, x1 <- ctx from pstack
+        POPPSP  x0                      // x0 <- word
+        POPPSP  x1                      // x1 <- ctx
         stp     x0, x1, [ISP]           // store on input stack (without changing ISP)
 	next
 
@@ -1460,7 +1469,7 @@ var_\name :
 
         // ( ctx -- )  update the context field without changing the word
         defcode "inpc!",5,,inpctx,inpdrop
-        POPP    x0
+        POPPSP  x0
         str     x0, [ISP, #8]
         next
 
@@ -1490,12 +1499,14 @@ var_\name :
 
         defcode "key",3,,key,inpctx     // ( -- key)
 	bl	_key
-	PUSHP	x0
+	PUSHPSP	x0
 	next
 _key:
 	// KEY () (char: T0)
         // read a key
-        PUSHP   x1, x2, lr
+        PUSHPSP x1
+        PUSHPSP x2
+        PUSHPSP lr
 3:
         ldr     x1, [ISP]               // get the byte-reading word
         blr     x1                      // jump there
@@ -1515,7 +1526,9 @@ _key:
         cmp     x1, #0                  // == 0?
         beq     2f                      // skip it
         bl      _con_out                // echo the character
-2:      POPP    x1, x2, lr
+2:      POPPSP  lr
+        POPPSP  x2
+        POPPSP  x1
         ret
 
 /*
@@ -1525,10 +1538,10 @@ _key:
 */
 
 	defcode "<con",4,,con_in,key    // ( -- key )
-        PUSHP   x1                      // save this register
+        PUSHPSP x1                      // save this register
         bl      _con_in
-        POPP    x1
-        PUSHP   x0
+        POPPSP  x1
+        PUSHPSP x0
         next
 _con_in:                                // return char in x0
         // wait for data available
@@ -1545,11 +1558,12 @@ _con_in:                                // return char in x0
 
 
         defcode ">con",4,,con_out,con_in // ( byte -- )
-        POPP    x0
+        POPPSP  x0                      // x0 <- byte to write
         bl      _con_out
         next
 _con_out:                               // take char in x0
-        PUSHP   x1, x2
+        PUSHPSP x1                      // preserve x1
+        PUSHPSP x2                      // preserve x2
         // wait for space available
         ldr     x1, =UART_FR            // address of flags register
 1:      ldr     w2, [x1]                // get flags
@@ -1559,7 +1573,8 @@ _con_out:                               // take char in x0
         // space is available
         ldr     x1, =UART_DR            // address of data register
         str     w0, [x1]                // write the data byte
-        POPP    x1, x2
+        POPPSP  x2                      // restore x2
+        POPPSP  x1                      // restore x1
         ret
 
 _con_init:
@@ -1643,7 +1658,7 @@ bufftop:
 
         defcode "<buf",4,,frombuf,con_out
         bl _frombuf
-        PUSHP   x0
+        PUSHPSP x0
         next
 _frombuf:
         ldr     x1, [ISP, 8]            // peek at the context word
@@ -1661,7 +1676,7 @@ _frombuf:
 
         // ( ch -- ) write a byte to output
 	defcode "emit",4,,emit,frombuf
-        POPP	x0
+        POPPSP	x0
         bl      _con_out
 	next
 
@@ -1701,7 +1716,8 @@ _frombuf:
 	next
 _word:
 	// WORD () (address: T0, length: T1)
-	PUSHP	U0, lr
+        PUSHPSP U0
+        PUSHPSP lr
 1:
 	bl	_key
 	cmp	T0, #'\\'		// == \?
@@ -1719,7 +1735,8 @@ _word:
 	ldr	T0, =word_buffer	// address
 	sub	T1, U0, T0		// length
 
-	POPP	U0, lr
+        POPPSP  lr
+        POPPSP  U0
         ret
 3:
 	bl	_key
@@ -1732,7 +1749,14 @@ word_buffer:
 	.space 32
 
 	defcode "?words",6,,qwords,word
-	PUSHP	U0,U1,U2,U3,lr,x21,x22,x23
+        PUSHPSP U0
+        PUSHPSP U1
+        PUSHPSP U2
+        PUSHPSP U3
+        PUSHPSP lr
+        PUSHPSP x21
+        PUSHPSP x22
+        PUSHPSP x23
 
 	ldr	x1, =crnl		// cr newline
 	mov	x2, #2
@@ -1751,7 +1775,12 @@ word_buffer:
 	add	x23, x0, #10		// name pointer
 
 	// And print it out with a cr/nl pair.
-	PUSHP	x0,x1,x2,x3,x4
+        PUSHPSP x0
+        PUSHPSP x1
+        PUSHPSP x2
+        PUSHPSP x3
+        PUSHPSP x4
+
         mov     x1, x23
         mov     x2, x22
         bl      _tell
@@ -1765,14 +1794,24 @@ word_buffer:
 	mov	x2, #2
         bl      _tell
 
-	POPP	x0,x1,x2,x3,x4
-
+        POPPSP  x4
+        POPPSP  x3
+        POPPSP  x2
+        POPPSP  x1
+        POPPSP  x0
 
 	// T2 = T3, but T3 can be destroyed in the loop
 	ldr	x0, [x0]		// previous dictionary pointer
 	b	1b			// try again
 4:
-	POPP	U0,U1,U2,U3,lr,x21,x22,x23
+        POPPSP  x23
+        POPPSP  x22
+        POPPSP  x21
+        POPPSP  lr
+        POPPSP  U3
+        POPPSP  U2
+        POPPSP  U1
+        POPPSP  U0
 	next
 
 
@@ -1802,7 +1841,11 @@ word_buffer:
 	next
 _number:
 	// NUMBER(address: T0, length: T1) (number: T0, unparsed: T1)
-	PUSHP	U0,U1,U2,U3,lr
+        PUSHPSP U0
+        PUSHPSP U1
+        PUSHPSP U2
+        PUSHPSP U3
+        PUSHPSP lr
 
 	mov	T2, T0		// address
 	mov	T0, #0		// number
@@ -1846,7 +1889,11 @@ _number:
 	cmp	U3, #1		// check negative flag
         cneg    T0, T0, eq      // If equal, negate x0
 5:
-	POPP	U0,U1,U2,U3,lr
+        POPPSP  lr
+        POPPSP  U3
+        POPPSP  U2
+        POPPSP  U1
+        POPPSP  U0
 	ret
 
 /*
@@ -1881,7 +1928,11 @@ _number:
 	next
 _find:
 	// FIND (address: T0, length: T1) (address: T0)
-	PUSHP	U0,U1,U2,U3,lr
+        PUSHPSP U0
+        PUSHPSP U1
+        PUSHPSP U2
+        PUSHPSP U3
+        PUSHPSP lr
 
 	mov	T2, T1			// length
 	mov	T1, T0			// address
@@ -1917,7 +1968,11 @@ _find:
 	ldr	T0, [T0]		// previous dictionary pointer
 	b	1b			// try again
 4:
-	POPP	U0,U1,U2,U3,lr
+        POPPSP  lr
+        POPPSP  U3
+        POPPSP  U2
+        POPPSP  U1
+        POPPSP  U0
 	ret
 
 /*
@@ -2450,17 +2505,18 @@ _comma:
 
         // ( addr length -- ) writes a string to output
 	defcode "tell",4,,tell,litstring
-        POPP    x2, x1                  // x1 <- addr, x2 <- length
+        POPPSP  x2                      // x2 <- len
+        POPPSP  x1                      // x1 <- addr
         bl      _tell
 	next
 
 _tell:
-        PUSHP   x30
+        PUSHPSP lr
 1:      ldrb    w0, [x1], #1
         bl      _con_out
         subs    x2, x2, #1
         bgt     1b
-        POPP    x30
+        POPPSP  lr
         ret
 
 /*

@@ -52,13 +52,14 @@
 
 \ Define some character constants
 : '\n' 10 ;
+: '\r' 13 ;
 : bl   32 ; \ bl (BLank) is a standard FORTH word for space.
 
 : '<' 60 ;
 : '>' 62 ;
 
 \ cr prints a carriage return
-: cr '\n' emit ;
+: cr '\r' emit '\n' emit ;
 
 \ space prints a space
 : space bl emit ;
@@ -1532,6 +1533,9 @@
 	data pointer.
 )
 
+: noecho 0 echo ! ;
+: echo 1 echo ! ;
+
 (
 	WELCOME MESSAGE ----------------------------------------------------------------------
 
@@ -1539,11 +1543,14 @@
 )
 
 : welcome
+        cr
 	s" test-mode" find not if
 		." jonesforth version " version . cr
 		." ok "
 	then
+        cr
 ;
 
 welcome
 hide welcome
+echo
