@@ -2609,11 +2609,13 @@ _tell:
         mov     x2, x5                  // length of word
         bl      _tell
 
-
-
 	ldr	x1, =errmsgnl
 	mov	x2, #errmsgnlend-errmsgnl
         bl      _tell
+
+	// reinitialize data stack
+        ldr     x9, =data_stack_top     // get the top of the parameter stack
+        mov     PSP, x9                 // initialize parameter stack
 	next
 
 	.section .rodata
