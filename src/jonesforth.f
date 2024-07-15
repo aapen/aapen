@@ -55,9 +55,6 @@
 : '\r' 13 ;
 : bl   32 ; \ bl (BLank) is a standard FORTH word for space.
 
-: '<' 60 ;
-: '>' 62 ;
-
 \ cr prints a carriage return
 : cr '\r' emit '\n' emit ;
 
@@ -107,6 +104,8 @@
 : ';' [ char ; ] literal ;
 : '(' [ char ( ] literal ;
 : ')' [ char ) ] literal ;
+: '<' [ char < ] literal ;
+: '>' [ char > ] literal ;
 : '"' [ char " ] literal ;
 : 'A' [ char A ] literal ;
 : '0' [ char 0 ] literal ;
