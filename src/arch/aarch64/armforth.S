@@ -343,9 +343,9 @@
 */
 
 	.macro next
-	ldr	T0, [NIP], #8	// load WORD from NIP, increment NIP
-	ldr	T1, [T0]	// load CODEWORD (offset 0 of WORD)
-	br	T1		// jump to CODEWORD
+	ldr	x0, [NIP], #8	// load WORD from NIP, increment NIP
+	ldr	x1, [x0]	// load CODEWORD (offset 0 of WORD)
+	br	x1		// jump to CODEWORD
 	.endm
 
 /*	The macro is called next.  That's a FORTH-ism.  It expands to those two instructions.
@@ -505,8 +505,8 @@
 	register (x29, more commonly used as the "frame pointer") for our return stack.
 
 	I've got two macros which just wrap up the details of using %ebp for the return stack.
-	You use them as for example "PUSHRSP T1" (push T1 on the return stack) or "POPRSP T0"
-	(pop top of return stack into T0).
+	You use them as for example "PUSHRSP x1" (push x1 on the return stack) or "POPRSP x0"
+	(pop top of return stack into x0).
 */
 
         // Return stack manipulation
@@ -540,26 +540,6 @@ PSP	.req	x28	// parameter stack pointer
 RSP	.req	x29	// return stack pointer
 NIP	.req	x10	// next instruction pointer
 ISP     .req    x27     // input stack pointer
-T0	.req	x0	// caller-saved (our FORTH convention)
-T0b     .req    w0      // T0 as a short
-T1	.req	x1
-T1b     .req    w1      // T1 as a short
-T2	.req	x2
-T2b	.req	w2      // T2 as a short
-T3	.req	x3
-T3b	.req	w3      // T3 as a short
-U0	.req	x4	// callee-saved (our FORTH convention)
-U0b	.req	w4	// U0 as a short
-U1	.req	x5	// (these were S0-S3 for MIPS-appeal originally)
-U1b     .req    w5      // U1 as a short
-U2	.req	x6
-U2b     .req    w6      // U2 as a short
-U3	.req	x7
-U3b     .req    w7      // U3 as a short
-
-// Note that we avoided x8 it is "special". On Aarch64 Linux, it holds the syscall number for kernel
-// calls.
-
 
 // ----------------------------------------------------------------------
 // Hardware Constants
@@ -592,7 +572,7 @@ U3b     .req    w7      // U3 as a short
 	The "interpreter" (it's not really "interpreting") just needs to push the old NIP (next
 	instruction pointer) on the return stack and set NIP to the first word in the definition.
 	Remember that we jumped to the function using the next macro?  Well a consequence of that is
-	that conveniently T0 contains the address the word, so just by adding 8 to it we get the
+	that conveniently x0 contains the address the word, so just by adding 8 to it we get the
 	address of the first data word which is our new NIP.  Finally after setting up NIP, it just
 	does next which causes that first word to run.
 
@@ -603,7 +583,7 @@ U3b     .req    w7      // U3 as a short
 	.align 3
 docol:
 	PUSHRSP	NIP		// push NIP on return stack
-	add	NIP, T0, #8	// skip codeword, make NIP the first dataword
+	add	NIP, x0, #8	// skip codeword, make NIP the first dataword
 	next
 
 /*
@@ -811,8 +791,8 @@ code_\label :
         PUSHPSP x5
         PUSHPSP x6
         PUSHPSP x30
-	ldr	T0, =name_\label+10	// address
-	mov	T1, #\namelen		// length
+	ldr	x0, =name_\label+10	// address
+	mov	x1, #\namelen		// length
 	bl	debug_pong
         POPPSP  x30
         POPPSP  x6
@@ -840,10 +820,10 @@ name_0: .quad 0
 
 	// SWAP (a b -- b a)
 	defcode "swap",4,,swap,drop
-	ldr	T0, [PSP]
-	ldr	T1, [PSP, #8]
-	str	T0, [PSP, #8]
-	str	T1, [PSP]
+	ldr	x0, [PSP]
+	ldr	x1, [PSP, #8]
+	str	x0, [PSP, #8]
+	str	x1, [PSP]
 	next
 
 	// DUP (a -- a a)
@@ -881,58 +861,58 @@ name_0: .quad 0
 	next
 
         defcode "?dup",4,,qdup,nrot     // duplicate top of stack if it is non-zero
-        ldr     T0, [PSP]
-        cmp     T0, #0
+        ldr     x0, [PSP]
+        cmp     x0, #0
         beq     1f
-        PUSHPSP T0
+        PUSHPSP x0
 1:      next
 
         defcode "1+",2,,incr,qdup
-        POPPSP  T0
-        add     T0, T0, #1
-        PUSHPSP T0
+        POPPSP  x0
+        add     x0, x0, #1
+        PUSHPSP x0
         next
 
         defcode "1-",2,,decr,incr
-        POPPSP  T0
-        sub     T0, T0, #1
-        PUSHPSP T0
+        POPPSP  x0
+        sub     x0, x0, #1
+        PUSHPSP x0
         next
 
         defcode "4+",2,,incr4,decr
-        POPPSP  T0
-        add     T0,T0,#4
-        PUSHPSP T0
+        POPPSP  x0
+        add     x0,x0,#4
+        PUSHPSP x0
         next
 
         defcode "4-",2,,decr4,incr4
-        POPPSP  T0
-        sub     T0,T0,#4
-        PUSHPSP T0
+        POPPSP  x0
+        sub     x0,x0,#4
+        PUSHPSP x0
         next
 
 	// + ( a b -- a+b )
 	defcode "+",1,,add,decr4
-        POPPSP  T1
-        POPPSP  T0
-	add	T0, T1, T0
-	PUSHPSP	T0
+        POPPSP  x1
+        POPPSP  x0
+	add	x0, x1, x0
+	PUSHPSP	x0
 	next
 
         // - ( a b -- a-b )
 	defcode "-",1,,sub,add
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	sub	T0, T0, T1              // T0 < a - b
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	sub	x0, x0, x1              // x0 < a - b
+	PUSHPSP	x0
 	next
 
 	// * ( a b -- a*b )
 	defcode "*",1,,mul,sub
-        POPPSP  T1
-        POPPSP  T0
-	mul	T0, T1, T0
-	PUSHPSP	T0
+        POPPSP  x1
+        POPPSP  x0
+	mul	x0, x1, x0
+	PUSHPSP	x0
 	next
 
         // << ( x u -- x<<u )
@@ -956,12 +936,12 @@ name_0: .quad 0
 
 	// /MOD (a b -- a%b a/b)
 	defcode "/mod",4,,divmod,rshift
-        POPPSP  T2                      // T2 <- b
-        POPPSP  T1                      // T1 <- a
-        udiv    T0, T1, T2              // T0 = a / b
-        msub    T3, T0, T2, T1          // T3 = a - (T0 * b)
-        PUSHPSP T3                      // push remainder
-        PUSHPSP T0                      // push quotient
+        POPPSP  x2                      // x2 <- b
+        POPPSP  x1                      // x1 <- a
+        udiv    x0, x1, x2              // x0 = a / b
+        msub    x3, x0, x2, x1          // x3 = a - (x0 * b)
+        PUSHPSP x3                      // push remainder
+        PUSHPSP x0                      // push quotient
 	next
 
 // for debugging, use this for gdb breakpoints
@@ -971,10 +951,10 @@ name_0: .quad 0
 
 // for debugging, switch PONG messages ON/OFF
 	defcode "dong",4,,dong,brk
-	ldr	T0, =var_pong
-	ldr	T1, [T0]
-	mvn	T1, T1
-	str	T1, [T0]
+	ldr	x0, =var_pong
+	ldr	x1, [x0]
+	mvn	x1, x1
+	str	x1, [x0]
 	next
 
 	.section .rodata
@@ -988,135 +968,135 @@ name_0: .quad 0
 
 	// = (a b -- a=b)
 	defcode "=",1,,equ,dong
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	cmp	T0, T1                  // test a vs b
-        csinc   T0, xzr, xzr, ne        // T0 <- (a != b) ? 0 : 1
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	cmp	x0, x1                  // test a vs b
+        csinc   x0, xzr, xzr, ne        // x0 <- (a != b) ? 0 : 1
+	PUSHPSP	x0
 	next
 
 	// <> (a b -- a<>b)
 	defcode "<>",2,,nequ,equ
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	cmp	T0, T1                  // test a vs b
-        csinc   T0, xzr, xzr, eq        // T0 <- (a == b) ? 0 : 1
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	cmp	x0, x1                  // test a vs b
+        csinc   x0, xzr, xzr, eq        // x0 <- (a == b) ? 0 : 1
+	PUSHPSP	x0
 	next
 
 	// < (a b -- a<b)
 	defcode "<",1,,lt,nequ
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	cmp	T0, T1                  // test a vs b
-        csinc   T0, xzr, xzr, ge        // T0 <- (a >= b) ? 0 : 1
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	cmp	x0, x1                  // test a vs b
+        csinc   x0, xzr, xzr, ge        // x0 <- (a >= b) ? 0 : 1
+	PUSHPSP	x0
 	next
 
 	// > (a b -- a>b)
 	defcode ">",1,,gt,lt
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	cmp	T0, T1                  // test a vs b
-        csinc   T0, xzr, xzr, le        // T0 <- (a <= b) ? 0 : 1
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	cmp	x0, x1                  // test a vs b
+        csinc   x0, xzr, xzr, le        // x0 <- (a <= b) ? 0 : 1
+	PUSHPSP	x0
 	next
 
 	// <= (a b -- a<=b)
 	defcode "<=",2,,le,gt
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	cmp	T0, T1                  // test a vs b
-        csinc   T0, xzr, xzr, gt        // T0 <- (a > b) ? 0 : 1
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	cmp	x0, x1                  // test a vs b
+        csinc   x0, xzr, xzr, gt        // x0 <- (a > b) ? 0 : 1
+	PUSHPSP	x0
 	next
 
 	// >= (a b -- a>=b)
 	defcode ">=",2,,ge,le
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	cmp	T0, T1                  // test a vs b
-        csinc   T0, xzr, xzr, lt        // T0 <- (a < b) ? 0 : 1
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	cmp	x0, x1                  // test a vs b
+        csinc   x0, xzr, xzr, lt        // x0 <- (a < b) ? 0 : 1
+	PUSHPSP	x0
 	next
 
         // 0= (a -- a == 0)
         defcode "0=",2,,zeroeq,ge
-        POPPSP  T0
-        cmp     T0, xzr
-        csinc   T0, xzr, xzr, ne
-        PUSHPSP T0
+        POPPSP  x0
+        cmp     x0, xzr
+        csinc   x0, xzr, xzr, ne
+        PUSHPSP x0
         next
 
         // 0<> (a -- a <> 0)
         defcode "0<>",3,,zerone,zeroeq
-        POPPSP  T0
-        cmp     T0, xzr
-        csinc   T0, xzr, xzr, eq
-        PUSHPSP T0
+        POPPSP  x0
+        cmp     x0, xzr
+        csinc   x0, xzr, xzr, eq
+        PUSHPSP x0
         next
 
         // 0< (a -- a<0)
         defcode "0<",2,,zlt,zerone
-        POPPSP  T0
-        cmp     T0, xzr
-        csinc   T0, xzr, xzr, ge
-        PUSHPSP T0
+        POPPSP  x0
+        cmp     x0, xzr
+        csinc   x0, xzr, xzr, ge
+        PUSHPSP x0
         next
 
         // 0> (a -- a>0)
         defcode "0>",2,,zgt,zlt
-        POPPSP  T0
-        cmp     T0, xzr
-        csinc   T0, xzr, xzr, le
-        PUSHPSP T0
+        POPPSP  x0
+        cmp     x0, xzr
+        csinc   x0, xzr, xzr, le
+        PUSHPSP x0
         next
 
         // 0<= (a -- a<=0)
         defcode "0<=",3,,zle,zgt
-        POPPSP  T0
-        cmp     T0, xzr
-        csinc   T0, xzr, xzr, gt
-        PUSHPSP T0
+        POPPSP  x0
+        cmp     x0, xzr
+        csinc   x0, xzr, xzr, gt
+        PUSHPSP x0
         next
 
         // 0>= (a -- a>=0)
         defcode "0>=",3,,zge,zle
-        POPPSP  T0
-        cmp     T0, xzr
-        csinc   T0, xzr, xzr, lt
-        PUSHPSP T0
+        POPPSP  x0
+        cmp     x0, xzr
+        csinc   x0, xzr, xzr, lt
+        PUSHPSP x0
         next
 
 	// AND (a b -- a&b)
 	defcode "and",3,,and,zge
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	and	T0, T1, T0
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	and	x0, x1, x0
+	PUSHPSP	x0
 	next
 
 	// OR (a b -- a|b)
 	defcode "or",2,,or,and
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	orr	T0, T1, T0
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	orr	x0, x1, x0
+	PUSHPSP	x0
 	next
 
 	// XOR (a b -- a^b)
 	defcode "xor",3,,xor,or
-        POPPSP  T1                      // T1 <- b
-        POPPSP  T0                      // T0 <- a
-	eor	T0, T1, T0
-	PUSHPSP	T0
+        POPPSP  x1                      // x1 <- b
+        POPPSP  x0                      // x0 <- a
+	eor	x0, x1, x0
+	PUSHPSP	x0
 	next
 
 	// INVERT (a -- ~a)
 	defcode "invert",6,,invert,xor
-	ldr	T0, [PSP]
-	mvn	T0, T0
-	str	T0, [PSP]
+	ldr	x0, [PSP]
+	mvn	x0, x0
+	str	x0, [PSP]
 	next
 
 /*
@@ -1190,8 +1170,8 @@ name_0: .quad 0
 */
 
 	defcode "lit",3,,lit,exit
-	ldr	T0, [NIP], #8	// load word from NIP, then increment NIP
-	PUSHPSP	T0		// push the word
+	ldr	x0, [NIP], #8	// load word from NIP, then increment NIP
+	PUSHPSP	x0		// push the word
 	next
 
 /*
@@ -1204,34 +1184,34 @@ name_0: .quad 0
 
 	// ! (value address -- ) M[address] = value
 	defcode "!",1,,store,lit
-        POPPSP  T0
-        POPPSP  T1
-	str	T1, [T0]
+        POPPSP  x0
+        POPPSP  x1
+	str	x1, [x0]
 	next
 
 	// // (address -- value) value = M[address]
 	defcode "@",1,,fetch,store
-	POPPSP	T0
-	ldr	T1, [T0]
-	PUSHPSP	T1
+	POPPSP	x0
+	ldr	x1, [x0]
+	PUSHPSP	x1
 	next
 
 	// +! (value address -- ) M[address] += value
 	defcode "+!",2,,addstore,fetch
-        POPPSP  T0
-        POPPSP  T1
-	ldr	T2, [T0]
-	add	T2, T2, T1
-	str	T2, [T0]
+        POPPSP  x0
+        POPPSP  x1
+	ldr	x2, [x0]
+	add	x2, x2, x1
+	str	x2, [x0]
 	next
 
 	// -! (value address -- ) M[address] -= value
 	defcode "-!",2,,substore,addstore
-        POPPSP  T0
-        POPPSP  T1
-	ldr	T2, [T0]
-	sub	T2, T2, T1
-	str	T2, [T0]
+        POPPSP  x0
+        POPPSP  x1
+	ldr	x2, [x0]
+	sub	x2, x2, x1
+	str	x2, [x0]
 	next
 
 /*
@@ -1315,8 +1295,8 @@ name_0: .quad 0
 
 	.macro defvar name, namelen, flags=0, label, link, initial=0
 	defcode \name,\namelen,\flags,\label,\link
-	ldr	T0, =var_\name	// load address
-	PUSHPSP	T0		// push address
+	ldr	x0, =var_\name	// load address
+	PUSHPSP	x0		// push address
 	next
 	.data
 	.align 3
@@ -1364,8 +1344,8 @@ var_\name :
 
 	.macro defconst name, namelen, flags=0, label, link, value
 	defcode \name,\namelen,\flags,\label,\link
-	ldr	T0, =\value
-	PUSHPSP	T0
+	ldr	x0, =\value
+	PUSHPSP	x0
 	next
 	.endm
 
@@ -1385,13 +1365,13 @@ var_\name :
 
 
 	defcode ">r",2,,tor,__f_hidden
-	POPPSP	T0                      // pop parameter stack into T0
-	PUSHRSP	T0                      // and push it onto the return stack
+	POPPSP	x0                      // pop parameter stack into x0
+	PUSHRSP	x0                      // and push it onto the return stack
 	next
 
 	defcode "r>",2,,fromr,tor
-	POPRSP	T0                      // pop return stack into T0
-	PUSHPSP	T0                      // and push it onto the parameter stack
+	POPRSP	x0                      // pop return stack into x0
+	PUSHPSP	x0                      // and push it onto the parameter stack
 	next
 
 	defcode "rsp@",4,,rspfetch,fromr
@@ -1414,13 +1394,13 @@ var_\name :
 */
 
 	defcode "dsp@",4,,dspfetch,rdrop
-	mov	T0, PSP
-	PUSHPSP	T0
+	mov	x0, PSP
+	PUSHPSP	x0
 	next
 
 	defcode "dsp!",4,,dspstore,dspfetch
-	POPPSP	T0
-	mov	PSP, T0
+	POPPSP	x0
+	mov	PSP, x0
 	next
 
 /*
@@ -1461,7 +1441,7 @@ var_\name :
 	PUSHPSP	x0
 	next
 _key:
-	// KEY () (char: T0)
+	// KEY () (char: x0)
         // read a key
         PUSHPSP x1
         PUSHPSP x2
@@ -1674,36 +1654,36 @@ _frombuf:
 
 	defcode "word",4,,word,emit
 	bl _word
-	PUSHPSP	T0			// address
-	PUSHPSP	T1			// length
+	PUSHPSP	x0			// address
+	PUSHPSP	x1			// length
 	next
 _word:
-	// WORD () (address: T0, length: T1)
-        PUSHPSP U0
+	// WORD () (address: x0, length: x1)
+        PUSHPSP x4
         PUSHPSP lr
 1:
 	bl	_key
-	cmp	T0, #'\\'		// == \?
+	cmp	x0, #'\\'		// == \?
 	beq	3f			// skip comment
-	cmp	T0, #' '		// <= ' '?
+	cmp	x0, #' '		// <= ' '?
 	ble	1b			// keep looking
 
-	ldr	U0, =word_buffer	// address
+	ldr	x4, =word_buffer	// address
 2:
-	strb	T0b, [U0], #1		// store character, increment pointer
+	strb	w0, [x4], #1		// store character, increment pointer
 	bl	_key
-	cmp	T0, #' '		// > ' '?
+	cmp	x0, #' '		// > ' '?
 	bgt	2b			// keep looking
 
-	ldr	T0, =word_buffer	// address
-	sub	T1, U0, T0		// length
+	ldr	x0, =word_buffer	// address
+	sub	x1, x4, x0		// length
 
         POPPSP  lr
-        POPPSP  U0
+        POPPSP  x4
         ret
 3:
 	bl	_key
-	cmp	T0, #'\n'		// eol?
+	cmp	x0, #'\n'		// eol?
 	bne	3b			// keep looking
 	b	1b
 
@@ -1712,10 +1692,10 @@ word_buffer:
 	.space 32
 
 	defcode "?words",6,,qwords,word
-        PUSHPSP U0
-        PUSHPSP U1
-        PUSHPSP U2
-        PUSHPSP U3
+        PUSHPSP x4
+        PUSHPSP x5
+        PUSHPSP x6
+        PUSHPSP x7
         PUSHPSP lr
         PUSHPSP x21
         PUSHPSP x22
@@ -1763,7 +1743,7 @@ word_buffer:
         POPPSP  x1
         POPPSP  x0
 
-	// T2 = T3, but T3 can be destroyed in the loop
+	// x2 = x3, but x3 can be destroyed in the loop
 	ldr	x0, [x0]		// previous dictionary pointer
 	b	1b			// try again
 4:
@@ -1771,10 +1751,10 @@ word_buffer:
         POPPSP  x22
         POPPSP  x21
         POPPSP  lr
-        POPPSP  U3
-        POPPSP  U2
-        POPPSP  U1
-        POPPSP  U0
+        POPPSP  x7
+        POPPSP  x6
+        POPPSP  x5
+        POPPSP  x4
 	next
 
 
@@ -1796,67 +1776,67 @@ word_buffer:
 */
 
 	defcode "number",6,,number,qwords
-	POPPSP	T1		// length of string
-	POPPSP	T0		// address of string
+	POPPSP	x1		// length of string
+	POPPSP	x0		// address of string
 	bl	_number
-	PUSHPSP	T0		// number
-	PUSHPSP	T1		// # unparsed
+	PUSHPSP	x0		// number
+	PUSHPSP	x1		// # unparsed
 	next
 _number:
-	// NUMBER(address: T0, length: T1) (number: T0, unparsed: T1)
-        PUSHPSP U0
-        PUSHPSP U1
-        PUSHPSP U2
-        PUSHPSP U3
+	// NUMBER(address: x0, length: x1) (number: x0, unparsed: x1)
+        PUSHPSP x4
+        PUSHPSP x5
+        PUSHPSP x6
+        PUSHPSP x7
         PUSHPSP lr
 
-	mov	T2, T0		// address
-	mov	T0, #0		// number
-	cmp	T1, #0		// length <= 0?
+	mov	x2, x0		// address
+	mov	x0, #0		// number
+	cmp	x1, #0		// length <= 0?
 	ble	5f		// really an error, but returns 0 anyway
 
-	ldr	U0, =var_base
-	ldr	U0, [U0]	// get BASE
-	ldrb	U1b, [T2], #1	// get character and increment address
-	mov	U3, #0		// set negative flag false
-	cmp	U1, #'-'	// leading '-'?
+	ldr	x4, =var_base
+	ldr	x4, [x4]	// get BASE
+	ldrb	w5, [x2], #1	// get character and increment address
+	mov	x7, #0		// set negative flag false
+	cmp	x5, #'-'	// leading '-'?
 	bne	2f		// nope, try to parse as digit
 
-	mov	U3, #1		// set negative flag true
-	subs	T1, T1, #1	// decrement length
+	mov	x7, #1		// set negative flag true
+	subs	x1, x1, #1	// decrement length
 	bpl	1f		// >0 so keep going
 
-	mov	T1, #1		// just a sign, no digits, signal an error
+	mov	x1, #1		// just a sign, no digits, signal an error
 	b	5f		// error!
 1:
-	mul	U2, T0, U0	// number = number * BASE
-	mov	T0, U2		// (need to use another register for mul to avoid warning)
-	ldrb	U1b, [T2], #1	// get character and increment address
+	mul	x6, x0, x4	// number = number * BASE
+	mov	x0, x6		// (need to use another register for mul to avoid warning)
+	ldrb	w5, [x2], #1	// get character and increment address
 2:
-	subs	U1, U1, #'0'	// try lower digit bound
+	subs	x5, x5, #'0'	// try lower digit bound
 	bmi	4f		// nope, < '0' so we're done
-	cmp	U1, #10		// try upper digit bound
+	cmp	x5, #10		// try upper digit bound
 	blt	3f		// yes, we got one!
-	subs	U1, U1, #17	// try lower char bound (17 is 'A'-'0')
+	subs	x5, x5, #17	// try lower char bound (17 is 'A'-'0')
 	bmi	4f		// nope, < 'A' so we're done
-	add	U1, U1, #10	// adjust for first 10 digit values before 'A'
+	add	x5, x5, #10	// adjust for first 10 digit values before 'A'
 3:
-	cmp	U1, U0		// >= BASE?
+	cmp	x5, x4		// >= BASE?
 	bge	4f		// yep, we're done
 
 	// finally, add new digit to number and loop
-	add	T0, T0, U1
-	subs	T1, T1, #1
+	add	x0, x0, x5
+	subs	x1, x1, #1
 	bne	1b
 4:
-	cmp	U3, #1		// check negative flag
-        cneg    T0, T0, eq      // If equal, negate x0
+	cmp	x7, #1		// check negative flag
+        cneg    x0, x0, eq      // If equal, negate x0
 5:
         POPPSP  lr
-        POPPSP  U3
-        POPPSP  U2
-        POPPSP  U1
-        POPPSP  U0
+        POPPSP  x7
+        POPPSP  x6
+        POPPSP  x5
+        POPPSP  x4
 	ret
 
 /*
@@ -1884,58 +1864,58 @@ _number:
 */
 
 	defcode "find",4,,find,number
-	POPPSP	T1			// length of string
-	POPPSP	T0			// address of string
+	POPPSP	x1			// length of string
+	POPPSP	x0			// address of string
 	bl	_find
-	PUSHPSP	T0			// address of dictionary entry (or 0)
+	PUSHPSP	x0			// address of dictionary entry (or 0)
 	next
 _find:
-	// FIND (address: T0, length: T1) (address: T0)
-        PUSHPSP U0
-        PUSHPSP U1
-        PUSHPSP U2
-        PUSHPSP U3
+	// FIND (address: x0, length: x1) (address: x0)
+        PUSHPSP x4
+        PUSHPSP x5
+        PUSHPSP x6
+        PUSHPSP x7
         PUSHPSP lr
 
-	mov	T2, T1			// length
-	mov	T1, T0			// address
-	ldr	T0, =var_latest
-	ldr	T0, [T0]		// current dictionary pointer
+	mov	x2, x1			// length
+	mov	x1, x0			// address
+	ldr	x0, =var_latest
+	ldr	x0, [x0]		// current dictionary pointer
 1:
-	cmp	T0, #0			// NULL?
+	cmp	x0, #0			// NULL?
 	beq	4f			// end of list!
 
-	ldrb	T3b, [T0, #8]		// flags
-	and	T3, T3, #(f_hidden)
-	cbnz	T3, 2f 			// branch if hidden non zero
-	ldrb	T3b, [T0, #9]		// len of word we're checking
-        cmp     T3, T2                  // check if lengths are equal
+	ldrb	w3, [x0, #8]		// flags
+	and	x3, x3, #(f_hidden)
+	cbnz	x3, 2f 			// branch if hidden non zero
+	ldrb	w3, [x0, #9]		// len of word we're checking
+        cmp     x3, x2                  // check if lengths are equal
         bne     2f                      // if not don't bother looking at the chars
 
-	// we know that T2 = T3, but T3 can be destroyed in the loop
-	mov	U0, T1			// U0 <- first letter of input word
-	mov	U1, T0                  // addr of word we're checking
-	add	U1, U1, #10		// U1 <- first letter of word we're checking
+	// we know that x2 = x3, but x3 can be destroyed in the loop
+	mov	x4, x1			// x4 <- first letter of input word
+	mov	x5, x0                  // addr of word we're checking
+	add	x5, x5, #10		// x5 <- first letter of word we're checking
 10:
-	ldrb 	U2b, [U0], #1		// get char A, increment ptr
-	ldrb	U3b, [U1], #1		// get char B, increment ptr
-	cmp	U2, U3			// A = B?
+	ldrb 	w6, [x4], #1		// get char A, increment ptr
+	ldrb	w7, [x5], #1		// get char B, increment ptr
+	cmp	x6, x7			// A = B?
 	bne	2f			// nope
-	subs	T3, T3, #1		// decrement
+	subs	x3, x3, #1		// decrement
 	bne	10b			// len > 0, keep going
 
-	// strings are equal, T0 is the correct entry pointer
+	// strings are equal, x0 is the correct entry pointer
 	b	4f
 
 2:      // names don't match, try the previous word in the dictionary
-	ldr	T0, [T0]		// previous dictionary pointer
+	ldr	x0, [x0]		// previous dictionary pointer
 	b	1b			// try again
 4:
         POPPSP  lr
-        POPPSP  U3
-        POPPSP  U2
-        POPPSP  U1
-        POPPSP  U0
+        POPPSP  x7
+        POPPSP  x6
+        POPPSP  x5
+        POPPSP  x4
 	ret
 
 /*
@@ -1970,13 +1950,13 @@ _find:
 */
 
 	defcode ">cfa",4,,tcfa,find
-	POPPSP	T0
+	POPPSP	x0
 	bl	_tcfa
-	PUSHPSP	T0
+	PUSHPSP	x0
 	next
 _tcfa:
-	// TCFA (address: T0) (address: T0)
-	add	T0, T0, #8+2+30		// header length is 40 bytes.
+	// TCFA (address: x0) (address: x0)
+	add	x0, x0, #8+2+30		// header length is 40 bytes.
 	ret
 
 /*
@@ -2157,29 +2137,29 @@ _tcfa:
 */
 
 	defcode "create",6,,create,tdfa // ( addr len -- )
-	POPPSP	T1                      // name length
-	POPPSP	T0                      // name address
+	POPPSP	x1                      // name length
+	POPPSP	x0                      // name address
 
-	ldr	T2, =var_here           // address of HERE
-	ldr	T3, [T2]                // T3 <- value of HERE, address of new header
-	ldr	U0, =var_latest         // address of LATEST
-	ldr	U1, [U0]                // U1 <- value of LATEST, link pointer
-	str	T3, [U0]                // update LATEST to refer to new header
-	str	U1, [T3], #8            // store link pointer in header, increment header
+	ldr	x2, =var_here           // address of HERE
+	ldr	x3, [x2]                // x3 <- value of HERE, address of new header
+	ldr	x4, =var_latest         // address of LATEST
+	ldr	x5, [x4]                // x5 <- value of LATEST, link pointer
+	str	x3, [x4]                // update LATEST to refer to new header
+	str	x5, [x3], #8            // store link pointer in header, increment header
 
-	strb	wzr, [T3], #1	        // store flag byte, increment header
-	strb	T1b, [T3], #1	        // store name length byte, increment header
+	strb	wzr, [x3], #1	        // store flag byte, increment header
+	strb	w1, [x3], #1	        // store name length byte, increment header
 
 	mov	x16, #30
-	sub	x16, x16, T1
+	sub	x16, x16, x1
 
 	// Copy the name into the definition.
 1:
-	cmp	T1, #0
+	cmp	x1, #0
         b.eq    2f
-	ldrb	U0b, [T0], #1           // get character, increment
-	strb	U0b, [T3], #1	        // put character, increment header
-	subs	T1, T1, #1              // decrement length
+	ldrb	w4, [x0], #1           // get character, increment
+	strb	w4, [x3], #1	        // put character, increment header
+	subs	x1, x1, #1              // decrement length
 	bne	1b
 
 	// Pad out the name to 30 bytes with commas.
@@ -2188,15 +2168,15 @@ _tcfa:
 3:
 	cmp	x16, #0
         b.eq    4f
-	strb	w15, [T3], #1	        // put character, increment header
+	strb	w15, [x3], #1	        // put character, increment header
 	subs	x16, x16, #1            // decrement length
 	bne	3b
 
 4:
-	add	T3, T3, #7              // align to 8 byte boundary
-	and	T3, T3, #~7
+	add	x3, x3, #7              // align to 8 byte boundary
+	and	x3, x3, #~7
 
-	str	T3, [T2]                // update HERE
+	str	x3, [x2]                // update HERE
 	next
 
 /*
@@ -2223,15 +2203,15 @@ _tcfa:
 */
 
 	defcode ",",1,,comma,create
-	POPPSP	T0                      // Code pointer to store.
+	POPPSP	x0                      // Code pointer to store.
 	bl	_comma
 	next
 _comma:
-	// COMMA (codeword: T0) ()
-	ldr	T1, =var_here           // address of HERE
-	ldr	T2, [T1]                // value of HERE
-	str	T0, [T2], #8            // store it and increment T2
-	str	T2, [T1]	        // update HERE
+	// COMMA (codeword: x0) ()
+	ldr	x1, =var_here           // address of HERE
+	ldr	x2, [x1]                // value of HERE
+	str	x0, [x2], #8            // store it and increment x2
+	str	x2, [x1]	        // update HERE
 	ret
 
 /*
@@ -2254,14 +2234,14 @@ _comma:
 */
 
 	defcode "[",1,f_immed,lbrac,comma
-	ldr	T0, =var_state          // address of STATE
-	str	xzr, [T0]               // store 0 in STATE
+	ldr	x0, =var_state          // address of STATE
+	str	xzr, [x0]               // store 0 in STATE
 	next
 
 	defcode "]",1,,rbrac,lbrac
-	ldr	T0, =var_state          // address of STATE
-	mov	T1, #1                  // put a 1 in the register
-	str	T1, [T0]                // store 1 in STATE
+	ldr	x0, =var_state          // address of STATE
+	mov	x1, #1                  // put a 1 in the register
+	str	x1, [x0]                // store 1 in STATE
 	next
 
 /*
@@ -2318,11 +2298,11 @@ _comma:
 */
 
 	defcode "immediate",9,f_immed,immediate,semicolon
-	ldr	T0, =var_latest		// address of LATEST
-	ldr	T0, [T0]		// value of LATEST
-	ldrb	T1b, [T0, #8]		// get flag byte
-	eor	T1, T1, #f_immed	// toggle IMMED bit
-	strb	T1b, [T0, #8]		// update flag byte
+	ldr	x0, =var_latest		// address of LATEST
+	ldr	x0, [x0]		// value of LATEST
+	ldrb	w1, [x0, #8]		// get flag byte
+	eor	x1, x1, #f_immed	// toggle IMMED bit
+	strb	w1, [x0, #8]		// update flag byte
 	next
 
 /*
@@ -2348,10 +2328,10 @@ _comma:
 */
 
 	defcode "hidden",6,,hidden,immediate
-	POPPSP	T0			// dictionary entry
-	ldrb	T1b, [T0, #8]		// get flag byte
-	eor	T1, T1, #f_hidden	// toggle HIDDEN bit
-	strb	T1b, [T0, #8]		// update flag byte
+	POPPSP	x0			// dictionary entry
+	ldrb	w1, [x0, #8]		// get flag byte
+	eor	x1, x1, #f_hidden	// toggle HIDDEN bit
+	strb	w1, [x0, #8]		// update flag byte
 	next
 
         defword "hide",4,,hide,hidden
@@ -2372,16 +2352,16 @@ _comma:
 	You tend to use ' in IMMEDIATE words.  For example an alternate (and rather useless) way to define
 	a literal 2 might be:
 
-	: LIT2 IMMEDIATE
+	: LIx2 IMMEDIATE
 		' LIT ,		\ Appends LIT to the currently-being-defined word
 		2 ,		\ Appends the number 2 to the currently-being-defined word
 	;
 
 	So you could do:
 
-	: double LIT2 * ;
+	: double LIx2 * ;
 
-	(If you don't understand how LIT2 works, then you should review the material about compiling words
+	(If you don't understand how LIx2 works, then you should review the material about compiling words
 	and immediate mode).
 
 	This definition of ' uses a cheat which I copied from buzzard92.  As a result it only works in
@@ -2390,8 +2370,8 @@ _comma:
 */
 
 	defcode "'",1,,tick,hide
-	ldr	T0, [NIP], #8   	// load address of next word from NIP, increment NIP to skip it
-	PUSHPSP	T0
+	ldr	x0, [NIP], #8   	// load address of next word from NIP, increment NIP to skip it
+	PUSHPSP	x0
 	next
 
 /*
@@ -2436,13 +2416,13 @@ _comma:
 */
 
 	defcode "branch",6,,branch,tick
-	ldr	T0, [NIP]	// offset to add
-	add	NIP, NIP, T0	// add it!
+	ldr	x0, [NIP]	// offset to add
+	add	NIP, NIP, x0	// add it!
 	next
 
 	defcode "0branch",7,,zbranch,branch
-	POPPSP	T0
-	cmp	T0, #0		// top of stack zero?
+	POPPSP	x0
+	cmp	x0, #0		// top of stack zero?
 	beq	code_branch	// yes, do the branch
 	add	NIP, NIP, #8	// no, skip the offset
 	next
@@ -2458,10 +2438,10 @@ _comma:
 */
 
 	defcode "litstring",9,,litstring,zbranch
-	ldr	T0, [NIP], #8	// get length of string, increment
+	ldr	x0, [NIP], #8	// get length of string, increment
 	PUSHPSP	NIP		// push address of string
-	PUSHPSP	T0		// push length of string
-	add	NIP, NIP, T0	// skip past the string
+	PUSHPSP	x0		// push length of string
+	add	NIP, NIP, x0	// skip past the string
 	add	NIP, NIP, #7	// align
 	and	NIP, NIP, #~7
 	next
@@ -2508,18 +2488,18 @@ _tell:
 	defcode "interpret",9,,interpret,quit
 	mov	x7, #0			// interpret_is_lit = 0
 
-	bl	_word			// returns T0 = address, T1 = length
+	bl	_word			// returns x0 = address, x1 = length
 	mov	x4, x0			// save word in x4, x5
 	mov	x5, x1
 
         // is it in the dictionary?
-	bl	_find			// returns T0 = dictionary entry
+	bl	_find			// returns x0 = dictionary entry
 	cmp	x0, #0			// = NULL?
 	beq	1f			// not found!
 
 	// found in dictionary, check if it's immediate
 	ldrb	w6, [x0, #8]		// load length/flags byte
-	bl	_tcfa			// returns T0 = codeword pointer
+	bl	_tcfa			// returns x0 = codeword pointer
 	tst	w6, #f_immed		// test immediate flag
 	bne	4f			// if IMMED, jump straight to executing
 	b	2f			// else, jump to compile/execute
@@ -2528,7 +2508,7 @@ _tell:
 	add	x7, x7, #1		// interpret_is_lit = 1
 	mov	x0, x4			// address
 	mov	x1, x5			// length
-	bl	_number			// returns T0 = number, T1 = unparsed
+	bl	_number			// returns x0 = number, x1 = unparsed
 	cmp	x1, #0			// unparsed > 0?
 	bne	6f			// error!
 
@@ -2542,12 +2522,12 @@ _tell:
 	beq	4f			// jump straight to execute!
 
 	// compiling, append word to current dictionary definition
-	bl	_comma			// expects codeword in T0
+	bl	_comma			// expects codeword in x0
 	cmp	x7, #0			// interpret_is_lit == 0?
 	beq	3f			// yep, so we're done
 
 	mov	x0, x6			// number
-	bl	_comma			// expects codeword in T0
+	bl	_comma			// expects codeword in x0
 3:
 	next
 
@@ -2613,8 +2593,8 @@ hellomsgend:
 
 	// Simple test word.
         defcode "hello",5,,hello,interpret
-	ldr	T1, =hellomsg		// address
-	mov	T2, #hellomsgend-hellomsg	// length
+	ldr	x1, =hellomsg		// address
+	mov	x2, #hellomsgend-hellomsg	// length
         bl      _tell
 	next
 
@@ -2625,14 +2605,14 @@ hellomsgend:
 	.quad exit		// Return
 
 	defcode "char",4,,char,hellohello
-	bl	_word			// returns T0 = address, T1 = length
-	ldrb	T0b, [T0]		// get first character
-	PUSHPSP	T0			// push it
+	bl	_word			// returns x0 = address, x1 = length
+	ldrb	w0, [x0]		// get first character
+	PUSHPSP	x0			// push it
 	next
 
 	defcode "execute",7,,execute,char
-	POPPSP	T0			// grab execution token, whatever that is?
-	br	T0			// jump to it (execution token's next will continue)
+	POPPSP	x0			// grab execution token, whatever that is?
+	br	x0			// jump to it (execution token's next will continue)
 
 /*
 	DATA SEGMENT ----------------------------------------------------------------------
@@ -2669,7 +2649,7 @@ create_data_segment:
 
 
 // debugging helper for assembly words
-// expects address in T0, length in T1
+// expects address in x0, length in x1
 // controlled by PONG FORTH variable
 // use DONG word to toggle ON/OFF
 
@@ -2677,24 +2657,24 @@ create_data_segment:
 
         .text
 debug_pong:
-	mov	U0, T0
-	mov	U1, T1
+	mov	x4, x0
+	mov	x5, x1
 
-	ldr	T0, =var_pong
-	ldr	T0, [T0]
-	cmp	T0, #0
+	ldr	x0, =var_pong
+	ldr	x0, [x0]
+	cmp	x0, #0
 	beq	1f
 
-	ldr	T1, =rmsg		// address
-	mov	T2, #rmsgend-rmsg	// length
+	ldr	x1, =rmsg		// address
+	mov	x2, #rmsgend-rmsg	// length
         bl      _tell
 
-	mov	T1, U0                  // address
-	mov	T2, U1                  // length
+	mov	x1, x4                  // address
+	mov	x2, x5                  // length
         bl      _tell
 
-	ldr	T1, =rmsgnl		// address
-	mov	T2, #3			// length
+	ldr	x1, =rmsgnl		// address
+	mov	x2, #3			// length
         bl      _tell
 1:
 	ret
