@@ -1526,7 +1526,7 @@
 
 
 (
-	NOTES ----------------------------------------------------------------------
+	NOTES ------------------------------------------------------------------------------
 
 	DOES> isn't possible to implement with this FORTH because we don't have a separate
 	data pointer.
