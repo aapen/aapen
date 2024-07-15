@@ -1266,6 +1266,7 @@ name_0: .quad 0
 
 */
 
+        // ( n a -- )
 	defcode "w!",2,,storeword,cmove
 	POPPSP	x0		// address
 	POPPSP	x1		// value
@@ -2657,6 +2658,7 @@ create_data_segment:
 
         .text
 debug_pong:
+        stp     x30, xzr, [sp, #-16]!
 	mov	x4, x0
 	mov	x5, x1
 
@@ -2674,9 +2676,10 @@ debug_pong:
         bl      _tell
 
 	ldr	x1, =rmsgnl		// address
-	mov	x2, #3			// length
+	mov	x2, #2			// length
         bl      _tell
 1:
+        ldp     x30, xzr, [sp], #16
 	ret
 
 	.section .rodata
