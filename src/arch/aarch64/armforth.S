@@ -1424,56 +1424,6 @@ var_\name :
 	next
 
 /*
-
-        INPUT STACK ----------------------------------------------------------------------
-
-        We want to be able to read from a buffer, a file included from another file, or from the
-        console if there's no other source. We can do this by making a stack of sources. Each stack
-        entry consists of 2 words. The word with the lowest address has the CFA of the routine for
-        reading a byte of input. The word with the higher address is available as 'context' whose
-        meaning is determined by the byte-reading routine.
-
-*/
-
-        // ( ctx word -- )
-	defcode ">inp",4,,toinp, dspstore
-        POPPSP  x0                      // x0 <- word
-        POPPSP  x1                      // x1 <- ctx
-        PUSHI   x0, x1                  // push with word at lower address
-	next
-
-        // ( -- ctx word )
-	defcode "inp>",4,,frominp,toinp
-	POPI	x0, x1                  // x0 <- word, x1 <- ctx
-        PUSHPSP x0
-        PUSHPSP x1
-	next
-
-        // ( -- ctx word )
-	defcode "inp@",4,,inpfetch,frominp
-        ldp     x0, x1, [ISP]           // x0 <- word, x1 <- ctx (without changing ISP)
-        PUSHPSP x0
-        PUSHPSP x1
-	next
-
-        // ( ctx word -- )
-	defcode "inp!",4,,inpstore,inpfetch
-        POPPSP  x0                      // x0 <- word
-        POPPSP  x1                      // x1 <- ctx
-        stp     x0, x1, [ISP]           // store on input stack (without changing ISP)
-	next
-
-	defcode "inpdrop",7,,inpdrop,inpstore
-	add	ISP, ISP, #16           // drop the top pair of the input stack
-	next
-
-        // ( ctx -- )  update the context field without changing the word
-        defcode "inpc!",5,,inpctx,inpdrop
-        POPPSP  x0
-        str     x0, [ISP, #8]
-        next
-
-/*
 	INPUT AND OUTPUT ----------------------------------------------------------------------
 
 	These are our first really meaty/complicated FORTH primitives.  I have chosen to write them in
@@ -1493,11 +1443,20 @@ var_\name :
 	to type their name -- ultimately it all comes in through KEY.
 
         The implementation of KEY uses the input stack to determine how to get the next byte. The
-        top of the input stack has the CFA of a word to read from the current input source.
+        top of the input stack has address of an assembly routine to read a byte from the current
+        input source.
+
+        INPUT STACK ----------------------------------------------------------------------
+
+        We want to be able to read from a buffer, a file included from another file, or from the
+        console if there's no other source. We can do this by making a stack of sources. Each stack
+        entry consists of 2 words. The word with the lowest address has the CFA of the routine for
+        reading a byte of input. The word with the higher address is available as 'context' whose
+        meaning is determined by the byte-reading routine.
 
 */
 
-        defcode "key",3,,key,inpctx     // ( -- key)
+        defcode "key",3,,key,dspstore   // ( -- key)
 	bl	_key
 	PUSHPSP	x0
 	next
@@ -1516,7 +1475,7 @@ _key:
         bne     1f                      // if not null we have a byte
 
         // else input is exhausted
-        bl      code_inpdrop            // fall back to the next input source
+        add     ISP, ISP, #16           // fall back to the next input source
         b       3b                      // read a character from there
 
 1:
@@ -1650,16 +1609,20 @@ bufftop:
 
         BUFFER INPUT ---------------------------------------------------------------------
 
-        Sometimes we want to interpret the contents of a buffer. In this case the byte-reading word
-        will be "<buf" (read as "from buf") and the context will be the pointer to the next byte to
-        read. It is very important that the buffer ends with a null!
+        Sometimes we want to interpret the contents of a buffer. To set up the reader on the input
+        stack, we use `readbuf` to put the address of the buffer and the address of the byte-reading
+        routine into the stack.
 
 */
 
-        defcode "<buf",4,,frombuf,con_out
-        bl _frombuf
-        PUSHPSP x0
+        // ( addr -- )
+        defcode "readbuf",7,,readbuf,con_in
+        POPPSP  x0                      // x0 <- address of the buffer to read
+        ldr     x1, =_frombuf           // x1 <- address of the byte-reading routine
+        PUSHI   x1, x0                  // put the buffer reader on the input stack
         next
+
+        .text
 _frombuf:
         ldr     x1, [ISP, 8]            // peek at the context word
         ldrb    w0, [x1], #1            // get the next byte and increment the pointer
@@ -1675,7 +1638,7 @@ _frombuf:
 */
 
         // ( ch -- ) write a byte to output
-	defcode "emit",4,,emit,frombuf
+	defcode "emit",4,,emit,readbuf
         POPPSP	x0
         bl      _con_out
 	next
