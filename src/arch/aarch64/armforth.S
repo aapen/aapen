@@ -1329,12 +1329,12 @@ name_0: .quad 0
 	defcode "w!",2,,storeword,cmove
 	POPPSP	x0		// address
 	POPPSP	x1		// value
-	strh	w1, [x0]	// store
+	str	w1, [x0]	// store
 	next
 
 	defcode "w@",2,,fetchword,storeword
 	POPPSP	x0		// address
-	ldrh	w1, [x0]        // load
+	ldr	w1, [x0]        // load
 	PUSHPSP	x1
 	next
 
