@@ -60,6 +60,10 @@
         bne      1b
 
 skip_bss_init:
+        // Install exception table
+        ldr       x0, =__exception_handler_table
+        msr       vbar_el1, x0
+
         // Prepare for the transition to EL1
         LDR_IMM64 x0, SCTLR_EL1_VALUE
         msr       sctlr_el1, x0
