@@ -673,6 +673,39 @@ _forth_start:
 cold_start:
 	.quad    quit
 
+        .text
+        .global  _forth_restart
+_forth_restart:
+        ldr     x0, =data_stack_top     // get the top of the parameter stack
+        mov     PSP, x0                 // initialize parameter stack
+
+        ldr     x1, =return_stack_top   // get the top of the return stack
+        mov     RSP, x1                 // initialize return stack
+
+        ldr     x1, =crnl
+        mov     x2, #2
+        bl      _tell
+
+        ldr     x1, =excmsg
+        mov     x2, #excmsgend-excmsg
+        bl      _tell
+
+        ldr     x1, =crnl
+        mov     x2, #2
+        bl      _tell
+
+        ldr     x2, =input_stack_top    // get the top of the input stack
+        mov     ISP, x2                 // initialize input stack
+        ldr     x2, =_con_in            // first input source is the console
+        PUSHI   x2, xzr                 // put the console reader on the input stack
+
+	ldr	NIP, =cold_start        // initialize interpreter
+	next                            // run interpreter
+
+        .section .rodata
+excmsg: .ascii "CORE ABORT!"
+excmsgend:
+
 
 //	BUILT-IN WORDS ----------------------------------------------------------------------
 //
@@ -1324,8 +1357,13 @@ var_\name :
 	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
         defvar "echo",4,,echo,base,0
+        defvar "exception",9,,exception,echo,0
+        defvar "excode",6,,excode,exception,0
 // for debugging
-	defvar	"pong",4,,pong,echo
+	defvar	"pong",4,,pong,excode
+
+        .global var_exception
+        .global var_excode
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
@@ -1347,6 +1385,7 @@ var_\name :
 	defcode \name,\namelen,\flags,\label,\link
 	ldr	x0, =\value
 	PUSHPSP	x0
+
 	next
 	.endm
 
