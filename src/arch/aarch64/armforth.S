@@ -648,17 +648,13 @@ stack points ->	| addr of DOUBLE   |	   + 4 =   +------------------+
 _forth_start:
         bl      _con_init               // initialize serial port
 
-        ldr     x0, =data_stack_top     // get the top of the parameter stack
-        mov     PSP, x0                 // initialize parameter stack
-
-        ldr     x1, =return_stack_top   // get the top of the return stack
-        mov     RSP, x1                 // initialize return stack
+        ldr     PSP, =data_stack_top    // initialize parameter stack
+        ldr     RSP, =return_stack_top  // initialize return stack
 
         mov     x0, #'F'                // emit an 'F' to show we're connected
         bl      _con_out
 
-        ldr     x2, =input_stack_top    // get the top of the input stack
-        mov     ISP, x2                 // initialize input stack
+        ldr     ISP, =input_stack_top   // initialize input stack
         ldr     x2, =_con_in            // first input source is the console
         PUSHI   x2, xzr                 // put the console reader on the input stack
         ldr     x1, =_frombuf           // second input source is a buffer
