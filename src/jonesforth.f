@@ -108,6 +108,7 @@
 : '>' [ char > ] literal ;
 : '"' [ char " ] literal ;
 : 'A' [ char A ] literal ;
+: 'a' [ char a ] literal ;
 : '0' [ char 0 ] literal ;
 : '-' [ char - ] literal ;
 : '.' [ char . ] literal ;
@@ -331,7 +332,7 @@
 		'0'		( decimal digits 0..9 )
 	else
 		10 -		( hex and beyond digits a..z )
-		'A'
+		'a'
 	then
 	+
 	emit

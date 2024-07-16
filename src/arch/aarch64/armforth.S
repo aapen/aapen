@@ -1818,9 +1818,9 @@ _number:
 	bmi	4f		// nope, < '0' so we're done
 	cmp	x5, #10		// try upper digit bound
 	blt	3f		// yes, we got one!
-	subs	x5, x5, #17	// try lower char bound (17 is 'A'-'0')
-	bmi	4f		// nope, < 'A' so we're done
-	add	x5, x5, #10	// adjust for first 10 digit values before 'A'
+	subs	x5, x5, #49	// try lower char bound (49 is 'a'-'0')
+	bmi	4f		// nope, < 'a' so we're done
+	add	x5, x5, #10	// adjust for first 10 digit values before 'a'
 3:
 	cmp	x5, x4		// >= BASE?
 	bge	4f		// yep, we're done
