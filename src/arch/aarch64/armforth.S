@@ -703,6 +703,7 @@ _forth_restart:
 	next                            // run interpreter
 
         .section .rodata
+        .align 3
 excmsg: .ascii "CORE ABORT!"
 excmsgend:
 
@@ -844,6 +845,7 @@ code_\label :
 	you can skip the details.
 */
 
+        .align 3
 name_0: .quad 0
 
 	// DROP (a -- )
