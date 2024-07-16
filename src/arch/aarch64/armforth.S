@@ -669,14 +669,48 @@ _forth_start:
 cold_start:
 	.quad    quit
 
+/*
+        EXCEPTION RECOVERY -----------------------------------------------------------------
+
+        We get here from the CPU's exception table. We do just enough setup to report the error on
+        the serial console and reset some core variables, then we go back to the beginning.
+
+        TODO - Print the exception type and ESR (stored in var_exception and var_excode by the
+        exception entry itself. See exceptions.S)
+
+        TODO - Add a counter for consecutive restarts. After N retries, there's probably an error
+        in the init file itself. Drop to a naked prompt instead of repeating the bootloop.
+
+*/
+
         .text
         .global  _forth_restart
 _forth_restart:
-        ldr     x0, =data_stack_top     // get the top of the parameter stack
-        mov     PSP, x0                 // initialize parameter stack
+        ldr     PSP, =data_stack_top    // get the top of the parameter stack
 
-        ldr     x1, =return_stack_top   // get the top of the return stack
-        mov     RSP, x1                 // initialize return stack
+        ldr     x0, =var_state          // reset state to 0
+        mov     x1, #0
+        str     x1, [x0]
+
+        ldr     x0, =var_here           // reset the dictionary to data
+        ldr     x1, =data_segment
+        str     x1, [x0]
+
+        ldr     x0, =var_latest         // reset latest to last defined word
+        ldr     x1, =name_execute
+        str     x1, [x0]
+
+        ldr     x0, =var_s0             // reset pstack TOS
+        ldr     x1, =data_stack_top
+        str     x1, [x0]
+
+        ldr     x0, =var_base           // reset base to decimal
+        mov     x1, #10
+        str     x1, [x0]
+
+        ldr     x0, =var_echo           // reset echo to off
+        mov     x1, #0
+        str     x1, [x0]
 
         ldr     x1, =crnl
         mov     x2, #2
@@ -690,13 +724,7 @@ _forth_restart:
         mov     x2, #2
         bl      _tell
 
-        ldr     x2, =input_stack_top    // get the top of the input stack
-        mov     ISP, x2                 // initialize input stack
-        ldr     x2, =_con_in            // first input source is the console
-        PUSHI   x2, xzr                 // put the console reader on the input stack
-
-	ldr	NIP, =cold_start        // initialize interpreter
-	next                            // run interpreter
+        b       _forth_start
 
         .section .rodata
         .align 3
