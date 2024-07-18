@@ -422,6 +422,28 @@
 	then
 ;
 
+( 0x parses the next word as a hex number )
+
+: 0x ( -- n )
+	base @			( save the current base )
+	hex
+	word			( len p saved-base )
+	number                  ( status n saved-base )
+	drop			( n saved-base )
+	swap base !		( restor the old base)
+; immediate
+
+( 0b parses the next word as a binary number )
+
+: 0b ( -- n )
+	base @			( save the current base )
+	2 base !
+	word			( len p saved-base )
+	number                  ( status n saved-base )
+	drop			( n saved-base )
+	swap base !		( restor the old base)
+; immediate
+
 ( depth returns the depth of the stack. )
 : depth		( -- n )
 	s0 @ dsp@ -
