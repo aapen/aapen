@@ -1385,8 +1385,9 @@ var_\name :
         defvar "echo",4,,echo,base,0
         defvar "exception",9,,exception,echo,0
         defvar "excode",6,,excode,exception,0
+        defvar "extra",5,,extra,excode,extrainit
 // for debugging
-	defvar	"pong",4,,pong,excode
+	defvar	"pong",4,,pong,extra
 
         .global var_exception
         .global var_excode
@@ -2757,6 +2758,9 @@ initfile:
         .incbin "jonesforth.f"
         .quad 0
 
+extrainit:
+        .incbin "mailbox.f"
+        .quad 0
 
 /*
 	We allocate static space for the various stacks and buffers.
