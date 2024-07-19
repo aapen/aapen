@@ -108,10 +108,19 @@
 : '>' [ char > ] literal ;
 : '"' [ char " ] literal ;
 : 'A' [ char A ] literal ;
+: 'J' [ char J ] literal ;
+: 'H' [ char H ] literal ;
 : 'a' [ char a ] literal ;
+: 'b' [ char b ] literal ;
+: 'c' [ char c ] literal ;
 : '0' [ char 0 ] literal ;
+: '1' [ char 1 ] literal ;
+: '2' [ char 2 ] literal ;
 : '-' [ char - ] literal ;
 : '.' [ char . ] literal ;
+: '[' [ char [ ] literal ;
+
+: 'esc' 27 ;
 
 \ while compiling, '[compile] word' compiles 'word' if it would otherwise be IMMEDIATE.
 : [compile] immediate
@@ -425,24 +434,41 @@
 ( 0x parses the next word as a hex number )
 
 : 0x ( -- n )
-	base @			( save the current base )
+	base @			( push current base )
 	hex
 	word			( len p saved-base )
 	number                  ( status n saved-base )
 	drop			( n saved-base )
-	swap base !		( restor the old base)
+	swap base !		( restore the old base)
+	state @ if		( if compiling compile n as lit )
+	  ' lit , ,
+	then
 ; immediate
+
 
 ( 0b parses the next word as a binary number )
 
 : 0b ( -- n )
-	base @			( save the current base )
+	base @			( push current base )
 	2 base !
 	word			( len p saved-base )
 	number                  ( status n saved-base )
 	drop			( n saved-base )
-	swap base !		( restor the old base)
+	swap base !		( restore the old base)
+	state @ if		( if compiling compile n as lit )
+	  ' lit , ,
+	then
 ; immediate
+
+( .base prints the current base in decimal )
+
+: .base ( -- )
+	base @ dup		( cur-base cur-base )
+	decimal			
+	. cr			( cur-base )
+	base !			( restore the old base)
+;
+
 
 ( depth returns the depth of the stack. )
 : depth		( -- n )
@@ -469,6 +495,12 @@
 	repeat
 	drop
 	cr
+;
+
+( Clear the screen )
+
+: cls ( -- )
+  'esc' emit 'c' emit
 ;
 
 (
