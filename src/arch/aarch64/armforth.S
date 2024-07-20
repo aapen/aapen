@@ -537,6 +537,12 @@
         ldp     \reg1,\reg2, [ISP], #16
 	.endm
 
+        .macro RESET_INPUT
+        ldr     ISP, =input_stack_top   // initialize input stack
+        ldr     x2, =_con_in            // first input source is the console
+        PUSHI   x2, xzr                 // put the console reader on the input stack
+        .endm
+
 PSP	.req	x28	// parameter stack pointer
 RSP	.req	x29	// return stack pointer
 NIP	.req	x10	// next instruction pointer
@@ -634,9 +640,7 @@ _forth_start:
         mov     x0, #'F'                // emit an 'F' to show we're connected
         bl      _con_out
 
-        ldr     ISP, =input_stack_top   // initialize input stack
-        ldr     x2, =_con_in            // first input source is the console
-        PUSHI   x2, xzr                 // put the console reader on the input stack
+        RESET_INPUT
         ldr     x1, =_frombuf           // second input source is a buffer
         ldr     x2, =initfile           // use the initfile as its context
         PUSHI   x1, x2                  // put the buffer reader on the input stack
@@ -2606,6 +2610,8 @@ _tell:
 	// reinitialize data stack
         ldr     x9, =data_stack_top     // get the top of the parameter stack
         mov     PSP, x9                 // initialize parameter stack
+        RESET_INPUT                     // stop reading files
+
 	next
 
 	.section .rodata
