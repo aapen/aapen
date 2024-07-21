@@ -1613,3 +1613,15 @@ here @ 15 + 15 invert and here !
 welcome
 hide welcome
 echo
+
+: t1
+	word create		( make a new word )
+	here @ 8 + ,		( code address is the next word )
+	call-template 		( call-t )
+	dup @ ,			( copy first quad of template )
+	dup 8  + @ ,		( copy second quad )
+	dup 16 + @ ,		( copy third quad )
+	24 + @ ,		( copy fourth quad )
+	say-msg ,		( and then the f we are calling )
+	exit
+;

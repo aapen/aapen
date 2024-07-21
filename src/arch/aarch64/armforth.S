@@ -1406,6 +1406,29 @@ var_\name :
 	defconst "f_immed",7,,__f_immed,__docol,f_immed
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
 
+	/* This is the instruction template for all of our direct word calls. */
+
+call_template:
+	adr     x30,#24 	// 0:  Load return address
+	adr	x17,#12		// 4:  Load addr of f address
+	ldr	x17,[x17]     	// 8:  Load f address
+	br	x17          	// 12: Branch to f
+				// 16: There should be 8 bytes of address here.
+call_template_end:
+
+ret_template:
+	ret
+ret_template_end:
+	
+	/* Plain old assembly language function. */
+	defconst "say-msg",7,,__say_msg,__f_hidden,_saymsg
+
+	/* Instruction templates, used by compiler. */
+
+	defconst "call-template",13,,__call_template,__say_msg,call_template
+	defconst "call-template-len",17,,__call_template_len,__call_template,(call_template_end-call_template)/4
+	defconst "ret-template",12,,__ret_template,__call_template_len,ret_template
+	defconst "ret-template-len",16,,__ret_template_len,__ret_template,(ret_template_end-ret_template)/4
 /*
 	RETURN STACK ----------------------------------------------------------------------
 
@@ -1415,7 +1438,7 @@ var_\name :
 
 
 
-	defcode ">r",2,,tor,__f_hidden
+	defcode ">r",2,,tor,__ret_template_len
 	POPPSP	x0                      // pop parameter stack into x0
 	PUSHRSP	x0                      // and push it onto the return stack
 	next
@@ -2628,6 +2651,8 @@ hmsgend:
 hellomsg: .ascii "Hello world!\r\n"
 hellomsgend:
 
+testmsg: .ascii "Testing!\r\n"
+testmsgend:
 /*
 	ODDS AND ENDS ----------------------------------------------------------------------
 
@@ -2644,18 +2669,38 @@ hellomsgend:
 
 */
 
-	// Simple test word.
+		// Simple test word.
         defcode "hello",5,,hello,interpret
 	ldr	x1, =hellomsg		// address
 	mov	x2, #hellomsgend-hellomsg	// length
         bl      _tell
 	next
 
+	// Word to test the call subroutine instructions.
+
+        defcode "test-call",9,,test_call,hello
+	adr     x30,#24 	// 0: Load return address
+	adr	x17,#12		// 4: Load addr of f address
+	ldr	x17,[x17]     	// 8: Load f address
+	br	x17          	// 12:Branch to f
+	.ascii	"ADDRESSX"	// 16: address of message f
+	mov	x19, #42	// 24: Some place to come back to
+	next
+
+_saymsg:
+        stp     x30, x1, [sp, #-16]!
+	ldr	x1, =testmsg		// address
+	mov	x2, #testmsgend-testmsg	// length
+        bl      _tell
+        ldp     x30, x1, [sp], #16
+	ret
+
 	// Example of a secondary in assembly.
-        defword "hellohello",10,,hellohello,hello
+        defword "hellohello",10,,hellohello,test_call
 	.quad hello
 	.quad hello
 	.quad exit		// Return
+
 
 	defcode "char",4,,char,hellohello
 	bl	_word			// returns x0 = address, x1 = length
