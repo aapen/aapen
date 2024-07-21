@@ -1,6 +1,8 @@
 noecho
 
-            0x 3f000000   constant peripherals
+( save base, use decimal )
+base @ decimal
+
 peripherals 0x     b880 + constant mbox-read
 mbox-read   0x       10 + constant mbox-peek
 mbox-read   0x       18 + constant mbox-status
@@ -195,7 +197,11 @@ variable fbyres
 ( x y -- a )
 : pixel fbpitch @ * + fb @ + ;
 
-initialize-fb
+initialize-fb drop
+3    0   0 pixel c!
+4 1023   0 pixel c!
+5 1023 767 pixel c!
+6    0 767 pixel c!
 
 ( CLOCKS )
 
@@ -218,3 +224,6 @@ initialize-fb
 : clock-rate-min 0x 30007 do-clock-query ;
 
 echo
+
+( restore base )
+base !

@@ -11,6 +11,9 @@
 
 	.set JONES_VERSION,47
 
+        /* RPi3 */
+        .set PERIPHERALS, 0x3f000000
+
 /*
 
         ARM32 port by Peter H. Froelich. Attribution follows:
@@ -1405,6 +1408,7 @@ var_\name :
 	defconst "docol",5,,__docol,rz,docol
 	defconst "f_immed",7,,__f_immed,__docol,f_immed
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
+        defconst "peripherals",11,,peripherals,__f_hidden,PERIPHERALS
 
 /*
 	RETURN STACK ----------------------------------------------------------------------
@@ -1415,7 +1419,7 @@ var_\name :
 
 
 
-	defcode ">r",2,,tor,__f_hidden
+	defcode ">r",2,,tor,peripherals
 	POPPSP	x0                      // pop parameter stack into x0
 	PUSHRSP	x0                      // and push it onto the return stack
 	next
