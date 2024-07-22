@@ -1370,11 +1370,11 @@ var_\name :
 	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
         defvar "echo",4,,echo,base,0
-        defvar "exception",9,,exception,echo,0
-        defvar "excode",6,,excode,exception,0
-        defvar "extra",5,,extra,excode,extrainit
+        defvar "exception",9,,exception,echo
+        defvar "excode",6,,excode,exception
 // for debugging
-	defvar	"pong",4,,pong,extra
+	defvar	"pong",4,,pong,excode
+
 
         .global var_exception
         .global var_excode
@@ -1409,6 +1409,10 @@ var_\name :
 	defconst "f_immed",7,,__f_immed,__docol,f_immed
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
         defconst "peripherals",11,,peripherals,__f_hidden,PERIPHERALS
+        defconst "mailbox",7,,mailbox,peripherals,mailbox_src
+        defconst "video",5,,video,mailbox,video_src
+        defconst "sdcard",6,,sdcard,video,sdcard_src
+
 
 /*
 	RETURN STACK ----------------------------------------------------------------------
@@ -1417,9 +1421,7 @@ var_\name :
 	the top of the return stack.
 */
 
-
-
-	defcode ">r",2,,tor,peripherals
+	defcode ">r",2,,tor,sdcard
 	POPPSP	x0                      // pop parameter stack into x0
 	PUSHRSP	x0                      // and push it onto the return stack
 	next
@@ -2648,8 +2650,33 @@ hellomsgend:
 
 */
 
+        defcode "fence",5,,fence,interpret
+        dmb     st                      // memory barrier. this is too pessimistic it will be slow
+        next
+
+        // Data cache clean
+        // Note: this operates on an entire cache line
+        defcode "dcc",3,,dcclean,fence
+        POPPSP  x0
+        dc      cvac, x0
+        next
+
+        // Data cache invalidate
+        // Note: this operates on an entire cache line
+        defcode "dci",3,,dcinval,dcclean
+        POPPSP  x0
+        dc      ivac, x0
+        next
+
+        // Data cache clean and invalidate
+        // Note: this operates on an entire cache line
+        defcode "dcci",4,,dccleaninval,dcinval
+        POPPSP  x0
+        dc      civac, x0
+        next
+
 	// Simple test word.
-        defcode "hello",5,,hello,interpret
+        defcode "hello",5,,hello,dccleaninval
 	ldr	x1, =hellomsg		// address
 	mov	x2, #hellomsgend-hellomsg	// length
         bl      _tell
@@ -2747,9 +2774,14 @@ rmsgnl: .ascii "\r\n"
 initfile:
         .incbin "jonesforth.f"
         .quad 0
-
-extrainit:
+mailbox_src:
         .incbin "mailbox.f"
+        .quad 0
+video_src:
+        .incbin "video.f"
+        .quad 0
+sdcard_src:
+        .incbin "sdcard.f"
         .quad 0
 
 /*
