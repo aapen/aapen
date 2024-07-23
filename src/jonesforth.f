@@ -1638,10 +1638,13 @@ here @ 15 + 15 invert and here !
 	Print the version and OK prompt.
 )
 
+: unused lastcell here @ - 8 / ;
+
 : welcome
         cr
 	s" test-mode" find not if
 		." jonesforth version " version . cr
+                unused . ." cells remaining" cr
 		." ok "
 	then
         cr

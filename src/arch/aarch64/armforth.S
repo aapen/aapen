@@ -1408,10 +1408,12 @@ var_\name :
 	defconst "docol",5,,__docol,rz,docol
 	defconst "f_immed",7,,__f_immed,__docol,f_immed
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
-        defconst "peripherals",11,,peripherals,__f_hidden,PERIPHERALS
+        defconst "lastcell",8,,lastcell,__f_hidden,LASTCELL
+        defconst "peripherals",11,,peripherals,lastcell,PERIPHERALS
         defconst "mailbox",7,,mailbox,peripherals,mailbox_src
         defconst "video",5,,video,mailbox,video_src
         defconst "sdcard",6,,sdcard,video,sdcard_src
+        defconst "charrom",7,,charrom,sdcard,char_rom
 
 
 	/* This is the instruction template for all of our direct word calls. */
@@ -1429,7 +1431,7 @@ ret_template:
 ret_template_end:
 	
 	/* Plain old assembly language function. */
-	defconst "say-msg",7,,__say_msg,sdcard,_saymsg
+	defconst "say-msg",7,,__say_msg,charrom,_saymsg
 
 	/* Instruction templates, used by compiler. */
 
@@ -2666,8 +2668,19 @@ _saymsg:
 	.quad hello
 	.quad exit		// Return
 
+        // ( charcode bgcolor fgcolor pitch addr -- )
+        defcode "drawchar",8,,drawchar,hellohello
+        POPPSP  x0
+        POPPSP  x1
+        POPPSP  x2
+        POPPSP  x3
+        POPPSP  x4
+        PUSHPSP lr
+        bl      draw_char
+        POPPSP  lr
+        next
 
-	defcode "char",4,,char,hellohello
+	defcode "char",4,,char,drawchar
 	bl	_word			// returns x0 = address, x1 = length
 	ldrb	w0, [x0]		// get first character
 	PUSHPSP	x0			// push it
