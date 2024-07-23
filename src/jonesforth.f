@@ -1567,6 +1567,20 @@
 	1 cells here +!	( increment here pointer by 1 cell )
 ;
 
+( wdump, reads the name of a word, dumps the first 256 bytes, including header )
+
+: wdump (  -- )
+  word 			( len addr )
+  dup           	( len len addr )
+  if                    ( len == 0 means word wasn't found )
+  	find		( word data address )
+	256 dump
+  else
+  	." Not found!"
+  then
+;
+
+
 (
 
         Another concern that didn't exist when FORTH was created was caching. In our multicore and
@@ -1625,3 +1639,5 @@ echo
 	say-msg ,		( and then the f we are calling )
 	exit
 ;
+
+t1 word1
