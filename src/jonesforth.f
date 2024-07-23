@@ -460,13 +460,30 @@
 	then
 ; immediate
 
+( .x print the tos in hex )
+
+: .x ( x -- )
+	base @ 			( cur-base x )
+	swap			( x cur-base )
+	hex
+	. 			( print x )
+	base !			( restore the old base)
+;
+
+( .d print the tos in decimal )
+
+: .d ( x -- )
+	base @ 			( cur-base x )
+	swap			( x cur-base )
+	decimal
+	. 			( print x )
+	base !			( restore the old base)
+;
+
 ( .base prints the current base in decimal )
 
 : .base ( -- )
-	base @ dup		( cur-base cur-base )
-	decimal			
-	. cr			( cur-base )
-	base !			( restore the old base)
+	base @ .d
 ;
 
 
@@ -706,8 +723,8 @@
 
 (
 	Second, CELLS.  In FORTH the phrase 'n CELLS ALLOT' means allocate n integers of whatever size
-	is the natural size for integers on this machine architecture.  On this 32 bit machine therefore
-	CELLS just multiplies the top of stack by 4.
+	is the natural size for integers on this machine architecture.  On this 64 bit machine therefore
+	CELLS just multiplies the top of stack by 8.
 )
 : cells ( n -- n ) 8 * ;
 
@@ -715,6 +732,7 @@
 	So now we can define VARIABLE easily in much the same way as CONSTANT above.  Refer to the
 	diagram above to see what the word that this creates will look like.
 )
+
 : variable
 	1 cells allot	( allocate 1 cell of memory, push the pointer to this memory )
 	word create	( make the dictionary entry (the name follows VARIABLE) )
@@ -1564,7 +1582,27 @@
 ( w, appends a 32-bit value to the current compiled word. )
 : w,
 	here @ w!	( store the character in the compiled image )
-	1 cells here +!	( increment here pointer by 1 cell )
+	4 here +!	( increment here pointer by 4 bytes )
+;
+
+( xray-p Dump out the details of a word from its address)
+: xray-p ( waddr -- )
+  dup ." Word address: " .x cr
+  dup ." Link address: "  @ .x cr
+  dup ." Flags: " 8 + c@ .x cr
+  dup ." Name len: " 9 + c@ .x cr
+        dup ." Name: " 10 + 30 dump 
+  dup ." Code Word: " 40 + @ .x cr
+  ." Next 128 bytes: " 48 + 128 dump
+;
+
+
+( read the name of a word and dump its details )
+: xray ( -- )
+  word find xray-p 
+  dup if
+  	xray-p
+  then
 ;
 
 (
@@ -1612,3 +1650,17 @@ here @ 15 + 15 invert and here !
 welcome
 hide welcome
 echo
+
+: t1
+	word create		( make a new word )
+	here @ 8 + ,		( code address is the next word )
+	call-template 		( call-t )
+	dup w@ w,			( copy first word of template )
+	dup 4  + w@ w,		( copy second word )
+	dup 8 + w@ w,		( copy third word )
+	12 + w@ w,		( copy fourth word )
+	say-msg ,		( and then the f we are calling )
+	exit
+;
+
+t1 word1

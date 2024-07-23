@@ -1414,6 +1414,29 @@ var_\name :
         defconst "sdcard",6,,sdcard,video,sdcard_src
 
 
+	/* This is the instruction template for all of our direct word calls. */
+
+call_template:
+	adr     x30,#24 	// 0:  Load return address
+	adr	x17,#12		// 4:  Load addr of f address
+	ldr	x17,[x17]     	// 8:  Load f address
+	br	x17          	// 12: Branch to f
+				// 16: There should be 8 bytes of address here.
+call_template_end:
+
+ret_template:
+	ret
+ret_template_end:
+	
+	/* Plain old assembly language function. */
+	defconst "say-msg",7,,__say_msg,sdcard,_saymsg
+
+	/* Instruction templates, used by compiler. */
+
+	defconst "call-template",13,,__call_template,__say_msg,call_template
+	defconst "call-template-len",17,,__call_template_len,__call_template,(call_template_end-call_template)/4
+	defconst "ret-template",12,,__ret_template,__call_template_len,ret_template
+	defconst "ret-template-len",16,,__ret_template_len,__ret_template,(ret_template_end-ret_template)/4
 /*
 	RETURN STACK ----------------------------------------------------------------------
 
@@ -1421,7 +1444,7 @@ var_\name :
 	the top of the return stack.
 */
 
-	defcode ">r",2,,tor,sdcard
+	defcode ">r",2,,tor,__ret_template_len
 	POPPSP	x0                      // pop parameter stack into x0
 	PUSHRSP	x0                      // and push it onto the return stack
 	next
@@ -1748,72 +1771,6 @@ _word:
 word_buffer:
 	.space 32
 
-	defcode "?words",6,,qwords,word
-        PUSHPSP x4
-        PUSHPSP x5
-        PUSHPSP x6
-        PUSHPSP x7
-        PUSHPSP lr
-        PUSHPSP x21
-        PUSHPSP x22
-        PUSHPSP x23
-
-	ldr	x1, =crnl		// cr newline
-	mov	x2, #2
-        bl      _tell
-
-	ldr	x0, =var_latest
-	ldr	x0, [x0]		// current dictionary pointer
-1:
-	cmp	x0, #0			// NULL?
-	beq	4f			// end of list!
-
-	// Find the name length and pointer for this entry.
-	ldrb	w3,  [x0, #8]		// flags
-	and	x21, x3, #(f_hidden)	// hidden flag
-	ldrb	w22, [x0, #9]		// name length
-	add	x23, x0, #10		// name pointer
-
-	// And print it out with a cr/nl pair.
-        PUSHPSP x0
-        PUSHPSP x1
-        PUSHPSP x2
-        PUSHPSP x3
-        PUSHPSP x4
-
-        mov     x1, x23
-        mov     x2, x22
-        bl      _tell
-
-	cbz	x21, 2f 		// branch if hidden zero
-	ldr	x1, =hmsg		// address of hidden msg
-	mov	x2, #hmsgend-hmsg	// length of hidden msg
-        bl      _tell
-
-2:	ldr	x1, =crnl		// cr newline
-	mov	x2, #2
-        bl      _tell
-
-        POPPSP  x4
-        POPPSP  x3
-        POPPSP  x2
-        POPPSP  x1
-        POPPSP  x0
-
-	// x2 = x3, but x3 can be destroyed in the loop
-	ldr	x0, [x0]		// previous dictionary pointer
-	b	1b			// try again
-4:
-        POPPSP  x23
-        POPPSP  x22
-        POPPSP  x21
-        POPPSP  lr
-        POPPSP  x7
-        POPPSP  x6
-        POPPSP  x5
-        POPPSP  x4
-	next
-
 
 /*
 	As well as reading in words we'll need to read in numbers and for that we are using a function
@@ -1832,7 +1789,7 @@ word_buffer:
 	partial value if there was an error.
 */
 
-	defcode "number",6,,number,qwords
+	defcode "number",6,,number,word
 	POPPSP	x1		// length of string
 	POPPSP	x0		// address of string
 	bl	_number
@@ -2634,6 +2591,8 @@ hmsgend:
 hellomsg: .ascii "Hello world!\r\n"
 hellomsgend:
 
+testmsg: .ascii "Testing!\r\n"
+testmsgend:
 /*
 	ODDS AND ENDS ----------------------------------------------------------------------
 
@@ -2682,11 +2641,31 @@ hellomsgend:
         bl      _tell
 	next
 
+	// Word to test the call subroutine instructions.
+
+        defcode "test-call",9,,test_call,hello
+	adr     x30,#24 	// 0: Load return address
+	adr	x17,#12		// 4: Load addr of f address
+	ldr	x17,[x17]     	// 8: Load f address
+	br	x17          	// 12:Branch to f
+	.ascii	"ADDRESSX"	// 16: address of message f
+	mov	x19, #42	// 24: Some place to come back to
+	next
+
+_saymsg:
+        stp     x30, x1, [sp, #-16]!
+	ldr	x1, =testmsg		// address
+	mov	x2, #testmsgend-testmsg	// length
+        bl      _tell
+        ldp     x30, x1, [sp], #16
+	ret
+
 	// Example of a secondary in assembly.
-        defword "hellohello",10,,hellohello,hello
+        defword "hellohello",10,,hellohello,test_call
 	.quad hello
 	.quad hello
 	.quad exit		// Return
+
 
 	defcode "char",4,,char,hellohello
 	bl	_word			// returns x0 = address, x1 = length
