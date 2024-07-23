@@ -1,10 +1,34 @@
 noecho
 
-            0x 3f000000   constant peripherals
+( save base, use decimal )
+base @ decimal
+
 peripherals 0x     b880 + constant mbox-read
 mbox-read   0x       10 + constant mbox-peek
 mbox-read   0x       18 + constant mbox-status
 mbox-read   0x       20 + constant mbox-write
+
+0x 40 constant cache-line
+
+( Clean invalidate cache in a region )
+( addr len -- end-addr end-len )
+: dcc-reg
+  begin
+    dup 0>
+  while
+    swap dup dcc cache-line + swap cache-line -
+  repeat
+;
+
+( Invalidate cache in a region )
+( addr len -- end-addr end-len )
+: dci-reg
+  begin
+    dup 0>
+  while
+    swap dup dci cache-line + swap cache-line -
+  repeat
+;
 
 : delay ( n -- : loop n times )
   begin ?dup while 1- repeat
@@ -27,17 +51,30 @@ mbox-read   0x       20 + constant mbox-write
 
 ( a -- )
 : send
-  begin mbox-full? while repeat         ( wait for space )
-  0x f invert and                       ( clear lower 4 bits )
-  8 or                                  ( assume channel 8 )
-  mbox-write w!
+  begin mbox-full? while repeat ( wait for space )
+  dup 0x f and
+  if
+    ." misaligned "
+  else
+    fence                       ( a         | make sure writes are complete )
+    dup dup w@                  ( a a len   | get ptr and len )
+    dcc-reg                     ( a a' len' | clean cache in region )
+    2drop                       ( a         | )
+    8 or                        ( a         | assume channel 8 )
+    mbox-write w!               (           | hand off to GPU )
+  then
 ;
 
 ( -- a )
 : receive
-  begin mbox-empty? while repeat        ( wait for reply )
-  mbox-read w@                          ( read message )
-  0x f invert and                       ( mask out channel )
+  begin mbox-empty? while repeat (           | wait for reply )
+  mbox-read w@                   ( a         | read message )
+  0x f invert and                ( a         | mask out channel )
+  dup dup w@                     ( a a len   | )
+  dci-reg                        ( a a' len' | invalidate cache in region )
+  2drop                          ( a         | )
+  fence                          ( a         | make sure writes are complete )
+  drop                           (           | )
 ;
 
 ( Temporary state )
@@ -116,87 +153,6 @@ variable message-start                  ( pointer to start of message buffer )
   walign
 ;
 
-( FRAME BUFFER )
-
-: physical-size                   rot 0x 48003 2-2tag ;
-: virtual-size                    rot 0x 48004 2-2tag ;
-: depth                          swap 0x 48005 1-1tag ;
-: overscan                            0x 4800a 4-4tag ;
-: allocate-framebuffer 16 swap 0 swap 0x 40001 2-2tag ;
-: fb-pitch                     0 swap 0x 40008 1-1tag ;
-
-( a -- a' )
-: set-palette
-  0x    4800b w!+
-    34 values w!+                         ( 32 palette entries + offset + length )
-    34 values w!+
-            0 w!+                         ( offset 0 )
-           32 w!+                         ( length 32 )
-  0x 00000000 w!+                         ( RGB of entry 0 )
-  0x 00ffffff w!+
-  0x 000000ff w!+
-  0x 00eeffaa w!+
-  0x 00cc44cc w!+
-  0x 0055cc00 w!+
-  0x 00e44140 w!+
-  0x 0077eeee w!+
-  0x 005588dd w!+
-  0x 00004466 w!+
-  0x 007777ff w!+
-  0x 00333333 w!+
-  0x 00777777 w!+
-  0x 0066ffaa w!+
-  0x 00f3afaf w!+
-  0x 00bbbbbb w!+                         ( RGB of entry 15 )
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+                         ( RGB of entry 31 )
-  walign
-;
-
-variable fb
-variable fbsize
-variable fbpitch
-variable fbxres
-variable fbyres
-
-: initialize-fb
-  tags{{
-    768 1024 physical-size
-    768 1024 virtual-size
-    8 depth
-    0 swap 0 swap 0 swap 0 swap overscan
-    allocate-framebuffer
-    set-palette
-    fb-pitch
-  }}
-
-  ( these are sensitive to the order of the tags )
-  26 msg[] w@ fb !
-  27 msg[] w@ fbsize !
-  68 msg[] w@ fbpitch !
-   6 msg[] w@ fbyres !
-   5 msg[] w@ fbxres !
-;
-
-( x y -- a )
-: pixel fbpitch @ * + fb @ + ;
-
-initialize-fb
-
 ( CLOCKS )
 
 1  constant clock-emmc
@@ -217,4 +173,26 @@ initialize-fb
 : clock-rate-max 0x 30004 do-clock-query ;
 : clock-rate-min 0x 30007 do-clock-query ;
 
+( POWER )
+
+0 constant power-sdhci
+1 constant power-uart0
+2 constant power-uart1
+3 constant power-usb-hcd
+4 constant power-i2c0
+5 constant power-i2c1
+6 constant power-i2c2
+7 constant power-spi
+8 constant power-ccp2tx
+
+: do-power-query tags{{ swap 2-2tag }} 6 msg[] w@ ;
+( device-id -- power-state )
+: power-state      0x 20001 tags{{ swap 1-2tag }} 6 msg[] w@ ;
+( device-id -- result )
+: power-on  3 swap 0x 28001 tags{{ swap 2-2tag }} 6 msg[] w@ ;
+: power-off 2 swap 0x 28001 tags{{ swap 2-2tag }} 6 msg[] w@ ;
+
 echo
+
+( restore base )
+base !

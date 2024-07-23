@@ -460,13 +460,30 @@
 	then
 ; immediate
 
+( .x print the tos in hex )
+
+: .x ( x -- )
+	base @ 			( cur-base x )
+	swap			( x cur-base )
+	hex
+	. 			( print x )
+	base !			( restore the old base)
+;
+
+( .d print the tos in decimal )
+
+: .d ( x -- )
+	base @ 			( cur-base x )
+	swap			( x cur-base )
+	decimal
+	. 			( print x )
+	base !			( restore the old base)
+;
+
 ( .base prints the current base in decimal )
 
 : .base ( -- )
-	base @ dup		( cur-base cur-base )
-	decimal			
-	. cr			( cur-base )
-	base !			( restore the old base)
+	base @ .d
 ;
 
 
@@ -1567,19 +1584,28 @@
 	1 cells here +!	( increment here pointer by 1 cell )
 ;
 
-( wdump, reads the name of a word, dumps the first 256 bytes, including header )
-
-: wdump (  -- )
-  word 			( len addr )
-  dup           	( len len addr )
-  if                    ( len == 0 means word wasn't found )
-  	find		( word data address )
-	256 dump
-  else
-  	." Not found!"
-  then
+( xray-p Dump out the details of a word from its address)
+: xray-p ( waddr -- )
+  dup ." Word address: " .x cr
+  dup ." Link address: "  @ .x cr
+  dup ." Flags: " 8 + c@ .x cr
+  dup ." Name len: " 9 + c@ .x cr
+        dup ." Name: " 10 + 30 dump 
+  dup ." Code Word: " 40 + @ .x cr
+  ." Next 128 bytes: " 48 + 128 dump
 ;
 
+
+( read the name of a word and dump its details )
+: xray ( -- )
+  word find xray-p 
+  dup if
+  	xray-p
+  else
+  	." Not found!" cr
+	drop
+  then
+;
 
 (
 
@@ -1603,7 +1629,6 @@
 
 : noecho 0 echo ! ;
 : echo 1 echo ! ;
-
 
 ( align HERE to 16 byte boundary)
 here @ 15 + 15 invert and here !
@@ -1632,10 +1657,10 @@ echo
 	word create		( make a new word )
 	here @ 8 + ,		( code address is the next word )
 	call-template 		( call-t )
-	dup @ ,			( copy first quad of template )
-	dup 8  + @ ,		( copy second quad )
-	dup 16 + @ ,		( copy third quad )
-	24 + @ ,		( copy fourth quad )
+	dup w@ w,			( copy first word of template )
+	dup 4  + w@ w,		( copy second word )
+	dup 8 + w@ w,		( copy third word )
+	12 + w@ w,		( copy fourth word )
 	say-msg ,		( and then the f we are calling )
 	exit
 ;
