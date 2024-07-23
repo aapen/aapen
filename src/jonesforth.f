@@ -723,8 +723,8 @@
 
 (
 	Second, CELLS.  In FORTH the phrase 'n CELLS ALLOT' means allocate n integers of whatever size
-	is the natural size for integers on this machine architecture.  On this 32 bit machine therefore
-	CELLS just multiplies the top of stack by 4.
+	is the natural size for integers on this machine architecture.  On this 64 bit machine therefore
+	CELLS just multiplies the top of stack by 8.
 )
 : cells ( n -- n ) 8 * ;
 
@@ -732,6 +732,7 @@
 	So now we can define VARIABLE easily in much the same way as CONSTANT above.  Refer to the
 	diagram above to see what the word that this creates will look like.
 )
+
 : variable
 	1 cells allot	( allocate 1 cell of memory, push the pointer to this memory )
 	word create	( make the dictionary entry (the name follows VARIABLE) )
@@ -1581,7 +1582,7 @@
 ( w, appends a 32-bit value to the current compiled word. )
 : w,
 	here @ w!	( store the character in the compiled image )
-	1 cells here +!	( increment here pointer by 1 cell )
+	4 here +!	( increment here pointer by 4 bytes )
 ;
 
 ( xray-p Dump out the details of a word from its address)
@@ -1601,9 +1602,6 @@
   word find xray-p 
   dup if
   	xray-p
-  else
-  	." Not found!" cr
-	drop
   then
 ;
 

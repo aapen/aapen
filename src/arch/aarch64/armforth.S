@@ -1771,72 +1771,6 @@ _word:
 word_buffer:
 	.space 32
 
-	defcode "?words",6,,qwords,word
-        PUSHPSP x4
-        PUSHPSP x5
-        PUSHPSP x6
-        PUSHPSP x7
-        PUSHPSP lr
-        PUSHPSP x21
-        PUSHPSP x22
-        PUSHPSP x23
-
-	ldr	x1, =crnl		// cr newline
-	mov	x2, #2
-        bl      _tell
-
-	ldr	x0, =var_latest
-	ldr	x0, [x0]		// current dictionary pointer
-1:
-	cmp	x0, #0			// NULL?
-	beq	4f			// end of list!
-
-	// Find the name length and pointer for this entry.
-	ldrb	w3,  [x0, #8]		// flags
-	and	x21, x3, #(f_hidden)	// hidden flag
-	ldrb	w22, [x0, #9]		// name length
-	add	x23, x0, #10		// name pointer
-
-	// And print it out with a cr/nl pair.
-        PUSHPSP x0
-        PUSHPSP x1
-        PUSHPSP x2
-        PUSHPSP x3
-        PUSHPSP x4
-
-        mov     x1, x23
-        mov     x2, x22
-        bl      _tell
-
-	cbz	x21, 2f 		// branch if hidden zero
-	ldr	x1, =hmsg		// address of hidden msg
-	mov	x2, #hmsgend-hmsg	// length of hidden msg
-        bl      _tell
-
-2:	ldr	x1, =crnl		// cr newline
-	mov	x2, #2
-        bl      _tell
-
-        POPPSP  x4
-        POPPSP  x3
-        POPPSP  x2
-        POPPSP  x1
-        POPPSP  x0
-
-	// x2 = x3, but x3 can be destroyed in the loop
-	ldr	x0, [x0]		// previous dictionary pointer
-	b	1b			// try again
-4:
-        POPPSP  x23
-        POPPSP  x22
-        POPPSP  x21
-        POPPSP  lr
-        POPPSP  x7
-        POPPSP  x6
-        POPPSP  x5
-        POPPSP  x4
-	next
-
 
 /*
 	As well as reading in words we'll need to read in numbers and for that we are using a function
@@ -1855,7 +1789,7 @@ word_buffer:
 	partial value if there was an error.
 */
 
-	defcode "number",6,,number,qwords
+	defcode "number",6,,number,word
 	POPPSP	x1		// length of string
 	POPPSP	x0		// address of string
 	bl	_number
