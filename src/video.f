@@ -70,9 +70,9 @@ variable fbyres
   }}
 
   ( these are sensitive to the order of the tags )
-  26 msg[] w@ fb !
+  26 msg[] w@ 0x 3fffffff and fb !
   27 msg[] w@ fbsize !
-  68 msg[] w@ fbpitch !
+  31 msg[] w@ fbpitch !
    6 msg[] w@ fbyres !
    5 msg[] w@ fbxres !
 ;
