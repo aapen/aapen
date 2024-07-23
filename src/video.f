@@ -33,22 +33,22 @@ base @ decimal
   0x 0066ffaa w!+
   0x 00f3afaf w!+
   0x 00bbbbbb w!+                         ( RGB of entry 15 )
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+
-  0x 00000000 w!+                         ( RGB of entry 31 )
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+
+  0x 00ffffff w!+                         ( RGB of entry 31 )
   walign
 ;
 
