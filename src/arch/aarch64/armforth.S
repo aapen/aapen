@@ -1544,18 +1544,28 @@ _key:
         // check whether we are echoing characters
         ldr     x2, =var_echo           // address of echo
         ldr     x1, [x2]                // value of echo
-        cmp     x1, #0                  // == 0?
+        cmp     x1, #0                  // echo == 0?
         beq     2f                      // skip it
-        cmp     w0, #127                // delete?
-        bne     3f                      // no, echo as is
+
+        // check for special cases
+        cmp     w0, #127                // char is delete?
+        bne     3f                      // no, next check
 
         mov     w0, #8                  // convert and echo delete as backspace
         bl      _con_out
         mov     w0, #' '
         bl      _con_out
         mov     w0, #8
+        b       4f
 
-3:      bl      _con_out                // echo the character
+3:      cmp     w0, #'\n'               // char is newline?
+        bne     4f                      // no, next check
+        mov     w0, #'\r'               // echo as \r\n
+        bl      _con_out
+        mov     w0, #'\n'
+        b       4f
+
+4:      bl      _con_out                // echo as is
 2:      POPPSP  lr
         POPPSP  x2
         POPPSP  x1
