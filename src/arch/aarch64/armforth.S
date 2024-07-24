@@ -1546,7 +1546,16 @@ _key:
         ldr     x1, [x2]                // value of echo
         cmp     x1, #0                  // == 0?
         beq     2f                      // skip it
-        bl      _con_out                // echo the character
+        cmp     w0, #127                // delete?
+        bne     3f                      // no, echo as is
+
+        mov     w0, #8                  // convert and echo delete as backspace
+        bl      _con_out
+        mov     w0, #' '
+        bl      _con_out
+        mov     w0, #8
+
+3:      bl      _con_out                // echo the character
 2:      POPPSP  lr
         POPPSP  x2
         POPPSP  x1
@@ -1753,7 +1762,7 @@ _word:
 	ldr	x4, =word_buffer	// address
 2:	strb	w0, [x4], #1		// store character, increment pointer
 5:      bl	_key
-        cmp     w0, #127                // backspace?
+        cmp     w0, #8                  // backspace?
         beq     4f
 	cmp	w0, #' '		// > ' '?
 	bgt	2b			// keep looking
