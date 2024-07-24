@@ -496,19 +496,20 @@
 
 (
 	FORTH word .S prints the contents of the stack.  It doesn't alter the stack.
-	Very useful for debugging.
+	Very useful for debugging. Prints stack in std FORTH order, with TOS last.
 )
+
 : .s		( -- )
 	'<' emit depth 0 .r '>' emit
 	space
 
-	dsp@		( get current stack pointer )
+	s0 @ 8 -		( sp ... )
 	begin
-		dup s0 @ <
+		dup dsp@ 8 + >  ( at the top? )
 	while
 		dup @ u.	( print the stack element )
 		space
-		8+		( move up )
+		8-		( move down )
 	repeat
 	drop
 	cr
@@ -1616,6 +1617,21 @@
 
 )
 
+(
+        Handy utilities  ---------------------------------------------------------------------------
+)
+
+( copy n words from addr to , )
+
+: ,* ( addr n - )
+  begin
+    dup 0>
+  while
+    swap dup w@ w, 4+ swap 1-
+  repeat
+  2drop
+;
+
 
 
 (
@@ -1654,16 +1670,4 @@ welcome
 hide welcome
 echo
 
-: t1
-	word create		( make a new word )
-	here @ 8 + ,		( code address is the next word )
-	call-template 		( call-t )
-	dup w@ w,			( copy first word of template )
-	dup 4  + w@ w,		( copy second word )
-	dup 8 + w@ w,		( copy third word )
-	12 + w@ w,		( copy fourth word )
-	say-msg ,		( and then the f we are calling )
-	exit
-;
 
-t1 word1

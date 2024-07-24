@@ -321,7 +321,7 @@
 	two assembly instructions which turn into just 3 bytes of machine code.  Let's store the
 	pointer to the next word to execute in the %esi register:
 
-		08 00 00 00	<- We're executing this one now.  %esi is the _next_ one to execute.
+		08 00 00 00	<- We're executing this one now.  %esi is the _eext_ one to execute.
 	%esi -> 1C 00 00 00
 		2C 00 00 00
 
@@ -1413,7 +1413,8 @@ var_\name :
         defconst "mailbox",7,,mailbox,peripherals,mailbox_src
         defconst "video",5,,video,mailbox,video_src
         defconst "sdcard",6,,sdcard,video,sdcard_src
-        defconst "charrom",7,,charrom,sdcard,char_rom
+        defconst "direct-thread",13,,direct_thread,sdcard,direct_thread_src
+        defconst "charrom",7,,charrom,direct_thread,char_rom
 
 
 	/* This is the instruction template for all of our direct word calls. */
@@ -1423,11 +1424,10 @@ call_template:
 	adr	x17,#12		// 4:  Load addr of f address
 	ldr	x17,[x17]     	// 8:  Load f address
 	br	x17          	// 12: Branch to f
-				// 16: There should be 8 bytes of address here.
 call_template_end:
 
 ret_template:
-	ret
+	next
 ret_template_end:
 	
 	/* Plain old assembly language function. */
@@ -2792,6 +2792,10 @@ video_src:
 sdcard_src:
         .incbin "sdcard.f"
         .quad 0
+direct_thread_src:
+        .incbin "direct_thread.f"
+        .quad 0
+
 
 /*
 	We allocate static space for the various stacks and buffers.
