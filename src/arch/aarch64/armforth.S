@@ -1751,10 +1751,11 @@ _word:
 	ble	1b			// keep looking
 
 	ldr	x4, =word_buffer	// address
-2:
-	strb	w0, [x4], #1		// store character, increment pointer
-	bl	_key
-	cmp	x0, #' '		// > ' '?
+2:	strb	w0, [x4], #1		// store character, increment pointer
+5:      bl	_key
+        cmp     w0, #127                // backspace?
+        beq     4f
+	cmp	w0, #' '		// > ' '?
 	bgt	2b			// keep looking
 
 	ldr	x0, =word_buffer	// address
@@ -1768,6 +1769,13 @@ _word:
 	cmp	x0, #'\n'		// eol?
 	bne	3b			// keep looking
 	b	1b
+
+4:
+        subs    x1, x4, 1               // drop the last character
+        ldr     x0, =word_buffer        // start of buffer
+        cmp     x1, x0                  // compare ptr-1 to start
+        csel    x4, x0, x1, le          // update ptr to max(ptr-1, start)
+        b       5b                      // keep looking
 
 	.data
 word_buffer:
