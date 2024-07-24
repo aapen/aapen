@@ -2590,8 +2590,7 @@ _tell:
         bl      _tell
 
 	// reinitialize data stack
-        ldr     x9, =data_stack_top     // get the top of the parameter stack
-        mov     PSP, x9                 // initialize parameter stack
+        ldr     PSP, =data_stack_top    // reset the parameter stack
         RESET_INPUT                     // stop reading files
 
 	next
