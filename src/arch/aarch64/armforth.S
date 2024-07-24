@@ -321,7 +321,7 @@
 	two assembly instructions which turn into just 3 bytes of machine code.  Let's store the
 	pointer to the next word to execute in the %esi register:
 
-		08 00 00 00	<- We're executing this one now.  %esi is the _eext_ one to execute.
+		08 00 00 00	<- We're executing this one now.  %esi is the _next_ one to execute.
 	%esi -> 1C 00 00 00
 		2C 00 00 00
 
