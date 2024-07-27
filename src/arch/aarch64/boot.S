@@ -101,7 +101,3 @@ skip_bss_init:
         wfe                                     // wait for an event
         b         pe_hang                       // if one arrives, loop and wait some more
         END(pe_hang)
-
-        ENTRY(_forth_error)
-        b         pe_hang
-        END(_forth_error)
