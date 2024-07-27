@@ -915,6 +915,12 @@
 	here !		( and store here with the dictionary address )
 ;
 
+: forget-latest
+	latest @	( get the most recent word defined )
+	dup @ latest !	( get the previous word )
+	here !		( and move here back to that prevous word )
+;
+
 (
 	DUMP ----------------------------------------------------------------------
 

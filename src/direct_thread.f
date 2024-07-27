@@ -13,6 +13,15 @@ noecho
   repeat
 ;
 
+( Compile a word that simply calls out to some assembly code. )
+
+: emit-call ( cfa -- )
+	call-template 		( add the call instructions )
+	call-template-len
+	,*
+	,			( and then the address we are calling )
+;
+
 ( Compile a new word that simply calls out to some assembly code. )
 
 : compile1 ( -- )
@@ -27,9 +36,53 @@ noecho
 	,*
 ;
 
-( Create a new word )
+( Redefinable stubs )
+
+: def
+  word create
+  word find
+  dup 0= if
+	cr ." Not Found!" cr
+	forget-latest
+	drop
+	exit
+  then
+  docol ,
+  >cfa
+  ,
+  ' exit ,
+;
+
+: redef
+  word find
+  dup 0= if
+	cr ." Not Found!" cr
+	drop
+	exit
+  then
+  >dfa
+  word find
+  dup 0= if
+	cr ." Not Found!" cr
+	2drop
+	exit
+  then
+  >cfa
+  swap !
+;
+
+echo
+
+( Create a rediect word)
 
 compile1 word1
 
-echo
+: normal-word-1 cr ." This is normal-word-1 " cr ;
+
+: normal-word-2 cr ." This is normal-word-2 " cr ;
+
+def redirect-word normal-word-1
+
+redef redirect-word normal-word-2
+
 
