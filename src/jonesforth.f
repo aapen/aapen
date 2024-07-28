@@ -1170,11 +1170,11 @@
 		' litstring of		( is it litstring ? )
 			[ char s ] literal emit '"' emit space ( print s"<space> )
 			8 + dup @		( get the length word )
-			swap 4 + swap		( end start+4 length )
+			swap 8 + swap		( end start+4 length )
 			2dup tell		( print the string )
 			'"' emit space		( finish the string with a final quote )
-			+ aligned		( end start+4+len, aligned )
-			8 -			( because we're about to add 4 below )
+			+ aligned		( end start+8+len, aligned )
+			8 -			( because we're about to add 8 below )
 		endof
 		' 0branch of		( is it 0branch ? )
 			." 0branch ( "
