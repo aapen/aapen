@@ -141,6 +141,17 @@ variable message-start                  ( pointer to start of message buffer )
   walign
 ;
 
+( n n n a t -- a' )
+: 3-3tag
+  ( tag )  w!+
+  3 values w!+
+  3 values w!+
+  swap     w!+
+  swap     w!+
+  swap     w!+
+  walign
+;
+
 ( n n n n a t -- a' )
 : 4-4tag
   ( tag )  w!+
@@ -155,23 +166,29 @@ variable message-start                  ( pointer to start of message buffer )
 
 ( CLOCKS )
 
-1  constant clock-emmc
-2  constant clock-uart
-3  constant clock-arm
-4  constant clock-core
-5  constant clock-v3d
-6  constant clock-h264
-7  constant clock-isp
-8  constant clock-sdram
-9  constant clock-pixel
-10 constant clock-pwm
+1  constant clk-emmc
+2  constant clk-uart
+3  constant clk-arm
+4  constant clk-core
+5  constant clk-v3d
+6  constant clk-h264
+7  constant clk-isp
+8  constant clk-sdram
+9  constant clk-pixel
+10 constant clk-pwm
+11 constant clk-hevc
+12 constant clk-emmc2
+13 constant clk-m2mc
+14 constant clk-pixel-bvb
+15 constant clk-vec
+16 constant clk-disp
 
 ( clock-id tag -- val )
-: do-clock-query tags{{ swap 1-2tag }} 6 msg[] w@ ;
-: clock-state    0x 30001 do-clock-query ;
-: clock-rate     0x 30002 do-clock-query ;
-: clock-rate-max 0x 30004 do-clock-query ;
-: clock-rate-min 0x 30007 do-clock-query ;
+: do-clock-query tags{{ swap 3-3tag }} 6 msg[] w@ ;
+: clock-state    0 swap 0 swap 0x 30001 do-clock-query ;
+: clock-rate     0 swap 0 swap 0x 30002 do-clock-query ;
+: clock-rate-max 0 swap 0 swap 0x 30004 do-clock-query ;
+: clock-rate-min 0 swap 0 swap 0x 30007 do-clock-query ;
 
 ( POWER )
 
@@ -187,10 +204,10 @@ variable message-start                  ( pointer to start of message buffer )
 
 : do-power-query tags{{ swap 2-2tag }} 6 msg[] w@ ;
 ( device-id -- power-state )
-: power-state      0x 20001 tags{{ swap 1-2tag }} 6 msg[] w@ ;
+: power-state 0 swap 0x 20001 do-power-query ;
 ( device-id -- result )
-: power-on  3 swap 0x 28001 tags{{ swap 2-2tag }} 6 msg[] w@ ;
-: power-off 2 swap 0x 28001 tags{{ swap 2-2tag }} 6 msg[] w@ ;
+: power-on  1 swap 0x 28001 do-power-query ;
+: power-off 0 swap 0x 28001 do-power-query ;
 
 echo
 
