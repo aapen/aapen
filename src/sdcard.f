@@ -1,9 +1,6 @@
 ( noecho )
 base @ decimal
 
-: stash dup >r ;
-: unstash >r ;
-
 peripherals 0x   200000 + constant gpio-base
 gpio-base   0x        0 + constant gpio-fsel0
 gpio-base   0x        4 + constant gpio-fsel1

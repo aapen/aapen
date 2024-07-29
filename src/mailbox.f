@@ -49,6 +49,9 @@ mbox-read   0x       20 + constant mbox-write
   repeat
 ;
 
+: stash dup >r ;
+: unstash >r ;
+
 ( a -- )
 : send
   begin mbox-full? while repeat ( wait for space )
@@ -190,7 +193,22 @@ variable message-start                  ( pointer to start of message buffer )
 : clock-rate-max 0 swap 0 swap 0x 30004 do-clock-query ;
 : clock-rate-min 0 swap 0 swap 0x 30007 do-clock-query ;
 
-( POWER )
+: discover-clocks
+  tags{{
+    0x 10007         w!+                ( 'get clocks' tag )
+    clk-disp 2 + 8 * w!+                ( req buf size )
+    0                w!+                ( space for resp len )
+    clk-disp 2 + 8 * 'A' rot            ( d: len byte addr )
+    memset                              ( d: addr+len )
+    walign
+    scratch 0x c0 dump
+  }}
+  5 msg[]                               ( d: addr )
+  4 msg[] w@ 0x 7fffffff and            ( d: addr bytes )
+  8 /                                   ( d: addr cnt )
+;
+
+( power )
 
 0 constant power-sdhci
 1 constant power-uart0

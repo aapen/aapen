@@ -1582,6 +1582,19 @@
 	here @ 		( push start address )
 ;
 
+: memset        ( len byte addr -- addr+len )
+        rot                     ( byte addr len )
+        begin
+                dup 0>
+        while
+                -rot            ( len byte addr )
+                2dup            ( len byte addr byte addr )
+                c!              ( len byte addr )
+                1+ rot 1-       ( byte addr+1 len-1 )
+        repeat
+        rot 2drop
+;
+
 (
         The assembler from the original jonesforth.f is i386 specific and wouldn't work at all on ARM64
 
