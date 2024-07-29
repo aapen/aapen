@@ -431,6 +431,8 @@
 	then
 ;
 
+( tbd -- should refactor the next 3 words )
+
 ( 0x parses the next word as a hex number )
 
 : 0x ( -- n )
@@ -459,6 +461,21 @@
 	  ' lit , ,
 	then
 ; immediate
+
+( 0d parses the next word as a decimal number )
+
+: 0d ( -- n )
+	base @			( push current base )
+	10 base !
+	word			( len p saved-base )
+	number                  ( status n saved-base )
+	drop			( n saved-base )
+	swap base !		( restore the old base)
+	state @ if		( if compiling compile n as lit )
+	  ' lit , ,
+	then
+; immediate
+
 
 ( .x print the tos in hex )
 
@@ -1676,4 +1693,4 @@ welcome
 hide welcome
 echo
 
-
+assembler readbuf

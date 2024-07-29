@@ -1414,7 +1414,8 @@ var_\name :
         defconst "video",5,,video,mailbox,video_src
         defconst "sdcard",6,,sdcard,video,sdcard_src
         defconst "direct-thread",13,,direct_thread,sdcard,direct_thread_src
-        defconst "charrom",7,,charrom,direct_thread,char_rom
+        defconst "assembler",9,,assembler,direct_thread,assembler_src
+        defconst "charrom",7,,charrom,assembler,char_rom
 
 
 	/* This is the instruction template for all of our direct word calls. */
@@ -2803,6 +2804,9 @@ sdcard_src:
         .quad 0
 direct_thread_src:
         .incbin "direct_thread.f"
+        .quad 0
+assembler_src:
+        .incbin "assembler.f"
         .quad 0
 
 
