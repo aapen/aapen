@@ -1,5 +1,6 @@
 ( noecho )
-base @ decimal
+base @ value sd-old-base
+decimal
 
 peripherals 0x   200000 + constant gpio-base
 gpio-base   0x        0 + constant gpio-fsel0
@@ -287,5 +288,5 @@ variable block-size
 
 ." stack depth at end: " depth . cr
 
-base !
+sd-old-base base !
 echo

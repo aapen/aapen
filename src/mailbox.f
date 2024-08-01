@@ -1,7 +1,6 @@
 noecho
-
-( save base, use decimal )
-base @ decimal
+base @ value mbox-old-base
+decimal
 
 peripherals 0x     b880 + constant mbox-read
 mbox-read   0x       10 + constant mbox-peek
@@ -227,7 +226,5 @@ variable message-start                  ( pointer to start of message buffer )
 : power-on  1 swap 0x 28001 do-power-query ;
 : power-off 0 swap 0x 28001 do-power-query ;
 
+mbox-old-base base !
 echo
-
-( restore base )
-base !
