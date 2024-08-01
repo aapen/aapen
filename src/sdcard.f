@@ -33,10 +33,9 @@ gpio-base   0x       94 + constant gpio-pud
 gpio-base   0x       98 + constant gpio-pudclk0
 gpio-base   0x       9c + constant gpio-pudclk1
 
-( see SD Specifications Part A2 SD Host Controller Simplified Specification Version 3.00 )
 peripherals 0x   300000 + constant emmc-base
 emmc-base   0x        0 + constant emmc-arg2
-emmc-base   0x        4 + constant emmc-blksz
+emmc-base   0x        4 + constant emmc-blksizecnt
 emmc-base   0x        8 + constant emmc-arg1
 emmc-base   0x        c + constant emmc-cmdtm
 emmc-base   0x       10 + constant emmc-resp0
@@ -47,11 +46,11 @@ emmc-base   0x       20 + constant emmc-data
 emmc-base   0x       24 + constant emmc-status
 emmc-base   0x       28 + constant emmc-control0
 emmc-base   0x       2c + constant emmc-control1
-emmc-base   0x       30 + constant emmc-int-flags
-emmc-base   0x       34 + constant emmc-int-mask
-emmc-base   0x       38 + constant emmc-int-ena
+emmc-base   0x       30 + constant emmc-interrupt
+emmc-base   0x       34 + constant emmc-irpt-mask
+emmc-base   0x       38 + constant emmc-irpt-en
 emmc-base   0x       3c + constant emmc-control2
-emmc-base   0x       40 + constant emmc-capabilities
+emmc-base   0x       88 + constant emmc-tune-step
 emmc-base   0x       fc + constant emmc-slotisr-ver
 
 1 32 lshift 1- constant ~0
@@ -62,7 +61,7 @@ emmc-base   0x       fc + constant emmc-slotisr-ver
 ( nbits shift v -- (v>>shift)&((1<<bits+1)-1) )
 : bits> swap rshift 1 rot lshift 1- and ;
 
-( v shift f -- v|v<<shift )
+( v f shift -- v|f<<shift )
 : >bits lshift or ;
 
 ( nbits shift v -- v & ~(1<<nbits)-1 )
@@ -71,52 +70,40 @@ emmc-base   0x       fc + constant emmc-slotisr-ver
   swap lshift invert and
 ;
 
-( Make a command word from its constituent parts )
-( idx ct isd ie ce rt rb mb dir ac bc ra -- word )
-: emmc-command
-  ( compute word )
-  0
-  swap 24 lshift or ( idx )
-  swap 22 lshift or ( ct )
-  swap 21 lshift or ( isd )
-  swap 20 lshift or ( ie )
-  swap 19 lshift or ( ce )
-  swap 16 lshift or ( rt )
-  swap  6 lshift or ( rb )
-  swap  5 lshift or ( mb )
-  swap  4 lshift or ( dir )
-  swap  2 lshift or ( ac )
-  swap  1 lshift or ( bc )
-                 or ( ra )
-  ( read next word make a constant )
-  constant
-;
+( nbits shift a -- )
+: clear-bits! dup -rot w@ 0bits swap w! ;
 
-0  0  0  0  0  0  0  0  0  0  0   0 emmc-command cmd-go-idle
-0  0  0  0  0  0  0  0  0  0  0   1 emmc-command cmd-reset-host
-0  0  0  0  0  0  0  0  0  0  0   2 emmc-command cmd-reset-cmd
-0  0  0  0  0  0  1  1  0  0  0   2 emmc-command cmd-send-cide
-0  0  0  0  0  0  2  1  0  0  0   3 emmc-command cmd-send-relative-addr
-0  0  0  0  0  0  0  0  0  0  0   4 emmc-command cmd-reset-data
-0  0  0  0  0  0  1  0  0  0  0   5 emmc-command cmd-io-set-op-cond
-0  0  0  0  0  0  3  1  0  0  0   7 emmc-command cmd-select-card
-0  0  0  0  0  0  0  0  0  0  0   7 emmc-command cmd-reset-all
-0  0  0  0  0  0  2  1  0  0  0   8 emmc-command cmd-send-if-cond
-0  0  0  0  0  0  2  1  0  0  0  16 emmc-command cmd-set-block-len
-0  0  0  1  0  0  2  1  0  1  0  17 emmc-command cmd-read-block
-0  1  1  1  1  0  2  1  0  1  0  18 emmc-command cmd-read-multiple
-0  0  0  0  0  0  2  0  0  0  0  41 emmc-command cmd-ocr-check
-0  0  0  1  0  0  2  1  0  1  0  51 emmc-command cmd-send-scr
-0  0  0  0  0  0  2  1  0  0  0  55 emmc-command cmd-app
-1  1  3  1  1 15  3  1  1  1  3  24 emmc-command cmd-write-block
-1  1  3  1  1 15  3  1  1  1  3  25 emmc-command cmd-write-multiple
+: cmd          24 lshift ;
+: is-data     1 21 >bits ;
+: multiblock  1  5 >bits ;
+: resp-48     2 16 >bits ;
+: resp-136    1 16 >bits ;
+: resp-48b    3 16 >bits ;
+: from-card   1  4 >bits ;
+: counted     1  1 >bits ;
 
-: cmd-response-type dup 16 rshift 3 and ;
-: cmd-is-data?      dup 21 rshift 1 and ;
-: cmd-index         dup 24 rshift 0x f and ;
-: app-command?      cmd-index 32 < ;
+ 0 cmd                                              constant cmd-go-idle
+ 1 cmd                                              constant cmd-reset-host
+ 2 cmd resp-136                                     constant cmd-all-send-cid
+ 3 cmd resp-48                                      constant cmd-send-rel-addr
+ 4 cmd                                              constant cmd-set-dsr
+ 7 cmd resp-48b                                     constant cmd-card-select
+ 8 cmd resp-48b                                     constant cmd-send-if-cond
+16 cmd resp-48b                                     constant cmd-set-blocklen
+17 cmd resp-48 is-data from-card                    constant cmd-read-single
+18 cmd resp-48 is-data from-card multiblock counted constant cmd-read-multi
+24 cmd resp-48 is-data                              constant cmd-write-single
+25 cmd resp-48 is-data multiblock counted           constant cmd-write-multi
+55 cmd                                              constant cmd-app
+55 cmd resp-48                                      constant cmd-app-rca
+
+: response-type 16 rshift 3 and ;
 
 variable block-size
+
+( s -- )
+: d   tell cr ;
+: err tell cr 1 ;
 
 ( tries mask addr -- b )
 : await-clear
@@ -131,6 +118,20 @@ variable block-size
   drop 2drop 1                  ( timed-out )
 ;
 
+( todo: duplication between await-clear and await-set )
+( tries mask addr -- b )
+: await-set
+  begin
+    dup w@ 2 pick
+    and 0<>
+    if
+      drop 2drop 0 exit
+    then
+    rot 1- dup >r -rot r> 0=
+  until
+  drop 2drop 1
+;
+
 ( todo: there has to be a better way to make an array variable )
 4 cells allot constant last-response
 
@@ -143,108 +144,141 @@ variable block-size
   swap w!
 ;
 
-400000 constant target-clock-rate
-
-: clock-divisor
-(  target-clock-rate
-  clk-emmc clock-rate stash           ( ask HW for base freq )
-  <=
-  if
-  else
-  then
-)
-  target-clock-rate ( stub return value )
+( tries -- b )
+: wait-for-command
+  s" wait-for-command" d
+  begin
+    emmc-status    w@ 0x 01 and            ( cmd inhibit bit )
+    emmc-interrupt w@ 0x 17f8000 and not   ( any error interrupt )
+    and
+  while
+    dup 0<= if s" command timeout" err exit then
+    1-
+  repeat
+  drop
+  0
 ;
 
-( n_arg n_cmd -- b )
-: issue-app-command
-  2drop 0
+: clear-interrupts emmc-interrupt w@ emmc-interrupt w! ;
+
+( tries irpt -- b )
+: await-interrupt
+  s" await-interrupt" d
+  begin
+    dup emmc-interrupt w@ and 0=
+  while
+    swap
+    dup 0<= if s" await irpt timeout" err exit then
+    1-
+    swap
+  repeat
+
+  emmc-interrupt w@
+  dup 0x   10000 and 0<> if     emmc-interrupt w! s" cmd timeout"  err exit then
+  dup 0x  100000 and 0<> if     emmc-interrupt w! s" data timeout" err exit then
+  dup 0x 17f8000 and 0<> if dup emmc-interrupt w! . cr s" error"   err exit then
+  drop
+  emmc-interrupt w!                     ( write mask back to clear our interrupt )
+  0
 ;
 
-( n_arg n_cmd -- b )
+( cmd arg -- b )
 : issue-normal-command
-  block-size @ emmc-blksz w!    ( this needs to be done on every command? )
-  swap emmc-arg1 w!
-  dup emmc-cmdtm w!
-  10 delay
-
-  ( look for 0x8001 in interrupt flags )
-  ( todo: timeout )
-  begin emmc-int-flags w@ 0x 8001 and while ." + " 10 delay repeat
-
-  ( read, then clear interrupt flags )
-  emmc-int-flags w@ 0x ffff0001 emmc-int-flags w!
-
-  last-response
-  emmc-resp0 w@ swap ! 4+
-  emmc-resp1 w@ swap ! 4+
-  emmc-resp2 w@ swap ! 4+
-  emmc-resp3 w@ swap ! 4+
-
-  ( todo: if command is data, do data transfer )
-  ( todo: if command is data or repsonse-type is R48busy? do some weird wait for register stuff )
-
-  ( claim it succeeded )
+  s" normal command " d
   2drop 1
 ;
 
-( n_arg n_cmd -- b )
-: emmc-send-command app-command? if issue-app-command else issue-normal-command then ;
+( cmd arg -- b )
+: emmc-send-command
+  ( todo: check if app command )
+  ( issue-normal-command )
+
+  ( todo: check if RCA required, send with RCA )
+
+  25 wait-for-command if 2drop s" wait for command aborted" err exit then
+
+  s" ready to send" d
+
+  clear-interrupts
+  emmc-arg1 w!
+  dup
+  emmc-cmdtm w!
+
+  25 0x 1 ( cmd_done ) await-interrupt if drop s" timeout " err exit then
+
+  ( todo: handle response types )
+  response-type case
+    0 of 0 endof
+    1 of ." TODO: resp-136" 0 endof
+    2 of ." TODO: resp-48" 0 endof
+    3 of ." TODO: resp-48 with busy" 0 endof
+  endcase
+;
 
 : emmc-reset-host
-  ( reset host )
-  cmd-reset-host emmc-control1 w!
+  0 emmc-control0 w!
+  0 emmc-control1 w!
+  1 24 lshift emmc-control1 w! ( reset host circuit )
 
-  ( wait for control register bits to be cleared )
-  200 cmd-reset-all emmc-control1 await-clear if ." reset timeout" cr 1 exit then
+  1 delay
 
-  0
-;
+  200 1 24 lshift emmc-control1 await-clear if s" reset time out" err exit then
 
-: emmc-setup-clock
-  ( get clock & reset control )
-  emmc-control1 w@
+  ( enable internal clock and set data timeout )
+  0x e 16 lshift emmc-control1 w! ( data timeout unit )
+  0x 1           emmc-control1 w! ( clock enable internal )
 
-  ( clock divisor in bits 8..15 )
-  4 16 rot 0bits                        ( clear timeout control register )
-  8 24 rot 0bits                        ( clear reset register )
-  8  8 rot 0bits                        ( clear clock divisor )
-
-  8 0 clock-divisor stash bits>         ( stash divisor, get lower 8 bits )
-  8 swap >bits                          ( put lower 8 bits of divisor in register bits 8..15)
-
-  2 8 unstash bits>                     ( unstash divisor, get upper 2 )
-  6 swap >bits                          ( put lower 2 bits of divisor in register bits 6..7 )
-
-  0 1 >bits                             ( set internal clock enable )
-  emmc-control1 w!
-
-  ( wait for clock stable bit to be set )
-  begin 1 2 emmc-control1 w@ bits> 0= while repeat
-
-  ( enable clock )
-  30 delay
-  emmc-control1 w@
-  2 1 >bits
-  emmc-control1 w!
-  30 delay
+  1 delay
 
   0
 ;
 
-: emmc-disable-interrupts
-  emmc-int-ena   clear-all!
-  emmc-int-flags set-all!
-  emmc-int-mask  set-all!
+( freq -- divisor )
+: get-clock-divisor
+  dup 41666667 + 1- swap /              ( 41666667 + freq - 1 / freq )
+  dup 0x 3ff > if drop 0x 3ff then
+  dup 3 < if drop 4 then
+  ." divisor: " dup . cr
+;
+
+( freq -- succ? )
+: emmc-set-clock
+  200 0x 03 emmc-status await-clear if emmc-status w@ . s" inhibit flags timeout: " err exit then
+
+  1 2 emmc-control1 clear-bits!   ( disable clock )
+  1 delay
+
+  get-clock-divisor               ( 10 bit clock divisor )
+  dup  0x 0ff and 8 lshift        ( lower 8 bits of divisor go in control bits 8..15 )
+  swap 0x 300 and 2 rshift        ( high 2 bits of divisor go in control bits 6..7 )
+  emmc-control1 w@                ( read control1 )
+  0x ffff001f and                 ( clear any old divisor bits )
+  or or                           ( set new divisor bits )
+  emmc-control1 w!                ( write it back )
+
+  1 delay
+
+  emmc-control1 w@ 0b 0100 or emmc-control1 w! ( set clk_en bit )
+
+  200 0b 0010 emmc-control1 await-set if s" clock stable timeout" err exit then
+
+  0
+;
+
+: emmc-enable-interrupts
+  emmc-irpt-en   set-all!
+  emmc-irpt-mask set-all!
   10 delay
 ;
 
+400000 constant clock-freq-setup
+
 : emmc-reset
   0 block-size !
-  emmc-reset-host               if ." reset host failed" cr 1 exit then
-  emmc-setup-clock              if ." setup clock failed" cr 1 exit then
-  emmc-disable-interrupts
-  cmd-go-idle emmc-send-command if ." go idle failed" cr 1 exit then
+  emmc-reset-host                   if s" reset host failed" err exit then
+  clock-freq-setup emmc-set-clock   if s" set clock failed"  err exit then
+  emmc-enable-interrupts
+  cmd-go-idle 0 emmc-send-command   if s" go idle failed"    err exit then
 ;
 
 : emmc-enable
@@ -253,18 +287,12 @@ variable block-size
 
   7 48 gpio-fsel 7 49 gpio-fsel 7 50 gpio-fsel 7 51 gpio-fsel 7 52 gpio-fsel
 
-  emmc-reset if ." reset failed " 1 exit then
+  emmc-reset if s" reset failed " err exit else 0 then
 ;
 
-
-: emmc-timeout-freq
-  emmc-capabilities w@ dup
-  6 0 rot bits> .
-  1 7 rot bits> if ." MHz" else ." KHz" then
-;
-
-: emmc-block-length
-  3 16 emmc-capabilities w@ bits>
+: firmware-sets-cdiv?
+  ( do a blank set_sdhost_clock, which queries the clock. test word 1 of the reply )
+  ~0 ~0 0 0x 38042 tags{{ swap 3-3tag }} 5 msg[] w@ ~0 <>
 ;
 
 : emmc-device-probe
@@ -279,14 +307,8 @@ variable block-size
   endcase
   cr
   ." Core clock rate: " clk-emmc clock-rate . cr
-
-  ( do a blank set_sdhost_clock, which queries the clock. test word 1 of the reply )
-  ." Firmware sets cdiv? "
-  ~0 ~0 0 0x 38042 tags{{ swap 3-3tag }} 5 msg[] w@ ~0 <> if ." Yes" else ." No" then
-  cr
+  ." Firmware sets cdiv? " firmware-sets-cdiv? if ." Yes" else ." No" then cr
 ;
-
-." stack depth at end: " depth . cr
 
 sd-old-base base !
 echo
