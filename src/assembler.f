@@ -223,8 +223,10 @@ noecho
 
 ( Define a noop primitive. )
 
+( -- TBD this is messing up the dictionary
 defprim do-nothing
 ;;
+)
 
 echo
 
