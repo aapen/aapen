@@ -81,55 +81,96 @@ emmc-base   0x       fc + constant emmc-slotisr-ver
 : resp-48b    3 16 >bits ;
 : from-card   1  4 >bits ;
 : counted     1  1 >bits ;
+: use-rca     1 32 >bits ;
+: delay-100   1 33 >bits ;
+: delay-1000  2 33 >bits ;
 
- 0 cmd                                              constant cmd-go-idle
- 1 cmd                                              constant cmd-reset-host
- 2 cmd resp-136                                     constant cmd-all-send-cid
- 3 cmd resp-48                                      constant cmd-send-rel-addr
- 4 cmd                                              constant cmd-set-dsr
- 7 cmd resp-48b                                     constant cmd-card-select
- 8 cmd resp-48b                                     constant cmd-send-if-cond
-16 cmd resp-48b                                     constant cmd-set-blocklen
-17 cmd resp-48 is-data from-card                    constant cmd-read-single
-18 cmd resp-48 is-data from-card multiblock counted constant cmd-read-multi
-24 cmd resp-48 is-data                              constant cmd-write-single
-25 cmd resp-48 is-data multiblock counted           constant cmd-write-multi
-55 cmd                                              constant cmd-app
-55 cmd resp-48                                      constant cmd-app-rca
+39 cells allot constant sdcommands
+: cmd[]       cells sdcommands + ;
+: cmd.code    cmd[] @ 0x  ffffffff and ;
+: cmd.rca?    cmd[] @ 0x 100000000 and 0<> ;
+: cmd.delay   cmd[] @ 33 rshift 0x 3 and ;
+: cmd.isdata? cmd[] @ 0x    200000 and 0<> ;
+: cmd.rtype   cmd[] @ 16 rshift 0x 3 and ;
+: cmd.app?    32 >= ;
 
-: response-type 16 rshift 3 and ;
+: mkcmd dup cmd[] ! constant ;
+
+39 cells 0x 00 sdcommands memset
+( cmd.code is CMD number from SD card spec )
+( cmd-* constants are defined as the index in our array )
+( cmd-* constants are never sent to the device )
+ 0 cmd                                                0 mkcmd cmd-go-idle
+ 2 cmd resp-136                                       1 mkcmd cmd-all-send-cid
+ 3 cmd resp-48                                        2 mkcmd cmd-send-rel-addr
+ 4 cmd                                                3 mkcmd cmd-set-dsr
+ 6 cmd resp-48                                        4 mkcmd cmd-switch-func
+ 7 cmd resp-48b use-rca                               5 mkcmd cmd-card-select
+ 8 cmd resp-48b delay-100                             6 mkcmd cmd-send-if-cond
+ 9 cmd resp-136 use-rca                               7 mkcmd cmd-send-csd
+10 cmd resp-136 use-rca                               8 mkcmd cmd-send-cid
+11 cmd resp-48                                        9 mkcmd cmd-volt-switch
+12 cmd resp-48b                                      10 mkcmd cmd-stop-xfer
+13 cmd resp-48  use-rca                              11 mkcmd cmd-send-status
+15 cmd          use-rca                              12 mkcmd cmd-go-inactive
+16 cmd resp-48b                                      13 mkcmd cmd-set-blocklen
+17 cmd resp-48  is-data from-card                    14 mkcmd cmd-read-single
+18 cmd resp-48  is-data from-card multiblock counted 15 mkcmd cmd-read-multi
+19 cmd resp-48                                       16 mkcmd cmd-send-tuning
+20 cmd resp-48b                                      17 mkcmd cmd-speed-class
+23 cmd resp-48                                       18 mkcmd cmd-set-blockcnt
+24 cmd resp-48  is-data                              19 mkcmd cmd-write-single
+25 cmd resp-48  is-data multiblock counted           20 mkcmd cmd-write-multi
+27 cmd resp-48                                       21 mkcmd cmd-program-csd
+28 cmd resp-48b                                      22 mkcmd cmd-set-write-pr
+29 cmd resp-48b                                      23 mkcmd cmd-clr-write-pr
+30 cmd resp-48                                       24 mkcmd cmd-snd-write-pr
+32 cmd resp-48                                       25 mkcmd cmd-erase-wr-st
+33 cmd resp-48                                       26 mkcmd cmd-erase-wr-end
+38 cmd resp-48b                                      27 mkcmd cmd-erase
+42 cmd resp-48                                       28 mkcmd cmd-lock-unlock
+55 cmd                                               29 mkcmd cmd-app
+55 cmd resp-48  use-rca                              30 mkcmd cmd-app-rca
+56 cmd resp-48                                       31 mkcmd cmd-gen-cmd
+ 6 cmd resp-48                                       32 mkcmd cmd-set-bus-width
+14 cmd resp-48  use-rca                              33 mkcmd cmd-sd-status
+22 cmd resp-48                                       34 mkcmd cmd-send-num-wrbl
+23 cmd resp-48                                       35 mkcmd cmd-send-num-ers
+41 cmd resp-48  delay-1000                           36 mkcmd cmd-app-send-op-cond
+42 cmd resp-48                                       37 mkcmd cmd-set-clr-det
+51 cmd resp-48  is-data from-card                    38 mkcmd cmd-send-scr
 
 variable block-size
 
-( s -- )
-: d   tell cr ;
-: err tell cr 1 ;
+1 constant etout
+2 constant eirpt
 
-( tries mask addr -- b )
+( n -- n-1 or throws )
+: tout? dup 0<= if ." throwing etout" cr etout throw then 1- ;
+
+( tries mask addr -- )
 : await-clear
+  ." await clear"
   begin
     dup w@ 2 pick               ( tries mask addr val mask )
-    and 0=                      ( tries mask addr clear? )
-    if
-      drop 2drop 0 exit         ( success )
-    then
-    rot 1- dup >r -rot r> 0=    ( tries-1 mask addr done? )
-  until
-  drop 2drop 1                  ( timed-out )
+    and 0<>                     ( tries mask addr notclear )
+  while
+    rot tout? -rot
+  repeat
+  drop drop drop
 ;
 
 ( todo: duplication between await-clear and await-set )
-( tries mask addr -- b )
+( tries mask addr -- )
 : await-set
+  ." await set"
   begin
     dup w@ 2 pick
-    and 0<>
-    if
-      drop 2drop 0 exit
-    then
-    rot 1- dup >r -rot r> 0=
-  until
-  drop 2drop 1
+    and 0=
+  while
+    rot tout? -rot
+  repeat
+  drop drop drop
 ;
 
 ( todo: there has to be a better way to make an array variable )
@@ -144,71 +185,70 @@ variable block-size
   swap w!
 ;
 
-( tries -- b )
+( tries -- )
 : wait-for-command
-  s" wait-for-command" d
+  ." wait-for-command"
   begin
     emmc-status    w@ 0x 01 and            ( cmd inhibit bit )
     emmc-interrupt w@ 0x 17f8000 and not   ( any error interrupt )
     and
   while
-    dup 0<= if s" command timeout" err exit then
-    1-
+    tout?
   repeat
   drop
-  0
 ;
 
 : clear-interrupts emmc-interrupt w@ emmc-interrupt w! ;
 
 ( tries irpt -- b )
 : await-interrupt
-  s" await-interrupt" d
+  ." await-interrupt" cr
   begin
     dup emmc-interrupt w@ and 0=
   while
-    swap
-    dup 0<= if s" await irpt timeout" err exit then
-    1-
-    swap
+    swap tout? swap
   repeat
+  2drop
+
+  ." irpt observed" cr
 
   emmc-interrupt w@
-  dup 0x   10000 and 0<> if     emmc-interrupt w! s" cmd timeout"  err exit then
-  dup 0x  100000 and 0<> if     emmc-interrupt w! s" data timeout" err exit then
-  dup 0x 17f8000 and 0<> if dup emmc-interrupt w! . cr s" error"   err exit then
+  dup 0x   10000 and 0<> if emmc-interrupt w! etout throw then
+  dup 0x  100000 and 0<> if emmc-interrupt w! etout throw then
+  dup 0x 17f8000 and 0<> if emmc-interrupt w! eirpt throw then
   drop
   emmc-interrupt w!                     ( write mask back to clear our interrupt )
-  0
 ;
 
-( cmd arg -- b )
+( cmd arg -- )
 : issue-normal-command
-  s" normal command " d
-  2drop 1
+  ." normal command " cr
+  2drop
 ;
 
-( cmd arg -- b )
+( cmd arg -- )
 : emmc-send-command
   ( todo: check if app command )
   ( issue-normal-command )
 
   ( todo: check if RCA required, send with RCA )
 
-  25 wait-for-command if 2drop s" wait for command aborted" err exit then
+  25 wait-for-command
 
-  s" ready to send" d
+  ." ready to send" cr
 
   clear-interrupts
   emmc-arg1 w!
-  dup
+  dup cmd.code
   emmc-cmdtm w!
 
-  25 0x 1 ( cmd_done ) await-interrupt if drop s" timeout " err exit then
+  25 0x 1 ( cmd_done ) await-interrupt
+
+  ." command complete" cr
 
   ( todo: handle response types )
-  response-type case
-    0 of 0 endof
+  cmd.rtype case
+    0 of ." no resp" 0 endof
     1 of ." TODO: resp-136" 0 endof
     2 of ." TODO: resp-48" 0 endof
     3 of ." TODO: resp-48 with busy" 0 endof
@@ -216,21 +256,20 @@ variable block-size
 ;
 
 : emmc-reset-host
+  ." emmc-reset-host"
   0 emmc-control0 w!
   0 emmc-control1 w!
   1 24 lshift emmc-control1 w! ( reset host circuit )
 
   1 delay
 
-  200 1 24 lshift emmc-control1 await-clear if s" reset time out" err exit then
+  200 1 24 lshift emmc-control1 await-clear
 
   ( enable internal clock and set data timeout )
   0x e 16 lshift emmc-control1 w! ( data timeout unit )
   0x 1           emmc-control1 w! ( clock enable internal )
 
   1 delay
-
-  0
 ;
 
 ( freq -- divisor )
@@ -238,12 +277,11 @@ variable block-size
   dup 41666667 + 1- swap /              ( 41666667 + freq - 1 / freq )
   dup 0x 3ff > if drop 0x 3ff then
   dup 3 < if drop 4 then
-  ." divisor: " dup . cr
 ;
 
 ( freq -- succ? )
 : emmc-set-clock
-  200 0x 03 emmc-status await-clear if emmc-status w@ . s" inhibit flags timeout: " err exit then
+  200 0x 03 emmc-status await-clear
 
   1 2 emmc-control1 clear-bits!   ( disable clock )
   1 delay
@@ -260,9 +298,7 @@ variable block-size
 
   emmc-control1 w@ 0b 0100 or emmc-control1 w! ( set clk_en bit )
 
-  200 0b 0010 emmc-control1 await-set if s" clock stable timeout" err exit then
-
-  0
+  200 0b 0010 emmc-control1 await-set
 ;
 
 : emmc-enable-interrupts
@@ -273,12 +309,17 @@ variable block-size
 
 400000 constant clock-freq-setup
 
+: CMD0
+  cmd-go-idle 0 ['] emmc-send-command catch
+  ?dup if ." CMD0 failed: " dup . cr throw then
+;
+
 : emmc-reset
   0 block-size !
-  emmc-reset-host                   if s" reset host failed" err exit then
-  clock-freq-setup emmc-set-clock   if s" set clock failed"  err exit then
+  emmc-reset-host
+  clock-freq-setup emmc-set-clock
   emmc-enable-interrupts
-  cmd-go-idle 0 emmc-send-command   if s" go idle failed"    err exit then
+  CMD0
 ;
 
 : emmc-enable
@@ -287,7 +328,7 @@ variable block-size
 
   7 48 gpio-fsel 7 49 gpio-fsel 7 50 gpio-fsel 7 51 gpio-fsel 7 52 gpio-fsel
 
-  emmc-reset if s" reset failed " err exit else 0 then
+  ['] emmc-reset catch ?dup if ." reset failed: " . cr then
 ;
 
 : firmware-sets-cdiv?
@@ -310,5 +351,5 @@ variable block-size
   ." Firmware sets cdiv? " firmware-sets-cdiv? if ." Yes" else ." No" then cr
 ;
 
-sd-old-base base !
+sd-old-base base ! hide sd-old-base
 echo
