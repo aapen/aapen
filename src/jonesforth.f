@@ -1416,7 +1416,7 @@
 
 : catch		( xt -- exn? )
 	dsp@ 8+ >r		( save parameter stack pointer (+8 because of xt) on the return stack )
-	' exception-marker 4+	( push the address of the rdrop inside exception-marker ... )
+	' exception-marker 8+	( push the address of the rdrop inside exception-marker ... )
 	>r			( ... on to the return stack so it acts like a return address )
 	execute			( execute the nested function )
 ;

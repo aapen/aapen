@@ -2714,8 +2714,9 @@ _saymsg:
 	next
 
 	defcode "execute",7,,execute,char
-	POPPSP	x0			// grab execution token, whatever that is?
-	br	x0			// jump to it (execution token's next will continue)
+	POPPSP	x0			// grab execution token
+	ldr	x1, [x0]	        // load codeword
+	br	x1		        // jump to codeword
 
 /*
 	DATA SEGMENT ----------------------------------------------------------------------
