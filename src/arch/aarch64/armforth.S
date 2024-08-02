@@ -828,25 +828,6 @@ name_\label :
 	.pool
 	.global code_\label
 code_\label :
-        PUSHPSP x0
-        PUSHPSP x1
-        PUSHPSP x2
-        PUSHPSP x3
-        PUSHPSP x4
-        PUSHPSP x5
-        PUSHPSP x6
-        PUSHPSP x30
-	ldr	x0, =name_\label+10	// address
-	mov	x1, #\namelen		// length
-	bl	debug_pong
-        POPPSP  x30
-        POPPSP  x6
-        POPPSP  x5
-        POPPSP  x4
-        POPPSP  x3
-        POPPSP  x2
-        POPPSP  x1
-        POPPSP  x0
 	// assembler code follows
 	.endm
 
@@ -995,16 +976,6 @@ name_0: .quad 0
         defcode "brk",3,,brk,divmod
         next
 
-// for debugging, switch PONG messages ON/OFF
-	defcode "dong",4,,dong,brk
-	ldr	x0, =var_pong
-	ldr	x1, [x0]
-	mvn	x1, x1
-	str	x1, [x0]
-	next
-
-	.section .rodata
-
 // 	Lots of comparison operations.
 //
 //	ANS FORTH says that the comparison words should return all (binary) 1's for
@@ -1013,7 +984,7 @@ name_0: .quad 0
 //	1 meaning TRUE and 0 meaning FALSE.
 
 	// = (a b -- a=b)
-	defcode "=",1,,equ,dong
+	defcode "=",1,,equ,brk
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
 	cmp	x0, x1                  // test a vs b
@@ -1372,9 +1343,6 @@ var_\name :
         defvar "echo",4,,echo,base,0
         defvar "exception",9,,exception,echo
         defvar "excode",6,,excode,exception
-// for debugging
-	defvar	"pong",4,,pong,excode
-
 
         .global var_exception
         .global var_excode
@@ -1403,7 +1371,7 @@ var_\name :
 	next
 	.endm
 
-	defconst "version",7,,version,pong,JONES_VERSION
+	defconst "version",7,,version,excode,JONES_VERSION
 	defconst "r0",2,,rz,version,return_stack_top
 	defconst "docol",5,,__docol,rz,docol
 	defconst "f_immed",7,,__f_immed,__docol,f_immed
@@ -2750,40 +2718,6 @@ _saymsg:
 create_data_segment:
 
         ret
-
-
-// debugging helper for assembly words
-// expects address in x0, length in x1
-// controlled by PONG FORTH variable
-// use DONG word to toggle ON/OFF
-
-        // clobbers: x0, x1, x2, x4, x5
-
-        .text
-debug_pong:
-        stp     x30, xzr, [sp, #-16]!
-	mov	x4, x0
-	mov	x5, x1
-
-	ldr	x0, =var_pong
-	ldr	x0, [x0]
-	cmp	x0, #0
-	beq	1f
-
-	ldr	x1, =rmsg		// address
-	mov	x2, #rmsgend-rmsg	// length
-        bl      _tell
-
-	mov	x1, x4                  // address
-	mov	x2, x5                  // length
-        bl      _tell
-
-	ldr	x1, =rmsgnl		// address
-	mov	x2, #2			// length
-        bl      _tell
-1:
-        ldp     x30, xzr, [sp], #16
-	ret
 
 	.section .rodata
 rmsg: .ascii "WORD: "
