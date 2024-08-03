@@ -1,7 +1,6 @@
 noecho
-
-( save base, use decimal )
-base @ decimal
+base @ value mbox-old-base
+decimal
 
 peripherals 0x     b880 + constant mbox-read
 mbox-read   0x       10 + constant mbox-peek
@@ -48,6 +47,9 @@ mbox-read   0x       20 + constant mbox-write
     1 delay
   repeat
 ;
+
+: stash dup >r ;
+: unstash >r ;
 
 ( a -- )
 : send
@@ -190,7 +192,22 @@ variable message-start                  ( pointer to start of message buffer )
 : clock-rate-max 0 swap 0 swap 0x 30004 do-clock-query ;
 : clock-rate-min 0 swap 0 swap 0x 30007 do-clock-query ;
 
-( POWER )
+: discover-clocks
+  tags{{
+    0x 10007         w!+                ( 'get clocks' tag )
+    clk-disp 2 + 8 * w!+                ( req buf size )
+    0                w!+                ( space for resp len )
+    clk-disp 2 + 8 * 'A' rot            ( d: len byte addr )
+    memset                              ( d: addr+len )
+    walign
+    scratch 0x c0 dump
+  }}
+  5 msg[]                               ( d: addr )
+  4 msg[] w@ 0x 7fffffff and            ( d: addr bytes )
+  8 /                                   ( d: addr cnt )
+;
+
+( power )
 
 0 constant power-sdhci
 1 constant power-uart0
@@ -209,7 +226,5 @@ variable message-start                  ( pointer to start of message buffer )
 : power-on  1 swap 0x 28001 do-power-query ;
 : power-off 0 swap 0x 28001 do-power-query ;
 
+mbox-old-base base !
 echo
-
-( restore base )
-base !
