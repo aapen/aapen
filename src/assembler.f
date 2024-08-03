@@ -1,5 +1,12 @@
 noecho
 
+( Save the current base and set it to hex )
+
+variable assembler-save-base 
+
+base @ assembler-save-base !
+hex
+
 ( ARM assembler )
 
 ( Utility words that set fields on the instructions. )
@@ -7,12 +14,20 @@ noecho
   or
 ;
 
+: set-ra ( instruction ra -- instruction )
+  0b 11111 and
+  0d 10 lshift
+  or
+;
+
 : set-rn ( instruction rn -- instruction )
+  0b 11111 and
   0d 5 lshift
   or
 ;
 
 : set-rm ( instruction rm -- instruction )
+  0b 11111 and
   0d 16 lshift
   or
 ;
@@ -23,7 +38,12 @@ noecho
 ;
 
 : set-im21-low ( instruction im21 -- instruction )
-  0x 3 and 0d 29 lshift		( instruction im21-lowbits )
+  3 and 0d 29 lshift		( instruction im21-lowbits )
+  or
+;
+
+: set-im26 ( instruction im26 -- instruction )
+  3ffffff and			( instruction im26 )
   or
 ;
 
@@ -57,15 +77,40 @@ noecho
   or
 ;
 
-: rt-rn-im9-instruction ( rt rn im9 opcode -- instruction )
-  swap set-im9			( rt rn instruction )
-  swap set-rn			( rn instuction )
+: set-im6 ( instruction im6 -- instruction )
+  0b 111111 and			( instruction im6 )
+  0d 10 lshift                  ( instruction mask )
+  or
+;
+
+: rt-rn-rm-ra-instruction ( rt rn rm ra opcode -- instruction )
+  swap set-ra			( rt rn rm instuction )
+  swap set-rm			( rt rn instuction )
+  swap set-rn			( rt instuction )
   swap set-rt			( instruction )
 ;
 
-: rt-rn-im12-instruction ( rt rn im9 opcode -- instruction )
+: rt-rn-rm-instruction ( rt rn rm opcode -- instruction )
+  swap set-rm			( rt rn instuction )
+  swap set-rn			( rt instuction )
+  swap set-rt			( instruction )
+;
+
+: rt-rn-im9-instruction ( rt rn im9 opcode -- instruction )
+  swap set-im9			( rt rn instruction )
+  swap set-rn			( rt instuction )
+  swap set-rt			( instruction )
+;
+
+: rt-rn-im12-instruction ( rt rn im12 opcode -- instruction )
   swap set-im12			( rt rn instruction )
-  swap set-rn			( rn instuction )
+  swap set-rn			( rt instuction )
+  swap set-rt			( instruction )
+;
+
+: rt-rn-im19-instruction ( rt rn im19 opcode -- instruction )
+  swap set-im19			( rt rn instruction )
+  swap set-rn			( rt instuction )
   swap set-rt			( instruction )
 ;
 
@@ -80,6 +125,11 @@ noecho
 
 : im16-instruction ( im16 opcode -- instruction )
   swap set-im16
+;
+
+: rt-im16-instruction ( rt im16 opcode -- instruction )
+  swap set-im16
+  swap set-rt
 ;
 
 : rt-im19-instruction ( rt im19 opcode -- instruction )
@@ -116,8 +166,8 @@ noecho
 
 ( Turn instruction into the 32 bit version of itself )
 
-: ->32bit ( instruction -- instruction )
-  0x 7fffffff and		( clear bit 31 )
+: ->w ( instruction -- instruction )
+  7fffffff and		( clear bit 31 )
 ;
 
 ( Turn on the shift option )
@@ -153,37 +203,78 @@ noecho
 
 ( Load and store )
 
-: ldur ( rt rn im12 -- instruction ) 0x f8400000 rt-rn-im9-instruction ;
-: ldrimm ( rt rn im12 -- instruction ) 0x f9400000 rt-rn-im12-instruction ;
+( Note the immediate offsets are multiplied by 8 when executed )
 
-: adr ( rt relative ) 0x 10000000 rt-im21-instruction ;
+: ldr-x[x]#  ( rt rn im12 -- instruction )  f8400000 rt-rn-im9-instruction ->post ;
+: ldr-x[x]   ( rt rn      -- instruction )  0 f8400000 rt-rn-im9-instruction ;
 
-( Arithmetic )
+: ldr-x[x#]! ( rt rn im12 -- instruction )  f8400000 rt-rn-im9-instruction ->pre ;
+: ldr-x#     ( rt im19 -- instruction )     58000000 rt-im19-instruction ;
 
-: addimm ( rt rn im9 -- instruction ) 0x 91000000 rt-rn-im9-instruction ;
-: subimm ( rt rn im9 -- instruction ) 0x d1000000 rt-rn-im9-instruction ;
+( TBD this has problems with neg imm values )
+: ldr-x[x#]  ( rt rn im12 -- instruction )  f9400000 rt-rn-im12-instruction ;
 
-: cbz ( rt im19 -- instruction ) 0x b4000000 rt-im19-instruction ;
-: cbnz ( rt im19 -- instruction ) 0x b5000000 rt-im19-instruction ;
+: str-x[x#]! ( rt rn im12 -- instruction ) f8000000 rt-rn-im9-instruction ->pre ;
+: str-x[x#]  ( rt rn im12 -- instruction ) f8000000 rt-rn-im9-instruction ;
+: str-x[x]#  ( rt rn im12 -- instruction ) f8000000 rt-rn-im9-instruction ->post ;
 
-: svc ( im16 -- instruction ) 0x d4000001 im16-instruction ;
-: hvc ( im16 -- instruction ) 0x d4000002 im16-instruction ;
-: smc ( im16 -- instruction ) 0x d4000003 im16-instruction ;
-: brkarm64 ( im16 -- instruction ) 0x d4200000 im16-instruction ;
-: hlt ( im16 -- instruction ) 0x d4400000 im16-instruction ;
-: dcps1 ( im16 -- instruction ) 0x d4a00001 im16-instruction ;
-: dcps2 ( im16 -- instruction ) 0x d4a00002 im16-instruction ;
-: dcps3 ( im16 -- instruction ) 0x d4a00003 im16-instruction ;
+(
+: ldur ( rt rn im12 -- instruction )       f8400000 rt-rn-im9-instruction ;
+: ldrimm ( rt rn im12 -- instruction )     f9400000 rt-rn-im12-instruction ;
+)
+
+
+( Addess arithmetic )
+
+: adr-x# ( rt relative ) 10000000 rt-im21-instruction ;
 
 ( Branches )
 
-: br ( rn -- instruction ) 0x d61f0000 rn-instruction ;
-: blr ( rn -- instruction ) 0x d63f0000 rn-instruction ;
-: ret ( rn -- instruction ) 0x d65f0000 rn-instruction ;
+: ret-x ( rn -- instruction ) d65f0000 swap set-rn ;
+: ret- ( -- instruction ) 0d 30 ret-x ;
+: br-x ( rn -- instruction ) d61f0000 rn-instruction ;
+: b-# ( im26 -- instruction ) 14000000 swap set-im26 ;
+: bl-# ( im26 -- instruction ) 94000000 swap set-im26 ;
 
-: eret ( -- instruction ) 0x d69f03e0 ;
-: drps ( -- instruction ) 0x d6bf03e0 ;
+: blr ( rn -- instruction ) d63f0000 rn-instruction ;
+: eret ( -- instruction ) d69f03e0 ;
+: drps ( -- instruction ) d6bf03e0 ;
  
+( Arithmetic )
+
+: orr-xxx ( rt rn rm -- instruction ) aa000000 rt-rn-rm-instruction ;
+: orr-www ( rt rn rm -- instruction ) orr-xxx ->w ;
+
+: add-xx# ( rt rn im12 -- instruction ) 91000000 rt-rn-im12-instruction ;
+: add-xxx ( rt rm rn -- instruction )   8b000000 rt-rn-rm-instruction ;
+: add-ww# ( rt rn im12 -- instruction ) add-xx# ->w ;
+: add-www ( rt rm rn -- instruction )  add-xxx ->w ;
+
+: sub-xx# ( rt rn im12 -- instruction ) d1000000 rt-rn-im12-instruction ;
+: sub-xxx ( rt rm rn -- instruction )   cb000000 rt-rn-rm-instruction ;
+: sub-ww# ( rt rn im12 -- instruction ) sub-xx# ->w ;
+: sub-www ( rt rm rn -- instruction )  sub-xxx ->w ;
+
+
+: madd-xxxx ( rt rm rn ra -- instruction ) 9b000000 rt-rn-rm-ra-instruction ;
+: mul-xxx ( rt rm rn -- instruction )   1f 9b000000 rt-rn-rm-ra-instruction ;
+: mul-www ( rt rm rn -- instruction ) mul-xxx ->w ;
+
+
+( Move )
+
+: mov-xx ( rt rm -- instruction ) 0d 31 swap orr-xxx ;
+: mov-ww ( rt rm -- instruction ) 0d 31 swap orr-www ;
+
+
+( Branch )
+
+: cbz-x#  ( rt im19 -- instruction ) b4000000 rt-im19-instruction ;
+: cbnz-x# ( rt im19 -- instruction ) b5000000 rt-im19-instruction ;
+: svc-#   ( im16 -- instruction )    d4000001 im16-instruction ;
+: hlt-# ( im16 -- instruction ) 0x d4400000 im16-instruction ;
+
+
  ( Conditional branches. The fundimental instruction is b-cond + an
  instruction code. We predefine a few of the common cases. 
  Keep in mind that the jump is relative and multiplied by 4. )
@@ -194,12 +285,12 @@ noecho
   swap set-im19		
 ;
 
-: beq ( im19 -- instruction ) cond-eq b-cond ;
-: bne ( im19 -- instruction ) cond-ne b-cond ;
-: blt ( im19 -- instruction ) cond-lt b-cond ;
-: bgt ( im19 -- instruction ) cond-gt b-cond ;
-: ble ( im19 -- instruction ) cond-le b-cond ;
-: bge ( im19 -- instruction ) cond-ge b-cond ;
+: beq-# ( im19 -- instruction ) cond-eq b-cond ;
+: bne-# ( im19 -- instruction ) cond-ne b-cond ;
+: blt-# ( im19 -- instruction ) cond-lt b-cond ;
+: bgt-# ( im19 -- instruction ) cond-gt b-cond ;
+: ble-# ( im19 -- instruction ) cond-le b-cond ;
+: bge-# ( im19 -- instruction ) cond-ge b-cond ;
 
 
 ( Create a new primitive word and leave its definition
@@ -215,18 +306,19 @@ noecho
   the code for next in the assembly. )
 
 : ;;
-  0d 0 0d 10 0d 8 ldur ->post w,
-  0d 1 0d 0  0d 0 ldur        w,
-  0d 1            br          w,
+  0 a 8 ldr-x[x]#  w,
+  1 0   ldr-x[x]   w,
+  1     br-x       w,
+  align			( Next word aligns )
 ;
 
 
 ( Define a noop primitive. )
 
-( -- TBD this is messing up the dictionary
 defprim do-nothing
 ;;
-)
 
+
+assembler-save-base @ base !
 echo
 

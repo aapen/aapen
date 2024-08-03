@@ -299,6 +299,7 @@
 ( Standard words for manipulating BASE. )
 : decimal ( -- ) 10 base ! ;
 : hex ( -- ) 16 base ! ;
+: binary ( -- ) 2 base ! ;
 
 (
 	PRINTING NUMBERS ----------------------------------------------------------------------
@@ -483,6 +484,16 @@
 	base @ 			( cur-base x )
 	swap			( x cur-base )
 	hex
+	. 			( print x )
+	base !			( restore the old base)
+;
+
+( .b print the tos in binary )
+
+: .b ( x -- )
+	base @ 			( cur-base x )
+	swap			( x cur-base )
+	binary
 	. 			( print x )
 	base !			( restore the old base)
 ;
@@ -1689,8 +1700,9 @@ here @ 15 + 15 invert and here !
         cr
 ;
 
+assembler readbuf
+
 welcome
 hide welcome
 echo
 
-assembler readbuf

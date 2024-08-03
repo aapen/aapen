@@ -1420,6 +1420,12 @@ var_\name :
 
 	/* This is the instruction template for all of our direct word calls. */
 
+test_template:
+	add	x3, x10, #42
+	add	w3, w10, #42
+	sub	x3, x10, #42
+	sub	w3, w10, #42
+
 call_template:
 	adr     x30,#24 	// 0:  Load return address
 	adr	x17,#12		// 4:  Load addr of f address
@@ -1559,7 +1565,14 @@ _key:
         mov     w0, #8
         b       4f
 
-3:      cmp     w0, #'\n'               // char is newline?
+3:	cmp     w0, #'\r'               // char is newline?
+        bne     35f                     // no, next check
+        bl      _con_out                // echo as \r\n
+        mov     w0, #'\n'
+        b       4f
+
+35:
+	cmp     w0, #'\n'               // char is newline?
         bne     4f                      // no, next check
         mov     w0, #'\r'               // echo as \r\n
         bl      _con_out
