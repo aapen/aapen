@@ -287,6 +287,20 @@ hex
 : ble-# ( im19 -- instruction ) cond-le b-cond ;
 : bge-# ( im19 -- instruction ) cond-ge b-cond ;
 
+( System register instructions )
+
+: sysreg 5 lshift constant ;
+
+( See ARMARM Section D19 for system register encoding )
+0b 1101111100011001 sysreg CNTV_CTL_EL0
+0b 1101111100011000 sysreg CNTV_TVAL_EL0
+0b 1101111100000010 sysreg CNTVCT_EL0
+0b 1100011000000000 sysreg VBAR_EL1
+
+: rt-sysreg-instruction swap set-rt or ;
+
+: mrs-xr ( sysreg rt -- instruction ) d5300000 rt-sysreg-instruction ;
+: msr-rx ( rt sysreg -- instruction ) d5100000 rt-sysreg-instruction ;
 
 ( Create a new primitive word and leave its definition
   open. You *must* complete the word with ;; or it will
