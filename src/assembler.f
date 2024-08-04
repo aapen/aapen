@@ -228,18 +228,7 @@ hex
 
 : adr-x# ( rt relative ) 10000000 rt-im21-instruction ;
 
-( Branches )
 
-: ret-x ( rn -- instruction ) d65f0000 swap set-rn ;
-: ret- ( -- instruction ) 0d 30 ret-x ;
-: br-x ( rn -- instruction ) d61f0000 rn-instruction ;
-: b-# ( im26 -- instruction ) 14000000 swap set-im26 ;
-: bl-# ( im26 -- instruction ) 94000000 swap set-im26 ;
-
-: blr ( rn -- instruction ) d63f0000 rn-instruction ;
-: eret ( -- instruction ) d69f03e0 ;
-: drps ( -- instruction ) d6bf03e0 ;
- 
 ( Arithmetic )
 
 : orr-xxx ( rt rn rm -- instruction ) aa000000 rt-rn-rm-instruction ;
@@ -267,12 +256,18 @@ hex
 : mov-ww ( rt rm -- instruction ) 0d 31 swap orr-www ;
 
 
-( Branch )
+( Branches )
 
 : cbz-x#  ( rt im19 -- instruction ) b4000000 rt-im19-instruction ;
 : cbnz-x# ( rt im19 -- instruction ) b5000000 rt-im19-instruction ;
 : svc-#   ( im16 -- instruction )    d4000001 im16-instruction ;
 : hlt-# ( im16 -- instruction ) 0x d4400000 im16-instruction ;
+
+: ret-x ( rn -- instruction ) d65f0000 swap set-rn ;
+: ret- ( -- instruction ) 0d 30 ret-x ;
+: br-x ( rn -- instruction ) d61f0000 rn-instruction ;
+: b-# ( im26 -- instruction ) 14000000 swap set-im26 ;
+: bl-# ( im26 -- instruction ) 94000000 swap set-im26 ;
 
 
  ( Conditional branches. The fundimental instruction is b-cond + an
@@ -316,6 +311,17 @@ hex
 ( Define a noop primitive. )
 
 defprim do-nothing
+;;
+
+decimal
+
+( This is currently broken! )
+defprim test-ass1
+	30 6  adr-x#   w,
+	17 3  adr-x#   w,
+	17 17 ldr-x[x] w,
+	17    br-x     w,
+	say-msg @      ,
 ;;
 
 
