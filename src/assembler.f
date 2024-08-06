@@ -218,13 +218,8 @@ hex
 : str-x[x#]  ( rt rn im12 -- instruction ) f8000000 rt-rn-im9-instruction ;
 : str-x[x]#  ( rt rn im12 -- instruction ) f8000000 rt-rn-im9-instruction ->post ;
 
-(
-: ldur ( rt rn im12 -- instruction )       f8400000 rt-rn-im9-instruction ;
-: ldrimm ( rt rn im12 -- instruction )     f9400000 rt-rn-im12-instruction ;
-)
 
-
-( Addess arithmetic )
+( Address arithmetic )
 
 : adr-x# ( rt relative ) 10000000 rt-im21-instruction ;
 
@@ -254,6 +249,9 @@ hex
 
 : mov-xx ( rt rm -- instruction ) 0d 31 swap orr-xxx ;
 : mov-ww ( rt rm -- instruction ) 0d 31 swap orr-www ;
+
+: mov-x# ( rt im16 -- instruction) d2800000 rt-im16-instruction ;
+: mov-w# ( rt im16 -- instruction) d2800000 rt-im16-instruction ->w ;
 
 
 ( Branches )
@@ -302,6 +300,18 @@ hex
 : mrs-xr ( sysreg rt -- instruction ) d5300000 rt-sysreg-instruction ;
 : msr-rx ( rt sysreg -- instruction ) d5100000 rt-sysreg-instruction ;
 
+( Macros to push and pop a register from the data and returns stacks. )
+
+0d 28 constant psp
+0d 29 constant rsp
+
+: pushrsp-x ( r -- instruction ) rsp -8 str-x[x#]! ;
+: poprsp-x  ( r -- instruction ) rsp  8 ldr-x[x]# ;
+
+: pushpsp-x ( r -- instruction ) psp -8 str-x[x#]! ;
+: poppsp-x  ( r -- instruction ) psp  8 ldr-x[x]# ;
+
+
 ( Create a new primitive word and leave its definition
   open. You *must* complete the word with ;; or it will
   surly crash. )
@@ -322,14 +332,25 @@ hex
 ;
 
 
+( Test out the assembler )
+
+decimal
+
 ( Define a noop primitive. )
 
 defprim do-nothing
 ;;
 
-decimal
 
-( This is currently broken! )
+( Push 44 onto the data stack )
+
+defprim push-44
+  0  44   mov-x#     w,
+  0       pushpsp-x  w,
+;;
+
+( Print the test message, currently broken )
+
 defprim test-ass1
 	30 6  adr-x#   w,
 	17 3  adr-x#   w,
