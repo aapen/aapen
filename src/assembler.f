@@ -344,10 +344,29 @@ defprim do-nothing
 
 ( Push 44 onto the data stack )
 
-defprim push-44
-  0  44   mov-x#     w,
-  0       pushpsp-x  w,
+defprim x-push-44
+  0  44     mov-x#     w,
+  0         pushpsp-x  w,
 ;;
+
+defprim x-dup
+  0  psp    ldr-x[x]   w,
+  0         pushpsp-x  w,
+;;
+
+defprim x-drop
+  psp psp 8 add-xx#    w,
+;;
+
+defprim x-rot
+  3         poppsp-x   w,
+  2         poppsp-x   w,
+  1         poppsp-x   w,
+  2         pushpsp-x  w,
+  3         pushpsp-x  w,
+  1         pushpsp-x  w,
+;;
+
 
 ( Print the test message, currently broken )
 
