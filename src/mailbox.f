@@ -29,18 +29,16 @@ mbox-read   0x       20 + constant mbox-write
   repeat
 ;
 
-0 0x 1c -8 str-x[x#]! constant pushpsp-x0
-
 defprim clk-freq
-  CNTFRQ_EL0 0 mrs-xr w,
-  pushpsp-x0          w,
+  CNTFRQ_EL0 0    mrs-xr w,
+  0            pushpsp-x w,
 ;;
 
 ( get hardware timer count )
 ( -- n )
 defprim ticks
-  CNTVCT_EL0 0 mrs-xr w,
-  pushpsp-x0          w,
+  CNTVCT_EL0 0    mrs-xr w,
+  0            pushpsp-x w,
 ;;
 
 clk-freq 1000000 / constant ticks-per-micro
