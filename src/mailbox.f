@@ -29,8 +29,28 @@ mbox-read   0x       20 + constant mbox-write
   repeat
 ;
 
-: delay ( n -- : loop n times )
-  begin ?dup while 1- repeat
+0 0x 1c -8 str-x[x#]! constant pushpsp-x0
+
+defprim clk-freq
+  CNTFRQ_EL0 0 mrs-xr w,
+  pushpsp-x0          w,
+;;
+
+( get hardware timer count )
+( -- n )
+defprim ticks
+  CNTVCT_EL0 0 mrs-xr w,
+  pushpsp-x0          w,
+;;
+
+clk-freq 1000000 / constant ticks-per-micro
+
+( spinloop until at least n micros have passed )
+: delay ( n -- )
+  ticks-per-micro *
+  ticks +
+  begin dup ticks > while repeat
+  drop
 ;
 
 1 30 lshift constant mbox-status-empty
@@ -44,7 +64,7 @@ mbox-read   0x       20 + constant mbox-write
     mbox-empty? not
   while
     mbox-read w@ drop
-    1 delay
+    20 delay
   repeat
 ;
 

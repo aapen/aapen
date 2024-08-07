@@ -92,6 +92,8 @@ Option selected:
 - Write a Forth word to do that same lookup.
 - Write a Forth word to disassemble the function an address is contained within.
 - Modify the panic handler to print function names along with the stack addresses
+** TODO Consider bitfield words
+C.f. https://github.com/dsmcfarl/forth-stm32f746-disco/blob/6e46f1088123e78ba615a7dad3f7249a3744cc2f/common.fs#L15
 * DONE Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware*
