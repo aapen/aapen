@@ -33,25 +33,25 @@ gpio-base   0x       94 + constant gpio-pud
 gpio-base   0x       98 + constant gpio-pudclk0
 gpio-base   0x       9c + constant gpio-pudclk1
 
-peripherals 0x   300000 + constant emmc-base
-emmc-base   0x        0 + constant emmc-arg2
-emmc-base   0x        4 + constant emmc-blksizecnt
-emmc-base   0x        8 + constant emmc-arg1
-emmc-base   0x        c + constant emmc-cmdtm
-emmc-base   0x       10 + constant emmc-resp0
-emmc-base   0x       14 + constant emmc-resp1
-emmc-base   0x       18 + constant emmc-resp2
-emmc-base   0x       1c + constant emmc-resp3
-emmc-base   0x       20 + constant emmc-data
-emmc-base   0x       24 + constant emmc-status
-emmc-base   0x       28 + constant emmc-control0
-emmc-base   0x       2c + constant emmc-control1
-emmc-base   0x       30 + constant emmc-irpt
-emmc-base   0x       34 + constant emmc-irpt-mask
-emmc-base   0x       38 + constant emmc-irpt-en
-emmc-base   0x       3c + constant emmc-control2
-emmc-base   0x       88 + constant emmc-tune-step
-emmc-base   0x       fc + constant emmc-slotisr-ver
+peripherals 0x   300000 + constant sd-base
+sd-base     0x        0 + constant sd-arg2
+sd-base     0x        4 + constant sd-blksizecnt
+sd-base     0x        8 + constant sd-arg1
+sd-base     0x        c + constant sd-cmdtm
+sd-base     0x       10 + constant sd-resp0
+sd-base     0x       14 + constant sd-resp1
+sd-base     0x       18 + constant sd-resp2
+sd-base     0x       1c + constant sd-resp3
+sd-base     0x       20 + constant sd-data
+sd-base     0x       24 + constant sd-status
+sd-base     0x       28 + constant sd-control0
+sd-base     0x       2c + constant sd-control1
+sd-base     0x       30 + constant sd-irpt
+sd-base     0x       34 + constant sd-irpt-mask
+sd-base     0x       38 + constant sd-irpt-en
+sd-base     0x       3c + constant sd-control2
+sd-base     0x       88 + constant sd-tune-step
+sd-base     0x       fc + constant sd-slotisr-ver
 
 1 32 lshift 1- constant ~0
 
@@ -76,9 +76,9 @@ emmc-base   0x       fc + constant emmc-slotisr-ver
 : cmd          24 lshift ;
 : is-data     1 21 >bits ;
 : multiblock  1  5 >bits ;
-: rbits-48   2 16 >bits ;
-: rbits-136  1 16 >bits ;
-: rbits-48b  3 16 >bits ;
+: rbits-48    2 16 >bits ;
+: rbits-136   1 16 >bits ;
+: rbits-48b   3 16 >bits ;
 : from-card   1  4 >bits ;
 : counted     1  1 >bits ;
 : use-rca     1 32 >bits ;
@@ -117,7 +117,7 @@ emmc-base   0x       fc + constant emmc-slotisr-ver
 13 cmd rbits-48  rtype-1  use-rca                              constant cmd-send-status
 13 cmd rbits-48  rtype-1  use-rca is-app                       constant cmd-sd-status
 15 cmd                    use-rca                              constant cmd-go-inactive
-16 cmd rbits-48b rtype-1                                       constant cmd-set-blocklen
+16 cmd rbits-48  rtype-1                                       constant cmd-set-blocklen
 17 cmd rbits-48  rtype-1  is-data from-card                    constant cmd-read-single
 18 cmd rbits-48  rtype-1  is-data from-card multiblock counted constant cmd-read-multi
 19 cmd rbits-48  rtype-1                                       constant cmd-send-tuning
@@ -154,7 +154,7 @@ emmc-base   0x       fc + constant emmc-slotisr-ver
 
 ( micros mask addr -- )
 : await-clear
-  ." await clear"
+\  ." await clear:" .s
   rot ticks + -rot
   begin
     dup w@ 2 pick               ( end-ticks mask addr val mask )
@@ -168,7 +168,7 @@ emmc-base   0x       fc + constant emmc-slotisr-ver
 ( todo: duplication between await-clear and await-set )
 ( micros mask addr -- )
 : await-set
-  ." await set"
+\  ." await set:" .s
   rot ticks + -rot
   begin
     dup w@ 2 pick
@@ -213,57 +213,47 @@ variable sdcard.capacity
   0 swap w!
 ;
 
-: card-state-name
-  case
-    0 of s" idle" endof
-    1 of s" ready" endof
-    2 of s" identify" endof
-    3 of s" standby" endof
-    4 of s" transmit" endof
-    5 of s" data" endof
-    6 of s" receive" endof
-    7 of s" prog" endof
-    8 of s" disable" endof
-  endcase
-;
 
 : matches ( n1 n2 -- n1 b ) over and 0<> ;
 
 ( irpt -- )
 : await-interrupt
-  ." await-interrupt: " .s
+\  ." await-interrupt: " .s
   >r ( p: 0, r: 1 )
   1000000 ticks +               ( end-ticks ) ( p: 0 end-ticks, r: 1 )
   begin
-    emmc-irpt w@ rsp@ @ and 0=  ( end-ticks b ) ( p: 0 end-ticks match?, r: 1 )
+    sd-irpt w@ rsp@ @ and 0=  ( end-ticks b ) ( p: 0 end-ticks match?, r: 1 )
   while                         ( end-ticks ) ( p: 0 end-ticks, r: 1 )
     tout?                       ( end-ticks ) ( p: 0 end-ticks, r: 1 )
   repeat
   drop
 
-  ." irpt observed: " .s
+\  ." irpt observed: " .s
 
-  r> emmc-irpt w!               ( clear the interrupt we were waiting for )
-  emmc-irpt w@
+  r> sd-irpt w!               ( clear the interrupt we were waiting for )
+  sd-irpt w@
 
-  ." irpt observed (cleared): " .s
+\  ." irpt observed (cleared): " .s
 
   0x   10000 matches if etout throw then
   0x  100000 matches if etout throw then
   0x 17f8000 matches if eirpt throw then
   drop
 
-  ." after irpt: " .s
+\  ." after irpt: " .s
 ;
+
+: done?       0x 00000001 await-interrupt ;
+: read-ready? 0x 00000020 await-interrupt ;
 
 ( inhibit -- )
 : not-busy?
-  ." not-busy? " dup .x cr
+\  ." not-busy? " dup .x cr
   >r
   1000000 ticks +
   begin
-    emmc-status w@ 0x rsp@ @ and      ( indicated inhibit bit )
-    emmc-irpt   w@ 0x 17f8000 and not ( any error interrupt )
+    sd-status w@ 0x rsp@ @ and      ( indicated inhibit bit )
+    sd-irpt   w@ 0x 17f8000 and not ( any error interrupt )
     and
   while
     tout?
@@ -272,51 +262,36 @@ variable sdcard.capacity
   drop
 ;
 
-( cmd -- cmd )
-: command-delay
-  dup cmd.delay case
-    1 of ." dly:100"  cr  100 delay endof
-    2 of ." dly:1000" cr 1000 delay endof
-  endcase
-;
-
-: done?       0x 00000001 await-interrupt ;
-: read-ready? 0x 00000020 await-interrupt ;
-
-( cmd arg -- )
-: issue-normal-command
-  ." normal command " cr
-  2drop
-;
-
-( words to from -- )
-: wcopy
+( n -- 10^n )
+: pow10
+  1 swap
   begin
-    rot ?dup 0>
+    ?dup 0>
   while
-    -rot 2dup w@ swap w!
-    rot 1- -rot
+    swap 10 * swap 1-
   repeat
-  2drop
 ;
+
+( cmd -- cmd )
+: command-delay dup cmd.delay 1+ pow10 delay ;
 
 ( cmd arg -- )
 : send-command-p
-  ( todo: check if RCA required, send with RCA )
-
+\  ." send-command-p: cmd " 2dup swap cmd.index . ." arg " .x cr
   ( wait for command inhibit off )
   0x 01 not-busy?
 
-  ." ready to send" cr
+\  ." issuing command: " .s
 
-  emmc-irpt w@ emmc-irpt w!
+  sd-irpt w@ sd-irpt w!
 
-  emmc-arg1 w!
-  dup cmd.code emmc-cmdtm w!
+  sd-arg1 w!
+  dup cmd.code sd-cmdtm w!
 
   command-delay
 
-  done? ." command complete" cr
+  done?
+\  ." command complete: " .s
 
   ( TODO : switch on cmd.rtype not cmd.rbits then cmd )
   ( todo: handle response types
@@ -329,67 +304,61 @@ variable sdcard.capacity
     rtype-7     7 )
   cmd.rtype case
     1 of
-      emmc-resp0 w@
+      sd-resp0 w@
       dup sdcard.status w!
       dup 0x 1e00 and 9 rshift sdcard.card-state w!
       r1-errors-mask and if erbad throw then
     endof
     2 of
-      emmc-resp0 w@ dup sdcard.status w!
+      sd-resp0 w@ dup sdcard.status w!
       0x 1e00 and 9 rshift sdcard.card-state w!
     endof
     3 of
       0 sdcard.status w!
-      emmc-resp0 w@ sdcard.cid      w!
-      emmc-resp1 w@ sdcard.cid  4 + w!
-      emmc-resp2 w@ sdcard.cid  8 + w!
-      emmc-resp3 w@ sdcard.cid 12 + w!
+      sd-resp0 w@ sdcard.cid      w!
+      sd-resp1 w@ sdcard.cid  4 + w!
+      sd-resp2 w@ sdcard.cid  8 + w!
+      sd-resp3 w@ sdcard.cid 12 + w!
     endof
     4 of
       0 sdcard.status w!
-      emmc-resp0 w@ sdcard.csd      w!
-      emmc-resp1 w@ sdcard.csd  4 + w!
-      emmc-resp2 w@ sdcard.csd  8 + w!
-      emmc-resp3 w@ sdcard.csd 12 + w!
+      sd-resp0 w@ sdcard.csd      w!
+      sd-resp1 w@ sdcard.csd  4 + w!
+      sd-resp2 w@ sdcard.csd  8 + w!
+      sd-resp3 w@ sdcard.csd 12 + w!
     endof
     5 of
       0 sdcard.status w!
-      emmc-resp0 w@ sdcard.ocr w!
+      sd-resp0 w@ sdcard.ocr w!
     endof
     6 of
-      emmc-resp0 w@ 0x ffff0000 and sdcard.rca w!
-      emmc-resp0 w@ 0x 1ffff and
-      emmc-resp0 w@ 0x  2000 and 6 lshift rot or ( resp0 bit 13 -> status bit 19 )
-      emmc-resp0 w@ 0x  4000 and 8 lshift rot or ( resp0 bit 14 -> status bit 22 )
-      emmc-resp0 w@ 0x  8000 and 8 lshift rot or ( resp0 bit 15 -> status bit 23 )
+      sd-resp0 w@ 0x ffff0000 and sdcard.rca w!
+      sd-resp0 w@ 0x 1ffff and
+      sd-resp0 w@ 0x  2000 and 6 lshift rot or ( resp0 bit 13 -> status bit 19 )
+      sd-resp0 w@ 0x  4000 and 8 lshift rot or ( resp0 bit 14 -> status bit 22 )
+      sd-resp0 w@ 0x  8000 and 8 lshift rot or ( resp0 bit 15 -> status bit 23 )
       sdcard.status w!
-      emmc-resp0 w@ 0x  1e00 and 9 rshift sdcard.card-state w!
+      sd-resp0 w@ 0x  1e00 and 9 rshift sdcard.card-state w!
     endof
     7 of
       0 sdcard.status w!
-      emmc-resp0 w@
+      sd-resp0 w@
     endof
     ( default case is no response )
   endcase
-  ." send-command-p end: " .s
+\  ." send-command-p end: " .s
 ;
 
 ( cmd -- )
 : send-app-command
-  ." send-app-command: rca " sdcard.rca @ .x cr
-  sdcard.rca @ ?dup if
-    ( rca <> 0, use cmd-app-rca )
-    cmd-app-rca swap
-  else
-    ( rca == 0, use cmd-app )
-    cmd-app 0
-  then
+\  ." send-app-command: rca " sdcard.rca @ .x cr
+  sdcard.rca @ ?dup if cmd-app-rca swap else cmd-app 0 then
   send-command-p
 ;
 
 ( cmd -- )
 : send-command
-  ." send-command: " dup .x cr
+\  ." send-command: cmd " dup cmd.index . cr
   dup cmd.is-app? if send-app-command then
   dup cmd.is-rca? if sdcard.rca @ else 0 then
   send-command-p
@@ -397,25 +366,25 @@ variable sdcard.capacity
 
 ( cmd arg -- )
 : send-command-a
-  ." send-command-a: " 2dup .x .x cr
+  ." send-command-a: cmd " 2dup swap cmd.index . ." arg " .x cr
   over cmd.is-app? if send-app-command then
   over cmd.is-rca? if drop sdcard.rca @ then
   send-command-p
 ;
 
-: emmc-reset-host
-  ." emmc-reset-host"
-  0 emmc-control0 w!
-  0 emmc-control1 w!
-  1 24 lshift emmc-control1 w! ( reset host circuit )
+: sd-reset-host
+\  ." sd-reset-host" cr
+  0 sd-control0 w!
+  0 sd-control1 w!
+  1 24 lshift sd-control1 w! ( reset host circuit )
 
   10 delay
 
-  1000000 1 24 lshift emmc-control1 await-clear
+  1000000 1 24 lshift sd-control1 await-clear
 
   ( enable internal clock and set data timeout )
-  0x e 16 lshift emmc-control1 w! ( data timeout unit )
-  0x 1           emmc-control1 w! ( clock enable internal )
+  0x e 16 lshift sd-control1 w! ( data timeout unit )
+  0x 1           sd-control1 w! ( clock enable internal )
 
   10 delay
 ;
@@ -429,24 +398,24 @@ variable sdcard.capacity
 
 ( freq -- succ? )
 : emmc-set-clock
-  1000000 0x 03 emmc-status await-clear
+  1000000 0x 03 sd-status await-clear
 
-  1 2 emmc-control1 clear-bits!   ( disable clock )
+  1 2 sd-control1 clear-bits!   ( disable clock )
   10 delay
 
   get-clock-divisor               ( 10 bit clock divisor )
   dup  0x 0ff and 8 lshift        ( lower 8 bits of divisor go in control bits 8..15 )
   swap 0x 300 and 2 rshift        ( high 2 bits of divisor go in control bits 6..7 )
-  emmc-control1 w@                ( read control1 )
+  sd-control1 w@                ( read control1 )
   0x ffff001f and                 ( clear any old divisor bits )
   or or                           ( set new divisor bits )
-  emmc-control1 w!                ( write it back )
+  sd-control1 w!                ( write it back )
 
   10 delay
 
-  emmc-control1 w@ 0b 0100 or emmc-control1 w! ( set clk_en bit )
+  sd-control1 w@ 0b 0100 or sd-control1 w! ( set clk_en bit )
 
-  1000000 0b 0010 emmc-control1 await-set
+  1000000 0b 0010 sd-control1 await-set
 ;
 
 : CMD0  cmd-go-idle       swap send-command-a ;
@@ -455,18 +424,19 @@ variable sdcard.capacity
 : CMD7  cmd-card-select        send-command ;
 : CMD8  cmd-send-if-cond  swap send-command-a ;
 : CMD9  cmd-send-csd           send-command ;
+: CMD16 cmd-set-blocklen  swap send-command-a ;
 : CMD41 cmd-send-op-cond  swap send-command-a ;
 : CMD51 cmd-send-scr           send-command ;
 
 400000   constant clock-freq-setup
 25000000 constant clock-freq-normal
 
-: emmc-reset
+: sd-reset
   0 sdcard.block-size !
-  emmc-reset-host
+  sd-reset-host
   clock-freq-setup emmc-set-clock
-  emmc-irpt-en   set-all!
-  emmc-irpt-mask set-all!
+  sd-irpt-en   set-all!
+  sd-irpt-mask set-all!
 
   0 CMD0
 ;
@@ -481,13 +451,15 @@ variable sdcard.capacity
   ( check for high capacity )
   ( cmd41 arg is hcs | sdxc_power | voltage )
   0x 54ff8000 CMD41
-  sdcard.ocr w@ 0x 40000000 and if 4 else 3 then sdcard.card-type w!
+  sdcard.ocr w@ 0x 40000000 and if 4 else 3 then sdcard.card-type !
 ;
 
-: csd-version sdcard.csd 12 + w@ 0x 00c00000 and 22 rshift 1+ ;
+: csd-version
+  sdcard.csd 12 + w@ 0x 00c00000 and 22 rshift 1+
+;
 
 : card-size-v1
-  ." card-size-v1" cr
+\  ." card-size-v1: " .s
   ( get c_size_mult )
   sdcard.csd 8+ w@ 0x 00000380 and 7 rshift ( 39..41 )
   ( 2^(c_size_mult+2) )
@@ -500,48 +472,42 @@ variable sdcard.capacity
 
   ( get read_bl_len, use as multiplier )
   sdcard.csd 4+ 0x 0f00 and 8 rshift ( 8..11 )
-
   *
+\  ." card-size-v1 end: " .s
 ;
 
 : card-size-v2
-  ." card-size-v2" cr
+\  ." card-size-v2" cr
   sdcard.csd 8+ 0x 3fffff00 and 8 rshift
   1+
   512 * 1024 *
 ;
 
-: csd-format
-  sdcard.csd w@ 1 rshift 3 and
+: csd.format
+   1 rshift 3 and
 ;
 
 : check-csd
+\  ." check-csd: " .s
   CMD9
-  dup csd-version case
+  csd-version case
     1 of card-size-v1 endof
     2 of card-size-v2 endof
     ." unrecognized card version " csd-version .x efail throw
   endcase
-  dup sdcard.capacity !
-  ." card capacity: " .x cr
-
-  csd-format case
-    0 of ." HDD with partition table" cr endof
-    1 of ." Floppy with boot sector" cr endof
-    2 of ." Universal" cr endof
-    3 of ." Unknown/Other" cr endof
-  endcase
+  sdcard.capacity !
+\  ." check-csd end: " .s
 ;
 
 ( read n bytes, returns unread remainder)
 ( a n -- n )
 : emmc-read-bytes
-  ." emmc-read-bytes" cr
+\  ." emmc-read-bytes: " .s
   >r
   ticks 100000 +
   begin
-    emmc-status w@ 0x 800 and if  ( read available? )
-      emmc-data w@ 2 pick w!      ( read the word, store it )
+    sd-status w@ 0x 800 and if  ( read available? )
+      sd-data w@ 2 pick w!      ( read the word, store it )
       swap 4+ swap                ( advance buffer pointer )
       r> 4- >r                    ( decrement remaining )
     then
@@ -549,32 +515,80 @@ variable sdcard.capacity
   while
     tout?
   repeat
-  r>                            ( return remaining, may be zero or negative )
+  2drop                         ( drop ticks and addr )
+  r>                            ( return count of unread bytes, may be zero or negative )
+\  ." emmc-read-bytes end: " .s
 ;
 
 : read-scr
+\  ." read-scr: " .s
+
   ( wait for data inhibit off )
   0x 02 not-busy?
 
   ( 1 block of 8 bytes )
-  0x 10008 emmc-blksizecnt w!
+  0x 10008 sd-blksizecnt w!
 
   CMD51
 
-  ." CMD51 complete" cr
+\  ." CMD51 complete: " .s
 
   read-ready?
 
   sdcard.scr 2 emmc-read-bytes
 
-  ." read-scr after read-bytes: " .s
+\  ." read-scr after read-bytes: " .s
 
-  ." sdcard.scr: " sdcard.scr @ .x cr
+  dup 0> if ." expected " . ." more bytes " cr efail throw else drop then
+
+\  ." sdcard.scr: " sdcard.scr @ .x cr
 
   100 delay
 ;
 
-: emmc-enable
+: card-state-name
+  case
+    0 of s" idle" endof
+    1 of s" ready" endof
+    2 of s" identify" endof
+    3 of s" standby" endof
+    4 of s" transmit" endof
+    5 of s" data" endof
+    6 of s" receive" endof
+    7 of s" prog" endof
+    8 of s" disable" endof
+  endcase
+;
+
+: card-format-name
+  case
+    0 of s" HDD with partition table" endof
+    1 of s" Floppy with boot sector" endof
+    2 of s" Universal" endof
+    3 of s" Unknown/Other" endof
+  endcase
+;
+
+( a -- a+8 )
+: .@+ base @ >r hex dup @ 16 u.r 8+ r> base ! ;
+
+: sd-report
+  cr
+  ." SD card report" cr
+  ." ==============" cr
+  ." Card type: "  sdcard.card-type @ .d cr
+  ." Capacity: "   sdcard.capacity @ .d cr
+  ." Format: "     sdcard.csd w@ csd.format card-format-name tell cr
+  ." Card state: " sdcard.card-state @ card-state-name tell cr
+  base @ hex
+  ." RCA: 0x" sdcard.rca .@+ cr
+  ." OCR: 0x" sdcard.ocr .@+ cr
+  ." CID: 0x" sdcard.cid .@+ .@+ cr
+  ." CSD: 0x" sdcard.csd .@+ .@+ cr
+  base !
+;
+
+: sd-enable
   0 34 gpio-fsel 0 35 gpio-fsel 0 36 gpio-fsel 0 37 gpio-fsel 0 38 gpio-fsel
   0 39 gpio-fsel
 
@@ -582,18 +596,18 @@ variable sdcard.capacity
 
   7 48 gpio-fsel 7 49 gpio-fsel 7 50 gpio-fsel 7 51 gpio-fsel 7 52 gpio-fsel
 
-  0 sdcard.block-size w!
-  0 sdcard.status     w!
-  0 sdcard.card-state w!
-  0 sdcard.card-type  w!
-  0 sdcard.rca        w!
-  0 sdcard.ocr        w!
-  0 sdcard.csd        w!
-  0 sdcard.cid        w!
+  0 sdcard.card-type   !
+  0 sdcard.block-size  !
+  0 sdcard.status      !
+  0 sdcard.card-state  !
+  0 sdcard.rca         !
+  0 sdcard.ocr         !
+  0 sdcard.csd         !
+  0 sdcard.cid         !
 
   ( todo: detect if card absent )
 
-  emmc-reset
+  sd-reset
   check-interface-condition
   check-sdhc-support
   CMD2
@@ -602,7 +616,10 @@ variable sdcard.capacity
   clock-freq-normal emmc-set-clock
   CMD7
   read-scr
-  ." emmc-enable complete" cr
+  512 CMD16
+
+  sd-report
+\  ." emmc-enable complete" cr
 ;
 
 : firmware-sets-cdiv?
@@ -610,9 +627,9 @@ variable sdcard.capacity
   ~0 ~0 0 0x 38042 tags{{ swap 3-3tag }} 5 msg[] w@ ~0 <>
 ;
 
-: emmc-device-probe
+: sd-device-probe
   cr
-  emmc-slotisr-ver w@ dup
+  sd-slotisr-ver w@ dup
   ." Vendor version: " 8 24 rot bits> . cr
   ." SD host specification version: " 8 16 rot bits> case
     0 of ." 1.00 - NOT SUPPORTED" endof
