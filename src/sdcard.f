@@ -1,4 +1,4 @@
-( noecho )
+noecho
 base @ value sd-old-base
 decimal
 
@@ -190,6 +190,7 @@ variable sdcard.scr
 variable sdcard.block-size
 variable sdcard.card-type
 variable sdcard.capacity
+variable sdcard.bus-width
 
 ( fn pin -- )
 : gpio-fsel
@@ -243,8 +244,9 @@ variable sdcard.capacity
 \  ." after irpt: " .s
 ;
 
-: done?       0x 00000001 await-interrupt ;
-: read-ready? 0x 00000020 await-interrupt ;
+: done?        0x 00000001 await-interrupt ;
+: write-ready? 0x 00000010 await-interrupt ;
+: read-ready?  0x 00000020 await-interrupt ;
 
 ( inhibit -- )
 : not-busy?
@@ -366,7 +368,7 @@ variable sdcard.capacity
 
 ( cmd arg -- )
 : send-command-a
-  ." send-command-a: cmd " 2dup swap cmd.index . ." arg " .x cr
+\  ." send-command-a: cmd " 2dup swap cmd.index . ." arg " .x cr
   over cmd.is-app? if send-app-command then
   over cmd.is-rca? if drop sdcard.rca @ then
   send-command-p
@@ -421,10 +423,12 @@ variable sdcard.capacity
 : CMD0  cmd-go-idle       swap send-command-a ;
 : CMD2  cmd-all-send-cid       send-command ;
 : CMD3  cmd-send-rel-addr      send-command ;
+: CMD6  cmd-set-bus-width swap send-command-a ;
 : CMD7  cmd-card-select        send-command ;
 : CMD8  cmd-send-if-cond  swap send-command-a ;
 : CMD9  cmd-send-csd           send-command ;
 : CMD16 cmd-set-blocklen  swap send-command-a ;
+: CMD17 cmd-read-single   swap send-command-a ;
 : CMD41 cmd-send-op-cond  swap send-command-a ;
 : CMD51 cmd-send-scr           send-command ;
 
@@ -432,7 +436,7 @@ variable sdcard.capacity
 25000000 constant clock-freq-normal
 
 : sd-reset
-  0 sdcard.block-size !
+  512 sdcard.block-size !
   sd-reset-host
   clock-freq-setup emmc-set-clock
   sd-irpt-en   set-all!
@@ -501,8 +505,8 @@ variable sdcard.capacity
 
 ( read n bytes, returns unread remainder)
 ( a n -- n )
-: emmc-read-bytes
-\  ." emmc-read-bytes: " .s
+: sd-read-bytes
+\  ." sd-read-bytes: " .s
   >r
   ticks 100000 +
   begin
@@ -517,7 +521,7 @@ variable sdcard.capacity
   repeat
   2drop                         ( drop ticks and addr )
   r>                            ( return count of unread bytes, may be zero or negative )
-\  ." emmc-read-bytes end: " .s
+\  ." sd-read-bytes end: " .s
 ;
 
 : read-scr
@@ -535,7 +539,7 @@ variable sdcard.capacity
 
   read-ready?
 
-  sdcard.scr 2 emmc-read-bytes
+  sdcard.scr 8 sd-read-bytes
 
 \  ." read-scr after read-bytes: " .s
 
@@ -544,6 +548,21 @@ variable sdcard.capacity
 \  ." sdcard.scr: " sdcard.scr @ .x cr
 
   100 delay
+;
+
+: set-bus-width
+  sdcard.scr w@ 0x 0100 and 0<> if 1 sdcard.bus-width ! then
+  sdcard.scr w@ 0x 0400 and 0<> if 4 sdcard.bus-width ! then
+
+  sdcard.bus-width @ 4 = if
+    ( if supported, set 4 bit bus width and update control0 )
+    sdcard.rca w@ 2 or CMD6
+    sd-control0 w@ 2 or sd-control0 w!
+  then
+;
+
+: set-block-size
+  512 CMD16
 ;
 
 : card-state-name
@@ -570,7 +589,7 @@ variable sdcard.capacity
 ;
 
 ( a -- a+8 )
-: .@+ base @ >r hex dup @ 16 u.r 8+ r> base ! ;
+: .@+ dup @ 16 u.r 8+ ;
 
 : sd-report
   cr
@@ -580,12 +599,13 @@ variable sdcard.capacity
   ." Capacity: "   sdcard.capacity @ .d cr
   ." Format: "     sdcard.csd w@ csd.format card-format-name tell cr
   ." Card state: " sdcard.card-state @ card-state-name tell cr
-  base @ hex
-  ." RCA: 0x" sdcard.rca .@+ cr
-  ." OCR: 0x" sdcard.ocr .@+ cr
-  ." CID: 0x" sdcard.cid .@+ .@+ cr
-  ." CSD: 0x" sdcard.csd .@+ .@+ cr
-  base !
+  base @ >r hex
+  ." RCA: 0x" sdcard.rca .@+ cr drop
+  ." OCR: 0x" sdcard.ocr .@+ cr drop
+  ." SCR: 0x" sdcard.scr .@+ cr drop
+  ." CID: 0x" sdcard.cid .@+ .@+ cr drop
+  ." CSD: 0x" sdcard.csd .@+ .@+ cr drop
+  r> base !
 ;
 
 : sd-enable
@@ -596,14 +616,15 @@ variable sdcard.capacity
 
   7 48 gpio-fsel 7 49 gpio-fsel 7 50 gpio-fsel 7 51 gpio-fsel 7 52 gpio-fsel
 
-  0 sdcard.card-type   !
-  0 sdcard.block-size  !
-  0 sdcard.status      !
-  0 sdcard.card-state  !
-  0 sdcard.rca         !
-  0 sdcard.ocr         !
-  0 sdcard.csd         !
-  0 sdcard.cid         !
+  0 sdcard.card-type  !
+  0 sdcard.block-size !
+  0 sdcard.status     !
+  0 sdcard.card-state !
+  0 sdcard.rca        !
+  0 sdcard.ocr        !
+  0 sdcard.csd        !
+  0 sdcard.cid        !
+  0 sdcard.bus-width  !
 
   ( todo: detect if card absent )
 
@@ -616,7 +637,8 @@ variable sdcard.capacity
   clock-freq-normal emmc-set-clock
   CMD7
   read-scr
-  512 CMD16
+  set-bus-width
+  set-block-size
 
   sd-report
 \  ." emmc-enable complete" cr
@@ -640,6 +662,30 @@ variable sdcard.capacity
   cr
   ." Core clock rate: " clk-emmc clock-rate . cr
   ." Firmware sets cdiv? " firmware-sets-cdiv? if ." Yes" else ." No" then cr
+;
+
+: card-type-2-hc? sdcard.card-type @ 4 = ;
+
+( a-buf a-card -- )
+: sd-read-block
+\  ." sd-read-block: card-addr " 2dup .x ."  into " .x cr
+  0x 02 not-busy?
+
+  ( HC uses addr / 512, others just addr )
+\  card-type-2-hc? if 9 rshift then
+
+\  ." sd-read-block: send CMD17" cr
+  ( blksizecnt <- 1 block << 16 | 512 blocksize )
+  1 16 lshift sdcard.block-size @ or sd-blksizecnt w!
+
+  CMD17
+\  ." sd-read-block: cmd sent" cr
+  read-ready?
+\  ." sd-read-block: read ready." cr
+  512 sd-read-bytes
+\  ." sd-read-block: bytes remaining " dup . cr
+
+  dup 0> if ." expected " . ." more bytes " cr efail throw else drop then
 ;
 
 sd-old-base base ! hide sd-old-base
