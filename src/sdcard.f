@@ -588,8 +588,12 @@ variable sdcard.bus-width
   endcase
 ;
 
-( a -- a+8 )
-: .@+ dup @ 16 u.r 8+ ;
+: h@ dup c@ swap 1+ c@ 8 lshift or ;
+
+: c.@+ ( a -- a+1 ) dup c@ 2 u.r 1 + ;
+: h.@+ ( a -- a+2 ) dup h@ 4 u.r 2 + ;
+: w.@+ ( a -- a+4 ) dup w@ 8 u.r 4 + ;
+: q.@+ ( a -- a+8 ) dup @ 16 u.r 8 + ;
 
 : sd-report
   cr
@@ -600,11 +604,11 @@ variable sdcard.bus-width
   ." Format: "     sdcard.csd w@ csd.format card-format-name tell cr
   ." Card state: " sdcard.card-state @ card-state-name tell cr
   base @ >r hex
-  ." RCA: 0x" sdcard.rca .@+ cr drop
-  ." OCR: 0x" sdcard.ocr .@+ cr drop
-  ." SCR: 0x" sdcard.scr .@+ cr drop
-  ." CID: 0x" sdcard.cid .@+ .@+ cr drop
-  ." CSD: 0x" sdcard.csd .@+ .@+ cr drop
+  ." RCA: 0x" sdcard.rca q.@+ cr drop
+  ." OCR: 0x" sdcard.ocr q.@+ cr drop
+  ." SCR: 0x" sdcard.scr q.@+ cr drop
+  ." CID: 0x" sdcard.cid q.@+ q.@+ cr drop
+  ." CSD: 0x" sdcard.csd q.@+ q.@+ cr drop
   r> base !
 ;
 
@@ -688,13 +692,100 @@ variable sdcard.bus-width
   dup 0> if ." expected " . ." more bytes " cr efail throw else drop then
 ;
 
+( a-buf a-card nblks -- a-buf' a-card' )
+: sd-read-blocks
+  sdcard.block-size @ * over + >r       ( compute end address )
+  begin
+    2dup sd-read-block
+    sdcard.block-size @ + swap
+    sdcard.block-size @ + swap
+    dup rsp@ @ >=
+  until
+  rdrop
+;
+
 (
         PARTITION TABLE ----------------------------------------------------------------------
 
 )
 
-: mbr? 508 + w@ 0x aa550000 = ;
-: gpt? 512 +  @ 0x 00005452415020494645 = ;
+( reserve space for reading blocks )
+128 cells allot constant sdbuf
+
+( reserve space to hold partition table )
+16 cells allot constant partitions
+
+: part[] 16 * partitions + ;
+
+: bs?  sdbuf dup c@ 0x eb = swap 1+ c@ 0x e9 = or ;
+: mbr? sdbuf 508 + w@ 0x aa550000 = ;
+: gpt? sdbuf 512 +  @ 0x 00005452415020494645 = ;
+
+( a -- a+1 )
+
+( n -- b )
+: part-active? part[] c@ 0x 80 = ;
+
+( n -- )
+: part-info
+  base @ >r hex
+  dup . ." :" space
+  part[]
+  c.@+ space                            ( status )
+  c.@+ space                            ( head start )
+  h.@+ space                            ( cyl & sect start )
+  c.@+ space                            ( part type )
+  c.@+ space                            ( head end )
+  h.@+ space                            ( cyl & sect end )
+  w.@+ space                            ( first sector )
+  w.@+ space                            ( sectors total )
+  r> base !
+;
+
+( a -- )
+: ppart-mbr
+  cr
+  ." MBR partition table" cr
+  ." #   A? HS CSTR TP HE CEND FRSTSECT TOTLSECT" cr
+  0 part-active? if 0 part-info then
+  1 part-active? if 1 part-info then
+  2 part-active? if 2 part-info then
+  3 part-active? if 3 part-info then
+  cr
+;
+
+( -- )
+: mount-mbr
+  mbr? if
+    sdbuf 446 + partitions 64 cmove       ( copy partition table )
+  then
+;
+
+: ppart-gpt
+  ." gpt" cr
+;
+
+: mount-gpt
+  ." mount-gpt" cr
+;
+
+( -- n )
+: partition-type
+  gpt? if 1 else
+  mbr? if 2 else
+  bs?  if 0 else
+  -1 then then then
+;
+
+: mount
+  sdbuf 0 2 sd-read-blocks
+  partition-type case
+    0 of ." boot sector" cr endof
+    1 of mount-gpt ppart-gpt cr endof
+    2 of mount-mbr ppart-mbr cr endof
+    ." no partition table??" cr efail throw
+  endcase
+;
 
 sd-old-base base ! hide sd-old-base
 echo
