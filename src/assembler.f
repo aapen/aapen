@@ -261,11 +261,12 @@ hex
 : svc-#   ( im16 -- instruction )    d4000001 im16-instruction ;
 : hlt-# ( im16 -- instruction ) 0x d4400000 im16-instruction ;
 
-: ret-x ( rn -- instruction ) d65f0000 swap set-rn ;
+: ret-x ( rn -- instruction )  d65f0000 swap set-rn ;
 : ret- ( -- instruction ) 0d 30 ret-x ;
-: br-x ( rn -- instruction ) d61f0000 rn-instruction ;
-: b-# ( im26 -- instruction ) 14000000 swap set-im26 ;
+: br-x ( rn -- instruction )   d61f0000 rn-instruction ;
+: b-# ( im26 -- instruction )  14000000 swap set-im26 ;
 : bl-# ( im26 -- instruction ) 94000000 swap set-im26 ;
+: blr-x ( rn -- instruction )  d63f0000 rn-instruction ;
 
 
  ( Conditional branches. The fundimental instruction is b-cond + an
@@ -347,6 +348,13 @@ defprim do-nothing
 defprim x-push-44
   0  44     mov-x#     w,
   0         pushpsp-x  w,
+;;
+
+( branch link to the 64b address on the TOS. )
+
+defprim call ( addr -- ?? )
+  0        poppsp-x    w,
+  0        blr-x       w,
 ;;
 
 defprim x-dup
