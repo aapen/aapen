@@ -4,7 +4,7 @@
         Answer: no it cannot
 - [X] Set up container with tools: zig (pinned to a dev snapshot), qemu, gdb-multiarch
 ** DONE Make devpod.sh work
-** HOLD Get devpod.sh to work on Mike's personal machine.                                                       :HOLD:
+** CANCELED Get devpod.sh to work on Mike's personal machine.                                               :CANCELED:
 There seems to be a docker network problem. Devpod.sh works great on the macOS laptop.
 ** DONE Discuss device tree & DTBs with Russ
 Advantages: 
@@ -94,6 +94,7 @@ Option selected:
 - Modify the panic handler to print function names along with the stack addresses
 ** TODO Consider bitfield words
 C.f. https://github.com/dsmcfarl/forth-stm32f746-disco/blob/6e46f1088123e78ba615a7dad3f7249a3744cc2f/common.fs#L15
+** TODO DO..LOOP would be really handy
 * DONE Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware*
