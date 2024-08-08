@@ -688,5 +688,13 @@ variable sdcard.bus-width
   dup 0> if ." expected " . ." more bytes " cr efail throw else drop then
 ;
 
+(
+        PARTITION TABLE ----------------------------------------------------------------------
+
+)
+
+: mbr? 508 + w@ 0x aa550000 = ;
+: gpt? 512 +  @ 0x 00005452415020494645 = ;
+
 sd-old-base base ! hide sd-old-base
 echo
