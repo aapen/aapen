@@ -4,7 +4,7 @@ OUTPUT_IMG=aapen.img
 OUTPUT_IMG_SIZE=256
 MOUNT_POINT="$(mktemp -d)"
 
-# Step 1: Create an empty disk image of 257MB
+# Step 1: Create an empty disk image of 256MB
 dd if=/dev/zero of=${OUTPUT_IMG} bs=1M count=${OUTPUT_IMG_SIZE}
 
 # Step 2: Use sfdisk to create a partition table with one FAT32
