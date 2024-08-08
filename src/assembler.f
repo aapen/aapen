@@ -360,6 +360,23 @@ defprim call ( addr -- ?? )
   0        blr-x       w,
 ;;
 
+( compile a call to the addr on the TOS )
+
+: compile-call ( addr -- )
+  30 24 adr-x#   w,
+  17 12 adr-x#   w,
+  17 17 ldr-x[x] w,
+  17    br-x     w,
+  ,
+;
+
+( Call the assembly lang f say-msg twice )
+
+defprim x-say-msg
+  say-msg compile-call
+  say-msg compile-call
+;;
+
 defprim x-dup
   0  psp    ldr-x[x]   w,
   0         pushpsp-x  w,
@@ -376,20 +393,8 @@ defprim x-rot
   2         pushpsp-x  w,
   3         pushpsp-x  w,
   1         pushpsp-x  w,
+
 ;;
-
-
-( Print the test message, currently broken )
-
-defprim test-ass1
-	30 6  adr-x#   w,
-	17 3  adr-x#   w,
-	17 17 ldr-x[x] w,
-	17    br-x     w,
-	say-msg @      ,
-;;
-
-
 assembler-save-base @ base !
 echo
 
