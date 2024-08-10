@@ -1579,6 +1579,7 @@ _con_in:                                // return char in x0
         ret
 
 
+        .global _con_out
         defcode ">con",4,,con_out,con_in // ( byte -- )
         POPPSP  x0                      // x0 <- byte to write
         bl      _con_out

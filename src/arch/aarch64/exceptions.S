@@ -35,6 +35,7 @@
         .macro VENTRY type
         .align 7
         ENTRY_ALIGN(__\type, 7)
+        bl      bsod
         ldr     x19, =var_exception
         mov     x0, #\type
         str     x0, [x19]
@@ -105,3 +106,112 @@ __exception_handler_table:
         VENTRY          IRQ_INVALID_EL0_32
         VENTRY          FIQ_INVALID_EL0_32
         VENTRY          ERROR_INVALID_EL0_32
+
+
+
+        // ----------------------------------------------------------------------
+        // Debug display
+        // ----------------------------------------------------------------------
+        // Using _con_out from armforth.S, displays certain key
+        // registers when handling a core abort.
+
+        .macro emit c
+        mov     w0, \c
+        bl      _con_out
+        .endm
+
+        .macro nl
+        emit #'\r'
+        emit #'\n'
+        .endm
+
+        .macro outsysr reg,lbl
+        mrs     x2, \reg
+        ldr     x3, =\lbl
+        bl      print_register
+        .endm
+
+        .macro outreg reg,lbl
+        mov     x2, \reg
+        ldr     x3, =\lbl
+        bl      print_register
+        .endm
+
+        .global bsod
+
+bsod:
+        // Save link register on stack
+        stp     x29, x30, [sp, #-16]!
+        mov     x29, sp
+
+        nl
+        outsysr ESR_EL1, esr_label
+        outsysr FAR_EL1, far_label
+        outreg  x28, x28_label
+        outreg  x29, x29_label
+        outreg  x10, x10_label
+
+        // Restore link register and return
+        ldp     x29, x30, [sp], #16
+        ret
+
+print_register:
+        // Save registers on stack
+        stp     x29, x30, [sp, #-16]!
+        mov     x29, sp
+
+1:      // Print the label
+        ldrb    w0, [x3], #1      // Load the next byte of the label
+        cbz     w0, 2f            // If the byte is null, end the loop
+        bl      _con_out          // Print the character
+        b       1b                // Continue the loop
+
+2:      // Print the register value
+        mov     x1, x2
+        bl      print_hex         // Call the print_hex routine to print x0 as hex
+
+        nl
+
+        // Restore registers and return
+        ldp     x29, x30, [sp], #16
+        ret
+
+print_hex:
+        // Save registers on stack
+        stp     x29, x30, [sp, #-16]!
+        mov     x29, sp
+
+        // Prepare for hex conversion
+        mov     w2, #8             // We have 8 hex digits to print
+        mov     w3, #0xF           // Mask for extracting 4 bits
+
+1:
+        // Shift the value left to extract the highest 4 bits
+        lsr     x0, x1, #28        // Move the top 4 bits into w1
+
+        // Mask and convert to hex character
+        and     w0, w0, w3         // Mask the top 4 bits
+        add     w0, w0, #'0'       // Convert to ASCII ('0' to '9')
+        cmp     w0, #'9'           // Compare with ASCII 9
+        ble     2f
+        add     w0, w0, #39        // Diff between ':' (ASCII '9' + 1) and 'a'
+2:
+        // Call _con_out to print the character
+        bl      _con_out
+
+        // Prepare for next hex digit
+        lsl     x1, x1, #4         // Shift the value left by 4 bits
+        sub     w2, w2, #1         // Decrease the counter
+        cbnz    w2, 1b             // Repeat if there are digits left
+
+        // Restore registers and return
+        ldp     x29, x30, [sp], #16
+        ret
+
+        .section .data
+// Data section for register labels
+esr_label:      .asciz "ESR_EL1: 0x"
+far_label:      .asciz "FAR_EL1: 0x"
+x28_label:      .asciz "    x28: 0x"
+x29_label:      .asciz "    x29: 0x"
+x10_label:      .asciz "    x10: 0x"
