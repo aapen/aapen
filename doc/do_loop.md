@@ -55,6 +55,63 @@ I don't know how to implement `leave` in a reasonable way. It seems to require m
 
 I'm going to defer `?do` until I need it.
 
+### +loop with negative index
+
+The [standard][STD-+LOOP] has this vexing phrase: "If the loop index did not cross the boundary between the loop limit minus one and the loop limit, continue execution". Obviously this is a mathematically precise way to handle both positive and negative indexes, and limits that are either greater than or less than the starting index. How do we translate it into valid jones?
+
+An ARM32 assembly implementation that I found looks like this: 
+
+```
+  movs r0, #0x80
+  lsls r0, #24 @ #0x80 --> #0x80 000000  6*4=24 Stellen schieben.
+  adds r0, rloopindex
+  adds rloopindex, tos
+  subs r0, rlooplimit
+  adds r0, tos  @ Flags are set here, Overflow means: Terminate loop.
+  drop
+  bx lr
+```
+
+where `rloopindex` is `r4` and `rlooplimit` is `r5`. This implementation doesn't use the return stack for the loop control.
+
+The first two instructions load r0 with -2^31. When adding rloopindex, there are two cases depending on whether the index is negative or positive:
+
+```
++----------------+-----------------------------+-------+
+| index < 0      | r0 is large positive number | V = 0 |
+| index > 0      | r0 is large negative number | V = 1 |
++----------------+-----------------------------+-------+
+```
+
+`TOS` holds the step to apply. It gets added to rloopindex regardless of whether we continue the loop or not. Then the loop limit is subtracted from r0. I think we now have 4 cases:
+
+```
++------------+---------------+---------------------------------------------+-------+
+| index < 0  | limit > index | r0 is a large negative number               | V = 1 |
+| index < 0  | limit < index | r0 is a slightly less large positive number | V = 0 |
+| index > 0  | limit > index | r0 is a large positive number               | V = 1 |
+| index > 0  | limit < index | r0 is a slightly less large negative number | V = 0 |
++------------+---------------+---------------------------------------------+-------+
+```
+
+So r0 now holds `INT_MIN + index - limit`
+
+All that was setup. Even though the code uses `adds` and `subs`, I'm not sure the overflow flag has any practical effect up until this point.
+
+Now the `TOS` is added to `r0` yielding `INT_MIN + index - limit + step`. But the sequence--not the formula--is the key. If this last addition causes r0 to cross from `INT_MIN` to `INT_MAX` or vice versa (i.e. wrap around from negative to positive or positive to negative) then we have "crossed the boundary between the loop limit minus one and the loop limit" and should terminate the loop.
+
+Let's try some cases. (Some of these probably have off-by-one errors in the wraparound from `INT_MIN` to `INT_MAX`.)
+
+| index | limit | step | r0                                        | V_final |
+|-------|-------|------|-------------------------------------------|---------|
+| 4     | 5     | 1    | `INT_MIN` + 4 - 5 + 1 = `INT_MIN`         | 1       |
+| 10    | 100   | 1    | `INT_MIN` + 10 - 100 + 1 = `INT_MAX` - 88 | 0       |
+| 1     | 0     | -1   | `INT_MIN` + 1 - 0 + -1 = `INT_MIN`        | 0       |
+| 0     | 0     | -1   | `INT_MIN` + 0 - 0 + -1 = `INT_MAX`        | 1       |
+| 5     | 0     | -10  | `INT_MIN` + 5 - 0 + -10 = `INT_MAX` - 5   | 1       |
+
+How to implement this in high level words?
+
 ## Excerpts from the [standard][STD]
 
 ### [Control-flow stack][STD-CONTROLFLOWSTACK]
