@@ -257,7 +257,10 @@
 \ small, probably misaligned address unless we clean up the return stack before executing it. That's
 \ where `unloop` comes in. It restores the return stack so we can `exit` cleanly.
 
-: unloop rdrop rdrop ;
+: unloop
+  ' rdrop ,
+  ' rdrop ,
+; immediate
 
 \ There are two words to end the loop's body: `loop` and `+loop`. The first one increments the loop
 \ counter by 1. The second increments it by some number. We will start with the general case, then
@@ -272,6 +275,7 @@
 \ another word or the offsets will be all wrong. Same goes for `j` and `(loop-done?)`
 
 : i rsp@ 16 + @ ;       \ get current loop count
+: j rsp@ 32 + @ ;       \ get outer loop count
 : (loop-inc)   rsp@ 16 + @ + rsp@ 16 + ! ;
 : (loop-done?) rsp@ 8+ @ rsp@ 16 + @ <= ;
 
