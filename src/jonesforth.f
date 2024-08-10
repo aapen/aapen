@@ -229,16 +229,75 @@
 
 \ unless is the same as if but the test is reversed.
 \
-\ note the use of [compile]: since if is immediate we don't want it to be executed while unless
-\ is compiling, but while unless is running (which happens to be when whatever word using unless is
-\ being compiled -- whew!).  So we use [compile] to reverse the effect of marking if as immediate.
+\ note the use of [compile]: since `if` is immediate we don't want it to be executed while `unless`
+\ is compiling, but while `unless` is running (which happens to be when whatever word using `unless` is
+\ being compiled -- whew!).  So we use `[compile]` to reverse the effect of marking `if` as immediate.
 \ this trick is generally used when we want to write our own control words without having to
-\ implement them all in terms of the primitives 0branch and branch, but instead reusing simpler
-\ control words like (in this instance) if.
+\ implement them all in terms of the primitives `0branch` and `branch`, but instead reusing simpler
+\ control words like (in this instance) `if`.
 : unless immediate
 	' not ,		\ compile not (to reverse the test)
 	[compile] if	\ continue by calling the normal if
 ;
+
+\ do..loop is a workhorse. We can view it as a composite of several of the control flow words we've
+\ just written. The `do` is similar to `begin`, but it has some extra runtime behavior to take the
+\ start and limit from the stack and tuck them away on the rstack.
+\
+\ Inside the loop body, RSP will be reserved for use by the loop itself. RSP@ will hold the loop
+\ limit and RSP@ + 8 will hold the current count.
+\
+: do
+     ' >r ,             \ compile >r to push initial count on rstack
+     ' >r ,             \ another >r to push the limit onto rstack
+     here @             \ save location that will be the branch target
+; immediate
+
+\ This hijacking of the rstack has a dangerous side effect: `exit` will "return" execution to some
+\ small, probably misaligned address unless we clean up the return stack before executing it. That's
+\ where `unloop` comes in. It restores the return stack so we can `exit` cleanly.
+
+: unloop rdrop rdrop ;
+
+\ There are two words to end the loop's body: `loop` and `+loop`. The first one increments the loop
+\ counter by 1. The second increments it by some number. We will start with the general case, then
+\ define the simple case as a usage of the general one.
+\
+\ Since there's quite a bit of rstack manipulation needed, we define some helper words. None of
+\ these change the rstack, they just access or manipulate the loop control structure in place.
+\
+\ Given the way we defined the loop control structure, you'd expect to find `i` at RSP+8. That's
+\ true, except that we had to call `i` itself, which puts another address on the rstack. Confusing?
+\ Yes. It also means that we can't use `i` except _directly_ inside a do..loop. No calling it from
+\ another word or the offsets will be all wrong. Same goes for `j` and `(loop-done?)`
+
+: i rsp@ 16 + @ ;       \ get current loop count
+: (loop-inc)   rsp@ 16 + @ + rsp@ 16 + ! ;
+: (loop-done?) rsp@ 8+ @ rsp@ 16 + @ <= ;
+
+\ `+loop` is a bit of a beast. It needs to compile the runtime code to update the loop count and
+\ check it against the limit. If we were writing this directly it would look like this:
+\
+\ ... (loop-inc) (loop-done?) < if ..not done.. else ..done.. then ...
+\
+\ Where the "not done" part branches back to the instruction after the `do` that started this whole
+\ thing and the "done" part cleans up the rstack.
+
+: +loop
+  ' (loop-inc) ,
+  ' (loop-done?) ,
+  ' 0branch ,           \ compile branch
+  here @ - ,
+  ' rdrop ,
+  ' rdrop ,
+; immediate
+
+\ And here's the special case to just step by 1.
+: loop
+  ' lit ,
+  1 ,
+  [compile] +loop
+; immediate
 
 \	COMMENTS ----------------------------------------------------------------------
 \
