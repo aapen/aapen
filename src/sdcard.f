@@ -265,14 +265,7 @@ variable sdcard.bus-width
 ;
 
 ( n -- 10^n )
-: pow10
-  1 swap
-  begin
-    ?dup 0>
-  while
-    swap 10 * swap 1-
-  repeat
-;
+: pow10 1 swap 0 do 10 * loop ;
 
 ( cmd -- cmd )
 : command-delay dup cmd.delay 1+ pow10 delay ;
@@ -692,21 +685,21 @@ variable sdcard.bus-width
   dup 0> if ." expected " . ." more bytes " cr efail throw else drop then
 ;
 
+: blocks sdcard.block-size @ * + ;
+
 ( a-buf a-card nblks -- a-buf' a-card' )
 : sd-read-blocks
-  sdcard.block-size @ * over + >r       ( compute end address )
-  begin
-    2dup sd-read-block
-    sdcard.block-size @ + swap
-    sdcard.block-size @ + swap
-    dup rsp@ @ >=
-  until
-  rdrop
+  0 do
+    over i blocks
+    over i blocks
+    .s
+    sd-read-block
+  loop
+  2drop
 ;
 
 (
         PARTITION TABLE ----------------------------------------------------------------------
-
 )
 
 ( reserve space for reading blocks )
@@ -714,6 +707,7 @@ variable sdcard.bus-width
 
 ( reserve space to hold partition table )
 16 cells allot constant partitions
+0 value active-partition
 
 : part[] 16 * partitions + ;
 
@@ -721,7 +715,11 @@ variable sdcard.bus-width
 : mbr? sdbuf 508 + w@ 0x aa550000 = ;
 : gpt? sdbuf 512 +  @ 0x 00005452415020494645 = ;
 
-( a -- a+1 )
+: ppart-bs
+;
+
+: mount-bs
+;
 
 ( n -- b )
 : part-active? part[] c@ 0x 80 = ;
@@ -729,7 +727,6 @@ variable sdcard.bus-width
 ( n -- )
 : part-info
   base @ >r hex
-  dup . ." :" space
   part[]
   c.@+ space                            ( status )
   c.@+ space                            ( head start )
@@ -746,11 +743,14 @@ variable sdcard.bus-width
 : ppart-mbr
   cr
   ." MBR partition table" cr
-  ." #   A? HS CSTR TP HE CEND FRSTSECT TOTLSECT" cr
-  0 part-active? if 0 part-info then
-  1 part-active? if 1 part-info then
-  2 part-active? if 2 part-info then
-  3 part-active? if 3 part-info then
+  ." # A? HS CSTR TP HE CEND FRSTSECT TOTLSECT" cr
+  4 0 do
+    i part-active? if
+      i 1 u.r space
+      i part-info
+      cr
+    then
+  loop
   cr
 ;
 
@@ -780,7 +780,7 @@ variable sdcard.bus-width
 : mount
   sdbuf 0 2 sd-read-blocks
   partition-type case
-    0 of ." boot sector" cr endof
+    0 of mount-bs  ppart-bs  cr endof
     1 of mount-gpt ppart-gpt cr endof
     2 of mount-mbr ppart-mbr cr endof
     ." no partition table??" cr efail throw
