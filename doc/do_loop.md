@@ -57,7 +57,7 @@ I'm going to defer `?do` until I need it.
 
 ### +loop with negative index
 
-The [standard][STD-+LOOP] has this vexing phrase: "If the loop index did not cross the boundary between the loop limit minus one and the loop limit, continue execution". Obviously this is a mathematically precise way to handle both positive and negative indexes, and limits that are either greater than or less than the starting index. How do we translate it into valid jones?
+The [standard][STD-+LOOP] has this vexing phrase: "If the loop index did not cross the boundary between the loop limit minus one and the loop limit, continue execution". Obviously this is a mathematically precise way to handle both positive and negative indexes, and limits that are either greater than or less than the starting index. How do we translate it into high level forth?
 
 An ARM32 assembly implementation that I found looks like this: 
 
