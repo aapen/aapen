@@ -1776,6 +1776,7 @@ here @ 15 + 15 invert and here !
         cr
 ;
 
+test readbuf
 assembler readbuf
 
 welcome
