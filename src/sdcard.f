@@ -70,9 +70,6 @@ sd-base     0x       fc + constant sd-slotisr-ver
   swap lshift invert and
 ;
 
-( nbits shift a -- )
-: clear-bits! dup -rot w@ 0bits swap w! ;
-
 : cmd          24 lshift ;
 : is-data     1 21 >bits ;
 : multiblock  1  5 >bits ;
@@ -395,16 +392,16 @@ variable sdcard.bus-width
 : emmc-set-clock
   1000000 0x 03 sd-status await-clear
 
-  1 2 sd-control1 clear-bits!   ( disable clock )
+  sd-control1 w@ 0x fffffffd and sd-control1 w! ( disable clock )
   10 delay
 
   get-clock-divisor               ( 10 bit clock divisor )
   dup  0x 0ff and 8 lshift        ( lower 8 bits of divisor go in control bits 8..15 )
   swap 0x 300 and 2 rshift        ( high 2 bits of divisor go in control bits 6..7 )
-  sd-control1 w@                ( read control1 )
+  sd-control1 w@                  ( read control1 )
   0x ffff001f and                 ( clear any old divisor bits )
   or or                           ( set new divisor bits )
-  sd-control1 w!                ( write it back )
+  sd-control1 w!                  ( write it back )
 
   10 delay
 
