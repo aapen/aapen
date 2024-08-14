@@ -622,17 +622,17 @@ d\  ." sdcard.scr: " sdcard.scr @ .x cr
 
   ( todo: detect if card absent )
 
-  sd-reset
-  check-interface-condition
-  check-sdhc-support
-  CMD2
-  CMD3
-  check-csd
-  clock-freq-normal emmc-set-clock
-  CMD7
-  read-scr
-  set-bus-width
-  set-block-size
+  sd-reset                          100 delay-millis
+  check-interface-condition         100 delay-millis
+  check-sdhc-support                100 delay-millis
+  CMD2                              100 delay-millis
+  CMD3                              100 delay-millis
+  check-csd                         100 delay-millis
+  clock-freq-normal emmc-set-clock  100 delay-millis
+  CMD7                              100 delay-millis
+  read-scr                          100 delay-millis
+  set-bus-width                     100 delay-millis
+  set-block-size                    100 delay-millis
 
   sd-report
 d\  ." emmc-enable complete" cr
