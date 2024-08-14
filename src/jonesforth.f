@@ -310,7 +310,6 @@
 : ( immediate
 	1		\ allowed nested parens by keeping track of depth
 	begin
-                brk
 		key		\ read next character
 		dup '(' = if	\ open paren?
 			drop		\ drop the open paren
@@ -1753,6 +1752,14 @@
 
 : noecho 0 echo ! ;
 : echo 1 echo ! ;
+
+0 value debug
+
+( d\ acts like a comment when `debug` is zero )
+: d\
+  debug not if begin key '\n' = until then
+; immediate
+
 
 ( align HERE to 16 byte boundary)
 here @ 15 + 15 invert and here !
