@@ -51,6 +51,7 @@
 : mod /mod drop ;
 
 \ Define some character constants
+: '\t' 9 ;
 : '\n' 10 ;
 : '\r' 13 ;
 : bl   32 ; \ bl (BLank) is a standard FORTH word for space.
@@ -61,6 +62,8 @@
 \ space prints a space
 : space bl emit ;
 
+\ tab prints a horizontal tab
+: tab '\t' emit ;
 
 \ The 2... versions of the standard operators work on pairs of stack entries.  They're not used
 \ very commonly so not really worth writing in assembler.  Here is how they are defined in FORTH.
