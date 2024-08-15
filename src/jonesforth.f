@@ -379,9 +379,12 @@
 	@    		( and fetch )
 ;
 
+( a b -- a>b?a:b )
+: max 2dup <= if swap then drop ;
+
 ( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
-: spaces ( n -- ) 0 ?do space loop ;
-: zeroes ( n -- ) 0 ?do '0' emit loop ;
+: spaces ( n -- ) 0 max 0 ?do space loop ;
+: zeroes ( n -- ) 0 max 0 ?do '0' emit loop ;
 
 ( Standard words for manipulating BASE. )
 : decimal ( -- ) 10 base ! ;
