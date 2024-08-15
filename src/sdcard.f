@@ -146,8 +146,28 @@ sd-base     0x       fc + constant sd-slotisr-ver
 3 constant efail ( cmd failed )
 4 constant erbad ( response indicates error )
 
+: .reg tell w@ ." : 0x" %08x ;
+
+: print-sd-status
+  cr
+  sd-control0  s"  control0" .reg tab sd-resp0      s"      resp0" .reg tab sd-cmdtm s"     cmdtm" .reg cr
+  sd-control1  s"  control1" .reg tab sd-resp1      s"      resp1" .reg tab sd-arg1  s"      arg1" .reg cr
+  sd-control2  s"  control2" .reg tab sd-resp2      s"      resp2" .reg tab sd-arg2  s"      arg2" .reg cr
+  sd-irpt      s"      irpt" .reg tab sd-resp3      s"      resp3" .reg cr
+  sd-irpt-mask s" irpt-mask" .reg tab sd-blksizecnt s" blksizecnt" .reg cr
+  sd-irpt-en   s"   irpt-en" .reg cr
+;
+
 ( n -- n|throws )
-: tout? dup ticks < if ." throwing etout" cr etout throw then ;
+: tout?
+  dup ticks <
+  if
+    ." throwing etout" cr
+    print-stack-trace cr
+    print-sd-status
+    etout throw
+  then
+;
 
 ( micros mask addr -- )
 : await-clear
@@ -233,9 +253,9 @@ d\  ." irpt observed: " .s
 
 d\  ." irpt observed (cleared): " .s
 
-  0x   10000 matches if etout throw then
-  0x  100000 matches if etout throw then
-  0x 17f8000 matches if eirpt throw then
+  0x   10000 matches if print-stack-trace cr etout throw then
+  0x  100000 matches if print-stack-trace cr etout throw then
+  0x 17f8000 matches if print-stack-trace cr eirpt throw then
   drop
 
 d\  ." after irpt: " .s
@@ -265,7 +285,7 @@ d\  ." not-busy? " dup .x cr
 : pow10 1 swap 0 do 10 * loop ;
 
 ( cmd -- cmd )
-: command-delay dup cmd.delay 1+ pow10 delay ;
+: command-delay dup cmd.delay 1+ pow10 delay-millis ;
 
 ( cmd arg -- )
 : send-command-p
