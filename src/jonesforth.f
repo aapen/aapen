@@ -213,18 +213,18 @@
 \	where offset points back to condition (the beginning) and offset2 points to after the whole piece of code
 \ So this is like a while (condition) { loop-part } loop in the C language
 : while immediate
-	' 0branch ,	\ compile 0branch
-	here @		\ save location of the offset2 on the stack
-	0 ,		\ compile a dummy offset2
+	' 0branch ,	          \ compile 0branch
+	here @                \ save location of the offset2 on the stack
+	0 ,                   \ compile a dummy offset2
 ;
 
 : repeat immediate
-	' branch ,	\ compile branch
-	swap		\ get the original offset (from begin)
-	here @ - ,	\ and compile it after branch
+	' branch ,            \ compile branch
+	swap                  \ get the original offset (from begin)
+	here @ - ,            \ and compile it after branch
 	dup
-	here @ swap -	\ calculate the offset2
-	swap !		\ and back-fill it in the original location
+	here @ swap -         \ calculate the offset2
+	swap !                \ and back-fill it in the original location
 ;
 
 \ unless is the same as if but the test is reversed.
@@ -236,8 +236,8 @@
 \ implement them all in terms of the primitives `0branch` and `branch`, but instead reusing simpler
 \ control words like (in this instance) `if`.
 : unless immediate
-	' not ,		\ compile not (to reverse the test)
-	[compile] if	\ continue by calling the normal if
+	' not ,               \ compile not (to reverse the test)
+	[compile] if          \ continue by calling the normal if
 ;
 
 \ do..loop is a workhorse. We can view it as a composite of several of the control flow words we've
@@ -247,10 +247,35 @@
 \ Inside the loop body, RSP will be reserved for use by the loop itself. RSP@ will hold the loop
 \ limit and RSP@ + 8 will hold the current count.
 \
+\ do loop-body loop
+\	-- compiles to: --> setup loop-body 1 (loop-inc) (loop-done?) 0branch offset
+\ where offset points back to just before the loop-body
+\
 : do
-     ' >r ,             \ compile >r to push initial count on rstack
-     ' >r ,             \ another >r to push the limit onto rstack
-     here @             \ save location that will be the branch target
+  0                     \ remember this was not a qdo
+  ' >r ,                \ compile >r to push initial count on rstack
+  ' >r ,                \ another >r to push the limit onto rstack
+  here @                \ save location that will be the branch target
+; immediate
+
+\ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal. In other
+\ words you can use this when it's possible for the loop body to be executed zero times.
+\
+\ ?do loop-body loop
+\	-- compiles to: --> bounds<>? 0branch offset2 setup loop-body (loop-inc) (loop-done?) 0branch offset1
+\ where offset2 points just after the final 0branch and lets us skip the whole thing
+\ and offset1 points back to just before the loop-body
+\
+\ Note that we unconditionally put the limit and count onto rstack so the +loop can drop them later.
+: ?do
+  ' 2dup ,
+  ' >r , ' >r ,          \ push initial count and limit onto rstack
+  ' = , ' not ,          \ compile execution-time test on bounds
+  ' 0branch ,            \ if bounds equal, we will skip the body
+  here @                 \ remember where to fill in the offset
+  0 ,                    \ dummy placeholder to fix up later
+  1                      \ remember this was a qdo
+  here @                 \ save location that will be the loop target
 ; immediate
 
 \ This hijacking of the rstack has a dangerous side effect: `exit` will "return" execution to some
@@ -292,6 +317,10 @@
   ' (loop-done?) ,
   ' 0branch ,           \ compile branch
   here @ - ,
+  if                    \ was this a qdo?
+    here @ over -       \ find offset from the qdo's branch to here
+    swap !              \ backpatch the qdo's branch target
+  then
   ' rdrop ,
   ' rdrop ,
 ; immediate
@@ -348,15 +377,8 @@
 ;
 
 ( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
-: spaces	( n -- )
-	begin
-		dup 0>		( while n > 0 )
-	while
-		space		( print a space )
-		1-		( until we count down to 0 )
-	repeat
-	drop
-;
+: spaces ( n -- ) 0 ?do space loop ;
+: zeroes ( n -- ) 0 ?do '0' emit loop ;
 
 ( Standard words for manipulating BASE. )
 : decimal ( -- ) 10 base ! ;
@@ -370,12 +392,13 @@
 	of the stack and prints it out.  However first I'm going to implement some lower-level
 	FORTH words:
 
-	U.R	( u width -- )	which prints an unsigned number, padded to a certain width
-	U.	( u -- )	which prints an unsigned number
-	.R	( n width -- )	which prints a signed number, padded to a certain width.
+	u.r	( u width -- )	which prints an unsigned number, space-padded to a certain width
+        u.r0    ( u width -- )  which prints an unsigned number, zero-padded to a certain width
+	u.            ( u -- )	which prints an unsigned number
+	.r	( n width -- )	which prints a signed number, space-padded to a certain width.
 
 	For example:
-		-123 6 .R
+		-123 6 .r
 	will print out these characters:
 		<space> <space> - 1 2 3
 
@@ -434,6 +457,11 @@
 	( ... and then call the underlying implementation of U. )
 	u.
 ;
+
+( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
+: u.r0 swap dup uwidth rot swap - zeroes u. ;
+: %02x base @ swap hex 2 u.r0 base ! ;
+: %08x base @ swap hex 8 u.r0 base ! ;
 
 (
 	.R prints a signed number, padded to a certain width.  We can't just print the sign
@@ -1031,7 +1059,7 @@
 	begin
 		dup 0>		( while len > 0 )
 	while
-		over 8 u.r	( print the address | base addr len )
+		over 8 u.r0	( print the address | base addr len )
 		space
 
 		( print up to 16 words on this line )
@@ -1042,7 +1070,7 @@
 		while
 			swap		( base addr len linelen addr )
 			dup c@		( base addr len linelen addr byte )
-			2 .r space	( base addr len linelen addr | print the byte )
+			2 u.r0 space	( base addr len linelen addr | print the byte )
 			1+ swap 1-	( base addr len linelen addr -- base addr len addr+1 linelen-1 )
 		repeat
 		2drop		( base addr len )
