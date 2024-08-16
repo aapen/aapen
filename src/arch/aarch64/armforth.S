@@ -1343,9 +1343,21 @@ var_\name :
         defvar "echo",4,,echo,base,0
         defvar "exception",9,,exception,echo
         defvar "excode",6,,excode,exception
+        defvar "srclen",6,,srclen,excode
 
         .global var_exception
         .global var_excode
+
+        // this one is "hand rolled" because "var_>in" is not a valid assembly label
+	defcode ">in",3,,to_in,srclen
+	ldr	x0, =var_to_in	// load address
+	PUSHPSP	x0		// push address
+	next
+	.data
+	.align 3
+var_to_in:
+	.quad 0
+
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
@@ -1371,7 +1383,7 @@ var_\name :
 	next
 	.endm
 
-	defconst "version",7,,version,excode,JONES_VERSION
+	defconst "version",7,,version,to_in,JONES_VERSION
 	defconst "r0",2,,rz,version,return_stack_top
 	defconst "docol",5,,__docol,rz,docol
 	defconst "f_immed",7,,__f_immed,__docol,f_immed
@@ -1784,6 +1796,179 @@ _word:
 word_buffer:
 	.space 32
 
+/*
+
+        WORD2 (this is a temporary name while I get line buffering working) is like WORD but doesn't
+        directly go get keys. Instead it parses through the input buffer that was previously filled
+        with `refill`. WORD2 leaves the address and length of the next word on the stack. (This
+        address may or may not be inside the input buffer. Callers should not make assumptions
+        either way.)
+
+        A zero length indicates no word is available in the input buffer.
+
+        If WORD2 encounters a backslash, it consumes everything to the next newline character.
+
+        WORD2 updates >in with the index in the input buffer of the next character _after_ the word
+        it just read.
+
+*/
+
+	defcode "word2",5,,newword,word
+	bl _word2
+	PUSHPSP	x0			// address
+	PUSHPSP	x1			// length
+	next
+_word2:
+	// WORD2 () (address: x0, length: x1)
+        PUSHPSP x6
+        PUSHPSP x5
+        PUSHPSP x4
+        PUSHPSP lr
+
+        // load x4 with address of next character in buffer
+        ldr     x4, =buffer
+        mov     x6, x4
+        ldr     x0, =var_to_in
+        ldr     x1, [x0]
+        add     x4, x4, x1
+
+        // x6 is the address of the last source character
+        ldr     x0, =var_srclen
+        ldr     x1, [x0]
+        add     x6, x6, x1
+
+        // if input exhausted, return false
+        cmp     x4, x6
+        bgt     5f
+
+        // load x5 with address of the word buffer
+	ldr	x5, =word_buffer2
+
+1:      // examine the next character
+        ldrb    w0, [x4], #1
+
+	cmp	x0, #'\\'		// == \?
+	beq	4f			// skip comment
+	cmp	x0, #' '		// <= ' '?
+	ble	1b			// skip all blanks and keep looking
+
+2:	// store character, increment pointer
+        strb	w0, [x5], #1
+        ldrb    w0, [x4], #1
+
+        // if input exhausted, return whatever we've got
+        cmp     x4, x6
+        bgt     3f
+
+	cmp	w0, #' '		// > ' '?
+	bgt	2b			// keep reading
+
+3:
+        // we're done, update `>in`
+        ldr     x0, =buffer
+        sub     x1, x4, x0
+        ldr     x0, =var_to_in
+        str     x1, [x0]
+
+        // prepare to return the addr and length of the word
+	ldr	x0, =word_buffer2	// address
+	sub	x1, x5, x0		// length
+
+        POPPSP  lr
+        POPPSP  x4
+        POPPSP  x5
+        POPPSP  x6
+        ret
+
+4:      // consume til newline
+        ldrb    w0, [x4], #1
+
+        // if input exhausted while in a comment, there's no word
+        cmp     x4, x6
+        bgt     5f
+
+	cmp	w0, #'\n'		// eol?
+	bne	4b			// no, keep looking
+	b	1b
+
+5:      // return false
+        ldr     x0, =word_buffer2
+        mov     x1, xzr
+
+        POPPSP  lr
+        POPPSP  x4
+        POPPSP  x5
+        POPPSP  x6
+        ret
+
+	.data
+word_buffer2:
+	.space 32
+
+/*
+
+       When the input source is the user input device, attempt to receive input into the terminal
+       input buffer. If successful, make the result the input buffer, set >IN to zero, and return
+       true. Receipt of a line containing no characters is considered successful. If there is no
+       input available from the current input source, return false.
+
+       When the input source is a string from EVALUATE, return false and perform no other action.
+*/
+
+        defcode "refill",6,,refill,newword
+        bl      _refill
+        PUSHPSP x0
+        next
+_refill:
+	// WORD () (address: x0, length: x1)
+        PUSHPSP x4
+        PUSHPSP lr
+        ldr     x4, =buffer
+1:
+	bl	_key
+
+        // special cases
+
+        // no input
+        cmp     x0, #0
+        beq     2f                      // exit (zero in x0 indicates "false")
+
+        // EOL
+        cmp     x0, #'\n'               // EOL
+        beq     2f                      // exit (non-zero x0 indicates "true")
+
+        // BS
+        cmp     x0, #8
+        beq     _refill_bs
+
+        strb    w0, [x4], #1            // store character, increment pointer
+        b       1b                      // keep reading characters
+
+2:
+        ldr     x1, =buffer
+        sub     x1, x4, x1              // how many characters did we read?
+        ldr     x4, =var_srclen         // address of variable
+        str     x1, [x4]                // store number of chars available
+        ldr     x4, =var_to_in          // address of variable
+        str     xzr, [x4]               // store zero in >in
+        POPPSP  lr
+        POPPSP  x4
+        ret
+
+_refill_bs:
+        subs    x1, x4, 1               // drop the last character
+        ldr     x0, =buffer             // start of buffer
+        cmp     x1, x0                  // compare ptr-1 to start
+        csel    x4, x0, x1, le          // update ptr to max(ptr-1, start)
+        b       1b                      // keep looking
+
+        defcode "source",6,,source,refill
+        ldr     x1, =buffer
+        PUSHPSP x1
+        ldr     x1, =var_srclen
+        ldr     x0, [x1]
+        PUSHPSP x0
+        next
 
 /*
 	As well as reading in words we'll need to read in numbers and for that we are using a function
@@ -1802,7 +1987,7 @@ word_buffer:
 	partial value if there was an error.
 */
 
-	defcode "number",6,,number,word
+	defcode "number",6,,number,source
 	POPPSP	x1		// length of string
 	POPPSP	x0		// address of string
 	bl	_number
