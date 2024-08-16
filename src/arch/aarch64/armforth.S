@@ -2482,11 +2482,13 @@ _comma:
 
 _tell:
         PUSHPSP lr
+        cmp     x2, #0
+        beq     2f
 1:      ldrb    w0, [x1], #1
         bl      _con_out
         subs    x2, x2, #1
         bgt     1b
-        POPPSP  lr
+2:      POPPSP  lr
         ret
 
 /*
