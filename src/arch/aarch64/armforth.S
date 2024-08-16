@@ -2729,18 +2729,7 @@ _saymsg:
 
 */
 
-        .text
-	.set INITIAL_DATA_SEGMENT_SIZE,65536
-
-create_data_segment:
-
-        ret
-
 	.section .rodata
-rmsg: .ascii "WORD: "
-rmsgend:
-rmsgnl: .ascii "\r\n"
-
         .align 3
 initfile:
         .incbin "jonesforth.f"
@@ -2767,52 +2756,21 @@ test_src:
 /*
 	We allocate static space for the various stacks and buffers.
 */
-	.set RETURN_STACK_SIZE,8*1024      // 8K
-        .set DATA_STACK_SIZE,8*1024        // 8K
-        .set INPUT_STACK_SIZE,64*8         // 128b ( allows 8 nested input sources )
-        .set BUFFER_SIZE,4096              // 4K
+        .macro defstack lbl,size
+        .align 12
+        \lbl: .space \size
+        \lbl\()_top:
+        .endm
 
 	.bss
-/* FORTH return stack */
-	.align 12
-return_stack:
-	.space RETURN_STACK_SIZE
-return_stack_top:
+        defstack return_stack,8*1024       // 8K
+        defstack data_stack,8*1024         // 8K
+        defstack input_stack,8*64          // 128B (allows 8 nested input sources)
 
-/* FORTH parameter stack */
         .align 12
-data_stack:
-        .space DATA_STACK_SIZE
-data_stack_top:
-
-/* Input stack */
-        .align 12
-input_stack:
-        .space INPUT_STACK_SIZE
-input_stack_top:
-
-	.align 12
-/* This is used as a temporary input buffer when reading from files or the terminal. */
-buffer:
-	.space BUFFER_SIZE
+buffer: .space 4096                        // 4K (temporary input buffer)
 
         .align 12
 data_segment:
         // data segment starts here and takes the rest of the memory
         // space.
-
-
-/*
-	START OF FORTH CODE ----------------------------------------------------------------------
-
-	We've now reached the stage where the FORTH system is running and self-hosting.  All further
-	words can be written as FORTH itself, including words like IF, THEN, .", etc which in most
-	languages would be considered rather fundamental.
-
-	I used to append this here in the assembly file, but I got sick of fighting against gas's
-	crack-smoking (lack of) multiline string syntax.  So now that is in a separate file called
-	jonesforth.f
-
-	If you don't already have that file, download it from http://annexia.org/forth in order
-	to continue the tutorial.
-*/
