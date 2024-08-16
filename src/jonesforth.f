@@ -467,7 +467,9 @@
 ( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
 : u.r0 swap dup uwidth rot swap - zeroes u. ;
 : %02x base @ swap hex 2 u.r0 base ! ;
+: %04x base @ swap hex 4 u.r0 base ! ;
 : %08x base @ swap hex 8 u.r0 base ! ;
+: %016x base @ swap hex 16 u.r0 base ! ;
 
 (
 	.R prints a signed number, padded to a certain width.  We can't just print the sign

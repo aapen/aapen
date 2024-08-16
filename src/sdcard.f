@@ -150,11 +150,12 @@ sd-base     0x       fc + constant sd-slotisr-ver
 
 : print-sd-status
   cr
-  sd-control0  s"  control0" .reg tab sd-resp0      s"      resp0" .reg tab sd-cmdtm s"     cmdtm" .reg cr
-  sd-control1  s"  control1" .reg tab sd-resp1      s"      resp1" .reg tab sd-arg1  s"      arg1" .reg cr
-  sd-control2  s"  control2" .reg tab sd-resp2      s"      resp2" .reg tab sd-arg2  s"      arg2" .reg cr
-  sd-irpt      s"      irpt" .reg tab sd-resp3      s"      resp3" .reg cr
-  sd-irpt-mask s" irpt-mask" .reg tab sd-blksizecnt s" blksizecnt" .reg cr
+  sd-status    s"    status" .reg tab sd-resp0      s"      resp0" .reg tab sd-cmdtm s"     cmdtm" .reg cr
+  sd-control0  s"  control0" .reg tab sd-resp1      s"      resp1" .reg tab sd-arg1  s"      arg1" .reg cr
+  sd-control1  s"  control1" .reg tab sd-resp2      s"      resp2" .reg tab sd-arg2  s"      arg2" .reg cr
+  sd-control2  s"  control2" .reg tab sd-resp3      s"      resp3" .reg cr
+  sd-irpt      s"      irpt" .reg tab sd-blksizecnt s" blksizecnt" .reg cr
+  sd-irpt-mask s" irpt-mask" .reg cr
   sd-irpt-en   s"   irpt-en" .reg cr
 ;
 
@@ -600,10 +601,10 @@ d\  ." sdcard.scr: " sdcard.scr @ .x cr
 
 : h@ dup c@ swap 1+ c@ 8 lshift or ;
 
-: c.@+ ( a -- a+1 ) dup c@ 2 u.r 1 + ;
-: h.@+ ( a -- a+2 ) dup h@ 4 u.r 2 + ;
-: w.@+ ( a -- a+4 ) dup w@ 8 u.r 4 + ;
-: q.@+ ( a -- a+8 ) dup @ 16 u.r 8 + ;
+: c.@+ ( a -- a+1 ) dup c@ %02x  1 + ;
+: h.@+ ( a -- a+2 ) dup h@ %04x  2 + ;
+: w.@+ ( a -- a+4 ) dup w@ %08x  4 + ;
+: q.@+ ( a -- a+8 ) dup  @ %016x 8 + ;
 
 : sd-report
   cr
