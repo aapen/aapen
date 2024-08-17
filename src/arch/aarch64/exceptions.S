@@ -137,6 +137,11 @@ __exception_handler_table:
         bl      print_register
         .endm
 
+        .macro outval lbl
+        ldr     x3, =\lbl
+        bl      print_register
+        .endm
+
         .global bsod
 
 bsod:
@@ -150,6 +155,10 @@ bsod:
         outreg  x28, x28_label
         outreg  x29, x29_label
         outreg  x10, x10_label
+        ldr     x2, [x27]
+        outval  irf_label
+        ldr     x2, [x27, 8]
+        outval  icx_label
 
         // Restore link register and return
         ldp     x29, x30, [sp], #16
@@ -212,6 +221,8 @@ print_hex:
 // Data section for register labels
 esr_label:      .asciz "ESR_EL1: 0x"
 far_label:      .asciz "FAR_EL1: 0x"
-x28_label:      .asciz "    x28: 0x"
-x29_label:      .asciz "    x29: 0x"
-x10_label:      .asciz "    x10: 0x"
+x28_label:      .asciz "PSP x28: 0x"
+x29_label:      .asciz "RSP x29: 0x"
+x10_label:      .asciz "NIP x10: 0x"
+irf_label:      .asciz "IRF    : 0x"
+icx_label:      .asciz "IRF ctx: 0x"

@@ -1383,7 +1383,8 @@ var_\name :
         defconst "sdcard",6,,sdcard,video,sdcard_src
         defconst "direct-thread",13,,direct_thread,sdcard,direct_thread_src
         defconst "assembler",9,,assembler,direct_thread,assembler_src
-        defconst "charrom",7,,charrom,assembler,char_rom
+        defconst "test",4,,test,assembler,test_src
+        defconst "charrom",7,,charrom,test,char_rom
 
 
 	/* This is the instruction template for all of our direct word calls. */
@@ -2757,7 +2758,9 @@ direct_thread_src:
 assembler_src:
         .incbin "assembler.f"
         .quad 0
-
+test_src:
+        .incbin "test.f"
+        .quad 0
 
 /*
 	We allocate static space for the various stacks and buffers.

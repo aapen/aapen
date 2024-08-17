@@ -51,6 +51,8 @@ clk-freq 1000000 / constant ticks-per-micro
   drop
 ;
 
+: delay-millis ( n -- ) 1000 * delay ;
+
 1 30 lshift constant mbox-status-empty
 1 31 lshift constant mbox-status-full
 
