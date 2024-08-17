@@ -173,7 +173,7 @@ hex
 ( Turn on the shift option )
 
 : ->shift ( instruction -- instruction )
-  0d 1 0d 22 lshift
+  1 0d 22 lshift
   or
 ;
 
@@ -211,13 +211,21 @@ hex
 : ldr-x[x#]! ( rt rn im12 -- instruction )  f8400000 rt-rn-im9-instruction ->pre ;
 : ldr-x#     ( rt im19 -- instruction )     58000000 rt-im19-instruction ;
 
+: ldrb-w[x]# ( rt rn im9 -- instruction ) 38400000 rt-rn-im9-instruction ->post ;
+: ldrb-w[x]  ( rt rn     -- instruction ) 0 39400000 rt-rn-im12-instruction ;
+: ldrb-w[x#] ( rt rn im12 -- instruction ) 39400000 rt-rn-im12-instruction ;
+
 ( TBD this has problems with neg imm values )
+
 : ldr-x[x#]  ( rt rn im12 -- instruction )  f9400000 rt-rn-im12-instruction ;
 
 : str-x[x#]! ( rt rn im12 -- instruction ) f8000000 rt-rn-im9-instruction ->pre ;
 : str-x[x#]  ( rt rn im12 -- instruction ) f8000000 rt-rn-im9-instruction ;
 : str-x[x]#  ( rt rn im12 -- instruction ) f8000000 rt-rn-im9-instruction ->post ;
 
+: strb-w[x#]  ( rt rn im12 -- instruction ) 39000000 rt-rn-im12-instruction ;
+: strb-w[x]   ( rt rn im12 -- instruction ) 0 strb-w[x#] ;
+: strb-w[x]#  ( rt rn im12 -- instruction ) 38000000 rt-rn-im9-instruction ->post ;
 
 ( Address arithmetic )
 
@@ -239,6 +247,11 @@ hex
 : sub-ww# ( rt rn im12 -- instruction ) sub-xx# ->w ;
 : sub-www ( rt rm rn -- instruction )  sub-xxx ->w ;
 
+: subs-xx# ( rt rn im12 -- instruction ) f1000000 rt-rn-im12-instruction ;
+: subs-ww# ( rt rn im12 -- instruction ) subs-xx# ->w ;
+
+: cmp-x#  ( rn im12 -- instruction ) 1f  rot rot subs-xx# ;
+: cmp-w#  ( rt im12 -- instruction )   cmp-x# ->w ;
 
 : madd-xxxx ( rt rm rn ra -- instruction ) 9b000000 rt-rn-rm-ra-instruction ;
 : mul-xxx ( rt rm rn -- instruction )   1f 9b000000 rt-rn-rm-ra-instruction ;
@@ -377,14 +390,20 @@ defprim x-say-msg
   say-msg compile-call
 ;;
 
+( Copy of the dup word )
+
 defprim x-dup
   0  psp    ldr-x[x]   w,
   0         pushpsp-x  w,
 ;;
 
+( Copy of the drop word )
+
 defprim x-drop
   psp psp 8 add-xx#    w,
 ;;
+
+( Copy of the rot word )
 
 defprim x-rot
   3         poppsp-x   w,
@@ -396,57 +415,84 @@ defprim x-rot
 ;;
 
 
+( Backward labels and address words )
+
 variable loc-1b
 variable loc-2b
 variable loc-3b
+variable loc-4b
+variable loc-5b
 
 : 1b: here @ loc-1b ! ;
+: 2b: here @ loc-2b ! ;
+: 3b: here @ loc-3b ! ;
+: 4b: here @ loc-4b ! ;
+: 5b: here @ loc-5b ! ;
 
 : ->1b loc-1b @ here @ - 4 /  ;
+: ->2b loc-3b @ here @ - 4 /  ;
+: ->3b loc-3b @ here @ - 4 /  ;
+: ->4b loc-4b @ here @ - 4 /  ;
+: ->5b loc-5b @ here @ - 4 /  ;
 
  
+( Forward labels and address words )
+
 variable loc-1f
 variable loc-2f
 variable loc-3f
+variable loc-4f
+variable loc-5f
 
 : ->1f here @ loc-1f !  0 ;
 : ->2f here @ loc-2f !  0 ;
 : ->3f here @ loc-3f !  0 ;
+: ->4f here @ loc-4f !  0 ;
+: ->5f here @ loc-5f !  0 ;
 
-: 1f: 
-  loc-1f @            ( address of instruction to patch )
-  here @ swap -       ( offset in bytes )
-  4 /                 ( offset in words )
-  loc-1f @ @          ( offset instruction-to-be-patched )
-  swap set-im19       ( patched-instruction )
-  loc-1f !
-  ( tbd clear loc-1f )
+: word-offset ( addr1 addr2 -- word-offset )
+  - 4 /
 ;
 
+( Given the addr of a branch instruction to patch, patch the
+  immediate offset with the difference between the instruction
+  address and here. )
+  
+: patch-jump-forward  ( address of instruction to patch -- )
+  dup not if          ( check for undefined jump )
+    ." Forward jump not defined!"
+    exit
+  then
+  here @ over         ( ins-addr here ins-addr  )
+  word-offset         ( ins-addr offset )
+  over                ( ins-addr offset ins-addr )
+  w@                  ( ins-addr offset instruction-to-be-patched )
+  swap set-im19       ( ins-addr patched-instruction )
+  swap w!
+;
 
-defprim back-jump
+: 1f: loc-1f @ patch-jump-forward loc-1f 0 ! ;
+: 2f: loc-2f @ patch-jump-forward loc-2f 0 ! ;
+: 3f: loc-3f @ patch-jump-forward loc-3f 0 ! ;
+: 4f: loc-4f @ patch-jump-forward loc-4f 0 ! ;
+: 5f: loc-5f @ patch-jump-forward loc-5f 0 ! ;
+
+
+( This is a copy of the cmove word, testing out labels and jumps )
+
+defprim x-cmove ( src-addr dst-addr len -- )
   0         poppsp-x   w,
-1b:
   1         poppsp-x   w,
   2         poppsp-x   w,
-  ->1b	    beq-#      w,
-  1         poppsp-x   w,
-  ->1f      beq-#      w,
-  2         poppsp-x   w,
-1f:
-  2         poppsp-x   w,
+  0 0       cmp-x#     w,
+  ->2f      beq-#      w,
+  1b:
+  3 2 1     ldrb-w[x]# w,
+  3 1 1     strb-w[x]# w,
+  0 0 1     subs-xx#   w,
+  ->1b      bgt-#      w,
+  2f:
 ;;
-
-defprim back-jump-control
-  3         poppsp-x   w,
-  2         poppsp-x   w,
-  1         poppsp-x   w,
-  0	    beq-#      w,
-  -1	    beq-#      w,
-  -2	    beq-#      w,
-  1         poppsp-x   w,
-;;
-
 
 assembler-save-base @ base !
 echo
