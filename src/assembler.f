@@ -328,6 +328,80 @@ hex
 : pushpsp-x ( r -- instruction ) psp -8 str-x[x#]! ;
 : poppsp-x  ( r -- instruction ) psp  8 ldr-x[x]# ;
 
+( Backward labels and address words )
+
+variable loc-1b
+variable loc-2b
+variable loc-3b
+variable loc-4b
+variable loc-5b
+
+: 1b: here @ loc-1b ! ;
+: 2b: here @ loc-2b ! ;
+: 3b: here @ loc-3b ! ;
+: 4b: here @ loc-4b ! ;
+: 5b: here @ loc-5b ! ;
+
+: ->1b loc-1b @ here @ - 4 /  ;
+: ->2b loc-3b @ here @ - 4 /  ;
+: ->3b loc-3b @ here @ - 4 /  ;
+: ->4b loc-4b @ here @ - 4 /  ;
+: ->5b loc-5b @ here @ - 4 /  ;
+
+ 
+( Forward labels and address words )
+
+variable loc-1f
+variable loc-2f
+variable loc-3f
+variable loc-4f
+variable loc-5f
+
+: ->1f here @ loc-1f !  0 ;
+: ->2f here @ loc-2f !  0 ;
+: ->3f here @ loc-3f !  0 ;
+: ->4f here @ loc-4f !  0 ;
+: ->5f here @ loc-5f !  0 ;
+
+: word-offset ( addr1 addr2 -- word-offset )
+  - 4 /
+;
+
+( Given the addr of a branch instruction to patch, patch the
+  immediate offset with the difference between the instruction
+  address and here. )
+  
+: patch-jump-forward  ( address of instruction to patch -- )
+  dup not if          ( check for undefined jump )
+    ." Forward jump not defined!"
+    exit
+  then
+  here @ over         ( ins-addr here ins-addr  )
+  word-offset         ( ins-addr offset )
+  over                ( ins-addr offset ins-addr )
+  w@                  ( ins-addr offset instruction-to-be-patched )
+  swap set-im19       ( ins-addr patched-instruction )
+  swap w!
+;
+
+: 1f: loc-1f @ patch-jump-forward loc-1f 0 ! ;
+: 2f: loc-2f @ patch-jump-forward loc-2f 0 ! ;
+: 3f: loc-3f @ patch-jump-forward loc-3f 0 ! ;
+: 4f: loc-4f @ patch-jump-forward loc-4f 0 ! ;
+: 5f: loc-5f @ patch-jump-forward loc-5f 0 ! ;
+
+: clear-jump-addresses ( -- )
+  0 loc-1b !
+  0 loc-2b !
+  0 loc-3b !
+  0 loc-4b !
+  0 loc-5b !
+  0 loc-1f !
+  0 loc-2f !
+  0 loc-3f !
+  0 loc-4f !
+  0 loc-5f !
+;
 
 ( Create a new primitive word and leave its definition
   open. You *must* complete the word with ;; or it will
@@ -346,6 +420,7 @@ hex
   1 0   ldr-x[x]   w,
   1     br-x       w,
   align			( Next word aligns )
+  clear-jump-addresses  ( Prevent cross word jumps )
 ;
 
 
@@ -413,70 +488,6 @@ defprim x-rot
   3         pushpsp-x  w,
   1         pushpsp-x  w,
 ;;
-
-
-( Backward labels and address words )
-
-variable loc-1b
-variable loc-2b
-variable loc-3b
-variable loc-4b
-variable loc-5b
-
-: 1b: here @ loc-1b ! ;
-: 2b: here @ loc-2b ! ;
-: 3b: here @ loc-3b ! ;
-: 4b: here @ loc-4b ! ;
-: 5b: here @ loc-5b ! ;
-
-: ->1b loc-1b @ here @ - 4 /  ;
-: ->2b loc-3b @ here @ - 4 /  ;
-: ->3b loc-3b @ here @ - 4 /  ;
-: ->4b loc-4b @ here @ - 4 /  ;
-: ->5b loc-5b @ here @ - 4 /  ;
-
- 
-( Forward labels and address words )
-
-variable loc-1f
-variable loc-2f
-variable loc-3f
-variable loc-4f
-variable loc-5f
-
-: ->1f here @ loc-1f !  0 ;
-: ->2f here @ loc-2f !  0 ;
-: ->3f here @ loc-3f !  0 ;
-: ->4f here @ loc-4f !  0 ;
-: ->5f here @ loc-5f !  0 ;
-
-: word-offset ( addr1 addr2 -- word-offset )
-  - 4 /
-;
-
-( Given the addr of a branch instruction to patch, patch the
-  immediate offset with the difference between the instruction
-  address and here. )
-  
-: patch-jump-forward  ( address of instruction to patch -- )
-  dup not if          ( check for undefined jump )
-    ." Forward jump not defined!"
-    exit
-  then
-  here @ over         ( ins-addr here ins-addr  )
-  word-offset         ( ins-addr offset )
-  over                ( ins-addr offset ins-addr )
-  w@                  ( ins-addr offset instruction-to-be-patched )
-  swap set-im19       ( ins-addr patched-instruction )
-  swap w!
-;
-
-: 1f: loc-1f @ patch-jump-forward loc-1f 0 ! ;
-: 2f: loc-2f @ patch-jump-forward loc-2f 0 ! ;
-: 3f: loc-3f @ patch-jump-forward loc-3f 0 ! ;
-: 4f: loc-4f @ patch-jump-forward loc-4f 0 ! ;
-: 5f: loc-5f @ patch-jump-forward loc-5f 0 ! ;
-
 
 ( This is a copy of the cmove word, testing out labels and jumps )
 
