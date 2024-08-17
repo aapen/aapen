@@ -393,8 +393,61 @@ defprim x-rot
   2         pushpsp-x  w,
   3         pushpsp-x  w,
   1         pushpsp-x  w,
-
 ;;
+
+
+variable loc-1b
+variable loc-2b
+variable loc-3b
+
+: 1b: here @ loc-1b ! ;
+
+: ->1b loc-1b @ here @ - 4 /  ;
+
+ 
+variable loc-1f
+variable loc-2f
+variable loc-3f
+
+: ->1f here @ loc-1f !  0 ;
+: ->2f here @ loc-2f !  0 ;
+: ->3f here @ loc-3f !  0 ;
+
+: 1f: 
+  loc-1f @            ( address of instruction to patch )
+  here @ swap -       ( offset in bytes )
+  4 /                 ( offset in words )
+  loc-1f @ @          ( offset instruction-to-be-patched )
+  swap set-im19       ( patched-instruction )
+  loc-1f !
+  ( tbd clear loc-1f )
+;
+
+
+defprim back-jump
+  0         poppsp-x   w,
+1b:
+  1         poppsp-x   w,
+  2         poppsp-x   w,
+  ->1b	    beq-#      w,
+  1         poppsp-x   w,
+  ->1f      beq-#      w,
+  2         poppsp-x   w,
+1f:
+  2         poppsp-x   w,
+;;
+
+defprim back-jump-control
+  3         poppsp-x   w,
+  2         poppsp-x   w,
+  1         poppsp-x   w,
+  0	    beq-#      w,
+  -1	    beq-#      w,
+  -2	    beq-#      w,
+  1         poppsp-x   w,
+;;
+
+
 assembler-save-base @ base !
 echo
 
