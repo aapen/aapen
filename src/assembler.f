@@ -367,6 +367,19 @@ variable loc-5f
   - 4 /
 ;
 
+( Given a branch instruction and an offset, update
+the instruction to jump to that offset. This word deals
+with the two forms of relative jumps. )
+
+: patch-jump-offset ( offset instruction -- instruction )
+  dup ff000000 and
+  14000000 = if
+    swap set-im26
+  else
+    swap set-im19
+  then
+;
+
 ( Given the addr of a branch instruction to patch, patch the
   immediate offset with the difference between the instruction
   address and here. )
@@ -380,7 +393,7 @@ variable loc-5f
   word-offset         ( ins-addr offset )
   over                ( ins-addr offset ins-addr )
   w@                  ( ins-addr offset instruction-to-be-patched )
-  swap set-im19       ( ins-addr patched-instruction )
+  patch-jump-offset   ( ins-addr patched-instruction )
   swap w!
 ;
 
