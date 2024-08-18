@@ -166,23 +166,23 @@
 \ the address of the 0BRANCH on the stack.  Later when we see THEN, we pop that address
 \ off the stack, calculate the offset, and back-fill the offset.
 : if immediate
-	' 0branch ,	\ compile 0branch
-	here @		\ save location of the offset on the stack
-	0 ,		\ compile a dummy offset
+	' 0branch ,                   \ compile 0branch
+	here @                        \ save location of the offset on the stack
+	0 ,                           \ compile a dummy offset
 ;
 
 : then immediate
 	dup
-	here @ swap -	\ calculate the offset from the address saved on the stack
-	swap !		\ store the offset in the back-filled location
+	here @ swap -                 \ calculate the offset from the address saved on the stack
+	swap !                        \ store the offset in the back-filled location
 ;
 
 : else immediate
-	' branch ,	\ definite branch to just over the false-part
-	here @		\ save location of the offset on the stack
-	0 ,		\ compile a dummy offset
-	swap		\ now back-fill the original (if) offset
-	dup		\ same as for then word above
+	' branch ,                    \ definite branch to just over the false-part
+	here @                        \ save location of the offset on the stack
+	0 ,                           \ compile a dummy offset
+	swap                          \ now back-fill the original (if) offset
+	dup                           \ same as for then word above
 	here @ swap -
 	swap !
 ;
@@ -192,13 +192,13 @@
 \	where offset points back to the loop-part
 \ This is like do { loop-part } while (condition) in the C language
 : begin immediate
-	here @		\ save location on the stack
+	here @                        \ save location on the stack
 ;
 
 : until immediate
-	' 0branch ,	\ compile 0branch
-	here @ -	\ calculate the offset from the address saved on the stack
-	,		\ compile the offset here
+	' 0branch ,                   \ compile 0branch
+	here @ -                      \ calculate the offset from the address saved on the stack
+	,                             \ compile the offset here
 ;
 
 \ begin loop-part again
@@ -206,9 +206,9 @@
 \	where offset points back to the loop-part
 \ In other words, an infinite loop which can only be returned from with EXIT
 : again immediate
-	' branch ,	\ compile branch
-	here @ -	\ calculate the offset back
-	,		\ compile the offset here
+	' branch ,                    \ compile branch
+	here @ -                      \ calculate the offset back
+	,                             \ compile the offset here
 ;
 
 \ begin condition while loop-part repeat
@@ -216,18 +216,18 @@
 \	where offset points back to condition (the beginning) and offset2 points to after the whole piece of code
 \ So this is like a while (condition) { loop-part } loop in the C language
 : while immediate
-	' 0branch ,	          \ compile 0branch
-	here @                \ save location of the offset2 on the stack
-	0 ,                   \ compile a dummy offset2
+	' 0branch ,                   \ compile 0branch
+	here @                        \ save location of the offset2 on the stack
+	0 ,                           \ compile a dummy offset2
 ;
 
 : repeat immediate
-	' branch ,            \ compile branch
-	swap                  \ get the original offset (from begin)
-	here @ - ,            \ and compile it after branch
+	' branch ,                    \ compile branch
+	swap                          \ get the original offset (from begin)
+	here @ - ,                    \ and compile it after branch
 	dup
-	here @ swap -         \ calculate the offset2
-	swap !                \ and back-fill it in the original location
+	here @ swap -                 \ calculate the offset2
+	swap !                        \ and back-fill it in the original location
 ;
 
 \ unless is the same as if but the test is reversed.
@@ -239,8 +239,8 @@
 \ implement them all in terms of the primitives `0branch` and `branch`, but instead reusing simpler
 \ control words like (in this instance) `if`.
 : unless immediate
-	' not ,               \ compile not (to reverse the test)
-	[compile] if          \ continue by calling the normal if
+	' not ,                       \ compile not (to reverse the test)
+	[compile] if                  \ continue by calling the normal if
 ;
 
 \ do..loop is a workhorse. We can view it as a composite of several of the control flow words we've
@@ -255,10 +255,10 @@
 \ where offset points back to just before the loop-body
 \
 : do
-  0                     \ remember this was not a qdo
-  ' >r ,                \ compile >r to push initial count on rstack
-  ' >r ,                \ another >r to push the limit onto rstack
-  here @                \ save location that will be the branch target
+  0                             \ remember this was not a qdo
+  ' >r ,                        \ compile >r to push initial count on rstack
+  ' >r ,                        \ another >r to push the limit onto rstack
+  here @                        \ save location that will be the branch target
 ; immediate
 
 \ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal. In other
@@ -272,13 +272,13 @@
 \ Note that we unconditionally put the limit and count onto rstack so the +loop can drop them later.
 : ?do
   ' 2dup ,
-  ' >r , ' >r ,          \ push initial count and limit onto rstack
-  ' = , ' not ,          \ compile execution-time test on bounds
-  ' 0branch ,            \ if bounds equal, we will skip the body
-  here @                 \ remember where to fill in the offset
-  0 ,                    \ dummy placeholder to fix up later
-  1                      \ remember this was a qdo
-  here @                 \ save location that will be the loop target
+  ' >r , ' >r ,                 \ push initial count and limit onto rstack
+  ' = , ' not ,                 \ compile execution-time test on bounds
+  ' 0branch ,                   \ if bounds equal, we will skip the body
+  here @                        \ remember where to fill in the offset
+  0 ,                           \ dummy placeholder to fix up later
+  1                             \ remember this was a qdo
+  here @                        \ save location that will be the loop target
 ; immediate
 
 \ This hijacking of the rstack has a dangerous side effect: `exit` will "return" execution to some
@@ -302,8 +302,8 @@
 \ Yes. It also means that we can't use `i` except _directly_ inside a do..loop. No calling it from
 \ another word or the offsets will be all wrong. Same goes for `j` and `(loop-done?)`
 
-: i rsp@ 16 + @ ;       \ get current loop count
-: j rsp@ 32 + @ ;       \ get outer loop count
+: i rsp@ 16 + @ ;               \ get current loop count
+: j rsp@ 32 + @ ;               \ get outer loop count
 : (loop-inc)   rsp@ 16 + @ + rsp@ 16 + ! ;
 : (loop-done?) rsp@ 8+ @ rsp@ 16 + @ <= ;
 
@@ -318,11 +318,11 @@
 : +loop
   ' (loop-inc) ,
   ' (loop-done?) ,
-  ' 0branch ,           \ compile branch
+  ' 0branch ,                   \ compile branch
   here @ - ,
-  if                    \ was this a qdo?
-    here @ over -       \ find offset from the qdo's branch to here
-    swap !              \ backpatch the qdo's branch target
+  if                            \ was this a qdo?
+    here @ over -               \ find offset from the qdo's branch to here
+    swap !                      \ backpatch the qdo's branch target
   then
   ' rdrop ,
   ' rdrop ,
