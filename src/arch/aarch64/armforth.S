@@ -827,6 +827,7 @@ name_\label :
 	.text
 	.pool
 	.global code_\label
+        .type code_\label,%function
 code_\label :
 	// assembler code follows
 	.endm
