@@ -1256,7 +1256,7 @@
 	recognise "meta-words" like LIT, LITSTRING, BRANCH, etc. and treat those separately.
 )
 : see
-	word find	( find the dictionary entry to decompile )
+	word2 find	( find the dictionary entry to decompile )
 
         dup 0= if ." not found " exit then
 
@@ -1705,13 +1705,6 @@
 ;
 
 (
-        The assembler from the original jonesforth.f is i386 specific and wouldn't work at all on ARM64
-
-        -mtnygard, 2024-07-04
-
-)
-
-(
         Hardware interface ---------------------------------------------------------------------------
 
         Working with modern hardware involves some complexity that wasn't a concern back when FORTH
@@ -1750,6 +1743,17 @@
   	xray-p
   then
 ;
+
+(
+
+        I/O --------------------------------------------------------------------------------
+
+        These words interact with the system implementation to provide I/O facilities. Where
+        possible they match the definitions on forth-standard.org
+
+)
+
+: source-id srcid @ ;
 
 (
 

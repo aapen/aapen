@@ -966,7 +966,7 @@ name_0: .quad 0
 	defcode "/mod",4,,divmod,rshift
         POPPSP  x2                      // x2 <- b
         POPPSP  x1                      // x1 <- a
-        udiv    x0, x1, x2              // x0 = a / b
+        sdiv    x0, x1, x2              // x0 = a / b
         msub    x3, x0, x2, x1          // x3 = a - (x0 * b)
         PUSHPSP x3                      // push remainder
         PUSHPSP x0                      // push quotient
@@ -1344,13 +1344,15 @@ var_\name :
         defvar "echo",4,,echo,base,0
         defvar "exception",9,,exception,echo
         defvar "excode",6,,excode,exception
-        defvar "srclen",6,,srclen,excode
+        defvar "inbuf",5,,inbuf,excode,buffer
+        defvar "srclen",6,,srclen,inbuf
+        defvar "srcid",5,,srcid,srclen
 
         .global var_exception
         .global var_excode
 
         // this one is "hand rolled" because "var_>in" is not a valid assembly label
-	defcode ">in",3,,to_in,srclen
+	defcode ">in",3,,to_in,srcid
 	ldr	x0, =var_to_in	// load address
 	PUSHPSP	x0		// push address
 	next
@@ -1380,7 +1382,6 @@ var_to_in:
 	defcode \name,\namelen,\flags,\label,\link
 	ldr	x0, =\value
 	PUSHPSP	x0
-
 	next
 	.endm
 
@@ -1814,7 +1815,7 @@ word_buffer:
 
 */
 
-	defcode "word2",5,,newword,word
+	defcode "word2",5,,word2,word
 	bl _word2
 	PUSHPSP	x0			// address
 	PUSHPSP	x1			// length
@@ -1833,7 +1834,7 @@ _word2:
         ldr     x1, [x0]
         add     x4, x4, x1
 
-        // x6 is the address of the last source character
+        // load x6 with the address of the last source character
         ldr     x0, =var_srclen
         ldr     x1, [x0]
         add     x6, x6, x1
@@ -1845,8 +1846,11 @@ _word2:
         // load x5 with address of the word buffer
 	ldr	x5, =word_buffer2
 
-1:      // examine the next character
+1:      // skip blanks and check for comment line
         ldrb    w0, [x4], #1
+
+        cmp     x4, x6                  // input exhausted
+        bgt     5f                      // got nothing
 
 	cmp	x0, #'\\'		// == \?
 	beq	4f			// skip comment
@@ -1859,27 +1863,11 @@ _word2:
 
         // if input exhausted, return whatever we've got
         cmp     x4, x6
-        bgt     3f
+        bgt     6f
 
 	cmp	w0, #' '		// > ' '?
 	bgt	2b			// keep reading
-
-3:
-        // we're done, update `>in`
-        ldr     x0, =buffer
-        sub     x1, x4, x0
-        ldr     x0, =var_to_in
-        str     x1, [x0]
-
-        // prepare to return the addr and length of the word
-	ldr	x0, =word_buffer2	// address
-	sub	x1, x5, x0		// length
-
-        POPPSP  lr
-        POPPSP  x4
-        POPPSP  x5
-        POPPSP  x6
-        ret
+        b       6f
 
 4:      // consume til newline
         ldrb    w0, [x4], #1
@@ -1892,9 +1880,16 @@ _word2:
 	bne	4b			// no, keep looking
 	b	1b
 
-5:      // return false
-        ldr     x0, =word_buffer2
-        mov     x1, xzr
+5:      ldr     x5, =word_buffer2       // this will make the length 0 later
+
+6:      // update >in and return
+        ldr     x0, =buffer
+        sub     x1, x4, x0
+        ldr     x0, =var_to_in
+        str     x1, [x0]
+
+        ldr     x0, =word_buffer2       // address
+        sub     x1, x5, x0              // length
 
         POPPSP  lr
         POPPSP  x4
@@ -1916,7 +1911,11 @@ word_buffer2:
        When the input source is a string from EVALUATE, return false and perform no other action.
 */
 
-        defcode "refill",6,,refill,newword
+        defcode "refill",6,,refill,word2
+        mov     x0, #'>'
+        bl      _con_out
+        mov     x0, #' '
+        bl      _con_out
         bl      _refill
         PUSHPSP x0
         next
@@ -1936,7 +1935,7 @@ _refill:
 
         // EOL
         cmp     x0, #'\n'               // EOL
-        beq     2f                      // exit (non-zero x0 indicates "true")
+        beq     _refill_nl              // exit (non-zero x0 indicates "true")
 
         // BS
         cmp     x0, #8
@@ -1945,7 +1944,7 @@ _refill:
         strb    w0, [x4], #1            // store character, increment pointer
         b       1b                      // keep reading characters
 
-2:
+_refill_nl:
         ldr     x1, =buffer
         sub     x1, x4, x1              // how many characters did we read?
         ldr     x4, =var_srclen         // address of variable
@@ -1957,10 +1956,11 @@ _refill:
         ret
 
 _refill_bs:
-        subs    x1, x4, 1               // drop the last character
         ldr     x0, =buffer             // start of buffer
         cmp     x1, x0                  // compare ptr-1 to start
-        csel    x4, x0, x1, le          // update ptr to max(ptr-1, start)
+        ble     1b                      // no input so far, do nothing
+
+        subs    x4, x4, 1               // drop the last character
         b       1b                      // keep looking
 
         defcode "source",6,,source,refill
@@ -2472,11 +2472,19 @@ _comma:
 	.quad rbrac                     // Go into compile mode.
 	.quad exit                      // Return from the function.
 
+	defword ":2",2,,colon2,colon
+	.quad word2                     // Get the name of the new word
+	.quad create                    // CREATE the dictionary entry / header
+	.quad lit, docol, comma         // Append DOCOL  (the codeword).
+	.quad latest, fetch, hidden     // Make the word hidden (see below for definition).
+	.quad rbrac                     // Go into compile mode.
+	.quad exit                      // Return from the function.
+
 /*
 	; (SEMICOLON) is also elegantly simple.  Notice the F_IMMED flag.
 */
 
-	defword ";",1,f_immed,semicolon,colon
+	defword ";",1,f_immed,semicolon,colon2
 	.quad lit, exit, comma          // Append EXIT (so the word will return).
 	.quad latest, fetch, hidden     // Toggle hidden flag -- unhide the word (see below for definition).
 	.quad lbrac                     // Go back to IMMEDIATE mode.
@@ -2777,6 +2785,100 @@ _tell:
 
 	next
 
+	defword "quit2",5,,quit2,interpret
+	.quad   rz,rspstore	  // r0 rsp!
+        .quad   lit,0,srcid,store // 0 srcid !
+        .quad   lit,0,state,store // [
+        .quad   refill            // do refill
+        .quad   zbranch,12*8      // exit if refill failed
+	.quad   interpret2	  // interpret
+        .quad   srclen,fetch      // srclen @
+        .quad   to_in,fetch       // >in @
+        .quad   sub,zgt           // - 0>
+        .quad   zbranch,-88       // if-not jump back to refill
+        .quad   branch,-96        // repeat
+        .quad   exit
+
+	defcode "interpret2",10,,interpret2,quit2
+8:      mov	x7, #0			// interpret_is_num = 0
+	bl	_word2			// returns x0 = address, x1 = length
+        cmp     x1, #0                  // is a word available?
+        bne     3f                      // yes, go to look it up
+        next                            // no, exit
+3:
+        // look up word
+	mov	x4, x0			// save word in x4, x5
+	mov	x5, x1
+
+        // is it in the dictionary?
+	bl	_find			// returns x0 = dictionary entry
+	cmp	x0, #0			// did we find it?
+	beq	1f			// no, it might be a number
+
+	// found in dictionary, check if it's immediate
+	ldrb	w6, [x0, #8]		// load length/flags byte
+	bl	_tcfa			// leaves codeword pointer in x0
+	tst	w6, #f_immed		// is it immediate?
+	bne	4f			// yes, jump straight to executing
+	b	2f			// no, jump to compile/execute
+
+1:	// not in dictionary, check if it's a number
+	add	x7, x7, #1		// interpret_is_num = 1
+	mov	x0, x4			// address
+	mov	x1, x5			// length
+	bl	_number			// returns x0 = number, x1 = unparsed
+	cmp	x1, #0			// were we able to parse it?
+	bne	6f			// not a number and not a word, report error
+
+	mov	x6, x0			// yes, it was a number
+	ldr	x0, =lit		// assume we need LIT as the codeword
+
+2:	// are we compiling or executing?
+	ldr	x2, =var_state		// address of STATE
+	ldr	x2, [x2]		// value of STATE
+	cmp	x2, #0			// are we interpreting?
+	beq	4f			// yes, jump straight to execute
+
+	// compiling, append word to current dictionary definition
+	bl	_comma			// expects codeword in x0 (from earlier)
+	cmp	x7, #0			// interpret_is_num == 0?
+	b       8b                      // yep, so we're done
+
+	mov	x0, x6			// number
+	bl	_comma			// expects number in x0
+	b       8b
+
+4:	// executing, so run the word
+	cmp	x7, #0			// interpret_is_num != 0?
+	bne	5f			// yep, so let's push
+
+	ldr	x1, [x0]                // not a literal, execute now
+        sub     NIP, NIP, #8            // set this up to re-enter interpret2 when the word exits
+	br	x1                      // go execute. this will not return here
+
+5:	// push literal on the stack
+	PUSHPSP	x6
+        b       8b
+
+6:
+        // todo : this should abort instead of print
+
+	// parse error
+	ldr	x1, =errmsg		// address
+	mov	x2, #errmsgend-errmsg	// length
+        bl      _tell                   // display it
+
+        mov     x1, x4                  // address of word
+        mov     x2, x5                  // length of word
+        bl      _tell
+
+	ldr	x1, =errmsgnl
+	mov	x2, #errmsgnlend-errmsgnl
+        bl      _tell
+
+	ldr	NIP, =cold_start        // re-initialize
+	next                            // start from the beginning
+
 	.section .rodata
 errmsg: .ascii "PARSE ERROR: '"
 errmsgend:
@@ -2809,7 +2911,7 @@ testmsgend:
 
 */
 
-        defcode "fence",5,,fence,interpret
+        defcode "fence",5,,fence,interpret2
         dmb     st                      // memory barrier. this is too pessimistic it will be slow
         next
 
@@ -2958,5 +3060,4 @@ buffer: .space 4096                        // 4K (temporary input buffer)
 
         .align 12
 data_segment:
-        // data segment starts here and takes the rest of the memory
-        // space.
+        // data segment starts here and takes the rest of the memory space.
