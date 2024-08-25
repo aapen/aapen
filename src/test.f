@@ -33,12 +33,10 @@ variable error-xt
   then
 ;
 
-\ TODO: is there any way we can have "source"?
-
 \ ( c-addr u -- ) display an error message
 : error1
-  tell cr                       \ error message
-  \ source tell cr              \ show the line that caused the problem
+  tell ." :["                   \ error message
+  source tell ." ]" cr          \ show the line that caused the problem
   empty-stack                   \ throw away everything else
 ;
 
