@@ -52,8 +52,6 @@
 
         .section .text
 
-        // Align to 2^11 (2048) bytes, as required by ARMv8-A
-        .align 11
 
         // Expose a symbol that the linker will provide to the Zig
         // init code.
@@ -79,7 +77,11 @@
         // handler must fit inside its $80 byte space. Won't be a
         // problem here, since each "handler" is just a quick branch
         // to a symbol.
+
+        // Align to 2^11 (2048) bytes, as required by ARMv8-A
+        .align 11
         .global __exception_handler_table
+        .type __exception_handler_table,%object
 __exception_handler_table:
         // From EL0 to EL0
         VENTRY          SYNCHRONOUS_INVALID_EL1T
@@ -107,8 +109,6 @@ __exception_handler_table:
         VENTRY          FIQ_INVALID_EL0_32
         VENTRY          ERROR_INVALID_EL0_32
 
-
-
         // ----------------------------------------------------------------------
         // Debug display
         // ----------------------------------------------------------------------
@@ -120,72 +120,83 @@ __exception_handler_table:
         bl      _con_out
         .endm
 
-        .macro nl
-        emit #'\r'
-        emit #'\n'
+        .macro puts lbl
+        ldr     x3, =\lbl
+        bl      _puts
         .endm
 
         .macro outsysr reg,lbl
-        mrs     x2, \reg
-        ldr     x3, =\lbl
-        bl      print_register
+        puts    \lbl
+        mrs     x1, \reg
+        bl      print_hex
+        puts    nl
         .endm
 
         .macro outreg reg,lbl
-        mov     x2, \reg
-        ldr     x3, =\lbl
-        bl      print_register
+        puts    \lbl
+        mov     x1, \reg
+        bl      print_hex
+        puts    nl
         .endm
 
         .macro outval lbl
-        ldr     x3, =\lbl
-        bl      print_register
+        puts    \lbl
+        bl      print_hex
+        puts    nl
         .endm
 
-        .global bsod
-
-bsod:
+        // ----------------------------------------------------------------------
+        // fn bsod
+        //
+        // Display a summary of important registers
+        //
+        // Alignment:
+        // Arguments: none
+        // Returns: none
+        // Clobbers: none
+        // ----------------------------------------------------------------------
+        ENTRY(bsod)
         // Save link register on stack
         stp     x29, x30, [sp, #-16]!
         mov     x29, sp
 
-        nl
+        puts    nl
         outsysr ESR_EL1, esr_label
         outsysr FAR_EL1, far_label
         outreg  x28, x28_label
         outreg  x29, x29_label
         outreg  x10, x10_label
-        ldr     x2, [x27]
-        outval  irf_label
-        ldr     x2, [x27, 8]
-        outval  icx_label
+
+        puts    inp_label
+        ldr     x3, =var_inbuf
+        ldr     x3, [x3]
+        ldr     x4, =var_to_in
+        ldr     x4, [x4]
+        cmp     x4, #100
+        ble     2f
+        add     x3, x3, x4              // only show the last 100 characters
+        mov     x4, #100
+        sub     x3, x3, #100
+2:      bl      _nputs
+        puts    inp_end
 
         // Restore link register and return
         ldp     x29, x30, [sp], #16
         ret
+        END(bsod)
 
-print_register:
-        // Save registers on stack
-        stp     x29, x30, [sp, #-16]!
-        mov     x29, sp
-
-1:      // Print the label
-        ldrb    w0, [x3], #1      // Load the next byte of the label
-        cbz     w0, 2f            // If the byte is null, end the loop
-        bl      _con_out          // Print the character
-        b       1b                // Continue the loop
-
-2:      // Print the register value
-        mov     x1, x2
-        bl      print_hex         // Call the print_hex routine to print x0 as hex
-
-        nl
-
-        // Restore registers and return
-        ldp     x29, x30, [sp], #16
-        ret
-
-print_hex:
+        // ----------------------------------------------------------------------
+        // fn print_hex
+        //
+        // Print a 32-bit unsigned hex value
+        //
+        // Alignment:
+        // Arguments:
+        //      x1 - value
+        // Returns: none
+        // Clobbers: x3, x0, x1
+        // ----------------------------------------------------------------------
+        ENTRY(print_hex)
         // Save registers on stack
         stp     x29, x30, [sp, #-16]!
         mov     x29, sp
@@ -216,13 +227,72 @@ print_hex:
         // Restore registers and return
         ldp     x29, x30, [sp], #16
         ret
+        END(print_hex)
 
-        .section .data
+        // ----------------------------------------------------------------------
+        // fn _puts
+        //
+        // Print a zstring to serial using _con_out
+        //
+        // Alignment:
+        // Arguments:
+        //      x3 - addr of zstring
+        // Returns: none
+        // Clobbers: x0, x1, x2
+        // ----------------------------------------------------------------------
+        ENTRY(_puts)
+        // Save registers on stack
+        stp     x29, x30, [sp, #-16]!
+        mov     x29, sp
+
+1:      // Print the label
+        ldrb    w0, [x3], #1      // Load the next byte of the label
+        cbz     w0, 2f            // If the byte is null, end the loop
+        bl      _con_out          // Print the character
+        b       1b                // Continue the loop
+
+2:      // Restore registers and return
+        ldp     x29, x30, [sp], #16
+        ret
+        END(_puts)
+
+        // ----------------------------------------------------------------------
+        // fn _nputs
+        //
+        // Print a string to serial using _con_out. This function uses
+        // a len, addr pair to print the string
+        //
+        // Alignment:
+        // Arguments:
+        //      x3 - addr of string
+        //      x4 - len of string
+        // Returns: none
+        // Clobbers: x0, x1, x2
+        // ----------------------------------------------------------------------
+        ENTRY(_nputs)
+        // Save registers on stack
+        stp     x29, x30, [sp, #-16]!
+        mov     x29, sp
+
+1:      // Print the label
+        ldrb    w0, [x3], #1      // Load the next byte of the label
+        bl      _con_out          // Print the character
+        subs    x4, x4, 1         // decrement count
+        bge     1b                // if count remains, continue the loop
+
+2:      // Restore registers and return
+        ldp     x29, x30, [sp], #16
+        ret
+        END(_nputs)
+
+
+        .section .rodata
 // Data section for register labels
 esr_label:      .asciz "ESR_EL1: 0x"
 far_label:      .asciz "FAR_EL1: 0x"
 x28_label:      .asciz "PSP x28: 0x"
 x29_label:      .asciz "RSP x29: 0x"
 x10_label:      .asciz "NIP x10: 0x"
-irf_label:      .asciz "IRF    : 0x"
-icx_label:      .asciz "IRF ctx: 0x"
+inp_label:      .asciz "  input: ["
+inp_end:        .asciz "]\r\n"
+nl:             .asciz "\r\n"
