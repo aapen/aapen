@@ -172,7 +172,6 @@ sd-base     0x       fc + constant sd-slotisr-ver
 
 ( micros mask addr -- )
 : await-clear
-d\  ." await clear:" .s
   rot ticks + -rot
   begin
     dup w@ 2 pick               ( end-ticks mask addr val mask )
@@ -186,7 +185,6 @@ d\  ." await clear:" .s
 ( todo: duplication between await-clear and await-set )
 ( micros mask addr -- )
 : await-set
-d\  ." await set:" .s
   rot ticks + -rot
   begin
     dup w@ 2 pick
@@ -237,7 +235,6 @@ variable sdcard.bus-width
 
 ( irpt -- )
 : await-interrupt
-d\  ." await-interrupt: " .s
   >r ( p: 0, r: 1 )
   1000000 ticks +               ( end-ticks ) ( p: 0 end-ticks, r: 1 )
   begin
@@ -247,19 +244,16 @@ d\  ." await-interrupt: " .s
   repeat
   drop
 
-d\  ." irpt observed: " .s
 
   r> sd-irpt w!               ( clear the interrupt we were waiting for )
   sd-irpt w@
 
-d\  ." irpt observed (cleared): " .s
 
   0x   10000 matches if print-stack-trace cr etout throw then
   0x  100000 matches if print-stack-trace cr etout throw then
   0x 17f8000 matches if print-stack-trace cr eirpt throw then
   drop
 
-d\  ." after irpt: " .s
 ;
 
 : done?        0x 00000001 await-interrupt ;
@@ -268,7 +262,6 @@ d\  ." after irpt: " .s
 
 ( inhibit -- )
 : not-busy?
-d\  ." not-busy? " dup .x cr
   >r
   1000000 ticks +
   begin
@@ -290,11 +283,9 @@ d\  ." not-busy? " dup .x cr
 
 ( cmd arg -- )
 : send-command-p
-d\  ." send-command-p: cmd " 2dup swap cmd.index . ." arg " .x cr
   ( wait for command inhibit off )
   0x 01 not-busy?
 
-d\  ." issuing command: " .s
 
   sd-irpt w@ sd-irpt w!
 
@@ -304,7 +295,6 @@ d\  ." issuing command: " .s
   command-delay
 
   done?
-d\  ." command complete: " .s
 
   ( TODO : switch on cmd.rtype not cmd.rbits then cmd )
   ( todo: handle response types
@@ -359,19 +349,16 @@ d\  ." command complete: " .s
     endof
     ( default case is no response )
   endcase
-d\  ." send-command-p end: " .s
 ;
 
 ( cmd -- )
 : send-app-command
-d\  ." send-app-command: rca " sdcard.rca @ .x cr
   sdcard.rca @ ?dup if cmd-app-rca swap else cmd-app 0 then
   send-command-p
 ;
 
 ( cmd -- )
 : send-command
-d\  ." send-command: cmd " dup cmd.index . cr
   dup cmd.is-app? if send-app-command then
   dup cmd.is-rca? if sdcard.rca @ else 0 then
   send-command-p
@@ -379,14 +366,12 @@ d\  ." send-command: cmd " dup cmd.index . cr
 
 ( cmd arg -- )
 : send-command-a
-d\  ." send-command-a: cmd " 2dup swap cmd.index . ." arg " .x cr
   over cmd.is-app? if send-app-command then
   over cmd.is-rca? if drop sdcard.rca @ then
   send-command-p
 ;
 
 : sd-reset-host
-d\  ." sd-reset-host" cr
   0 sd-control0 w!
   0 sd-control1 w!
   1 24 lshift sd-control1 w! ( reset host circuit )
@@ -474,7 +459,6 @@ d\  ." sd-reset-host" cr
 ;
 
 : card-size-v1
-d\  ." card-size-v1: " .s
   ( get c_size_mult )
   sdcard.csd 8+ w@ 0x 00000380 and 7 rshift ( 39..41 )
   ( 2^c_size_mult+2 )
@@ -488,11 +472,9 @@ d\  ." card-size-v1: " .s
   ( get read_bl_len, use as multiplier )
   sdcard.csd 4+ 0x 0f00 and 8 rshift ( 8..11 )
   *
-d\  ." card-size-v1 end: " .s
 ;
 
 : card-size-v2
-d\  ." card-size-v2" cr
   sdcard.csd 8+ 0x 3fffff00 and 8 rshift
   1+
   512 * 1024 *
@@ -503,7 +485,6 @@ d\  ." card-size-v2" cr
 ;
 
 : check-csd
-d\  ." check-csd: " .s
   CMD9
   csd-version case
     1 of card-size-v1 endof
@@ -511,13 +492,11 @@ d\  ." check-csd: " .s
     ." unrecognized card version " csd-version .x efail throw
   endcase
   sdcard.capacity !
-d\  ." check-csd end: " .s
 ;
 
 ( read n bytes, returns unread remainder)
 ( a n -- n )
 : sd-read-bytes
-d\  ." sd-read-bytes: " .s
   >r
   ticks 100000 +
   begin
@@ -532,11 +511,9 @@ d\  ." sd-read-bytes: " .s
   repeat
   2drop                         ( drop ticks and addr )
   r>                            ( return count of unread bytes, may be zero or negative )
-d\  ." sd-read-bytes end: " .s
 ;
 
 : read-scr
-d\  ." read-scr: " .s
 
   ( wait for data inhibit off )
   0x 02 not-busy?
@@ -546,17 +523,14 @@ d\  ." read-scr: " .s
 
   CMD51
 
-d\  ." CMD51 complete: " .s
 
   read-ready?
 
   sdcard.scr 8 sd-read-bytes
 
-d\  ." read-scr after read-bytes: " .s
 
   dup 0> if ." expected " . ." more bytes " cr efail throw else drop then
 
-d\  ." sdcard.scr: " sdcard.scr @ .x cr
 
   100 delay
 ;
@@ -656,7 +630,6 @@ d\  ." sdcard.scr: " sdcard.scr @ .x cr
   set-block-size                    100 delay-millis
 
   sd-report
-d\  ." emmc-enable complete" cr
 ;
 
 : firmware-sets-cdiv?
@@ -683,22 +656,16 @@ d\  ." emmc-enable complete" cr
 
 ( a-buf a-card -- )
 : sd-read-block
-d\  ." sd-read-block: card-addr " 2dup .x ."  into " .x cr
   0x 02 not-busy?
 
   ( HC uses addr / 512, others just addr )
-d\  card-type-2-hc? if 9 rshift then
 
-d\  ." sd-read-block: send CMD17" cr
   ( blksizecnt <- 1 block << 16 | 512 blocksize )
   1 16 lshift sdcard.block-size @ or sd-blksizecnt w!
 
   CMD17
-d\  ." sd-read-block: cmd sent" cr
   read-ready?
-d\  ." sd-read-block: read ready." cr
   512 sd-read-bytes
-d\  ." sd-read-block: bytes remaining " dup . cr
 
   dup 0> if ." expected " . ." more bytes " cr efail throw else drop then
 ;

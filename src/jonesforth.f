@@ -1790,13 +1790,6 @@
 : noecho 0 echo ! ;
 : echo 1 echo ! ;
 
-0 value debug
-
-( d\ acts like a comment when `debug` is zero )
-: d\
-  debug not if '\n' parse 2drop then
-; immediate
-
 ( align HERE to 16 byte boundary )
 here @ 15 + 15 invert and here !
 1024 cells allot constant scratch
@@ -1809,6 +1802,9 @@ here @ 15 + 15 invert and here !
 
 : unused lastcell here @ - 8 / ;
 
+test evaluate
+assembler evaluate
+
 : welcome
         cr
 	s" test-mode" find not if
@@ -1818,9 +1814,6 @@ here @ 15 + 15 invert and here !
 	then
         cr
 ;
-
-test evaluate
-assembler evaluate
 
 welcome
 hide welcome
