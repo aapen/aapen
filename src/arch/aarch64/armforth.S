@@ -531,25 +531,19 @@
         ldr \reg, [PSP], #8             // load from PSP, post-increment PSP
         .endm
 
-        // Input stack manipulation
-	.macro PUSHI reg1,reg2
-        stp     \reg1,\reg2, [ISP, #-16]!
-	.endm
-
-	.macro POPI reg1,reg2
-        ldp     \reg1,\reg2, [ISP], #16
-	.endm
-
         .macro RESET_INPUT
-        ldr     ISP, =input_stack_top   // initialize input stack
-        ldr     x2, =_con_in            // first input source is the console
-        PUSHI   x2, xzr                 // put the console reader on the input stack
+        ldr     x2, =var_srcid
+        str     xzr, [x2]
+        ldr     x2, =var_inbuf
+        ldr     x1, =buffer
+        str     x1, [x2]
+        ldr     x2, =var_to_in
+        str     xzr, [x2]
         .endm
 
 PSP	.req	x28	// parameter stack pointer
 RSP	.req	x29	// return stack pointer
 NIP	.req	x10	// next instruction pointer
-ISP     .req    x27     // input stack pointer
 
 
 /*
@@ -644,9 +638,14 @@ _forth_start:
         bl      _con_out
 
         RESET_INPUT
-        ldr     x1, =_frombuf           // second input source is a buffer
-        ldr     x2, =initfile           // use the initfile as its context
-        PUSHI   x1, x2                  // put the buffer reader on the input stack
+        ldr     x0, =var_inbuf
+        ldr     x1, =jonesforth_src
+        str     x1, [x0]
+        ldr     x0, =var_srclen
+        ldr     x1, =jonesforth_len
+        str     x1, [x0]
+        ldr     x0, =var_to_in
+        str     xzr, [x0]
 
 	ldr	NIP, =cold_start        // initialize interpreter
 	next                            // run interpreter
@@ -654,7 +653,9 @@ _forth_start:
 	.section .rodata
         .align 3
 cold_start:
-	.quad    quit
+	.quad   interpret
+warm_start:
+        .quad   quit
 
 /*
         EXCEPTION RECOVERY -----------------------------------------------------------------
@@ -698,6 +699,13 @@ _forth_restart:
         ldr     x0, =var_echo           // reset echo to off
         mov     x1, #0
         str     x1, [x0]
+
+        ldr     x0, =inbuf              // reset to keyboard input
+        ldr     x1, =buffer
+        str     x1, [x0]
+
+        ldr     x0, =srcid
+        str     xzr, [x0]
 
         ldr     x1, =crnl
         mov     x2, #2
@@ -1319,6 +1327,7 @@ name_0: .quad 0
 	next
 	.data
 	.align 3
+        .global var_\name
 var_\name :
 	.quad \initial
 	.endm
@@ -1341,10 +1350,11 @@ var_\name :
 	defvar "latest",6,,latest,here,name_execute
 	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
-        defvar "echo",4,,echo,base,0
+        defvar "echo",4,,echo,base,1
         defvar "exception",9,,exception,echo
         defvar "excode",6,,excode,exception
-        defvar "inbuf",5,,inbuf,excode,buffer
+        defvar "in0",3,,in0,excode,buffer
+        defvar "inbuf",5,,inbuf,in0,buffer
         defvar "srclen",6,,srclen,inbuf
         defvar "srcid",5,,srcid,srclen
 
@@ -1358,6 +1368,7 @@ var_\name :
 	next
 	.data
 	.align 3
+        .global var_to_in
 var_to_in:
 	.quad 0
 
@@ -1392,14 +1403,31 @@ var_to_in:
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
         defconst "lastcell",8,,lastcell,__f_hidden,LASTCELL
         defconst "peripherals",11,,peripherals,lastcell,PERIPHERALS
-        defconst "mailbox",7,,mailbox,peripherals,mailbox_src
-        defconst "video",5,,video,mailbox,video_src
-        defconst "sdcard",6,,sdcard,video,sdcard_src
-        defconst "direct-thread",13,,direct_thread,sdcard,direct_thread_src
-        defconst "assembler",9,,assembler,direct_thread,assembler_src
-        defconst "test",4,,test,assembler,test_src
-        defconst "charrom",7,,charrom,test,char_rom
+        defconst "charrom",7,,charrom,peripherals,char_rom
 
+        .macro embed src,name,namelen,label,link
+        defcode \name,\namelen,,\label,\link
+        ldr     x0, =\label\()_src
+        PUSHPSP x0
+        ldr     x0, =\label\()_len
+        PUSHPSP x0
+        next
+
+        .section .rodata
+        \label\()_src: .incbin "\src"
+        \label\()_src_end:
+        .set  \label\()_len,\label\()_src_end - \label\()_src
+
+        .text
+        .endm
+
+        embed   "jonesforth.f","jonesforth",10,jonesforth,charrom
+        embed   "mailbox.f","mailbox",7,mailbox,jonesforth
+        embed   "test.f","test",4,test,mailbox
+        embed   "assembler.f","assembler",9,assembler,test
+        embed   "video.f","video",5,video,assembler
+        embed   "sdcard.f","sdcard",6,sdcard,video
+        embed   "direct_thread.f","direct-thread",13,direct_thread,sdcard
 
 	/* This is the instruction template for all of our direct word calls. */
 
@@ -1421,7 +1449,7 @@ ret_template:
 ret_template_end:
 	
 	/* Plain old assembly language function. */
-	defconst "say-msg",7,,__say_msg,charrom,_saymsg
+	defconst "say-msg",7,,__say_msg,direct_thread,_saymsg
 
 	/* Instruction templates, used by compiler. */
 
@@ -1486,87 +1514,19 @@ ret_template_end:
 
 	Let's discuss input first.
 
-	The FORTH word KEY reads the next byte from current input (and pushes it on the parameter stack).
-	So if KEY is called and someone hits the space key, then the number 32 (ASCII code of space)
-	is pushed on the stack.
-
-	In FORTH there is no distinction between reading code and reading input.  We might be reading
-	and compiling code, we might be reading words to execute, we might be asking for the user
-	to type their name -- ultimately it all comes in through KEY.
-
-        The implementation of KEY uses the input stack to determine how to get the next byte. The
-        top of the input stack has address of an assembly routine to read a byte from the current
-        input source.
-
-        INPUT STACK ----------------------------------------------------------------------
-
-        We want to be able to read from a buffer, a file included from another file, or from the
-        console if there's no other source. We can do this by making a stack of sources. Each stack
-        entry consists of 2 words. The word with the lowest address has the CFA of the routine for
-        reading a byte of input. The word with the higher address is available as 'context' whose
-        meaning is determined by the byte-reading routine.
+        KEY reads a single character from the console. In previous versions, KEY was used by all the
+        parsing words. However, this makes it hard to work with other input sources. We're now using
+        an input system more similar to a Forth-2012 standard. KEY always reads from the interactive
+        console. Parsing words (`word` and `parse`) look at the "current input source" which _might_
+        be from the keyboard or might be from a string (via `evaluate`) or even a file ... whenever
+        we implement files.
 
 */
 
         defcode "key",3,,key,dspstore   // ( -- key)
-	bl	_key
+	bl	_con_in
 	PUSHPSP	x0
 	next
-_key:
-	// KEY () (char: x0)
-        // read a key
-        PUSHPSP x1
-        PUSHPSP x2
-        PUSHPSP lr
-3:
-        ldr     x1, [ISP]               // get the byte-reading word
-        blr     x1                      // jump there
-
-        // next byte is returned in w0
-        cmp     w0, #0
-        bne     1f                      // if not null we have a byte
-
-        // else input is exhausted
-        add     ISP, ISP, #16           // fall back to the next input source
-        b       3b                      // read a character from there
-
-1:
-        // check whether we are echoing characters
-        ldr     x2, =var_echo           // address of echo
-        ldr     x1, [x2]                // value of echo
-        cmp     x1, #0                  // echo == 0?
-        beq     2f                      // skip it
-
-        // check for special cases
-        cmp     w0, #127                // char is delete?
-        bne     3f                      // no, next check
-
-        mov     w0, #8                  // convert and echo delete as backspace
-        bl      _con_out
-        mov     w0, #' '
-        bl      _con_out
-        mov     w0, #8
-        b       4f
-
-3:	cmp     w0, #'\r'               // char is newline?
-        bne     35f                     // no, next check
-        bl      _con_out                // echo as \r\n
-        mov     w0, #'\n'
-        b       4f
-
-35:
-	cmp     w0, #'\n'               // char is newline?
-        bne     4f                      // no, next check
-        mov     w0, #'\r'               // echo as \r\n
-        bl      _con_out
-        mov     w0, #'\n'
-        b       4f
-
-4:      bl      _con_out                // echo as is
-2:      POPPSP  lr
-        POPPSP  x2
-        POPPSP  x1
-        ret
 
 /*
 
@@ -1686,30 +1646,6 @@ bufftop:
 
 /*
 
-        BUFFER INPUT ---------------------------------------------------------------------
-
-        Sometimes we want to interpret the contents of a buffer. To set up the reader on the input
-        stack, we use `readbuf` to put the address of the buffer and the address of the byte-reading
-        routine into the stack.
-
-*/
-
-        // ( addr -- )
-        defcode "readbuf",7,,readbuf,con_in
-        POPPSP  x0                      // x0 <- address of the buffer to read
-        ldr     x1, =_frombuf           // x1 <- address of the byte-reading routine
-        PUSHI   x1, x0                  // put the buffer reader on the input stack
-        next
-
-        .text
-_frombuf:
-        ldr     x1, [ISP, 8]            // peek at the context word
-        ldrb    w0, [x1], #1            // get the next byte and increment the pointer
-        str     x1, [ISP, 8]            // update the context word
-        ret
-
-/*
-
 	By contrast, output is much simpler.  The FORTH word EMIT writes out a single byte to stdout.
         The kernel must supply a routine that takes a single byte in w0 and outputs it. This routine
         must be linked as _forth_putch.
@@ -1717,7 +1653,7 @@ _frombuf:
 */
 
         // ( ch -- ) write a byte to output
-	defcode "emit",4,,emit,readbuf
+	defcode "emit",4,,emit,con_in
         POPPSP	x0
         bl      _con_out
 	next
@@ -1725,16 +1661,33 @@ _frombuf:
 /*
 	Back to input, WORD is a FORTH word which reads the next full word of input.
 
+        WORD is a "parsing word". That means it doesn't get all of its input from the stack.
+        Instead it parses through an input buffer that was either filled with `refill` or supplied
+        by another input source (like `evaluate`). WORD leaves the address and length of the next
+        word on the stack. This address may or may not be inside the input buffer.
+
+        A zero length indicates no word is available from the input source.
+
+        If WORD encounters a backslash, it consumes everything to the next newline character. (I'm
+        not 100% convinced this is the right place to do this.)
+
+        WORD updates >in with the index in the input buffer of the next character _after_ the word
+        it just read.
+
 	What it does in detail is that it first skips any blanks (spaces, tabs, newlines and so on).
 	Then it calls KEY to read characters into an internal buffer until it hits a blank.  Then it
 	calculates the length of the word it read and returns the address and the length as
 	two words on the stack (with the length at the top of stack).
 
 	Notice that WORD has a single internal buffer which it overwrites each time (rather like
-	a static C string).  Also notice that WORD's internal buffer is just 32 bytes long and
-	there is NO checking for overflow.  31 bytes happens to be the maximum length of a
+	a static C string).  Also notice that WORD's internal buffer is 1024 bytes long and
+	there is NO checking for overflow.  30 bytes happens to be the maximum length of a
 	FORTH word that we support, and that is what WORD is used for: to read FORTH words when
-	we are compiling and executing code.  The returned strings are not NUL-terminated.
+	we are compiling and executing code.  The returned strings are
+	not NUL-terminated.
+
+        Note also that WORD's buffer is shared with PARSE, so a call to WORD invalidates the last
+        PARSE result and vice versa.
 
 	Start address+length is the normal way to represent strings in FORTH (not ending in an
 	ASCII NUL character as in C), and so FORTH strings can contain any character including NULs
@@ -1743,12 +1696,6 @@ _frombuf:
 	WORD is not suitable for just reading strings (eg. user input) because of all the above
 	peculiarities and limitations.
 
-	Note that when executing, you'll see:
-	WORD FOO
-	which puts "FOO" and length 3 on the stack, but when compiling:
-	: BAR WORD FOO ;
-	is an error (or at least it doesn't do what you might expect).  Later we'll talk about compiling
-	and immediate mode, and you'll understand why.
 */
 
 	defcode "word",4,,word,emit
@@ -1758,77 +1705,14 @@ _frombuf:
 	next
 _word:
 	// WORD () (address: x0, length: x1)
-        PUSHPSP x4
-        PUSHPSP lr
-1:
-	bl	_key
-	cmp	x0, #'\\'		// == \?
-	beq	3f			// skip comment
-	cmp	x0, #' '		// <= ' '?
-	ble	1b			// keep looking
-
-	ldr	x4, =word_buffer	// address
-2:	strb	w0, [x4], #1		// store character, increment pointer
-5:      bl	_key
-        cmp     w0, #8                  // backspace?
-        beq     4f
-	cmp	w0, #' '		// > ' '?
-	bgt	2b			// keep looking
-
-	ldr	x0, =word_buffer	// address
-	sub	x1, x4, x0		// length
-
-        POPPSP  lr
-        POPPSP  x4
-        ret
-3:
-	bl	_key
-	cmp	x0, #'\n'		// eol?
-	bne	3b			// keep looking
-	b	1b
-
-4:
-        subs    x1, x4, 1               // drop the last character
-        ldr     x0, =word_buffer        // start of buffer
-        cmp     x1, x0                  // compare ptr-1 to start
-        csel    x4, x0, x1, le          // update ptr to max(ptr-1, start)
-        b       5b                      // keep looking
-
-	.data
-word_buffer:
-	.space 32
-
-/*
-
-        WORD2 (this is a temporary name while I get line buffering working) is like WORD but doesn't
-        directly go get keys. Instead it parses through the input buffer that was previously filled
-        with `refill`. WORD2 leaves the address and length of the next word on the stack. (This
-        address may or may not be inside the input buffer. Callers should not make assumptions
-        either way.)
-
-        A zero length indicates no word is available in the input buffer.
-
-        If WORD2 encounters a backslash, it consumes everything to the next newline character.
-
-        WORD2 updates >in with the index in the input buffer of the next character _after_ the word
-        it just read.
-
-*/
-
-	defcode "word2",5,,word2,word
-	bl _word2
-	PUSHPSP	x0			// address
-	PUSHPSP	x1			// length
-	next
-_word2:
-	// WORD2 () (address: x0, length: x1)
         PUSHPSP x6
         PUSHPSP x5
         PUSHPSP x4
         PUSHPSP lr
 
         // load x4 with address of next character in buffer
-        ldr     x4, =buffer
+        ldr     x4, =var_inbuf          // input buffer addr
+        ldr     x4, [x4]
         mov     x6, x4
         ldr     x0, =var_to_in
         ldr     x1, [x0]
@@ -1844,7 +1728,7 @@ _word2:
         bgt     5f
 
         // load x5 with address of the word buffer
-	ldr	x5, =word_buffer2
+	ldr	x5, =word_buffer
 
 1:      // skip blanks and check for comment line
         ldrb    w0, [x4], #1
@@ -1880,15 +1764,16 @@ _word2:
 	bne	4b			// no, keep looking
 	b	1b
 
-5:      ldr     x5, =word_buffer2       // this will make the length 0 later
+5:      ldr     x5, =word_buffer        // this will make the length 0 later
 
 6:      // update >in and return
-        ldr     x0, =buffer
+        ldr     x0, =var_inbuf
+        ldr     x0, [x0]
         sub     x1, x4, x0
         ldr     x0, =var_to_in
         str     x1, [x0]
 
-        ldr     x0, =word_buffer2       // address
+        ldr     x0, =word_buffer        // address
         sub     x1, x5, x0              // length
 
         POPPSP  lr
@@ -1898,20 +1783,109 @@ _word2:
         ret
 
 	.data
-word_buffer2:
-	.space 32
+        .global word_buffer
+word_buffer:
+	.space 1024
 
 /*
 
-       When the input source is the user input device, attempt to receive input into the terminal
-       input buffer. If successful, make the result the input buffer, set >IN to zero, and return
-       true. Receipt of a line containing no characters is considered successful. If there is no
-       input available from the current input source, return false.
+        The next parsing word is `parse`. It is similar to `word` but treats leading delimiters a
+        bit differently. The major difference is that `word` skips leading delimiters, `parse` does
+        not.
 
-       When the input source is a string from EVALUATE, return false and perform no other action.
+        Unlike `word`, `parse` returns a substring of the input buffer.
+
 */
 
-        defcode "refill",6,,refill,word2
+        defcode "parse",5,,parse,word
+        POPPSP  x2                      // delimiter
+        bl      _parse
+	PUSHPSP	x0			// address
+	PUSHPSP	x1			// length
+        next
+_parse:
+	// WORD () (address: x0, length: x1)
+        PUSHPSP x6
+        PUSHPSP x5
+        PUSHPSP x4
+        PUSHPSP lr
+
+        // load x4 with address of next character in buffer
+        ldr     x4, =var_inbuf          // input buffer addr
+        ldr     x4, [x4]
+        mov     x6, x4
+        ldr     x0, =var_to_in
+        ldr     x1, [x0]
+        add     x4, x4, x1
+
+        // load x5 with address of the word budffer
+        ldr     x5, =word_buffer
+
+        // load x6 with the address of the last source character
+        ldr     x0, =var_srclen
+        ldr     x1, [x0]
+        add     x6, x6, x1
+
+        // if input exhausted, return false
+        cmp     x4, x6
+        bgt     6f
+
+1:      // fetch and examine next character
+        ldrb    w0, [x4], #1            // get next character
+
+        cmp     x4, x6                  // input exhausted?
+        bgt     5f                      // yes, we got nothing
+
+        cmp     w0, w2                  // == delimiter?
+        beq     6f                      // yes, we're done
+
+        cmp	x0, #'\\'		// == \?
+	beq	4f			// skip comment
+
+        // store character, increment pointer
+        strb    w0, [x5], #1
+        b       1b
+
+4:      // consume til the next newline
+        ldrb    w0, [x4], #1
+
+        // if input exhausted while in a comment, there's no word
+        cmp     x4, x6
+        bgt     5f
+
+	cmp	w0, #'\n'		// eol?
+	bne	4b			// no, keep looking
+	b	1b
+
+5:      ldr     x5, =word_buffer        // this will make the length 0 later
+
+6:      // update >in and return
+        ldr     x0, =var_inbuf          // get start of whole source buffer
+        ldr     x0, [x0]
+        sub     x1, x4, x0              // >in = curr addr - inbuf
+        ldr     x0, =var_to_in
+        str     x1, [x0]
+
+        ldr     x0, =word_buffer        // start of parsed string
+        sub     x1, x5, x0              // length of parsed string
+
+        POPPSP  lr
+        POPPSP  x4
+        POPPSP  x5
+        POPPSP  x6
+        ret
+
+/*
+
+        When the input source is the user input device, attempt to receive input into the terminal
+        input buffer. If successful, make the result the input buffer, set >IN to zero, and return
+        true. Receipt of a line containing no characters is considered successful. If there is no
+        input available from the current input source, return false.
+
+TODO:  check the current source-id before reading from the terminal.
+*/
+
+        defcode "refill",6,,refill,parse
         mov     x0, #'>'
         bl      _con_out
         mov     x0, #' '
@@ -1921,11 +1895,16 @@ word_buffer2:
         next
 _refill:
 	// WORD () (address: x0, length: x1)
+        PUSHPSP x7
         PUSHPSP x4
         PUSHPSP lr
+
+        // x7 = echo?
+        ldr     x7, =var_echo
+        ldr     x7, [x7]
+
         ldr     x4, =buffer
-1:
-	bl	_key
+1:	bl	_con_in
 
         // special cases
 
@@ -1934,14 +1913,21 @@ _refill:
         beq     2f                      // exit (zero in x0 indicates "false")
 
         // EOL
-        cmp     x0, #'\n'               // EOL
+        cmp     x0, #'\r'               // EOL
         beq     _refill_nl              // exit (non-zero x0 indicates "true")
 
         // BS
         cmp     x0, #8
         beq     _refill_bs
 
-        strb    w0, [x4], #1            // store character, increment pointer
+        // DEL
+        cmp     x0, #0x7f
+        beq     _refill_bs
+
+        cmp     x7, #0                  // echo == 0?
+        beq     2f                      // yes, skip it
+        bl      _con_out                // no, echo.
+2:      strb    w0, [x4], #1            // store character, increment pointer
         b       1b                      // keep reading characters
 
 _refill_nl:
@@ -1951,17 +1937,33 @@ _refill_nl:
         str     x1, [x4]                // store number of chars available
         ldr     x4, =var_to_in          // address of variable
         str     xzr, [x4]               // store zero in >in
-        POPPSP  lr
+        cmp     x7, #0                  // echo == 0?
+        beq     3f                      // yes, skip it
+        bl      _con_out                // no, echo the \r
+        mov     w0, #'\n'               // we also need to emit a \n
+        bl      _con_out
+3:      POPPSP  lr
         POPPSP  x4
+        POPPSP  x7
         ret
 
 _refill_bs:
         ldr     x0, =buffer             // start of buffer
+        sub     x1, x4, 1
         cmp     x1, x0                  // compare ptr-1 to start
-        ble     1b                      // no input so far, do nothing
+        blt     1b                      // no input so far, do nothing
 
-        subs    x4, x4, 1               // drop the last character
+        cmp     x7, #0                  // echo == 0?
+        beq     4f                      // yes, skip it
+        mov     w0, #8
+        bl      _con_out                // echo the backspace
+        mov     w0, #' '                // overwrite the previous character
+        bl      _con_out
+        mov     w0, #8                  // reposition the cursor
+        bl      _con_out
+4:      subs    x4, x4, 1               // drop the last character
         b       1b                      // keep looking
+
 
         defcode "source",6,,source,refill
         ldr     x1, =buffer
@@ -2472,19 +2474,11 @@ _comma:
 	.quad rbrac                     // Go into compile mode.
 	.quad exit                      // Return from the function.
 
-	defword ":2",2,,colon2,colon
-	.quad word2                     // Get the name of the new word
-	.quad create                    // CREATE the dictionary entry / header
-	.quad lit, docol, comma         // Append DOCOL  (the codeword).
-	.quad latest, fetch, hidden     // Make the word hidden (see below for definition).
-	.quad rbrac                     // Go into compile mode.
-	.quad exit                      // Return from the function.
-
 /*
 	; (SEMICOLON) is also elegantly simple.  Notice the F_IMMED flag.
 */
 
-	defword ";",1,f_immed,semicolon,colon2
+	defword ";",1,f_immed,semicolon,colon
 	.quad lit, exit, comma          // Append EXIT (so the word will return).
 	.quad latest, fetch, hidden     // Toggle hidden flag -- unhide the word (see below for definition).
 	.quad lbrac                     // Go back to IMMEDIATE mode.
@@ -2674,6 +2668,7 @@ _comma:
         bl      _tell
 	next
 
+        .global _tell
 _tell:
         PUSHPSP lr
         cmp     x2, #0
@@ -2689,109 +2684,25 @@ _tell:
 	QUIT AND INTERPRET ----------------------------------------------------------------------
 
 	QUIT is the first FORTH function called, almost immediately after the FORTH system "boots".
-	As explained before, QUIT doesn't "quit" anything.  It does some initialisation (in particular
-	it clears the return stack) and it calls INTERPRET in a loop to interpret commands.  The
-	reason it is called QUIT is because you can call it from your own FORTH words in order to
-	"quit" your program and start again at the user prompt.
+	As explained before, QUIT doesn't "quit" anything.  It does some initialisation (in
+	particular it clears the return stack and restores input) and it calls INTERPRET in a loop
+	to interpret commands.  The reason it is called QUIT is because you can call it from your
+	own FORTH words in order to "quit" your program and start again at the user prompt.
 
 	INTERPRET is the FORTH interpreter ("toploop", "toplevel" or "REPL" might be a more accurate
 	description -- see: http://en.wikipedia.org/wiki/REPL).
 */
 
-	defword "quit",4,,quit,tell
-	.quad rz,rspstore	// R0 RSP!, clear the return stack
-	.quad interpret		// interpret the next word
-	.quad branch,-16	// and loop (indefinitely)
-
-/*
-	This interpreter is pretty simple, but remember that in FORTH you can always override
-	it later with a more powerful one!
- */
-
-	defcode "interpret",9,,interpret,quit
-	mov	x7, #0			// interpret_is_lit = 0
-
-	bl	_word			// returns x0 = address, x1 = length
-	mov	x4, x0			// save word in x4, x5
-	mov	x5, x1
-
-        // is it in the dictionary?
-	bl	_find			// returns x0 = dictionary entry
-	cmp	x0, #0			// = NULL?
-	beq	1f			// not found!
-
-	// found in dictionary, check if it's immediate
-	ldrb	w6, [x0, #8]		// load length/flags byte
-	bl	_tcfa			// returns x0 = codeword pointer
-	tst	w6, #f_immed		// test immediate flag
-	bne	4f			// if IMMED, jump straight to executing
-	b	2f			// else, jump to compile/execute
-
-1:	// not in dictionary, check if it's a number
-	add	x7, x7, #1		// interpret_is_lit = 1
-	mov	x0, x4			// address
-	mov	x1, x5			// length
-	bl	_number			// returns x0 = number, x1 = unparsed
-	cmp	x1, #0			// unparsed > 0?
-	bne	6f			// error!
-
-	mov	x6, x0			// number
-	ldr	x0, =lit		// codeword is LIT
-
-2:	// are we compiling or executing?
-	ldr	x2, =var_state		// address of STATE
-	ldr	x2, [x2]		// value of STATE
-	cmp	x2, #0			// STATE == 0?
-	beq	4f			// jump straight to execute!
-
-	// compiling, append word to current dictionary definition
-	bl	_comma			// expects codeword in x0
-	cmp	x7, #0			// interpret_is_lit == 0?
-	beq	3f			// yep, so we're done
-
-	mov	x0, x6			// number
-	bl	_comma			// expects codeword in x0
-3:
-	next
-
-4:	// executing, so run the word
-	cmp	x7, #0			// interpret_is_lit != 0?
-	bne	5f			// yep, so let's push
-
-	ldr	x1, [x0]                // not a literal, execute now
-	br	x1
-
-5:	// push literal on the stack
-	PUSHPSP	x6
-	next
-
-6:
-	// parse error
-	ldr	x1, =errmsg		// address
-	mov	x2, #errmsgend-errmsg	// length
-        bl      _tell                   // display it
-
-        mov     x1, x4                  // address of word
-        mov     x2, x5                  // length of word
-        bl      _tell
-
-	ldr	x1, =errmsgnl
-	mov	x2, #errmsgnlend-errmsgnl
-        bl      _tell
-
-	// reinitialize data stack
-        ldr     PSP, =data_stack_top    // reset the parameter stack
-        RESET_INPUT                     // stop reading files
-
-	next
-
-	defword "quit2",5,,quit2,interpret
+        defword "quit",4,,quit,tell
 	.quad   rz,rspstore	  // r0 rsp!
         .quad   lit,0,srcid,store // 0 srcid !
         .quad   lit,0,state,store // [
+        .quad   in0,fetch         // in0 @
+        .quad   inbuf,store       // inbuf !
+        .quad   sz,fetch,dspstore // s0 @ dsp!
         .quad   refill            // do refill
         .quad   zbranch,12*8      // exit if refill failed
-	.quad   interpret2	  // interpret
+	.quad   interpret	  // interpret
         .quad   srclen,fetch      // srclen @
         .quad   to_in,fetch       // >in @
         .quad   sub,zgt           // - 0>
@@ -2799,9 +2710,14 @@ _tell:
         .quad   branch,-96        // repeat
         .quad   exit
 
-	defcode "interpret2",10,,interpret2,quit2
+/*
+	This interpreter is pretty simple, but remember that in FORTH you can always override
+	it later with a more powerful one!
+ */
+
+	defcode "interpret",9,,interpret,quit
 8:      mov	x7, #0			// interpret_is_num = 0
-	bl	_word2			// returns x0 = address, x1 = length
+	bl	_word			// returns x0 = address, x1 = length
         cmp     x1, #0                  // is a word available?
         bne     3f                      // yes, go to look it up
         next                            // no, exit
@@ -2842,7 +2758,7 @@ _tell:
 	// compiling, append word to current dictionary definition
 	bl	_comma			// expects codeword in x0 (from earlier)
 	cmp	x7, #0			// interpret_is_num == 0?
-	b       8b                      // yep, so we're done
+	beq     8b                      // yep, so we're done
 
 	mov	x0, x6			// number
 	bl	_comma			// expects number in x0
@@ -2853,7 +2769,7 @@ _tell:
 	bne	5f			// yep, so let's push
 
 	ldr	x1, [x0]                // not a literal, execute now
-        sub     NIP, NIP, #8            // set this up to re-enter interpret2 when the word exits
+        sub     NIP, NIP, #8            // set this up to re-enter interpret when the word exits
 	br	x1                      // go execute. this will not return here
 
 5:	// push literal on the stack
@@ -2876,7 +2792,8 @@ _tell:
 	mov	x2, #errmsgnlend-errmsgnl
         bl      _tell
 
-	ldr	NIP, =cold_start        // re-initialize
+        RESET_INPUT
+	ldr	NIP, =warm_start        // re-initialize
 	next                            // start from the beginning
 
 	.section .rodata
@@ -2895,6 +2812,7 @@ hellomsgend:
 
 testmsg: .ascii "Testing!\r\n"
 testmsgend:
+
 /*
 	ODDS AND ENDS ----------------------------------------------------------------------
 
@@ -2904,14 +2822,13 @@ testmsgend:
 	EXECUTE is used to run execution tokens.  See the discussion of execution tokens in the
 	FORTH code for more details.
 
-	In this FORTH, EXECUTE is the last word in the built-in (assembler) dictionary so we
-	initialise the LATEST variable to point to it.  This means that if you want to extend the
-	assembler part, you must put new words before EXECUTE, or else change how LATEST is
-	initialised.
+	In this FORTH, EXECUTE is the last word in the built-in dictionary so we initialise the
+	LATEST variable to point to it. This means that if you want to extend the builtin
+	dictionary, you must put new words before EXECUTE, or else change how LATEST is initialised.
 
 */
 
-        defcode "fence",5,,fence,interpret2
+        defcode "fence",5,,fence,interpret
         dmb     st                      // memory barrier. this is too pessimistic it will be slow
         next
 
@@ -3019,27 +2936,6 @@ _saymsg:
 
 	.section .rodata
         .align 3
-initfile:
-        .incbin "jonesforth.f"
-        .quad 0
-mailbox_src:
-        .incbin "mailbox.f"
-        .quad 0
-video_src:
-        .incbin "video.f"
-        .quad 0
-sdcard_src:
-        .incbin "sdcard.f"
-        .quad 0
-direct_thread_src:
-        .incbin "direct_thread.f"
-        .quad 0
-assembler_src:
-        .incbin "assembler.f"
-        .quad 0
-test_src:
-        .incbin "test.f"
-        .quad 0
 
 /*
 	We allocate static space for the various stacks and buffers.
