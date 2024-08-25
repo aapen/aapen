@@ -1716,22 +1716,35 @@
 
 : source-id srcid @ ;
 
-( i*j c-addr u -- i*k )
-: evaluate
-  >r >r
-
-  ." e.1: " .s
-
-  ( todo - replace with save-input once it exists )
+( -- i*k k )
+: save-input
   inbuf @
   >in @
   srclen @
   srcid @
-  0x abacab ( put a marker on the stack )
+  0x abacab ( magic marker on the stack )
   5
+;
 
-  ." e.2: " .s
+( i*k k -- )
+: restore-input
+  ( todo use abort" -- if it's possible to define abort" )
+  5 <> if ." stack mismatch" -1 throw then
+  0x abacab <> if ." stack mismatch" -1 throw then
+  srcid !
+  srclen !
+  >in !
+  inbuf !
+;
 
+: eof?
+  >in @ srclen @ >
+;
+
+( i*j c-addr u -- i*k )
+: evaluate
+  >r >r
+  save-input
 
   r> r>
   srclen !
@@ -1739,24 +1752,10 @@
   -1 srcid !
   0 >in !
 
-  ." e.3: " .s
-  ." e.3: inbuf = " inbuf @ .x cr
-
   begin
     interpret
-
-    ." e.4: " .s
-
-    >in @ srclen @ > if
-
-      ( todo replace with restore-input once it exists )
-      ( todo use abort" if we can create one )
-      5 <> if ." stack mismatch" -1 throw then
-      0x abacab <> if ." stack mismatch" -1 throw then
-      srcid !
-      srclen !
-      >in !
-      inbuf !
+    eof? if
+      restore-input
       exit
     then
   again

@@ -1668,8 +1668,8 @@ bufftop:
 
         A zero length indicates no word is available from the input source.
 
-        If WORD encounters a backslash, it consumes everything to the next newline character. (I'm
-        not 100% convinced this is the right place to do this.)
+        If WORD encounters a backslash before any non-blank character, it consumes everything to the
+        next newline character. (I'm not 100% convinced this is the right place to do this.)
 
         WORD updates >in with the index in the input buffer of the next character _after_ the word
         it just read.

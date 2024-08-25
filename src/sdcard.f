@@ -58,13 +58,13 @@ sd-base     0x       fc + constant sd-slotisr-ver
 : clear-all! 0 swap w! ;
 : set-all!  ~0 swap w! ;
 
-( nbits shift v -- (v>>shift)&((1<<bits+1)-1) )
+( nbits shift v -- v>>shift&1<<bits+1-1 )
 : bits> swap rshift 1 rot lshift 1- and ;
 
 ( v f shift -- v|f<<shift )
 : >bits lshift or ;
 
-( nbits shift v -- v & ~(1<<nbits)-1 )
+( nbits shift v -- v & ~1<<nbits-1 )
 : 0bits
   swap rot 1 swap lshift 1-
   swap lshift invert and
@@ -477,7 +477,7 @@ d\  ." sd-reset-host" cr
 d\  ." card-size-v1: " .s
   ( get c_size_mult )
   sdcard.csd 8+ w@ 0x 00000380 and 7 rshift ( 39..41 )
-  ( 2^(c_size_mult+2) )
+  ( 2^c_size_mult+2 )
   2 + 1 swap lshift
 
   ( get c_size )
