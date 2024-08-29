@@ -686,7 +686,6 @@
 		' litstring ,	( compile litstring )
 		here @		( save the address of the length word on the stack )
 		0 ,		( dummy length - we don't know what it is yet )
-                brk
                 '"' parse s,
 		dup		( get the saved address of the length word )
 		here @ swap -	( calculate the length )
@@ -694,10 +693,9 @@
 		swap !		( and back-fill the length location )
 		align		( round up to next multiple of 4 bytes for the remaining code )
 	else		( immediate mode )
-	  here @		( get the start address of the temporary space )
-          brk
+	        here @		( get the start address of the temporary space )
                 '"' parse s,
-		here @ -	( calculate the length )
+		here @ swap -	( calculate the length )
 		here @		( push the start address )
 		swap		( addr len )
 	then
