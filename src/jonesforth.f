@@ -828,6 +828,11 @@
 : cells ( n -- n ) 8 * ;
 
 (
+	'chars' is like 'cells' but indexes by characters. In our case, one character is one byte.
+)
+: chars ( n -- n ) 1 * ;
+
+(
 	So now we can define VARIABLE easily in much the same way as CONSTANT above.  Refer to the
 	diagram above to see what the word that this creates will look like.
 )
@@ -1773,6 +1778,27 @@
 (
         Handy utilities  ---------------------------------------------------------------------------
 )
+
+
+(
+	/string is used to remove or add characters relative to the current position in the
+	character string. Positive values of n will exclude characters from the string while
+	negative values of n will include charactesr to the left of the string.
+)
+
+: /string ( c-addr_1 u_1 n -- c-addr_2 u_2 ) tuck - >r chars + r> ;
+
+(
+	If u is greater than zero, store char in each of u consecutive characters of memory
+	beginning at c-addr.
+)
+: fill ( c-addr u char -- ) -rot 0 ?do 2dup c! 1+ loop 2drop ;
+
+(
+	if u is greater than zero, store the character value for space in u consecutive character
+	positions beginning at c-addr.
+)
+: blank ( c-addr u -- ) bl fill ;
 
 ( copy n words from addr to , )
 
