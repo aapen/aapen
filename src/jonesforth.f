@@ -1533,8 +1533,11 @@
 		drop
 
 		case
-		0 1- of	( abort )
+		-1 of	( abort )
 			." aborted" cr
+		endof
+                -2 of	( abort" )
+		  	tell cr
 		endof
 			( default case )
 			." uncaught throw "
@@ -1544,9 +1547,8 @@
 	then
 ;
 
-: abort		( -- )
-	0 1- throw
-;
+: abort	( -- ) -1 throw ;
+: abort" ( -- ) '"' parse -2 throw ;
 
 ( Print a stack trace by walking up the return stack. )
 : print-stack-trace
