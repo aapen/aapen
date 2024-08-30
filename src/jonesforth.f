@@ -695,9 +695,8 @@
 	else		( immediate mode )
 	        here @		( get the start address of the temporary space )
                 '"' parse s,
+                dup             ( keep the start address available )
 		here @ swap -	( calculate the length )
-		here @		( push the start address )
-		swap		( addr len )
 	then
 ; immediate
 
