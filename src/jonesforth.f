@@ -824,11 +824,13 @@
 	CELLS just multiplies the top of stack by 8.
 )
 : cells ( n -- n ) 8 * ;
+: cell+ 1 cells + ;
 
 (
 	'chars' is like 'cells' but indexes by characters. In our case, one character is one byte.
 )
 : chars ( n -- n ) 1 * ;
+: char+ 1 chars + ;
 
 (
 	So now we can define VARIABLE easily in much the same way as CONSTANT above.  Refer to the
