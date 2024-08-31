@@ -215,22 +215,20 @@
 	Words, both built-in ones and ones which the programmer defines later, are stored in a dictionary
 	which is just a linked list of dictionary entries.
 
-	<--- DICTIONARY ENTRY (HEADER) ----------------------->
-	+------------------------+--------+---------- - - - - +----------- - - - -
-	| LINK POINTER           | LENGTH/| NAME 	      | DEFINITION
-	|			 | FLAGS  |     	      |
-	+--- (4 bytes) ----------+- byte -+- n bytes  - - - - +----------- - - - -
+	<--- DICTIONARY ENTRY (HEADER) ------------------------------>
+	+------------------------+--------+--------+---------- - - - +----------- - - - -
+	| LINK POINTER           | FLAGS  | LENGTH | NAME	     | DEFINITION
+	+--- (8 bytes) ----------+- byte -+- byte -+- 30 bytes  - -  +----------- - - - -
 
-	link_pointer[4] flags[1] namelen[1] name[n] definition
-
+	link_pointer[8] flags[1] namelen[1] name[n] definition
 
 	I'll come to the definition of the word later.  For now just look at the header.  The first
-	4 bytes are the link pointer.  This points back to the previous word in the dictionary, or, for
-	the first word in the dictionary it is just a NULL pointer.  Then comes a length/flags byte.
-	The length of the word can be up to 31 characters (5 bits used) and the top three bits are used
-	for various flags which I'll come to later.  This is followed by the name itself, and in this
-	implementation the name is rounded up to a multiple of 4 bytes by padding it with zero bytes.
-	That's just to ensure that the definition starts on a 32 bit boundary.
+	8 bytes are the link pointer.  This points back to the previous word in the dictionary, or,
+	for the first word in the dictionary it is just a NULL pointer.  Then comes a flags byte,
+	which I'll come to later. Then there is a length byte. The length of the word can be up to
+	30 characters and the top three bits are used for various flags. This is followed by the
+	name itself, and in this implementation the name is padded out to 30 bytes with a filler
+	character (ascii 0x2c, the comma character). The total header length is thus 40 bytes.
 
 	A FORTH variable called LATEST contains a pointer to the most recently defined word, in
 	other words, the head of this linked list.
@@ -240,15 +238,15 @@
 	  pointer to previous word
 	   ^
 	   |
-	+--|------+---+---+---+---+---+---+---+---+------------- - - - -
-	| LINK    | 6 | D | O | U | B | L | E | 0 | (definition ...)
-	+---------+---+---+---+---+---+---+---+---+------------- - - - -
-           ^       len                         padding
+	+--|------+---+---+---+---+---+---+---+---+----------+------------- - - - -
+	| LINK    | 0 | 6 | D | O | U | B | L | E | 24 x ',' | (definition ...)
+	+---------+---+---+---+---+---+---+---+---+----------+------------- - - - -
+           ^       flg len                         padding
 	   |
-	+--|------+---+---+---+---+---+---+---+---+---+---+---+---+------------- - - - -
-	| LINK    | 9 | Q | U | A | D | R | U | P | L | E | 0 | 0 | (definition ...)
-	+---------+---+---+---+---+---+---+---+---+---+---+---+---+------------- - - - -
-           ^       len                                     padding
+	+--|------+---+---+---+---+---+---+---+---+---+---+---+----------+------------- - - - -
+	| LINK    | 0 | 9 | Q | U | A | D | R | U | P | L | E | 21 x ',' | (definition ...)
+	+---------+---+---+---+---+---+---+---+---+---+---+---+----------+------------- - - - -
+           ^       flg len                                     padding
            |
            |
 	  LATEST
@@ -735,12 +733,12 @@ excmsgend:
 //	  pointer to previous word
 //	   ^
 //	   |
-//	+--|------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-//	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-//	+---------+---+---+---+---+---+---+---+---+------------+--|---------+------------+------------+
-//         ^       len                         pad  codeword      |
-//	   |							  V
-//	  LINK in next word				points to codeword of DUP
+//	+--|------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+//	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          | EXIT       |
+//	+---------+---+---+---+---+---+---+---+---+-------+------------+--|---------+------------+------------+
+//         ^       flg len                         pad      codeword      |
+//	   |							   	  V
+//	  LINK in next word						points to codeword of DUP
 //
 //	Initially we can't just write ": DOUBLE DUP + ;" (ie. that literal string) here because we
 //	don't yet have anything to read the string, break it up at spaces, parse each word, etc. etc.
@@ -804,17 +802,15 @@ name_\label :
 //	  pointer to previous word
 //	   ^
 //	   |
-//	+--|------+---+---+---+---+---+---+---+---+------------+
-//	| LINK    | 3 | D | U | P | 0 | 0 | 0 | 0 | code_DUP -----------------> points to the assembly
-//	+---------+---+---+---+---+---+---+---+---+------------+                code used to write DUP,
-//           ^       len                            codeword			which ends with next.
+//	+--|------+---+---+---+---+---+-------+---------+
+//	| LINK    | 0 | 3 | D | U | P | , ... | code_DUP -------------> points to the assembly
+//	+---------+---+---+---+---+---+-------+---------+		code used to write DUP,
+//           ^     flg len                     codeword			which ends with next.
 //           |
 //	    LINK in next word
 //
-//      The extra 0's after the name are padding required by the ARM CPU
-//      to make the code words align to a 8-byte boundary.
-//
-//	Again, for brevity in writing the header I'm going to write an assembler macro called defcode.
+//	Again, for brevity in writing the header I'm going to write an assembler macro called
+//	defcode.
 
 	.macro defcode name, namelen, flags=0, label, link
 	.section .rodata
@@ -927,8 +923,20 @@ name_0: .quad 0
         PUSHPSP x0
         next
 
+        defcode "8+",2,,incr8,decr4
+        POPPSP  x0
+        add     x0,x0,#8
+        PUSHPSP x0
+        next
+
+        defcode "8-",2,,decr8,incr8
+        POPPSP  x0
+        sub     x0,x0,#8
+        PUSHPSP x0
+        next
+
 	// + ( a b -- a+b )
-	defcode "+",1,,add,decr4
+	defcode "+",1,,add,decr8
         POPPSP  x1
         POPPSP  x0
 	add	x0, x1, x0
@@ -2069,9 +2077,9 @@ _number:
 	|
 	|
 	V
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          | EXIT       |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
 
 	See also >CFA and >dfa.
 
@@ -2144,16 +2152,14 @@ _find:
 
 	FIND returns a pointer to this
 	|				>CFA converts it to a pointer to this
-	|					        |
-	V		  			        V
-	+-------+-------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-	| LINK  | FLAGS | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-	+-------+-------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-						         codeword
+	|						      |
+	V		  				      V
+	+-------+-------+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+	| LINK  | FLAGS | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          | EXIT       |
+	+-------+-------+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+						              codeword
 
 	Notes:
-
-	Because names vary in length, this isn't just a simple increment.
 
 	In this FORTH you cannot easily turn a codeword pointer back into a dictionary entry pointer, but
 	that is not true in most FORTH implementations where they store a back pointer in the definition
@@ -2179,26 +2185,25 @@ _tcfa:
 	returns a pointer to the first data field.
 
 	FIND returns a pointer to this
-	|				>CFA converts it to a pointer to this
-	|					   |
-	|					   |	>dfa converts it to a pointer to this
-	|					   |		 |
-	V					   V		 V
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-						   codeword
+	|					>CFA converts it to a pointer to this
+	|					   	   |
+	|					   	   |	>DFA converts it to a pointer to this
+	|					   	   |		 |
+	V					   	   V		 V
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          | EXIT       |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+		              			   	    codeword
 
-	(Note to those following the source of FIG-FORTH / ciforth: My >dfa definition is
+	(Note to those following the source of FIG-FORTH / ciforth: My >DFA definition is
 	different from theirs, because they have an extra indirection).
 
-	You can see that >dfa is easily defined in FORTH just by adding 4 to the result of >CFA.
+	You can see that >DFA is easily defined in FORTH just by adding 8 to the result of >CFA.
 */
 
 	defword ">dfa",4,,tdfa,tcfa
 	.quad tcfa		// >CFA		(get code field address)
-	.quad incr4		// 4+		(add 8 to it to get to next word)
-        .quad incr4		// 4+
+	.quad incr8		// 8+		(add 8 to it to get to next word)
 	.quad exit		// EXIT		(return from FORTH word)
 
 /*
@@ -2213,11 +2218,11 @@ _tcfa:
 	  pointer to previous word
 	   ^
 	   |
-	+--|------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-	+---------+---+---+---+---+---+---+---+---+------------+--|---------+------------+------------+
-           ^       len                         pad  codeword      |
-	   |							  V
+	+--|------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          | EXIT       |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+--|---------+------------+------------+
+           ^       flg len                         pad	    codeword      |
+	   |							  	  V
 	  LATEST points here				points to codeword of DUP
 
 	There are several problems to solve.  Where to put the new word?  How do we read words?  How
@@ -2245,13 +2250,13 @@ _tcfa:
 
 	(2) Construct the dictionary entry -- just the header part -- in user memory:
 
-    pointer to previous word (from LATEST)			+-- Afterwards, HERE points here, where
-	   ^							|   the interpreter will start appending
-	   |							V   codewords.
-	+--|------+---+---+---+---+---+---+---+---+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      |
-	+---------+---+---+---+---+---+---+---+---+------------+
-                   len                         pad  codeword
+    pointer to previous word (from LATEST)				+-- Afterwards, HERE points here, where
+	   ^								|   the interpreter will start appending
+	   |								V   codewords.
+	+--|------+---+---+---+---+---+---+---+---+-------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+
+                   flg len                         pad	    codeword
 
 	(3) Set LATEST to point to the newly defined word, ...
 
@@ -2271,23 +2276,23 @@ _tcfa:
 	so the interpreter (now it's in compile mode, so I guess it's really the compiler) reads "DUP",
 	looks it up in the dictionary, gets its codeword pointer, and appends it:
 
-									     +-- HERE updated to point here.
-									     |
-									     V
-	+---------+---+---+---+---+---+---+---+---+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        |
-	+---------+---+---+---+---+---+---+---+---+------------+------------+
-                   len                         pad  codeword
+										     +-- HERE updated to point here.
+										     |
+										     V
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+
+                   flg len                         pad	    codeword
 
 	Next we read +, get the codeword pointer, and append it:
 
-											  +-- HERE updated to point here.
-											  |
-											  V
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          |
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+
-                   len                         pad  codeword
+												  +-- HERE updated to point here.
+												  |
+												  V
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+
+                   flg len                         pad	    codeword
 
 	The issue is what happens next.  Obviously what we _don't_ want to happen is that we
 	read ";" and compile it and go on compiling everything afterwards.
@@ -2305,12 +2310,13 @@ _tcfa:
 
 	After the interpreter reads ; and executes it 'immediately', we get this:
 
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-                   len                         pad  codeword					       ^
-												       |
-												      HERE
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          | EXIT       |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+        flg len                         pad	    codeword                                                   ^
+                                                                                                               |
+                                                                                                              HERE
+
 	STATE is set to 0.
 
 	And that's it, job done, our new definition is compiled, and we're back in immediate mode
@@ -2327,24 +2333,24 @@ _tcfa:
 	going to define them.  The : (COLON) function can be made a little bit more general by writing
 	it in two parts.  The first part, called CREATE, makes just the header:
 
-						   +-- Afterwards, HERE points here.
-						   |
-						   V
-	+---------+---+---+---+---+---+---+---+---+
-	| LINK    | 6 | D | O | U | B | L | E | 0 |
-	+---------+---+---+---+---+---+---+---+---+
-                   len                         pad
+							   +-- Afterwards, HERE points here.
+							   |
+							   V
+	+---------+---+---+---+---+---+---+---+---+-------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... |
+	+---------+---+---+---+---+---+---+---+---+-------+
+                   flg len                         pad
 
 	and the second part, the actual definition of : (COLON), calls CREATE and appends the
 	DOCOL codeword, so leaving:
 
-								+-- Afterwards, HERE points here.
-								|
-								V
-	+---------+---+---+---+---+---+---+---+---+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      |
-	+---------+---+---+---+---+---+---+---+---+------------+
-                   len                         pad  codeword
+									+-- Afterwards, HERE points here.
+									|
+									V
+	+---------+---+---+---+---+---+---+---+---+-------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+
+                   flg len                         pad      codeword
 
 	CREATE is a standard FORTH word and the advantage of this split is that we can reuse it to
 	create other types of words (not just ones which contain code, but words which contain variables,
@@ -2408,15 +2414,15 @@ _header:
 	The first is , (COMMA) which is a standard FORTH word which appends a 32 bit integer to the user
 	memory pointed to by HERE, and adds 4 to HERE.  So the action of , (COMMA) is:
 
-							previous value of HERE
-								 |
-								 V
-	+---------+---+---+---+---+---+---+---+---+-- - - - - --+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 |             |  <data>    |
-	+---------+---+---+---+---+---+---+---+---+-- - - - - --+------------+
-                   len                         pad		              ^
-									      |
-									new value of HERE
+                                                                previous value of HERE
+                                                                         |
+                                                                         V
+	+---------+---+---+---+---+---+---+---+---+-------+-- - - - - --+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... |             |  <data>    |
+	+---------+---+---+---+---+---+---+---+---+-------+-- - - - - --+------------+
+                   flg len                         pad                                ^
+                                                                                      |
+                                                                                new value of HERE
 
 	and <data> is whatever 32 bit integer was at the top of the stack.
 
