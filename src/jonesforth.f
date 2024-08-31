@@ -782,7 +782,6 @@
 	assembler part which returns the value of the assembler symbol of the same name.
 )
 : constant
-	word		( get the name. the name follows constant )
 	create		( make the dictionary entry )
 	docol ,		( append docol. the codeword field of this word )
 	' lit ,		( append the codeword lit )
@@ -838,7 +837,7 @@
 
 : variable
 	1 cells allot	( allocate 1 cell of memory, push the pointer to this memory )
-	word create	( make the dictionary entry, the name follows VARIABLE )
+	create		( make the dictionary entry, the name follows VARIABLE )
 	docol ,		( append docol, the codeword field of this word )
 	' lit ,		( append the codeword lit )
 	,		( append the pointer to the new memory )
@@ -897,7 +896,7 @@
 	way cannot be inlined.
 )
 : value		( n -- )
-	word create	( make the dictionary entry, the name follows value )
+	create		( make the dictionary entry, the name follows value )
 	docol ,		( append docol )
 	' lit ,		( append the codeword lit )
 	,		( append the initial value )
@@ -1393,7 +1392,7 @@
 )
 
 : :noname
-	0 0 create	( create a word with no name - we need a dictionary header because ; expects it )
+	0 0 header	( create a word with no name - we need a dictionary header because ; expects it )
 	here @		( current here value is the address of the codeword, ie. the xt )
 	docol ,		( compile docol -- the codeword )
 	]		( go into compile mode )

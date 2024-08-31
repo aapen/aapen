@@ -421,7 +421,7 @@ with the two forms of relative jumps. )
   surly crash. )
 
 : defprim
-  word create		( Create a new word )
+  create		( Create a new word )
   here @ 8 + ,		( Code word is the next address )
 ;
 

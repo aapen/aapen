@@ -25,7 +25,7 @@ noecho
 ( Compile a new word that simply calls out to some assembly code. )
 
 : compile1 ( -- )
-	word create		( make a new word )
+	create			( make a new word )
 	here @ 8 + ,		( code address is the next word )
 	call-template 		( call-t )
 	call-template-len
@@ -39,7 +39,7 @@ noecho
 ( Redefinable stubs )
 
 : def
-  word create
+  create
   word find
   dup 0= if
 	cr ." Not Found!" cr

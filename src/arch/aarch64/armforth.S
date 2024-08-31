@@ -2351,10 +2351,12 @@ _tcfa:
 	constants and other data).
 */
 
-	defcode "create",6,,create,tdfa // ( addr len -- )
-	POPPSP	x1                      // name length
-	POPPSP	x0                      // name address
-
+        defcode "header",6,,header,tdfa
+        POPPSP  x1                      // name length
+        POPPSP  x0                      // name addr
+        bl	_header
+        next
+_header:
 	ldr	x2, =var_here           // address of HERE
 	ldr	x3, [x2]                // x3 <- value of HERE, address of new header
 	ldr	x4, =var_latest         // address of LATEST
@@ -2392,6 +2394,11 @@ _tcfa:
 	and	x3, x3, #~7
 
 	str	x3, [x2]                // update HERE
+        ret
+
+	defcode "create",6,,create,header // ( "<spaces>name" -- )
+        bl      _word                   // parse name
+        bl      _header                 // create word header
 	next
 
 /*
@@ -2467,7 +2474,6 @@ _comma:
 */
 
 	defword ":",1,,colon,rbrac
-	.quad word                      // Get the name of the new word
 	.quad create                    // CREATE the dictionary entry / header
 	.quad lit, docol, comma         // Append DOCOL  (the codeword).
 	.quad latest, fetch, hidden     // Make the word hidden (see below for definition).
