@@ -567,6 +567,7 @@ docol:
 	add	NIP, x0, #8	// skip codeword, make NIP the first dataword
 	next
 
+
 /*
 	Just to make this absolutely clear, let's see how DOCOL works when jumping from QUADRUPLE
 	into DOUBLE:
@@ -770,10 +771,7 @@ excmsgend:
 	.set f_immed,0x80
 	.set f_hidden,0x20
 
-        // Store the chain of links
-	// .set link,0
-
-	.macro defword name, namelen, flags=0, label, link
+	.macro defword name, namelen, flags=0, label, link, codeword=docol
 	.section .rodata
 	.align 3
 	.global name_\label
@@ -788,7 +786,7 @@ name_\label :
 	.align 	3                       // padding to next 8 byte boundary
 	.global \label
 \label :
-	.quad docol                     // codeword - the interpreter
+	.quad \codeword                 // codeword - the interpreter
 	// list of word pointers follows
 	.endm
 
@@ -835,6 +833,46 @@ name_\label :
 code_\label :
 	// assembler code follows
 	.endm
+
+/*
+
+        In classic Jonesforth, the only codeword we used was DOCOL. As we work toward a Forth that
+        handles DOES>, it's useful to support different codewords. The first alternate codeword is
+        DOCON, which simply takes the value in the first cell of the data field and pushes it on the
+        stack. Based on the current implementation, x0 will always hold the CFA when a codeword is
+        invoked. So we can just add 8 to the CFA in order to get to the DFA.
+
+        Here is what a word built with docon looks like:
+
+	  pointer to previous word
+	   ^
+	   |
+	+--|------+---+---+---+---+---+-------+---------+---------+
+	| LINK    | 0 | 3 | F | O | O | , ... | docon   | val     |
+	+---------+---+---+---+---+---+-------+---------+---------+
+           ^	   flg len                     codeword  data field
+           |
+	  LINK in next word
+
+*/
+        .align 3
+docon:
+        add     x0, x0, #8      // x0 holds CFA, skip it to get DFA
+        ldr     x0, [x0]        // get the value
+        PUSHPSP x0              // put it on the stack
+        next
+
+/*
+
+	DOVAR is another codeword, which makes a word return the address of its own data field. This
+	makes it useful as a variable.
+
+*/
+
+        .align 3
+dovar:  add     x0, x0, #8      // x0 holds CFA, skip it to get DFA
+        PUSHPSP x0              // push DFA on the stack
+        next
 
 /*
 	Now some easy FORTH primitives.  These are written in assembly for speed.  If you understand
@@ -1329,12 +1367,7 @@ name_0: .quad 0
 */
 
 	.macro defvar name, namelen, flags=0, label, link, initial=0
-	defcode \name,\namelen,\flags,\label,\link
-	ldr	x0, =var_\name	// load address
-	PUSHPSP	x0		// push address
-	next
-	.data
-	.align 3
+	defword \name,\namelen,\flags,\label,\link,dovar
         .global var_\name
 var_\name :
 	.quad \initial
@@ -1370,16 +1403,10 @@ var_\name :
         .global var_excode
 
         // this one is "hand rolled" because "var_>in" is not a valid assembly label
-	defcode ">in",3,,to_in,srcid
-	ldr	x0, =var_to_in	// load address
-	PUSHPSP	x0		// push address
-	next
-	.data
-	.align 3
+	defword ">in",3,,to_in,srcid,dovar
         .global var_to_in
 var_to_in:
-	.quad 0
-
+        .quad 0
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
@@ -1407,7 +1434,9 @@ var_to_in:
 	defconst "version",7,,version,to_in,JONES_VERSION
 	defconst "r0",2,,rz,version,return_stack_top
 	defconst "docol",5,,__docol,rz,docol
-	defconst "f_immed",7,,__f_immed,__docol,f_immed
+        defconst "docon",5,,__docon,__docol,docon
+        defconst "dovar",5,,__dovar,__docon,dovar
+	defconst "f_immed",7,,__f_immed,__dovar,f_immed
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
         defconst "lastcell",8,,lastcell,__f_hidden,LASTCELL
         defconst "peripherals",11,,peripherals,lastcell,PERIPHERALS

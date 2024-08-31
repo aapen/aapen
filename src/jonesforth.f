@@ -766,52 +766,43 @@
 	+---------+---+---+---+---+
                    len
 
-	For CONSTANT we can continue by appending DOCOL -- the codeword -- then LIT followed by
+	For CONSTANT we can continue by appending DOCON -- the codeword -- then LIT followed by
 	the constant itself and then EXIT, forming a little word definition that returns the
 	constant:
 
-	+---------+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 3 | T | E | N | DOCOL      | LIT        | 10         | EXIT       |
-	+---------+---+---+---+---+------------+------------+------------+------------+
+	+---------+---+---+---+---+------------+------------+
+	| LINK    | 3 | T | E | N | DOCON      | 10         |
+	+---------+---+---+---+---+------------+------------+
                    len              codeword
 
-	Notice that this word definition is exactly the same as you would have got if you had
-	written : TEN 10 ;
-
-	Note for people reading the code below: DOCOL is a constant word which we defined in the
+	Note for people reading the code below: DOCON is a constant word which we defined in the
 	assembler part which returns the value of the assembler symbol of the same name.
 )
 : constant
-	create		( make the dictionary entry )
-	docol ,		( append docol. the codeword field of this word )
-	' lit ,		( append the codeword lit )
-	,		( append the value on the top of the stack )
-	' exit ,	( append the codeword exit )
+	create                  ( make a new dictionary entry )
+	docon ,                 ( append the codeword to return a constant )
+        ,                       ( append the value the constant will hold )
 ;
 
 (
-	VARIABLE is a little bit harder because we need somewhere to put the variable.  There is
-	nothing particularly special about the user memory -- the area of memory pointed to by HERE
-	where we have previously just stored new word definitions.  We can slice off bits of this
-	memory area to store anything we want, so one possible definition of VARIABLE might create
-	this:
+	We can define VARIABLE in much the same way as CONSTANT above. The only difference is that
+	the codeword DOVAR is used and we initialize the value to 0 instead of taking whatever is on
+	the stack.
+)
 
-	   +--------------------------------------------------------------+
-	   |								  |
-	   V								  |
-	+---------+---------+---+---+---+---+------------+------------+---|--------+------------+
-	| <var>   | LINK    | 3 | V | A | R | DOCOL      | LIT        | <addr var> | EXIT       |
-	+---------+---------+---+---+---+---+------------+------------+------------+------------+
-        		     len              codeword
+: variable
+	create                  ( make a dictionary entry )
+	dovar ,                 ( append dovar, the codeword for this word )
+	0 ,                     ( reserve some space in the word's data field )
+;
 
-	where <var> is the place to store the variable, and <addr var> points back to it.
-
-	To make this more general let's define a couple of words which we can use to allocate
-	arbitrary memory from the user memory.
+(
+	Let's define a couple of words which we can use to allocate arbitrary memory from the user
+	memory.
 
 	First ALLOT, where n ALLOT allocates n bytes of memory.  Note when calling this that
-	it's a very good idea to make sure that n is a multiple of 4, or at least that next time
-	a word is compiled that HERE has been left as a multiple of 4.
+	it's a very good idea to make sure that n is a multiple of 8, or at least that next time
+	a word is compiled that HERE has been left as a multiple of 8.
 )
 : allot		( n -- addr )
 	here @ swap	( here n )
@@ -833,23 +824,9 @@
 : char+ 1 chars + ;
 
 (
-	So now we can define VARIABLE easily in much the same way as CONSTANT above.  Refer to the
-	diagram above to see what the word that this creates will look like.
-)
-
-: variable
-	1 cells allot	( allocate 1 cell of memory, push the pointer to this memory )
-	create		( make the dictionary entry, the name follows VARIABLE )
-	docol ,		( append docol, the codeword field of this word )
-	' lit ,		( append the codeword lit )
-	,		( append the pointer to the new memory )
-	' exit ,	( append the codeword exit )
-;
-
-(
 	VALUES ----------------------------------------------------------------------
 
-	VALUEs are like VARIABLEs but with a simpler syntax.  You would generally use them when you
+	VALUEs are like a cross between CONSTANTs and VARIABLEs.  You would generally use them when you
 	want a variable which is read often, and written infrequently.
 
 	20 VALUE VAL 	creates VAL with initial value 20
@@ -858,7 +835,7 @@
 	VAL		pushes the value 30 directly on the stack
 
 	Notice that 'VAL' on its own doesn't return the address of the value, but the value itself,
-	making values simpler and more obvious to use than variables -- no indirection through '@'.
+	making values work kind of like CONSTANTs -- no indirection through '@'.
 	The price is a more complicated implementation, although despite the complexity there is no
 	performance penalty at runtime.
 
@@ -872,9 +849,9 @@
 
 	Now this is the clever bit.  We'll compile our value like this:
 
-	+---------+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 3 | V | A | L | DOCOL      | LIT        | <value>    | EXIT       |
-	+---------+---+---+---+---+------------+------------+------------+------------+
+	+---------+---+---+---+---+------------+------------+
+	| LINK    | 3 | V | A | L | DOCON      | <value>    |
+	+---------+---+---+---+---+------------+------------+
                    len              codeword
 
 	where <value> is the actual value itself.  Note that when VAL executes, it will push the
@@ -882,14 +859,14 @@
 
 	But what will TO use for the address <addr>?  Why of course a pointer to that <value>:
 
-		code compiled	- - - - --+------------+------------+------------+-- - - - -
-		by TO VAL		  | LIT        | <addr>     | !          |
-				- - - - --+------------+-----|------+------------+-- - - - -
-							     |
-							     V
-	+---------+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 3 | V | A | L | DOCOL      | LIT        | <value>    | EXIT       |
-	+---------+---+---+---+---+------------+------------+------------+------------+
+	code compiled	- - - - --+------------+------------+------------+-- - - - -
+	by TO VAL		  | LIT        | <addr>     | !          |
+			- - - - --+------------+-----|------+------------+-- - - - -
+						     |
+						     V
+	+---------+---+---+---+---+------------+------------+
+	| LINK    | 3 | V | A | L | DOCON      | <value>    |
+	+---------+---+---+---+---+------------+------------+
                    len              codeword
 
 	In other words, this is a kind of self-modifying code.
@@ -899,17 +876,14 @@
 )
 : value		( n -- )
 	create		( make the dictionary entry, the name follows value )
-	docol ,		( append docol )
-	' lit ,		( append the codeword lit )
+	docon ,		( append docol )
 	,		( append the initial value )
-	' exit ,	( append the codeword exit )
 ;
 
 : to immediate	( n -- )
 	word		( get the name of the value )
 	find		( look it up in the dictionary )
-	>dfa		( get a pointer to the first data field, the 'lit' )
-	8+		( increment to point at the value )
+	>dfa		( get a pointer to the first cell of the data field )
 	state @ if	( compiling? )
 		' lit ,		( compile lit )
 		,		( compile the address of the value )
@@ -923,8 +897,7 @@
 : +to immediate
 	word		( get the name of the value )
 	find		( look it up in the dictionary )
-	>dfa		( get a pointer to the first data field, the 'lit' )
-	8+		( increment to point at the value )
+	>dfa		( get a pointer to the first cell of the data field )
 	state @ if	( compiling? )
 		' lit ,		( compile lit )
 		,		( compile the address of the value )
