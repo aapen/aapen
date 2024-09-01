@@ -1786,8 +1786,8 @@
   2drop
 ;
 
-: noecho 0 echo ! ;
-: echo 1 echo ! ;
+: troff 0 echo ! ;
+: tron  1 echo ! ;
 
 ( align HERE to 16 byte boundary )
 here @ 15 + 15 invert and here !

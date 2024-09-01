@@ -1,5 +1,3 @@
-noecho
-
 ( Save the current base and set it to hex )
 
 variable assembler-save-base 
@@ -519,5 +517,3 @@ defprim x-cmove ( src-addr dst-addr len -- )
 ;;
 
 assembler-save-base @ base !
-echo
-

@@ -1,5 +1,3 @@
-noecho
-
 ( Experiments in building a direct thread compiler )
 
 ( Test word that reads 3 words )
@@ -70,8 +68,6 @@ noecho
   >cfa
   swap !
 ;
-
-echo
 
 ( Create a rediect word)
 

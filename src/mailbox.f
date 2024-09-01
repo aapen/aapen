@@ -1,4 +1,3 @@
-noecho
 base @ value mbox-old-base
 decimal
 
@@ -247,4 +246,3 @@ variable message-start                  ( pointer to start of message buffer )
 : power-off 0 swap 0x 28001 do-power-query ;
 
 mbox-old-base base !
-echo

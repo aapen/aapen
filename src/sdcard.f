@@ -1,4 +1,3 @@
-noecho
 base @ value sd-old-base
 decimal
 
@@ -684,6 +683,14 @@ variable sdcard.bus-width
 ;
 
 (
+	FILE SYSTEM INTERFACE ----------------------------------------------------------------
+)
+
+0 value drive
+0 value dir
+16 cells allot constant file-descriptors
+
+(
         PARTITION TABLE ----------------------------------------------------------------------
 )
 
@@ -700,11 +707,8 @@ variable sdcard.bus-width
 : mbr? sdbuf 508 + w@ 0x aa550000 = ;
 : gpt? sdbuf 512 +  @ 0x 00005452415020494645 = ;
 
-: ppart-bs
-;
-
-: mount-bs
-;
+: ppart-bs ;
+: mount-bs ;
 
 ( n -- b )
 : part-active? part[] c@ 0x 80 = ;
@@ -739,38 +743,17 @@ variable sdcard.bus-width
   cr
 ;
 
-( -- )
-: mount-mbr
-  mbr? if
-    sdbuf 446 + partitions 64 cmove       ( copy partition table )
-  then
-;
-
-: ppart-gpt
-  ." gpt" cr
-;
-
-: mount-gpt
-  ." mount-gpt" cr
-;
-
-( -- n )
-: partition-type
-  gpt? if 1 else
-  mbr? if 2 else
-  bs?  if 0 else
-  -1 then then then
-;
+: mount-mbr ( -- ) sdbuf 446 + partitions 64 cmove ;
+: ppart-gpt ( -- ) ." gpt" cr ;
+: mount-gpt ( -- ) ." mount-gpt" cr ;
 
 : mount
   sdbuf 0 2 sd-read-blocks
-  partition-type case
-    0 of mount-bs  ppart-bs  cr endof
-    1 of mount-gpt ppart-gpt cr endof
-    2 of mount-mbr ppart-mbr cr endof
-    ." no partition table??" cr efail throw
-  endcase
+  bs?  if mount-bs  ppart-bs  else
+  gpt? if mount-gpt ppart-gpt else
+  mbr? if mount-mbr ppart-mbr else
+  ." partition table??" efail throw
+  then then then
 ;
 
 sd-old-base base ! hide sd-old-base
-echo

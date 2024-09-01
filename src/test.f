@@ -1,4 +1,3 @@
-noecho
 base @ value test-old-base
 hex
 
@@ -73,4 +72,3 @@ variable error-xt
 ;
 
 test-old-base base ! hide test-old-base
-echo

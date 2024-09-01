@@ -1,4 +1,3 @@
-noecho
 base @ decimal
 
 ( FRAME BUFFER )
@@ -197,4 +196,3 @@ s" V 0.01" tell cr
 s" READY" tell cr
 
 base !
-echo

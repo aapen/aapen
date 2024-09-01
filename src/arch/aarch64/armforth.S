@@ -696,8 +696,7 @@ _forth_restart:
         str     x1, [x0]
 
         ldr     x0, =var_echo           // reset echo to off
-        mov     x1, #0
-        str     x1, [x0]
+        str     xzr, [x0]
 
         ldr     x0, =inbuf              // reset to keyboard input
         ldr     x1, =buffer
@@ -1391,7 +1390,7 @@ var_\name :
 	defvar "latest",6,,latest,here,name_execute
 	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
-        defvar "echo",4,,echo,base,1
+        defvar "echo",4,,echo,base,0
         defvar "exception",9,,exception,echo
         defvar "excode",6,,excode,exception
         defvar "in0",3,,in0,excode,buffer
@@ -1936,15 +1935,10 @@ _refill:
         PUSHPSP x4
         PUSHPSP lr
 
-        // x7 = echo?
-        ldr     x7, =var_echo
-        ldr     x7, [x7]
-
         ldr     x4, =buffer
 1:	bl	_con_in
 
         // special cases
-
         // no input
         cmp     x0, #0
         beq     2f                      // exit (zero in x0 indicates "false")
@@ -1961,10 +1955,8 @@ _refill:
         cmp     x0, #0x7f
         beq     _refill_bs
 
-        cmp     x7, #0                  // echo == 0?
-        beq     2f                      // yes, skip it
-        bl      _con_out                // no, echo.
-2:      strb    w0, [x4], #1            // store character, increment pointer
+        bl      _con_out                // echo it
+        strb    w0, [x4], #1            // store character, increment pointer
         b       1b                      // keep reading characters
 
 _refill_nl:
@@ -1974,12 +1966,10 @@ _refill_nl:
         str     x1, [x4]                // store number of chars available
         ldr     x4, =var_to_in          // address of variable
         str     xzr, [x4]               // store zero in >in
-        cmp     x7, #0                  // echo == 0?
-        beq     3f                      // yes, skip it
         bl      _con_out                // no, echo the \r
         mov     w0, #'\n'               // we also need to emit a \n
         bl      _con_out
-3:      POPPSP  lr
+        POPPSP  lr
         POPPSP  x4
         POPPSP  x7
         ret
@@ -1990,15 +1980,13 @@ _refill_bs:
         cmp     x1, x0                  // compare ptr-1 to start
         blt     1b                      // no input so far, do nothing
 
-        cmp     x7, #0                  // echo == 0?
-        beq     4f                      // yes, skip it
         mov     w0, #8
         bl      _con_out                // echo the backspace
         mov     w0, #' '                // overwrite the previous character
         bl      _con_out
         mov     w0, #8                  // reposition the cursor
         bl      _con_out
-4:      subs    x4, x4, 1               // drop the last character
+        subs    x4, x4, 1               // drop the last character
         b       1b                      // keep looking
 
 
@@ -2762,9 +2750,26 @@ _tell:
         cmp     x1, #0                  // is a word available?
         bne     3f                      // yes, go to look it up
         next                            // no, exit
-3:
+3:      // are we echoing?
+        ldr     x4, =var_echo           // address of echo?
+        ldr     x4, [x4]                // value of echo?
+        cmp     x4, #0                  //
+        beq     7f                      // if echo != 0
+
+        PUSHPSP x0                      // we're about to clobber x0, x1, x2
+        PUSHPSP x1                      // so preserve them
+        PUSHPSP x2
+        mov     x2, x1
+        mov     x1, x0
+        bl      _tell                   // use tell to echo the word
+        mov     x0, #' '
+        bl      _con_out
+9:      POPPSP  x2
+        POPPSP  x1
+        POPPSP  x0
+
         // look up word
-	mov	x4, x0			// save word in x4, x5
+7:      mov	x4, x0			// save word in x4, x5
 	mov	x5, x1
 
         // is it in the dictionary?

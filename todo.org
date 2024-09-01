@@ -95,7 +95,7 @@ Option selected:
 ** TODO Consider bitfield words
 C.f. https://github.com/dsmcfarl/forth-stm32f746-disco/blob/6e46f1088123e78ba615a7dad3f7249a3744cc2f/common.fs#L15
 ** DONE DO..LOOP would be really handy
-** TODO Move echoing to "interpret"... use 'tron' and 'troff' to turn echoing on and off
+** DONE Move echoing to "interpret"... use 'tron' and 'troff' to turn echoing on and off
 ** TODO Remove the .zig sources from the build
 * DONE Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
@@ -519,5 +519,3 @@ Allow multiple frame buffers. (Q: restrict MainConsole to fb 0?) Provide Forty w
 - InputBuffer becomes a ring of u16.
 - CharBufferConsole.emit goes away.
 - MainConsole probably goes away entirely.
-* TODO Move echoing to "interpret"... use 'tron' and 'troff' to turn echoing on and off
-* TODO Remove the .zig sources from the build
