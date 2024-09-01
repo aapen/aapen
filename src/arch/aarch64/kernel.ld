@@ -78,18 +78,18 @@ SECTIONS
         hold DWARF sections. It will be a binary blob attached after
         the kernel is built. */
 
-        __debug_info_start = .;
-        . += 512 * 1024;
-        __debug_info_end = .;
+        /* __debug_info_start = .; */
+        /* . += 512 * 1024; */
+        /* __debug_info_end = .; */
 
-        . = ALIGN(PAGE_SIZE);
+        /* . = ALIGN(PAGE_SIZE); */
 
-        .page_tables(NOLOAD) : ALIGN(16)
-        {
-                __page_tables_start = .;
-                . += 0x6000;
-                __page_tables_end_exclusive = .;
-        } :segment_data
+        /* .page_tables(NOLOAD) : ALIGN(16) */
+        /* { */
+        /*         __page_tables_start = .; */
+        /*         . += 0x6000; */
+        /*         __page_tables_end_exclusive = .; */
+        /* } :segment_data */
 
         .bss (NOLOAD) : ALIGN(16)
         {
@@ -102,15 +102,15 @@ SECTIONS
         /***********************************************************************
         * Heap
         ***********************************************************************/
-        . = ALIGN(PAGE_SIZE);
-        __heap_start = .;
-        .heap (NOLOAD) :
-        {
-                . += 512 * 1024 * 1024; /* 512MB heap */
-        } :segment_heap
-        __heap_end_exclusive = .;
+        /* . = ALIGN(PAGE_SIZE); */
+        /* __heap_start = .; */
+        /* .heap (NOLOAD) : */
+        /* { */
+        /*         . += 512 * 1024 * 1024; /\* 512MB heap *\/ */
+        /* } :segment_heap */
+        /* __heap_end_exclusive = .; */
 
-        ASSERT((. & PAGE_MASK) == 0, "Heap is not page aligned")
+        /* ASSERT((. & PAGE_MASK) == 0, "Heap is not page aligned") */
 
         /***********************************************************************
         * Junk and gunk

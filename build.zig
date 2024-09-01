@@ -51,16 +51,14 @@ pub fn build(b: *std.Build) !void {
     });
 
     compile_kernel.root_module.addOptions("config", options);
-    compile_kernel.addCSourceFile(.{ .file = b.path("src/printf.c"), .flags = &[_][]const u8{} });
-    compile_kernel.addCSourceFile(.{ .file = b.path("src/disassemble.c"), .flags = &[_][]const u8{} });
     compile_kernel.addIncludePath(b.path("include"));
     compile_kernel.addIncludePath(b.path("src"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/armforth.S"));
-    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/atomic.S"));
+    //    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/atomic.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/boot.S"));
-    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/context_switch.S"));
+    //    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/context_switch.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/exceptions.S"));
-    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/mmu.S"));
+    //    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/mmu.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/util.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/video.S"));
     compile_kernel.setLinkerScriptPath(b.path("src/arch/aarch64/kernel.ld"));
@@ -78,28 +76,5 @@ pub fn build(b: *std.Build) !void {
 
     const install_image = b.addInstallFile(extract_image.getOutputSource(), img_name);
 
-    if (!isTestBuild(testname)) {
-        const build_symbols = buildSymbolTable(b, compile_kernel, extract_image);
-        b.getInstallStep().dependOn(&build_symbols.step);
-        install_image.step.dependOn(&build_symbols.step);
-    }
-
     b.getInstallStep().dependOn(&install_image.step);
-}
-
-fn buildSymbolTable(b: *std.Build, compile_kernel: *std.Build.Step.Compile, extract_image: *std.Build.Step.ObjCopy) *std.Build.Step.Run {
-    const tool = b.addExecutable(.{
-        .target = b.host,
-        .name = "build-symbtab",
-        .root_source_file = b.path("tools/build-symtab/src/main.zig"),
-    });
-
-    const run_tool = b.addRunArtifact(tool);
-    run_tool.addFileArg(compile_kernel.getEmittedBin());
-    run_tool.addFileArg(extract_image.getOutput());
-    return run_tool;
-}
-
-fn isTestBuild(testname: []const u8) bool {
-    return testname.len > 0;
 }
