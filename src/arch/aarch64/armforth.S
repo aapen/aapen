@@ -2033,45 +2033,70 @@ _number:
 	mov	x2, x0		// address
 	mov	x0, #0		// number
 	cmp	x1, #0		// length <= 0?
-	ble	5f		// really an error, but returns 0 anyway
+	ble	8f		// really an error, but returns 0 anyway
 
 	ldr	x4, =var_base
 	ldr	x4, [x4]	// get BASE
 	ldrb	w5, [x2], #1	// get character and increment address
 	mov	x7, #0		// set negative flag false
-	cmp	x5, #'-'	// leading '-'?
-	bne	2f		// nope, try to parse as digit
+
+	cmp	x1, #2		// if len < 3 then this can't be 0x 0b or 0d.
+	ble	3f		// nope, skip to leading - test
+	cmp	x5, #'0'	// leading '0'?
+	bne	3f		// nope, skip to leading - test
+	ldrb	w5, [x2], #1	// got a leading '0', check next char.
+
+	cmp	x5, #'x'	// do we have 0x?
+	bne	1f		// nope, try the next one...
+	mov	x4, #16		// set base value to 16 for this number
+	ldrb	w5, [x2], #1	// get character and increment address
+	subs	x1, x1, #2	// decrement length
+
+1:	cmp	x5, #'b'	// do we have 0b?
+	bne	2f		// nope, try the next one...
+	mov	x4, #2		// set base value to 2 for this number
+	ldrb	w5, [x2], #1	// get character and increment address
+	subs	x1, x1, #2	// decrement length
+
+2:	cmp	x5, #'d'	// do we have 0d?
+	bne	3f		// nope, must be a regular number
+	mov	x4, #10		// set base value to 2 for this number
+	ldrb	w5, [x2], #1	// get character and increment address
+	subs	x1, x1, #2	// decrement length
+
+3:	cmp	x5, #'-'	// leading '-'?
+	bne	5f		// nope, try to parse as digit
 
 	mov	x7, #1		// set negative flag true
 	subs	x1, x1, #1	// decrement length
-	bpl	1f		// >0 so keep going
+	bpl	4f		// >0 so keep going
 
 	mov	x1, #1		// just a sign, no digits, signal an error
-	b	5f		// error!
-1:
+	b	8f		// error!
+4:
 	mul	x6, x0, x4	// number = number * BASE
 	mov	x0, x6		// (need to use another register for mul to avoid warning)
 	ldrb	w5, [x2], #1	// get character and increment address
-2:
+5:
 	subs	x5, x5, #'0'	// try lower digit bound
-	bmi	4f		// nope, < '0' so we're done
+	bmi	7f		// nope, < '0' so we're done
 	cmp	x5, #10		// try upper digit bound
-	blt	3f		// yes, we got one!
+	blt	6f		// yes, we got one!
 	subs	x5, x5, #49	// try lower char bound (49 is 'a'-'0')
-	bmi	4f		// nope, < 'a' so we're done
+	bmi	7f		// nope, < 'a' so we're done
 	add	x5, x5, #10	// adjust for first 10 digit values before 'a'
-3:
+6:
 	cmp	x5, x4		// >= BASE?
-	bge	4f		// yep, we're done
+	bge	7f		// yep, we're done
 
 	// finally, add new digit to number and loop
 	add	x0, x0, x5
 	subs	x1, x1, #1
-	bne	1b
-4:
+	bne	4b
+7:
 	cmp	x7, #1		// check negative flag
         cneg    x0, x0, eq      // If equal, negate x0
-5:
+8:
         POPPSP  lr
         POPPSP  x7
         POPPSP  x6
