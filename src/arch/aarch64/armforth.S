@@ -821,12 +821,8 @@ code_\label :
 
 /*
 
-        In classic Jonesforth, the only codeword we used was DOCOL. As we work toward a Forth that
-        handles DOES>, it's useful to support different codewords. The first alternate codeword was
-        DOCON, which took the value in the first cell of the data field and pushed it on the
-        stack. DOCON isn't need any more.
-
-        DOVAR is another codeword that pushes the address of the current word's DFA on the stack.
+        In classic Jonesforth, the only codeword was DOCOL. DOVAR is another codeword that pushes
+        the address of the current word's DFA on the stack.
 
 */
 

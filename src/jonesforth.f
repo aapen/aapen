@@ -708,82 +708,9 @@
 : char+ 1 chars + ;
 
 (
-	Constants and variables ----------------------------------------------------------------------
 
-	In forth, global constants and variables are defined like this:
-
-	10 constant ten		When ten is executed, it leaves the integer 10 on the stack
-	variable var		When var is executed, it leaves the address of var on the stack
-
-	Constants can be read but not written, eg:
-
-	ten . cr		prints 10
-
-	You can read a variable -- in this example called 'var' -- by doing:
-
-	var @			leaves the value of var on the stack
-	var @ . cr		prints the value of var
-	var ? cr		same as above, since ? is the same as @ .
-
-	and update the variable by doing:
-
-	20 var !		sets var to 20
-
-	Note that variables are uninitialised -- but see value later on which provides initialised
-	variables with a slightly simpler syntax.
-
-	-- MTNygard: I removed some literate discussion of how `constant` and `variable` work since
-           it no longer applies and I don't know how to explain `does>` in a similar manner.
-
-	VALUES ----------------------------------------------------------------------
-
-	VALUEs are like a cross between CONSTANTs and VARIABLEs.  You would generally use them when you
-	want a variable which is read often, and written infrequently.
-
-	20 VALUE VAL 	creates VAL with initial value 20
-	VAL		pushes the value 20 directly on the stack
-	30 TO VAL	updates VAL, setting it to 30
-	VAL		pushes the value 30 directly on the stack
-
-	Notice that 'VAL' on its own doesn't return the address of the value, but the value itself,
-	making values work kind of like CONSTANTs -- no indirection through '@'.
-	The price is a more complicated implementation, although despite the complexity there is no
-	performance penalty at runtime.
-
-	A naive implementation of 'TO' would be quite slow, involving a dictionary search each time.
-	But because this is FORTH we have complete control of the compiler so we can compile TO more
-	efficiently, turning:
-		TO VAL
-	into:
-		LIT <addr> !
-	and calculating <addr>  -- the address of the value -- at compile time.
-
-	Now this is the clever bit.  We'll compile our value like this:
-
-	+---------+---+---+---+---+------------+------------+
-	| LINK    | 3 | V | A | L | do does    | <value>    |
-	+---------+---+---+---+---+------------+------------+
-                   len              codeword
-
-	where <value> is the actual value itself.  Note that when VAL executes, it will push the
-	value on the stack, which is what we want.
-
-	But what will TO use for the address <addr>?  Why of course a pointer to that <value>:
-
-	code compiled	- - - - --+------------+------------+------------+-- - - - -
-	by TO VAL		  | LIT        | <addr>     | !          |
-			- - - - --+------------+-----|------+------------+-- - - - -
-						     |
-						     V
-	+---------+---+---+---+---+------------+------------+
-	| LINK    | 3 | V | A | L | do does    | <value>    |
-	+---------+---+---+---+---+------------+------------+
-                   len              codeword
-
-	In other words, this is a kind of self-modifying code.
-
-	Note to the people who want to modify this FORTH to add inlining: values defined this
-	way cannot be inlined.
+	-- MTNygard: I removed a lot of literate discussion of how `constant` and `variable` work
+           since it no longer applies and I don't know how to explain `does>` in a similar manner.
 
 )
 
