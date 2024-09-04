@@ -1188,6 +1188,8 @@
 	':' emit space dup id. space
 	dup ?immediate if ." immediate " then
 
+        dup >cfa docol <> if ." <compiled word> ;" cr exit then
+
 	>dfa		( get the data address, ie. points after DOCOL | end-of-word start-of-data )
 
 	( now we start decompiling until we hit the end of the word )

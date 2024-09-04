@@ -420,7 +420,7 @@ with the two forms of relative jumps. )
 
 : defprim
   create		( Create a new word )
-  here @ 8 + ,		( Code word is the next address )
+  here @ dup 8- !       ( Put DFA into CFA )
 ;
 
 ( Close out an open primitive word. This is essentially
