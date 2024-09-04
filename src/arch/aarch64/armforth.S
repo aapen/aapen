@@ -2051,12 +2051,14 @@ _number:
 	mov	x4, #16		// set base value to 16 for this number
 	ldrb	w5, [x2], #1	// get character and increment address
 	subs	x1, x1, #2	// decrement length
+	b	3f
 
 1:	cmp	x5, #'b'	// do we have 0b?
 	bne	2f		// nope, try the next one...
 	mov	x4, #2		// set base value to 2 for this number
 	ldrb	w5, [x2], #1	// get character and increment address
 	subs	x1, x1, #2	// decrement length
+	b	3f
 
 2:	cmp	x5, #'d'	// do we have 0d?
 	bne	3f		// nope, must be a regular number
