@@ -1700,7 +1700,7 @@
   >in @
   srclen @
   srcid @
-  0x abacab ( magic marker on the stack )
+  0xabacab ( magic marker on the stack )
   5
 ;
 
@@ -1708,7 +1708,7 @@
 : restore-input
   ( todo use abort" -- if it's possible to define abort" )
   5 <> if ." stack mismatch" -1 throw then
-  0x abacab <> if ." stack mismatch" -1 throw then
+  0xabacab <> if ." stack mismatch" -1 throw then
   srcid !
   srclen !
   >in !

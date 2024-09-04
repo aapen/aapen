@@ -13,30 +13,30 @@ hex
 ;
 
 : set-ra ( instruction ra -- instruction )
-  0b 11111 and
-  0d 10 lshift
+  0b11111 and
+  0d10 lshift
   or
 ;
 
 : set-rn ( instruction rn -- instruction )
-  0b 11111 and
-  0d 5 lshift
+  0b11111 and
+  0d5 lshift
   or
 ;
 
 : set-rm ( instruction rm -- instruction )
-  0b 11111 and
-  0d 16 lshift
+  0b11111 and
+  0d16 lshift
   or
 ;
 
 : set-im21-hi ( instruction im21 -- instruction )
-  0d 2 rshift 0d 5 lshift       ( instruction im21-hibits )
+  0d2 rshift 0d5 lshift       ( instruction im21-hibits )
   or
 ;
 
 : set-im21-low ( instruction im21 -- instruction )
-  3 and 0d 29 lshift		( instruction im21-lowbits )
+  3 and 0d29 lshift		( instruction im21-lowbits )
   or
 ;
 
@@ -52,32 +52,32 @@ hex
 ;
 
 : set-im19 ( instruction im19 -- instruction )
-  0b 1111111111111111111 and	( instruction im19 )
-  0d 5 lshift                   ( instruction mask )
+  0b1111111111111111111 and	( instruction im19 )
+  0d5 lshift                   ( instruction mask )
   or
 ;
 
 : set-im16 ( instruction im16 -- instruction )
-  0b 1111111111111111 and	( instruction im16 )
-  0d 5 lshift                   ( instruction mask )
+  0b1111111111111111 and	( instruction im16 )
+  0d5 lshift                   ( instruction mask )
   or
 ;
 
 : set-im12 ( instruction im12 -- instruction )
-  0b 111111111111 and		( instruction im12 )
-  0d 10 lshift                  ( instruction mask )
+  0b111111111111 and		( instruction im12 )
+  0d10 lshift                  ( instruction mask )
   or
 ;
 
 : set-im9 ( instruction im9 -- instruction )
-  0b 111111111 and		( instruction im9 )
-  0d 12 lshift                  ( instruction mask )
+  0b111111111 and		( instruction im9 )
+  0d12 lshift                  ( instruction mask )
   or
 ;
 
 : set-im6 ( instruction im6 -- instruction )
-  0b 111111 and			( instruction im6 )
-  0d 10 lshift                  ( instruction mask )
+  0b111111 and			( instruction im6 )
+  0d10 lshift                  ( instruction mask )
   or
 ;
 
@@ -142,22 +142,22 @@ hex
 
 ( Condition codes used by the b-cond instruction )
 
-: cond-eq 0b 0000 ;
-: cond-ne 0b 0001 ;
-: cond-cs 0b 0010 ;
-: cond-cc 0b 0011 ;
-: cond-mi 0b 0100 ;
-: cond-pl 0b 0101 ;
-: cond-vs 0b 0110 ;
-: cond-vc 0b 0111 ;
-: cond-hi 0b 1000 ;
-: cond-ls 0b 1001 ;
-: cond-ge 0b 1010 ;
-: cond-lt 0b 1011 ;
-: cond-gt 0b 1100 ;
-: cond-le 0b 1101 ;
-: cond-al 0b 1110 ;
-: cond-nv 0b 1111 ;
+: cond-eq 0b0000 ;
+: cond-ne 0b0001 ;
+: cond-cs 0b0010 ;
+: cond-cc 0b0011 ;
+: cond-mi 0b0100 ;
+: cond-pl 0b0101 ;
+: cond-vs 0b0110 ;
+: cond-vc 0b0111 ;
+: cond-hi 0b1000 ;
+: cond-ls 0b1001 ;
+: cond-ge 0b1010 ;
+: cond-lt 0b1011 ;
+: cond-gt 0b1100 ;
+: cond-le 0b1101 ;
+: cond-al 0b1110 ;
+: cond-nv 0b1111 ;
 
 
 ( Instruction modifiers )
@@ -171,28 +171,28 @@ hex
 ( Turn on the shift option )
 
 : ->shift ( instruction -- instruction )
-  1 0d 22 lshift
+  1 0d22 lshift
   or
 ;
 
 ( Set the condition code for a b-cond instruction )
 
 : ->cond ( instruction cond -- instruction )
-  0b 1111 and
+  0b1111 and
   or
 ;
 
 ( Set the preindex option )
 
 : ->pre ( instruction -- instruction )
-  0b 11 0d 10 lshift
+  0b11 0d10 lshift
   or
 ;
 
 ( Set the postindex option )
 
 : ->post ( instruction -- instruction )
-  0b 01 0d 10 lshift
+  0b01 0d10 lshift
   or
 ;
 
@@ -258,8 +258,8 @@ hex
 
 ( Move )
 
-: mov-xx ( rt rm -- instruction ) 0d 31 swap orr-xxx ;
-: mov-ww ( rt rm -- instruction ) 0d 31 swap orr-www ;
+: mov-xx ( rt rm -- instruction ) 0d31 swap orr-xxx ;
+: mov-ww ( rt rm -- instruction ) 0d31 swap orr-www ;
 
 : mov-x# ( rt im16 -- instruction) d2800000 rt-im16-instruction ;
 : mov-w# ( rt im16 -- instruction) d2800000 rt-im16-instruction ->w ;
@@ -270,10 +270,10 @@ hex
 : cbz-x#  ( rt im19 -- instruction ) b4000000 rt-im19-instruction ;
 : cbnz-x# ( rt im19 -- instruction ) b5000000 rt-im19-instruction ;
 : svc-#   ( im16 -- instruction )    d4000001 im16-instruction ;
-: hlt-# ( im16 -- instruction ) 0x d4400000 im16-instruction ;
+: hlt-# ( im16 -- instruction )      d4400000 im16-instruction ;
 
 : ret-x ( rn -- instruction )  d65f0000 swap set-rn ;
-: ret- ( -- instruction ) 0d 30 ret-x ;
+: ret- ( -- instruction )      0d30 ret-x ;
 : br-x ( rn -- instruction )   d61f0000 rn-instruction ;
 : b-# ( im26 -- instruction )  14000000 swap set-im26 ;
 : bl-# ( im26 -- instruction ) 94000000 swap set-im26 ;
@@ -285,7 +285,7 @@ hex
  Keep in mind that the jump is relative and multiplied by 4. )
 
 : b-cond ( im19 cond -- instruction )
-  0x 54000000			( im19 cond instruction )
+  0x54000000			( im19 cond instruction )
   swap ->cond			( im19 instruction )
   swap set-im19		
 ;
@@ -302,13 +302,13 @@ hex
 : sysreg 5 lshift constant ;
 
 ( See ARMARM Section D19 for system register encoding )
-0b 1101111100000000 sysreg CNTFRQ_EL0
-0b 1101111100010001 sysreg CNTP_CTL_EL0
-0b 1101111100011001 sysreg CNTV_CTL_EL0
-0b 1101111100010000 sysreg CNTP_TVAL_EL0
-0b 1101111100011000 sysreg CNTV_TVAL_EL0
-0b 1101111100000010 sysreg CNTVCT_EL0
-0b 1100011000000000 sysreg VBAR_EL1
+0b1101111100000000 sysreg CNTFRQ_EL0
+0b1101111100010001 sysreg CNTP_CTL_EL0
+0b1101111100011001 sysreg CNTV_CTL_EL0
+0b1101111100010000 sysreg CNTP_TVAL_EL0
+0b1101111100011000 sysreg CNTV_TVAL_EL0
+0b1101111100000010 sysreg CNTVCT_EL0
+0b1100011000000000 sysreg VBAR_EL1
 
 : rt-sysreg-instruction swap set-rt or ;
 
@@ -317,8 +317,8 @@ hex
 
 ( Macros to push and pop a register from the data and returns stacks. )
 
-0d 28 constant psp
-0d 29 constant rsp
+0d28 constant psp
+0d29 constant rsp
 
 : pushrsp-x ( r -- instruction ) rsp -8 str-x[x#]! ;
 : poprsp-x  ( r -- instruction ) rsp  8 ldr-x[x]# ;

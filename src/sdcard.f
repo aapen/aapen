@@ -1,56 +1,56 @@
 base @ value sd-old-base
 decimal
 
-peripherals 0x   200000 + constant gpio-base
-gpio-base   0x        0 + constant gpio-fsel0
-gpio-base   0x        4 + constant gpio-fsel1
-gpio-base   0x        8 + constant gpio-fsel2
-gpio-base   0x        c + constant gpio-fsel3
-gpio-base   0x       10 + constant gpio-fsel4
-gpio-base   0x       14 + constant gpio-fsel5
-gpio-base   0x       1c + constant gpio-set0
-gpio-base   0x       20 + constant gpio-set1
-gpio-base   0x       28 + constant gpio-clr0
-gpio-base   0x       2c + constant gpio-clr1
-gpio-base   0x       34 + constant gpio-lev0
-gpio-base   0x       38 + constant gpio-lev1
-gpio-base   0x       40 + constant gpio-eds0
-gpio-base   0x       44 + constant gpio-eds1
-gpio-base   0x       4c + constant gpio-ren0
-gpio-base   0x       50 + constant gpio-ren1
-gpio-base   0x       58 + constant gpio-fen0
-gpio-base   0x       5c + constant gpio-fen1
-gpio-base   0x       64 + constant gpio-hen0
-gpio-base   0x       68 + constant gpio-hen1
-gpio-base   0x       70 + constant gpio-len0
-gpio-base   0x       74 + constant gpio-len1
-gpio-base   0x       7c + constant gpio-paren0
-gpio-base   0x       80 + constant gpio-paren1
-gpio-base   0x       88 + constant gpio-afen0
-gpio-base   0x       8c + constant gpio-afen1
-gpio-base   0x       94 + constant gpio-pud
-gpio-base   0x       98 + constant gpio-pudclk0
-gpio-base   0x       9c + constant gpio-pudclk1
+peripherals  0x200000 + constant gpio-base
+gpio-base         0x0 + constant gpio-fsel0
+gpio-base         0x4 + constant gpio-fsel1
+gpio-base         0x8 + constant gpio-fsel2
+gpio-base         0xc + constant gpio-fsel3
+gpio-base        0x10 + constant gpio-fsel4
+gpio-base        0x14 + constant gpio-fsel5
+gpio-base        0x1c + constant gpio-set0
+gpio-base        0x20 + constant gpio-set1
+gpio-base        0x28 + constant gpio-clr0
+gpio-base        0x2c + constant gpio-clr1
+gpio-base        0x34 + constant gpio-lev0
+gpio-base        0x38 + constant gpio-lev1
+gpio-base        0x40 + constant gpio-eds0
+gpio-base        0x44 + constant gpio-eds1
+gpio-base        0x4c + constant gpio-ren0
+gpio-base        0x50 + constant gpio-ren1
+gpio-base        0x58 + constant gpio-fen0
+gpio-base        0x5c + constant gpio-fen1
+gpio-base        0x64 + constant gpio-hen0
+gpio-base        0x68 + constant gpio-hen1
+gpio-base        0x70 + constant gpio-len0
+gpio-base        0x74 + constant gpio-len1
+gpio-base        0x7c + constant gpio-paren0
+gpio-base        0x80 + constant gpio-paren1
+gpio-base        0x88 + constant gpio-afen0
+gpio-base        0x8c + constant gpio-afen1
+gpio-base        0x94 + constant gpio-pud
+gpio-base        0x98 + constant gpio-pudclk0
+gpio-base        0x9c + constant gpio-pudclk1
 
-peripherals 0x   300000 + constant sd-base
-sd-base     0x        0 + constant sd-arg2
-sd-base     0x        4 + constant sd-blksizecnt
-sd-base     0x        8 + constant sd-arg1
-sd-base     0x        c + constant sd-cmdtm
-sd-base     0x       10 + constant sd-resp0
-sd-base     0x       14 + constant sd-resp1
-sd-base     0x       18 + constant sd-resp2
-sd-base     0x       1c + constant sd-resp3
-sd-base     0x       20 + constant sd-data
-sd-base     0x       24 + constant sd-status
-sd-base     0x       28 + constant sd-control0
-sd-base     0x       2c + constant sd-control1
-sd-base     0x       30 + constant sd-irpt
-sd-base     0x       34 + constant sd-irpt-mask
-sd-base     0x       38 + constant sd-irpt-en
-sd-base     0x       3c + constant sd-control2
-sd-base     0x       88 + constant sd-tune-step
-sd-base     0x       fc + constant sd-slotisr-ver
+peripherals  0x300000 + constant sd-base
+sd-base           0x0 + constant sd-arg2
+sd-base           0x4 + constant sd-blksizecnt
+sd-base           0x8 + constant sd-arg1
+sd-base           0xc + constant sd-cmdtm
+sd-base          0x10 + constant sd-resp0
+sd-base          0x14 + constant sd-resp1
+sd-base          0x18 + constant sd-resp2
+sd-base          0x1c + constant sd-resp3
+sd-base          0x20 + constant sd-data
+sd-base          0x24 + constant sd-status
+sd-base          0x28 + constant sd-control0
+sd-base          0x2c + constant sd-control1
+sd-base          0x30 + constant sd-irpt
+sd-base          0x34 + constant sd-irpt-mask
+sd-base          0x38 + constant sd-irpt-en
+sd-base          0x3c + constant sd-control2
+sd-base          0x88 + constant sd-tune-step
+sd-base          0xfc + constant sd-slotisr-ver
 
 1 32 lshift 1- constant ~0
 
@@ -89,14 +89,14 @@ sd-base     0x       fc + constant sd-slotisr-ver
 : rtype-6     6 36 >bits ;
 : rtype-7     7 36 >bits ;
 
-: cmd.is-app?  0x 800000000 and 0<> ;
-: cmd.is-rca?  0x 100000000 and 0<> ;
-: cmd.is-data? 0x    200000 and 0<> ;
-: cmd.code     0x  ffffffff and ;
-: cmd.index    24 rshift 0x 3f and ;
-: cmd.delay    33 rshift 0x 3 and ;
-: cmd.rbits    16 rshift 0x 3 and ;
-: cmd.rtype    36 rshift 0x 7 and ;
+: cmd.is-app?  0x800000000 and 0<> ;
+: cmd.is-rca?  0x100000000 and 0<> ;
+: cmd.is-data?    0x200000 and 0<> ;
+: cmd.code      0xffffffff and ;
+: cmd.index    24 rshift 0x3f and ;
+: cmd.delay    33 rshift 0x3 and ;
+: cmd.rbits    16 rshift 0x3 and ;
+: cmd.rtype    36 rshift 0x7 and ;
 
  0 cmd                                                         constant cmd-go-idle
  2 cmd rbits-136 rtype-2i                                      constant cmd-all-send-cid
@@ -138,7 +138,7 @@ sd-base     0x       fc + constant sd-slotisr-ver
 55 cmd rbits-48  rtype-1  use-rca                              constant cmd-app-rca
 56 cmd rbits-48  rtype-1                                       constant cmd-gen-cmd
 
-0x ff9c004 constant r1-errors-mask
+0xff9c004 constant r1-errors-mask
 
 1 constant etout ( timeout )
 2 constant eirpt ( interrupt mismatch )
@@ -248,24 +248,24 @@ variable sdcard.bus-width
   sd-irpt w@
 
 
-  0x   10000 matches if print-stack-trace cr etout throw then
-  0x  100000 matches if print-stack-trace cr etout throw then
-  0x 17f8000 matches if print-stack-trace cr eirpt throw then
+  0x10000   matches if print-stack-trace cr etout throw then
+  0x100000  matches if print-stack-trace cr etout throw then
+  0x17f8000 matches if print-stack-trace cr eirpt throw then
   drop
 
 ;
 
-: done?        0x 00000001 await-interrupt ;
-: write-ready? 0x 00000010 await-interrupt ;
-: read-ready?  0x 00000020 await-interrupt ;
+: done?        0x00000001 await-interrupt ;
+: write-ready? 0x00000010 await-interrupt ;
+: read-ready?  0x00000020 await-interrupt ;
 
 ( inhibit -- )
 : not-busy?
   >r
   1000000 ticks +
   begin
-    sd-status w@ 0x rsp@ @ and      ( indicated inhibit bit )
-    sd-irpt   w@ 0x 17f8000 and not ( any error interrupt )
+    sd-status w@  rsp@ @ and      ( indicated inhibit bit )
+    sd-irpt   w@ 0x17f8000 and not ( any error interrupt )
     and
   while
     tout?
@@ -283,7 +283,7 @@ variable sdcard.bus-width
 ( cmd arg -- )
 : send-command-p
   ( wait for command inhibit off )
-  0x 01 not-busy?
+  0x01 not-busy?
 
 
   sd-irpt w@ sd-irpt w!
@@ -308,12 +308,12 @@ variable sdcard.bus-width
     1 of
       sd-resp0 w@
       dup sdcard.status w!
-      dup 0x 1e00 and 9 rshift sdcard.card-state w!
+      dup 0x1e00 and 9 rshift sdcard.card-state w!
       r1-errors-mask and if erbad throw then
     endof
     2 of
       sd-resp0 w@ dup sdcard.status w!
-      0x 1e00 and 9 rshift sdcard.card-state w!
+      0x1e00 and 9 rshift sdcard.card-state w!
     endof
     3 of
       0 sdcard.status w!
@@ -334,13 +334,13 @@ variable sdcard.bus-width
       sd-resp0 w@ sdcard.ocr w!
     endof
     6 of
-      sd-resp0 w@ 0x ffff0000 and sdcard.rca w!
-      sd-resp0 w@ 0x 1ffff and
-      sd-resp0 w@ 0x  2000 and 6 lshift rot or ( resp0 bit 13 -> status bit 19 )
-      sd-resp0 w@ 0x  4000 and 8 lshift rot or ( resp0 bit 14 -> status bit 22 )
-      sd-resp0 w@ 0x  8000 and 8 lshift rot or ( resp0 bit 15 -> status bit 23 )
+      sd-resp0 w@ 0xffff0000 and sdcard.rca w!
+      sd-resp0 w@ 0x1ffff and
+      sd-resp0 w@ 0x2000 and 6 lshift rot or ( resp0 bit 13 -> status bit 19 )
+      sd-resp0 w@ 0x4000 and 8 lshift rot or ( resp0 bit 14 -> status bit 22 )
+      sd-resp0 w@ 0x8000 and 8 lshift rot or ( resp0 bit 15 -> status bit 23 )
       sdcard.status w!
-      sd-resp0 w@ 0x  1e00 and 9 rshift sdcard.card-state w!
+      sd-resp0 w@ 0x1e00 and 9 rshift sdcard.card-state w!
     endof
     7 of
       0 sdcard.status w!
@@ -380,8 +380,8 @@ variable sdcard.bus-width
   1000000 1 24 lshift sd-control1 await-clear
 
   ( enable internal clock and set data timeout )
-  0x e 16 lshift sd-control1 w! ( data timeout unit )
-  0x 1           sd-control1 w! ( clock enable internal )
+  0xe 16 lshift sd-control1 w! ( data timeout unit )
+  0x1           sd-control1 w! ( clock enable internal )
 
   10 delay
 ;
@@ -389,30 +389,30 @@ variable sdcard.bus-width
 ( freq -- divisor )
 : get-clock-divisor
   dup 41666667 + 1- swap /              ( 41666667 + freq - 1 / freq )
-  dup 0x 3ff > if drop 0x 3ff then
+  dup 0x3ff > if drop 0x3ff then
   dup 3 < if drop 4 then
 ;
 
 ( freq -- succ? )
 : emmc-set-clock
-  1000000 0x 03 sd-status await-clear
+  1000000 0x03 sd-status await-clear
 
-  sd-control1 w@ 0x fffffffd and sd-control1 w! ( disable clock )
+  sd-control1 w@ 0xfffffffd and sd-control1 w! ( disable clock )
   10 delay
 
   get-clock-divisor               ( 10 bit clock divisor )
-  dup  0x 0ff and 8 lshift        ( lower 8 bits of divisor go in control bits 8..15 )
-  swap 0x 300 and 2 rshift        ( high 2 bits of divisor go in control bits 6..7 )
+  dup  0x0ff and 8 lshift        ( lower 8 bits of divisor go in control bits 8..15 )
+  swap 0x300 and 2 rshift        ( high 2 bits of divisor go in control bits 6..7 )
   sd-control1 w@                  ( read control1 )
-  0x ffff001f and                 ( clear any old divisor bits )
+  0xffff001f and                 ( clear any old divisor bits )
   or or                           ( set new divisor bits )
   sd-control1 w!                  ( write it back )
 
   10 delay
 
-  sd-control1 w@ 0b 0100 or sd-control1 w! ( set clk_en bit )
+  sd-control1 w@ 0b0100 or sd-control1 w! ( set clk_en bit )
 
-  1000000 0b 0010 sd-control1 await-set
+  1000000 0b0010 sd-control1 await-set
 ;
 
 : CMD0  cmd-go-idle       swap send-command-a ;
@@ -442,39 +442,39 @@ variable sdcard.bus-width
 
 : check-interface-condition
   ( send voltage range & check pattern, should get same value back )
-  0x 01aa CMD8
-  dup 0x 01aa <> if ." unusable card: " .x cr efail throw else drop then
+  0x01aa CMD8
+  dup 0x01aa <> if ." unusable card: " .x cr efail throw else drop then
 ;
 
 : check-sdhc-support
   ( check for high capacity )
   ( cmd41 arg is hcs | sdxc_power | voltage )
-  0x 54ff8000 CMD41
-  sdcard.ocr w@ 0x 40000000 and if 4 else 3 then sdcard.card-type !
+  0x54ff8000 CMD41
+  sdcard.ocr w@ 0x40000000 and if 4 else 3 then sdcard.card-type !
 ;
 
 : csd-version
-  sdcard.csd 12 + w@ 0x 00c00000 and 22 rshift 1+
+  sdcard.csd 12 + w@ 0x00c00000 and 22 rshift 1+
 ;
 
 : card-size-v1
   ( get c_size_mult )
-  sdcard.csd 8+ w@ 0x 00000380 and 7 rshift ( 39..41 )
+  sdcard.csd 8+ w@ 0x00000380 and 7 rshift ( 39..41 )
   ( 2^c_size_mult+2 )
   2 + 1 swap lshift
 
   ( get c_size )
-  sdcard.csd 4+ w@ 0x 3 and 10 lshift ( 64..65 )
-  sdcard.csd 8+ w@ 0x ffc00000 and 22 rshift or ( 54..63 )
+  sdcard.csd 4+ w@ 0x3 and 10 lshift ( 64..65 )
+  sdcard.csd 8+ w@ 0xffc00000 and 22 rshift or ( 54..63 )
   1+ *
 
   ( get read_bl_len, use as multiplier )
-  sdcard.csd 4+ 0x 0f00 and 8 rshift ( 8..11 )
+  sdcard.csd 4+ 0x0f00 and 8 rshift ( 8..11 )
   *
 ;
 
 : card-size-v2
-  sdcard.csd 8+ 0x 3fffff00 and 8 rshift
+  sdcard.csd 8+ 0x3fffff00 and 8 rshift
   1+
   512 * 1024 *
 ;
@@ -499,7 +499,7 @@ variable sdcard.bus-width
   >r
   ticks 100000 +
   begin
-    sd-status w@ 0x 800 and if  ( read available? )
+    sd-status w@ 0x800 and if  ( read available? )
       sd-data w@ 2 pick w!      ( read the word, store it )
       swap 4+ swap                ( advance buffer pointer )
       r> 4- >r                    ( decrement remaining )
@@ -515,10 +515,10 @@ variable sdcard.bus-width
 : read-scr
 
   ( wait for data inhibit off )
-  0x 02 not-busy?
+  0x02 not-busy?
 
   ( 1 block of 8 bytes )
-  0x 10008 sd-blksizecnt w!
+  0x10008 sd-blksizecnt w!
 
   CMD51
 
@@ -535,8 +535,8 @@ variable sdcard.bus-width
 ;
 
 : set-bus-width
-  sdcard.scr w@ 0x 0100 and 0<> if 1 sdcard.bus-width ! then
-  sdcard.scr w@ 0x 0400 and 0<> if 4 sdcard.bus-width ! then
+  sdcard.scr w@ 0x0100 and 0<> if 1 sdcard.bus-width ! then
+  sdcard.scr w@ 0x0400 and 0<> if 4 sdcard.bus-width ! then
 
   sdcard.bus-width @ 4 = if
     ( if supported, set 4 bit bus width and update control0 )
@@ -633,7 +633,7 @@ variable sdcard.bus-width
 
 : firmware-sets-cdiv?
   ( do a blank set_sdhost_clock, which queries the clock. test word 1 of the reply )
-  ~0 ~0 0 0x 38042 tags{{ swap 3-3tag }} 5 msg[] w@ ~0 <>
+  ~0 ~0 0 0x38042 tags{{ swap 3-3tag }} 5 msg[] w@ ~0 <>
 ;
 
 : sd-device-probe
@@ -655,7 +655,7 @@ variable sdcard.bus-width
 
 ( a-buf a-card -- )
 : sd-read-block
-  0x 02 not-busy?
+  0x02 not-busy?
 
   ( HC uses addr / 512, others just addr )
 
@@ -703,15 +703,15 @@ variable sdcard.bus-width
 
 : part[] 16 * partitions + ;
 
-: bs?  sdbuf dup c@ 0x eb = swap 1+ c@ 0x e9 = or ;
-: mbr? sdbuf 508 + w@ 0x aa550000 = ;
-: gpt? sdbuf 512 +  @ 0x 00005452415020494645 = ;
+: bs?  sdbuf dup c@ 0xeb = swap 1+ c@ 0xe9 = or ;
+: mbr? sdbuf 508 + w@ 0xaa550000 = ;
+: gpt? sdbuf 512 +  @ 0x00005452415020494645 = ;
 
 : ppart-bs ;
 : mount-bs ;
 
 ( n -- b )
-: part-active? part[] c@ 0x 80 = ;
+: part-active? part[] c@ 0x80 = ;
 
 ( n -- )
 : part-info

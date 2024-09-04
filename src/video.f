@@ -2,52 +2,52 @@ base @ decimal
 
 ( FRAME BUFFER )
 
-: physical-size                   rot 0x 48003 2-2tag ;
-: virtual-size                    rot 0x 48004 2-2tag ;
-: depth                          swap 0x 48005 1-1tag ;
-: overscan                            0x 4800a 4-4tag ;
-: allocate-framebuffer 16 swap 0 swap 0x 40001 2-2tag ;
-: fb-pitch                     0 swap 0x 40008 1-1tag ;
+: physical-size                   rot 0x48003 2-2tag ;
+: virtual-size                    rot 0x48004 2-2tag ;
+: depth                          swap 0x48005 1-1tag ;
+: overscan                            0x4800a 4-4tag ;
+: allocate-framebuffer 16 swap 0 swap 0x40001 2-2tag ;
+: fb-pitch                     0 swap 0x40008 1-1tag ;
 
 ( a -- a' )
 : set-palette
-  0x    4800b w!+
-    34 values w!+                         ( 32 palette entries + offset + length )
-    34 values w!+
-            0 w!+                         ( offset 0 )
-           32 w!+                         ( length 32 )
-  0x 00000000 w!+                         ( RGB of entry 0 )
-  0x 00ffffff w!+
-  0x 000000ff w!+
-  0x 00eeffaa w!+
-  0x 00cc44cc w!+
-  0x 0055cc00 w!+
-  0x 00e44140 w!+
-  0x 0077eeee w!+
-  0x 005588dd w!+
-  0x 00004466 w!+
-  0x 007777ff w!+
-  0x 00333333 w!+
-  0x 00777777 w!+
-  0x 0066ffaa w!+
-  0x 00f3afaf w!+
-  0x 00bbbbbb w!+                         ( RGB of entry 15 )
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+
-  0x 00ffffff w!+                         ( RGB of entry 31 )
+     0x4800b w!+
+   34 values w!+                         ( 32 palette entries + offset + length )
+   34 values w!+
+           0 w!+                         ( offset 0 )
+          32 w!+                         ( length 32 )
+  0x00000000 w!+                         ( RGB of entry 0 )
+  0x00ffffff w!+
+  0x000000ff w!+
+  0x00eeffaa w!+
+  0x00cc44cc w!+
+  0x0055cc00 w!+
+  0x00e44140 w!+
+  0x0077eeee w!+
+  0x005588dd w!+
+  0x00004466 w!+
+  0x007777ff w!+
+  0x00333333 w!+
+  0x00777777 w!+
+  0x0066ffaa w!+
+  0x00f3afaf w!+
+  0x00bbbbbb w!+                         ( RGB of entry 15 )
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+
+  0x00ffffff w!+                         ( RGB of entry 31 )
   walign
 ;
 
@@ -89,7 +89,7 @@ variable fbyres
   }}
 
   ( these are sensitive to the order of the tags )
-  26 msg[] w@ 0x 3fffffff and fb !
+  26 msg[] w@ 0x3fffffff and fb !
   27 msg[] w@ fbsize !
   31 msg[] w@ fbpitch !
    6 msg[] w@ fbyres !

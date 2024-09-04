@@ -1,12 +1,12 @@
 base @ value mbox-old-base
 decimal
 
-peripherals 0x     b880 + constant mbox-read
-mbox-read   0x       10 + constant mbox-peek
-mbox-read   0x       18 + constant mbox-status
-mbox-read   0x       20 + constant mbox-write
+peripherals 0xb880 + constant mbox-read
+mbox-read   0x10   + constant mbox-peek
+mbox-read   0x18   + constant mbox-status
+mbox-read   0x20   + constant mbox-write
 
-0x 40 constant cache-line
+0x40 constant cache-line
 
 ( Clean invalidate cache in a region )
 ( addr len -- end-addr end-len )
@@ -73,7 +73,7 @@ clk-freq 1000000 / constant ticks-per-micro
 ( a -- )
 : send
   begin mbox-full? while repeat ( wait for space )
-  dup 0x f and
+  dup 0xf and
   if
     ." misaligned "
   else
@@ -90,7 +90,7 @@ clk-freq 1000000 / constant ticks-per-micro
 : receive
   begin mbox-empty? while repeat (           | wait for reply )
   mbox-read w@                   ( a         | read message )
-  0x f invert and                ( a         | mask out channel )
+  0xf invert and                 ( a         | mask out channel )
   dup dup w@                     ( a a len   | )
   dci-reg                        ( a a' len' | invalidate cache in region )
   2drop                          ( a         | )
@@ -206,23 +206,23 @@ variable message-start                  ( pointer to start of message buffer )
 
 ( clock-id tag -- val )
 : do-clock-query tags{{ swap 3-3tag }} 6 msg[] w@ ;
-: clock-state    0 swap 0 swap 0x 30001 do-clock-query ;
-: clock-rate     0 swap 0 swap 0x 30002 do-clock-query ;
-: clock-rate-max 0 swap 0 swap 0x 30004 do-clock-query ;
-: clock-rate-min 0 swap 0 swap 0x 30007 do-clock-query ;
+: clock-state    0 swap 0 swap 0x30001 do-clock-query ;
+: clock-rate     0 swap 0 swap 0x30002 do-clock-query ;
+: clock-rate-max 0 swap 0 swap 0x30004 do-clock-query ;
+: clock-rate-min 0 swap 0 swap 0x30007 do-clock-query ;
 
 : discover-clocks
   tags{{
-    0x 10007         w!+                ( 'get clocks' tag )
+    0x10007          w!+                ( 'get clocks' tag )
     clk-disp 2 + 8 * w!+                ( req buf size )
     0                w!+                ( space for resp len )
     clk-disp 2 + 8 * 'A' rot            ( d: len byte addr )
     memset                              ( d: addr+len )
     walign
-    scratch 0x c0 dump
+    scratch 0xc0 dump
   }}
   5 msg[]                               ( d: addr )
-  4 msg[] w@ 0x 7fffffff and            ( d: addr bytes )
+  4 msg[] w@ 0x7fffffff and             ( d: addr bytes )
   8 /                                   ( d: addr cnt )
 ;
 
@@ -240,9 +240,9 @@ variable message-start                  ( pointer to start of message buffer )
 
 : do-power-query tags{{ swap 2-2tag }} 6 msg[] w@ ;
 ( device-id -- power-state )
-: power-state 0 swap 0x 20001 do-power-query ;
+: power-state 0 swap 0x20001 do-power-query ;
 ( device-id -- result )
-: power-on  1 swap 0x 28001 do-power-query ;
-: power-off 0 swap 0x 28001 do-power-query ;
+: power-on  1 swap 0x28001 do-power-query ;
+: power-off 0 swap 0x28001 do-power-query ;
 
 mbox-old-base base !
