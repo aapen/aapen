@@ -822,39 +822,11 @@ code_\label :
 /*
 
         In classic Jonesforth, the only codeword we used was DOCOL. As we work toward a Forth that
-        handles DOES>, it's useful to support different codewords. The first alternate codeword is
-        DOCON, which simply takes the value in the first cell of the data field and pushes it on the
-        stack. Based on the current implementation, x0 will always hold the CFA when a codeword is
-        invoked. So we can just add 8 to the CFA in order to get to the DFA.
+        handles DOES>, it's useful to support different codewords. The first alternate codeword was
+        DOCON, which took the value in the first cell of the data field and pushed it on the
+        stack. DOCON isn't need any more.
 
-        Here is what a word built with docon looks like:
-
-	  pointer to previous word
-	   ^
-	   |
-	+--|------+---+---+---+---+---+-------+---------+---------+
-	| LINK    | 0 | 3 | F | O | O | , ... | docon   | val     |
-	+---------+---+---+---+---+---+-------+---------+---------+
-           ^	   flg len                     codeword  data field
-           |
-	  LINK in next word
-
-*/
-
-        .text
-        .align 3
-        .global docon
-        .type docon, %function
-docon:
-        add     x0, x0, #8      // x0 holds CFA, skip it to get DFA
-        ldr     x0, [x0]        // get the value
-        PUSHPSP x0              // put it on the stack
-        next
-
-/*
-
-	DOVAR is another codeword, which makes a word return the address of its own data field. This
-	makes it useful as a variable.
+        DOVAR is another codeword that pushes the address of the current word's DFA on the stack.
 
 */
 
@@ -1552,8 +1524,7 @@ var_to_in:
 	defconst "version",7,,version,to_in,JONES_VERSION
 	defconst "r0",2,,rz,version,return_stack_top
 	defconst "docol",5,,__docol,rz,docol
-        defconst "docon",5,,__docon,__docol,docon
-        defconst "dovar",5,,__dovar,__docon,dovar
+        defconst "dovar",5,,__dovar,__docol,dovar
 	defconst "f_immed",7,,__f_immed,__dovar,f_immed
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
         defconst "lastcell",8,,lastcell,__f_hidden,LASTCELL

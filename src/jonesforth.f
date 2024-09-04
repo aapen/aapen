@@ -681,79 +681,6 @@
 ;
 
 (
-	Constants and variables ----------------------------------------------------------------------
-
-	In forth, global constants and variables are defined like this:
-
-	10 constant ten		When ten is executed, it leaves the integer 10 on the stack
-	variable var		When var is executed, it leaves the address of var on the stack
-
-	Constants can be read but not written, eg:
-
-	ten . cr		prints 10
-
-	You can read a variable -- in this example called 'var' -- by doing:
-
-	var @			leaves the value of var on the stack
-	var @ . cr		prints the value of var
-	var ? cr		same as above, since ? is the same as @ .
-
-	and update the variable by doing:
-
-	20 var !		sets var to 20
-
-	Note that variables are uninitialised -- but see value later on which provides initialised
-	variables with a slightly simpler syntax.
-
-	How can we define the words CONSTANT and VARIABLE?
-
-	The trick is to define a new word for the variable itself. E.g., if the variable was called
-	'VAR' then we would define a new word called VAR.  This is easy to do because we exposed
-	dictionary entry creation through the CREATE word, part of the definition of : above.  A
-	call to WORD [TEN] CREATE -- where [TEN] means that "TEN" is the next word in the input --
-	leaves the dictionary entry:
-
-				   +--- HERE
-				   |
-				   V
-	+---------+---+---+---+---+
-	| LINK    | 3 | T | E | N |
-	+---------+---+---+---+---+
-                   len
-
-	For CONSTANT we can continue by appending DOCON -- the codeword -- then LIT followed by
-	the constant itself and then EXIT, forming a little word definition that returns the
-	constant:
-
-	+---------+---+---+---+---+------------+------------+
-	| LINK    | 3 | T | E | N | DOCON      | 10         |
-	+---------+---+---+---+---+------------+------------+
-                   len              codeword
-
-	Note for people reading the code below: DOCON is a constant word which we defined in the
-	assembler part which returns the value of the assembler symbol of the same name.
-)
-: constant
-	create                  ( make a new dictionary entry )
-        here @ 8- here !
-	docon ,                 ( append the codeword to return a constant )
-        ,                       ( append the value the constant will hold )
-;
-
-(
-	We can define VARIABLE in much the same way as CONSTANT above. The only difference is that
-	the codeword DOVAR is used and we initialize the value to 0 instead of taking whatever is on
-	the stack.
-)
-
-: variable
-	create                  ( make a dictionary entry )
-        here @ 8- here !
-	dovar ,                 ( append dovar, the codeword for this word )
-	0 ,                     ( reserve some space in the word's data field )
-;
-
-(
 	Let's define a couple of words which we can use to allocate arbitrary memory from the user
 	memory.
 
@@ -781,6 +708,33 @@
 : char+ 1 chars + ;
 
 (
+	Constants and variables ----------------------------------------------------------------------
+
+	In forth, global constants and variables are defined like this:
+
+	10 constant ten		When ten is executed, it leaves the integer 10 on the stack
+	variable var		When var is executed, it leaves the address of var on the stack
+
+	Constants can be read but not written, eg:
+
+	ten . cr		prints 10
+
+	You can read a variable -- in this example called 'var' -- by doing:
+
+	var @			leaves the value of var on the stack
+	var @ . cr		prints the value of var
+	var ? cr		same as above, since ? is the same as @ .
+
+	and update the variable by doing:
+
+	20 var !		sets var to 20
+
+	Note that variables are uninitialised -- but see value later on which provides initialised
+	variables with a slightly simpler syntax.
+
+	-- MTNygard: I removed some literate discussion of how `constant` and `variable` work since
+           it no longer applies and I don't know how to explain `does>` in a similar manner.
+
 	VALUES ----------------------------------------------------------------------
 
 	VALUEs are like a cross between CONSTANTs and VARIABLEs.  You would generally use them when you
@@ -807,7 +761,7 @@
 	Now this is the clever bit.  We'll compile our value like this:
 
 	+---------+---+---+---+---+------------+------------+
-	| LINK    | 3 | V | A | L | DOCON      | <value>    |
+	| LINK    | 3 | V | A | L | do does    | <value>    |
 	+---------+---+---+---+---+------------+------------+
                    len              codeword
 
@@ -822,7 +776,7 @@
 						     |
 						     V
 	+---------+---+---+---+---+------------+------------+
-	| LINK    | 3 | V | A | L | DOCON      | <value>    |
+	| LINK    | 3 | V | A | L | do does    | <value>    |
 	+---------+---+---+---+---+------------+------------+
                    len              codeword
 
@@ -830,13 +784,12 @@
 
 	Note to the people who want to modify this FORTH to add inlining: values defined this
 	way cannot be inlined.
+
 )
-: value		( n -- )
-	create		( make the dictionary entry, the name follows value )
-        here @ 8- here !
-	docon ,		( append docol )
-	,		( append the initial value )
-;
+
+: constant create   , does> @ ;
+: variable create 0 , does> ;
+: value	   create   , does> @ ;
 
 : to immediate	( n -- )
 	word		( get the name of the value )
@@ -1188,7 +1141,11 @@
 	':' emit space dup id. space
 	dup ?immediate if ." immediate " then
 
-        dup >cfa docol <> if ." <compiled word> ;" cr exit then
+        dup >cfa @ docol <> if  ( end-of-word start-of-word )
+          ." <compiled word> ;" cr
+          2drop
+          exit
+        then
 
 	>dfa		( get the data address, ie. points after DOCOL | end-of-word start-of-data )
 
