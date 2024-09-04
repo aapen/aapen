@@ -36,12 +36,9 @@
         .align 7
         ENTRY_ALIGN(__\type, 7)
         bl      bsod
-        ldr     x19, =var_exception
         mov     x0, #\type
-        str     x0, [x19]
-        ldr     x19, =var_excode
-        mrs     x0, esr_el1
-        str     x0, [x19]
+        mrs     x1, esr_el1
+        mrs     x2, far_el1
         b       _forth_restart
         END(__\type)
         .endm
@@ -161,6 +158,7 @@ __exception_handler_table:
         mov     x29, sp
 
         puts    nl
+        puts    abort_msg
         outsysr ESR_EL1, esr_label
         outsysr FAR_EL1, far_label
         outreg  x28, x28_label
@@ -287,6 +285,7 @@ __exception_handler_table:
 
 
         .section .rodata
+abort_msg:      .asciz "CORE ABORT!\r\n"
 // Data section for register labels
 esr_label:      .asciz "ESR_EL1: 0x"
 far_label:      .asciz "FAR_EL1: 0x"

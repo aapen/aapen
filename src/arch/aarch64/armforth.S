@@ -530,12 +530,14 @@
         .endm
 
         .macro RESET_INPUT
-        ldr     x2, =var_srcid
+        ldr     x2, =var_srcid          // reset to keyboard input
         str     xzr, [x2]
-        ldr     x2, =var_inbuf
+        ldr     x2, =var_inbuf          // use the terminal input buffer
         ldr     x1, =buffer
         str     x1, [x2]
-        ldr     x2, =var_to_in
+        ldr     x2, =var_in0            // ensure terminal input is the default
+        str     x1, [x2]
+        ldr     x2, =var_to_in          // reset to 0 characters read
         str     xzr, [x2]
         .endm
 
@@ -659,11 +661,10 @@ warm_start:
 /*
         EXCEPTION RECOVERY -----------------------------------------------------------------
 
-        We get here from the CPU's exception table. We do just enough setup to report the error on
-        the serial console and reset some core variables, then we go back to the beginning.
-
-        TODO - Print the exception type and ESR (stored in var_exception and var_excode by the
-        exception entry itself. See exceptions.S)
+        We get here from the CPU's exception table. On entry, the CPU exception will be reported
+        x0 - the exception type (from the constants in exceptions.S)
+        x1 - the exception code (ESR_EL1)
+        x2 - additional detail if applicable (FAR_EL1)
 
         TODO - Add a counter for consecutive restarts. After N retries, there's probably an error
         in the init file itself. Drop to a naked prompt instead of repeating the bootloop.
@@ -673,12 +674,14 @@ warm_start:
         .text
         .global  _forth_restart
 _forth_restart:
-        ldr     PSP, =data_stack_top    // get the top of the parameter stack
+        ldr     PSP, =var_exception
+        str     x0, [PSP]
+        ldr     PSP, =var_excode
+        str     x1, [PSP]
+        ldr     PSP, =var_exdetail
+        str     x2, [PSP]
 
-        ldr     x0, =var_state          // reset state to 0
-        mov     x1, #0
-        str     x1, [x0]
-
+        // reset dictionary
         ldr     x0, =var_here           // reset the dictionary to data
         ldr     x1, =data_segment
         str     x1, [x0]
@@ -687,43 +690,26 @@ _forth_restart:
         ldr     x1, =name_execute
         str     x1, [x0]
 
+        // reset stacks
         ldr     x0, =var_s0             // reset pstack TOS
         ldr     x1, =data_stack_top
+        str     x1, [x0]
+
+        // reset interpreter
+        ldr     x0, =var_state          // reset state to 0
+        mov     x1, #0
         str     x1, [x0]
 
         ldr     x0, =var_base           // reset base to decimal
         mov     x1, #10
         str     x1, [x0]
 
-        ldr     x0, =var_echo           // reset echo to off
-        str     xzr, [x0]
-
-        ldr     x0, =inbuf              // reset to keyboard input
-        ldr     x1, =buffer
+        // after an abort, tron
+        ldr     x0, =var_echo           // after an abort, tron
+        mov     x1, #1
         str     x1, [x0]
 
-        ldr     x0, =srcid
-        str     xzr, [x0]
-
-        ldr     x1, =crnl
-        mov     x2, #2
-        bl      _tell
-
-        ldr     x1, =excmsg
-        mov     x2, #excmsgend-excmsg
-        bl      _tell
-
-        ldr     x1, =crnl
-        mov     x2, #2
-        bl      _tell
-
         b       _forth_start
-
-        .section .rodata
-        .align 3
-excmsg: .ascii "CORE ABORT!"
-excmsgend:
-
 
 //	BUILT-IN WORDS ----------------------------------------------------------------------
 //
@@ -1393,7 +1379,8 @@ var_\name :
         defvar "echo",4,,echo,base,0
         defvar "exception",9,,exception,echo
         defvar "excode",6,,excode,exception
-        defvar "in0",3,,in0,excode,buffer
+        defvar "exdetail",8,,exdetail,excode
+        defvar "in0",3,,in0,exdetail,buffer
         defvar "inbuf",5,,inbuf,in0,buffer
         defvar "srclen",6,,srclen,inbuf
         defvar "srcid",5,,srcid,srclen
