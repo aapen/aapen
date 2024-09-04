@@ -96,7 +96,8 @@ Option selected:
 C.f. https://github.com/dsmcfarl/forth-stm32f746-disco/blob/6e46f1088123e78ba615a7dad3f7249a3744cc2f/common.fs#L15
 ** DONE DO..LOOP would be really handy
 ** DONE Move echoing to "interpret"... use 'tron' and 'troff' to turn echoing on and off
-** TODO Remove the .zig sources from the build
+** DONE Remove the .zig sources from the build
+** TODO Detect double-fault and halt instead of spewing core aborts.
 * DONE Milestone: Run a kernel
 ** DONE Perform "Hello world" as RPi3 under QEMU
 ** DONE Perform "Hello world" on RPi3 hardware*

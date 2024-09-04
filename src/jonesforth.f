@@ -735,6 +735,7 @@
 )
 : constant
 	create                  ( make a new dictionary entry )
+        here @ 8- here !
 	docon ,                 ( append the codeword to return a constant )
         ,                       ( append the value the constant will hold )
 ;
@@ -747,6 +748,7 @@
 
 : variable
 	create                  ( make a dictionary entry )
+        here @ 8- here !
 	dovar ,                 ( append dovar, the codeword for this word )
 	0 ,                     ( reserve some space in the word's data field )
 ;
@@ -831,6 +833,7 @@
 )
 : value		( n -- )
 	create		( make the dictionary entry, the name follows value )
+        here @ 8- here !
 	docon ,		( append docol )
 	,		( append the initial value )
 ;
@@ -1225,6 +1228,10 @@
 			cfa>			( and force it to be printed as a dictionary entry )
 			id. space
 		endof
+                ' (does>) of            ( is it does>?)
+                        ." does> "
+                        32 +                    ( skip the shim )
+                endof
 		' exit of		( is it exit? )
 			( we expect the last word to be exit, and if it is then we don't print it
 			  because exit is normally implied by ;.  exit can also appear in the middle

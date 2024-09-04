@@ -840,7 +840,11 @@ code_\label :
 	  LINK in next word
 
 */
+
+        .text
         .align 3
+        .global docon
+        .type docon, %function
 docon:
         add     x0, x0, #8      // x0 holds CFA, skip it to get DFA
         ldr     x0, [x0]        // get the value
@@ -854,9 +858,40 @@ docon:
 
 */
 
+        .text
         .align 3
+        .global dovar
+        .type dovar, %function
 dovar:  add     x0, x0, #8      // x0 holds CFA, skip it to get DFA
         PUSHPSP x0              // push DFA on the stack
+        next
+
+
+/*
+
+	When DODOES is invoked as a codeword, the state is:
+        - x0 points to the CFA of the word with DODOES. This CFA holds the address of the
+          "does shim" instruction in the parent word's stream. This CFA was used to reach
+          this point
+        - RSP points to the next high level word after the _invocation_ of the one with DODOES.
+        - LR points to the instruction after the "BL" that got us here. This is where we find the
+          high level behavior we want.
+
+        DODOES must do all of the following:
+        - Push the DFA of the word with DODOES onto the parameter stack. The DFA is just x0 + 8.
+        - Save the old NIP on the return stack
+        - Set NIP to the address of the behavior to invoke, which LR points to.
+
+*/
+
+        .text
+        .align 3
+        .global dodoes
+        .type dodoes, %function
+dodoes: add     x1, x0, #8      // x0 holds CFA, skip it to get DFA
+        PUSHPSP x1              // put DFA on stack
+        PUSHRSP NIP             // put the old NIP on the return stack
+        mov     NIP, lr         // lr points right after the 'bl dodoes' instruction
         next
 
 /*
@@ -1316,6 +1351,103 @@ name_0: .quad 0
 
 /*
 
+	MTNygard - here we are diverging from jonesforth in a pretty significant way. The original
+	literate program gradually works its way up through some primitives. We're jumping _way_
+	into deep waters with the next few words.
+
+        DOES>, (DOES>) and DODOES work together to let us make defining words that build other words
+        which share common behavior.
+
+        DOES> is the immediate word. At compile time it "caps" the word being compiled and starts
+        compiling a "tail" which defines the shared behavior. For example, suppose we later define
+        CONSTANT like this:
+
+        : CONSTANT CREATE , DOES> @ ;
+
+        We have to think about 3 different times:
+        1. Compiling CONSTANT... this is the job of DOES>
+        2. Executing CONSTANT... this is the job of (DOES>)
+        3. Executing the word CONSTANT creates... this is the jobof DODOES
+
+        When compiling CONSTANT, DOES> compiles (DOES>) into the word, then compiles the tail. The
+        resulting definition will look like this:
+
+	+--------------------+-------+--------+---+---------+-----------+---+------+
+	| header of CONSTANT | DOCOL | CREATE | , | (DOES>) | bl dodoes | @ | EXIT |
+	+--------------------+-------+--------+---+---------+-----------+---+------+
+
+        Then when executing CONSTANT, CREATE makes a new word, COMMA puts the TOS into the
+        definition, then (DOES)> makes the word use DODOES and point to the shared behavior. Suppose
+        the source was "12 CONSTANT FOO":
+
+	+--------------------+-------+--------+---+---------+-----------+---+------+
+	| header of CONSTANT | DOCOL | CREATE | , | (DOES>) | bl dodoes | @ | EXIT |
+	+--------------------+-------+--------+---+---------+-----------+---+------+
+                                                              ^
+                                                              |
+                                         +---------------+----|-----+----+
+                                         | header of FOO | codeword | 12 |
+                                         +---------------+----------+----+
+
+        When FOO is executed, its codeword points to a stub routine compiled by DOES>.
+        That routine invokes DODOES which will set up the interpreter to continue with the
+        high-level code that follows the `bl dodoes` portion.
+
+*/
+
+        defcode "does>",5,f_immed,does,cmove
+        ldr     x2, =var_here
+        ldr     x1, [x2]
+        ldr     x3, =execdoes
+        str     x3, [x1], #8
+
+        // inline 8 instructions from do_shim
+        ldr     x3, =do_shim
+        ldr     x0, [x3], #8            // instructions 1 & 2
+        str     x0, [x1], #8
+        ldr     x0, [x3], #8            // instructions 3 & 4
+        str     x0, [x1], #8
+        ldr     x0, [x3], #8            // instructions 5 & 6
+        str     x0, [x1], #8
+        ldr     x0, [x3], #8            // instructions 7 & 8
+        str     x0, [x1], #8
+
+        // update HERE
+        str     x1, [x2]
+        next
+
+        defcode "(does>)",7,,execdoes,does
+        ldr     x2, =var_latest         // addr of latest
+        ldr     x2, [x2]                // val of latest -> most recently defined word
+        add     x2, x2, #40             // address of codeword
+        str     NIP, [x2]               // overwrite codeword of new word with addr of the inlined "do_shim" in parent
+        POPRSP  NIP                     // perform the action of exit (we don't want to execute the rest of the parent word now
+        next
+
+/*
+
+	When we get to this shim, x0 is the CFA of the current word. NIP points to the next CFA in
+	the thread that _invoked_ the current word. We want to make NIP point to the word after the
+	shim in the parent word of the current word. We also want to make sure that, on exit from
+	the parent word, we return to where NIP would have been.
+
+	To get the addr after the shim, we have to use an offset relative to the CPU's PC. Since we
+	know how long the shim is, we can use a fixed offset from the PC. That makes this shim
+	position-independent even though it looks like it references a fixed symbol.
+
+*/
+do_shim:
+        add     x1, x0, #8      // x0 holds CFA of current word, skip it to get DFA
+        PUSHPSP x1              // put DFA of current word on parameter stack
+        PUSHRSP NIP
+        adr     NIP, do_shim_end
+        next
+        nop
+do_shim_end:
+.set do_shim_len,do_shim_end - do_shim
+
+/*
+
         For reading and writing hardware registers, it's necessary to have 32-bit wide
         operations. Otherwise the ARM processor will trigger an alignment fault if we try to use a
         64-bit write on an address that is not 64-bit aligned... such as any hardware register with
@@ -1324,7 +1456,7 @@ name_0: .quad 0
 */
 
         // ( n a -- )
-	defcode "w!",2,,storeword,cmove
+	defcode "w!",2,,storeword,execdoes
 	POPPSP	x0		// address
 	POPPSP	x1		// value
 	str	w1, [x0]	// store
@@ -2436,6 +2568,8 @@ _header:
 	defcode "create",6,,create,header // ( "<spaces>name" -- )
         bl      _word                   // parse name
         bl      _header                 // create word header
+        ldr     x0, =dovar
+        bl      _comma
 	next
 
 /*
@@ -2512,6 +2646,8 @@ _comma:
 
 	defword ":",1,,colon,rbrac
 	.quad create                    // CREATE the dictionary entry / header
+        .quad here, fetch, decr8        // get HERE, back up to the codeword
+        .quad here, store               // update HERE
 	.quad lit, docol, comma         // Append DOCOL  (the codeword).
 	.quad latest, fetch, hidden     // Make the word hidden (see below for definition).
 	.quad rbrac                     // Go into compile mode.
