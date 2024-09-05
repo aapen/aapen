@@ -1,11 +1,16 @@
-# Forth Records
+# Forth Records and Data Structures
 
 These are notes from video lectures by Ulrich Hoffman on the
 [Forth2020](https://www.youtube.com/@Forth2020) Youtube channel.
 
 These examples are all in SwiftForth. They rely on `DOES>` which we
-don't have implemented (as of August 31, 2024) as well as specific
-semantics of `CREATE` that do not match Jones.
+have implemented (as of Sept 4, 2024). There are a few other words we
+don't have. For example, the bounds-checked array requires `U<` which
+we have not implemented yet. Despite that, some of the examples work:
+
+- Basic array
+- Structures using +field
+- Enums
 
 ## Arrays
 
@@ -247,8 +252,4 @@ status @ bit-two   OR         status ! \ set bit two
 status @ bit-three INVERT AND status ! \ reset bit three
 ```
 
-## Gaps in Jones
-
-- Most glaring, we don't have `DOES>`. A comment from the original jonesforth.f stated that `DOES>` could not be implemented in indirect-threaded Forths.
-- In SwiftForth (and standard Forth-2012) `CREATE` makes a word that pushes its DFA on the stack. Our `CREATE` makes a word that has no valid execution semantics. (`create p p` will cause a core abort.)
 
