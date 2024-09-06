@@ -1027,8 +1027,25 @@
 	0		( sorry, nothing found )
 ;
 
+
+( find the word after the given one )
+: after ( word -- next-word )
+  here @                        ( address of the end of the last compiled word )
+  latest @                      ( word last curr )
+  begin
+    2 pick                      ( word last curr word )
+    over                        ( word last curr word curr )
+    <>                          ( word last curr word<>curr? )
+  while                         ( word last curr )
+    nip                         ( word curr )
+    dup @                       ( word curr prev -- which becomes: word last curr )
+  repeat
+  drop
+  nip
+;
+
 (
-	SEE decompiles a FORTH word.
+	see decompiles a FORTH word.
 
 	We search for the dictionary entry of the word, then search again for the next
 	word -- effectively, the end of the compiled word.  This results in two pointers:
@@ -1046,35 +1063,40 @@
 : see
 	word find	( find the dictionary entry to decompile )
 
-        dup 0= if ." not found " exit then
+        ?dup 0= if ." not found " exit then
 
 	( Now we search again, looking for the next word in the dictionary.  This gives us
 	  the length of the word that we will be decompiling.  Well, mostly it does. )
-	here @		( address of the end of the last compiled word )
-	latest @	( word last curr )
-	begin
-		2 pick		( word last curr word )
-		over		( word last curr word curr )
-		<>		( word last curr word<>curr? )
-	while			( word last curr )
-		nip		( word curr )
-		dup @		( word curr prev -- which becomes: word last curr )
-	repeat
-
-	drop		( at this point, the stack is: start-of-word end-of-word )
-	swap		( end-of-word start-of-word )
+        dup after swap                 ( end-of-word start-of-word )
 
 	( begin the definition with : NAME [IMMEDIATE] )
 	':' emit space dup id. space
 	dup ?immediate if ." immediate " then
 
-        dup >cfa @ docol <> if  ( end-of-word start-of-word )
-          ." <compiled word> ;" cr
-          2drop
+        dup >cfa @ dovar = if
+          ." <var> " >dfa dup @ . ." @0x" .x cr
+          drop
           exit
         then
 
-	>dfa		( get the data address, ie. points after DOCOL | end-of-word start-of-data )
+        dup >cfa @ docol <> if
+          (
+
+            This is a does> child word which means the current word's >cfa points to some assembly
+            inlined in the parent. To decompile this we need to find the correct start & end to use
+            for the parent word. The start will be the target of the current word's >cfa plus 32
+            bytes -- that's due to the 8 instruction shim that gets inlined into the parent word by
+            does>. To find the end, we have to do _another_ search. This time instead of `find` we
+            need to look for a word that contains the >cfa's target address and get it's end.
+
+          )
+          dup >dfa ." 0x" .x ." ( does 0x" dup >cfa @ .x  ." ) "
+          nip                   ( start-of-child-word )
+          >cfa @ 0d32 +         ( thread-of-parent-word )
+          dup cfa> after swap   ( end-of-parent-word thread-of-parent-word )
+        else
+	  >dfa		( get the data address, ie. points after DOCOL | end-of-word start-of-data )
+        then
 
 	( now we start decompiling until we hit the end of the word )
 	begin		( end start )
@@ -1084,46 +1106,46 @@
 
 		case
 		' lit of		( is it lit ? )
-			8 + dup @		( get next word which is the integer constant )
+			cell+ dup @		( get next word which is the integer constant )
 			.			( and print it )
 		endof
 		' litstring of		( is it litstring ? )
 			[ char s ] literal emit '"' emit space ( print s"<space> )
-			8 + dup @		( get the length word )
-			swap 8 + swap		( end start+4 length )
+			cell+ dup @		( get the length word )
+			swap cell+ swap		( end start+8 length )
 			2dup tell		( print the string )
 			'"' emit space		( finish the string with a final quote )
 			+ aligned		( end start+8+len, aligned )
-			8 -			( because we're about to add 8 below )
+			1 cells -		( because we're about to add 8 below )
 		endof
 		' 0branch of		( is it 0branch ? )
 			." 0branch ( "
-			8 + dup @		( print the offset )
+			cell+ dup @		( print the offset )
 			.
 			." ) "
 		endof
 		' branch of		( is it branch ? )
 			." branch ( "
-			8 + dup @		( print the offset )
+			cell+ dup @		( print the offset )
 			.
 			." ) "
 		endof
 		' ' of			( is it ' <tick> ? )
 			[ char ' ] literal emit space
-			8 + dup @		( get the next codeword )
+			cell+ dup @		( get the next codeword )
 			cfa>			( and force it to be printed as a dictionary entry )
 			id. space
 		endof
                 ' (does>) of            ( is it does>?)
                         ." does> "
-                        32 +                    ( skip the shim )
+                        0d32 +                  ( skip the shim )
                 endof
 		' exit of		( is it exit? )
 			( we expect the last word to be exit, and if it is then we don't print it
 			  because exit is normally implied by ;.  exit can also appear in the middle
 			  of words, and then it needs to be printed. )
 			2dup			( end start end start )
-			8 +			( end start end start+4 )
+			cell+			( end start end start+4 )
 			<> if			( end start | we're not at the end )
 				." exit "
 			then
@@ -1134,7 +1156,7 @@
 			id. space		( and print it )
 		endcase
 
-		8 +		( end start+4 )
+		cell+		( end start+8 )
 	repeat
 
 	';' emit cr
@@ -1149,12 +1171,12 @@
 	similar to a function pointer in C.  We map the execution token to a codeword address.
 
 			execution token of DOUBLE is the address of this codeword
-						    |
-						    V
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-	| LINK    | 6 | D | O | U | B | L | E | 0 | DOCOL      | DUP        | +          | EXIT       |
-	+---------+---+---+---+---+---+---+---+---+------------+------------+------------+------------+
-                   len                         pad  codeword					       ^
+							    |
+							    V
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          | EXIT       |
+	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
+                   flg len                         pad      codeword
 
 	There is one assembler primitive for execution tokens, EXECUTE, which runs them.
 
