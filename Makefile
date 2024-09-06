@@ -9,7 +9,16 @@ BOARD_FLAVORS   = $(shell echo pi3)
 
 # Change this to set the board flavor used in the emulator.
 # Must be one in the list above.
-BOARD  = pi3
+BOARD    = pi3
+
+EMU_pi3      = raspi3b
+FIRMWARE_pi3 = bcm2710-rpi-3-b.dtb
+
+EMU_pi4      = raspi4b
+FIRMWARE_pi4 = bcm2711-rpi-4-b.dtb
+
+EMUBOARD     = ${EMU_${BOARD}}
+FIRMWARE     = ${FIRMWARE_${BOARD}}
 
 ELF_FILES = $(addprefix zig-out/kernel-,$(addsuffix .elf,$(BOARD_FLAVORS)))
 KERNEL_FILES = $(addprefix zig-out/kernel-,$(addsuffix .img,$(BOARD_FLAVORS)))
@@ -30,7 +39,7 @@ else
   SD_ARGS=
 endif
 
-QEMU_BOARD_ARGS = -M raspi3b -dtb firmware/bcm2710-rpi-3-b.dtb $(SD_ARGS)
+QEMU_BOARD_ARGS = -M $(EMUBOARD) -dtb firmware/$(FIRMWARE) $(SD_ARGS)
 QEMU_DEBUG_ARGS = -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd -device usb-mouse -trace 'events=trace_events.txt'
 QEMU_UNIT_TEST_ARGS = -nographic
 
