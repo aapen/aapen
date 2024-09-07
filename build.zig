@@ -51,6 +51,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     compile_kernel.root_module.addOptions("config", options);
+    compile_kernel.root_module.addCMacro("BOARD", @tagName(board));
     compile_kernel.addIncludePath(b.path("include"));
     compile_kernel.addIncludePath(b.path("src"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/armforth.S"));

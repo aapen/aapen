@@ -7,12 +7,16 @@
 */
 
 #include <asm/macro.h>
+
+#if defined(BOARD)
+#if BOARD == pi3
 #include <asm/aarch64/rpi3_registers.h>
+#elif BOARD == pi4
+#include <asm/aarch64/rpi4_registers.h>
+#endif
+#endif
 
 	.set JONES_VERSION,47
-
-        /* RPi3 */
-        .set PERIPHERALS, 0x3f000000
 
 /*
 
@@ -1524,7 +1528,7 @@ var_to_in:
 	defconst "f_immed",7,,__f_immed,__dovar,f_immed
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
         defconst "lastcell",8,,lastcell,__f_hidden,LASTCELL
-        defconst "peripherals",11,,peripherals,lastcell,PERIPHERALS
+        defconst "peripherals",11,,peripherals,lastcell,PERIPH_BASE
         defconst "charrom",7,,charrom,peripherals,char_rom
 
         .macro embed src,name,namelen,label,link
