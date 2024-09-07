@@ -1,4 +1,5 @@
-base @ decimal
+base @ value video-old-base
+decimal
 
 ( FRAME BUFFER )
 
@@ -194,5 +195,6 @@ aapen-logo
 cr
 s" V 0.01" tell cr
 s" READY" tell cr
+align
 
-base !
+video-old-base base ! hide video-old-base
