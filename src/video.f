@@ -195,6 +195,5 @@ aapen-logo
 cr
 s" V 0.01" tell cr
 s" READY" tell cr
-align
 
 video-old-base base ! hide video-old-base

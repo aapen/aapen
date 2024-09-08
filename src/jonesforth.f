@@ -648,10 +648,8 @@
 		swap !		( and back-fill the length location )
 		align		( round up to next multiple of 4 bytes for the remaining code )
 	else		( immediate mode )
-	        here @		( get the start address of the temporary space )
-                '"' parse s,
-                dup             ( keep the start address available )
-		here @ swap -	( calculate the length )
+                '"' parse 2dup here @ swap cmove
+                nip here @ swap
 	then
 ; immediate
 
