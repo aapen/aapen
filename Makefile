@@ -1,5 +1,5 @@
 ZIG             = zig
-ZIG_BUILD_ARGS  = -Doptimize=Debug -freference-trace
+ZIG_BUILD_ARGS  = -Doptimize=Debug -freference-trace --verbose-cc --verbose-link
 
 # Could we possibly have a zig build command that would simply output
 # all of the different board flavors? Otherwise we can make this
