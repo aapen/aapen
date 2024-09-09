@@ -22,6 +22,13 @@ name:                                           \
   .cfi_endproc;                                 \
   .size name, .-name;
 
+// Invoke a BIOS routine
+#define BIOS(syscall)				\
+  movz	x8, #1, lsl #16;			\
+  movk	x8, #(syscall*8);			\
+  ldr	x8, [x8];				\
+  blr	x8;
+
 // Load a PC-relative address into a register.
 #define LDR_REL(register, symbol)               \
   adrp register, symbol;                        \

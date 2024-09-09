@@ -134,66 +134,66 @@ initialize-fb
 ;
 
 ( ch -- )
-: emit bg fg fbpitch @ cursorx cursory char-pixel drawchar next-char ;
-: cr 0 to cursorx next-line ;
 : home 0 to cursorx 0 to cursory ;
+: semit bg fg fbpitch @ cursorx cursory char-pixel drawchar next-char ;
+: scr 0 to cursorx next-line ;
+
+: scls
+  home
+  screen-rows screen-cols *
+  begin dup 0> while 32 semit 1- repeat drop
+  home
+;
 
 ( addr len -- )
-: tell
-  begin
-    dup 0>
-  while
-    swap dup c@ emit 1+ swap 1-
-  repeat
-  2drop
+: stell
+  0
+  do
+    dup c@ semit
+    1+
+  loop
+  drop
 ;
 
 : aapen-logo
-  home cr cr
+  home scr scr
   yellow to fg
-  s"                 AAA                              AAA                                                                        " tell cr
-  s"                A:::A                            A:::A                                                                       " tell cr
-  s"               A:::::A                          A:::::A                                                                      " tell cr
+  s"                 AAA                              AAA                                                                        " stell scr
+  s"                A:::A                            A:::A                                                                       " stell scr
+  s"               A:::::A                          A:::::A                                                                      " stell scr
   green to fg
-  s"              A:::::::A                        A:::::::A                                                                     " tell cr
-  s"             A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " tell cr
-  s"            A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " tell cr
+  s"              A:::::::A                        A:::::::A                                                                     " stell scr
+  s"             A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " stell scr
+  s"            A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " stell scr
   red to fg
-  s"           A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " tell cr
-  s"          A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" tell cr
+  s"           A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " stell scr
+  s"          A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" stell scr
   yellow to fg
-  s"         A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" tell cr
-  s"        A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" tell cr
-  s"       A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" tell cr
+  s"         A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" stell scr
+  s"        A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" stell scr
+  s"       A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" stell scr
   green to fg
-  s"      A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" tell cr
-  s"     A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" tell cr
+  s"      A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" stell scr
+  s"     A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" stell scr
   red to fg
-  s"    A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" tell cr
-  s"   A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" tell cr
-  s"  AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" tell cr
-  s"                                                                  A:::::A                                                    " tell cr
+  s"    A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" stell scr
+  s"   A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" stell scr
+  s"  AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" stell scr
+  s"                                                                  A:::::A                                                    " stell scr
   yellow to fg
-  s"                                                                  A:::::A                                                    " tell cr
-  s"                                                                 A:::::::A                                                   " tell cr
-  s"                                                                 A:::::::A                                                   " tell cr
+  s"                                                                  A:::::A                                                    " stell scr
+  s"                                                                 A:::::::A                                                   " stell scr
+  s"                                                                 A:::::::A                                                   " stell scr
   green to fg
-  s"                                                                 A:::::::A                                                   " tell cr
-  s"                                                                 AAAAAAAAA                                                   " tell cr
+  s"                                                                 A:::::::A                                                   " stell scr
+  s"                                                                 AAAAAAAAA                                                   " stell scr
   light-blue to fg
 ;
 
-: cls
-  home
-  screen-rows screen-cols *
-  begin dup 0> while 32 emit 1- repeat drop
-  home
-;
-
-cls
+scls
 aapen-logo
-cr
-s" V 0.01" tell cr
-s" READY" tell cr
+scr
+s" V 0.01" stell scr
+s" READY" stell scr
 
 video-old-base base ! hide video-old-base

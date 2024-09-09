@@ -57,6 +57,7 @@ pub fn build(b: *std.Build) !void {
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/armforth.S"));
     //    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/atomic.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/boot.S"));
+    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/bios.S"));
     //    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/context_switch.S"));
     compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/exceptions.S"));
     //    compile_kernel.addAssemblyFile(b.path("src/arch/aarch64/mmu.S"));

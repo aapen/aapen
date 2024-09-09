@@ -1,8 +1,8 @@
 #ifndef _BOOT_H
 #define _BOOT_H
 
-// 128Kb Stack size per core
-#define STACK_SIZE                           0x20000
+// 64Kb Stack size per core
+#define STACK_SIZE                           0x10000
 
 // System Control Register
 #define SCTLR_RES1                           (3 << 28) | (3 << 22) | (1 << 20) | (1 << 11)

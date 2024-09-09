@@ -91,13 +91,20 @@ skip_bss_init:
         msr       sp_el1, x19
 
         mov       x0, x5                        // pass the core id as argument
-        LDR_REL   (x1, _forth_start)
+        LDR_REL   (x1, el1_init)
         msr       elr_el2, x1
         eret
         // unreachable
         END(_start)
 
+
         ENTRY(pe_hang)                          // park the PE
         wfe                                     // wait for an event
         b         pe_hang                       // if one arrives, loop and wait some more
         END(pe_hang)
+
+
+        ENTRY(el1_init)
+        bl      _bios_init
+        b       _forth_start
+        END(el1_init)

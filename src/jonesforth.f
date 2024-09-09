@@ -344,6 +344,18 @@
 \ From now on we can use ( ... ) for multiline comments, but they don't allow nested parens like the
 \ original jonesforth definition.
 
+: xt word find >cfa ;
+
+( addr len -- )
+: tell
+  0
+  do
+    dup c@ emit
+    1+
+  loop
+  drop
+;
+
 (
 	STACK NOTATION ----------------------------------------------------------------------
 
