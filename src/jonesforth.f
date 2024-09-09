@@ -1560,9 +1560,10 @@
 
 ( read the name of a word and dump its details )
 : xray ( -- )
-  word find xray-p 
-  dup if
-  	xray-p
+  word find ?dup 0= if
+    ." not found" cr exit
+  else
+    xray-p
   then
 ;
 
