@@ -1089,10 +1089,15 @@
           exit
         then
 
-        dup >cfa @ docol <> if
+        dup >cfa @ docol = if
+	  >dfa		( get the data address, ie. points after DOCOL | end-of-word start-of-data )
+        else
           (
 
-            This is a does> child word which means the current word's >cfa points to some assembly
+            This might be a primitive, or it might be a child word given behavior by `does>`. I'm
+            not sure how to tell the difference here.
+
+            If it is a does> child word then the current word's >cfa points to some assembly
             inlined in the parent. To decompile this we need to find the correct start & end to use
             for the parent word. The start will be the target of the current word's >cfa plus 32
             bytes -- that's due to the 8 instruction shim that gets inlined into the parent word by
@@ -1104,8 +1109,6 @@
           nip                   ( start-of-child-word )
           >cfa @ 0d32 +         ( thread-of-parent-word )
           dup cfa> after swap   ( end-of-parent-word thread-of-parent-word )
-        else
-	  >dfa		( get the data address, ie. points after DOCOL | end-of-word start-of-data )
         then
 
 	( now we start decompiling until we hit the end of the word )
