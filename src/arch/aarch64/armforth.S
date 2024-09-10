@@ -1540,8 +1540,7 @@ var_to_in:
         embed   "mailbox.f","mailbox",7,mailbox,jonesforth
         embed   "test.f","test",4,test,mailbox
         embed   "assembler.f","assembler",9,assembler,test
-        embed   "video.f","video",5,video,assembler
-        embed   "sdcard.f","sdcard",6,sdcard,video
+        embed   "sdcard.f","sdcard",6,sdcard,assembler
         embed   "direct_thread.f","direct-thread",13,direct_thread,sdcard
 
 	/* This is the instruction template for all of our direct word calls. */
