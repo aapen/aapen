@@ -48,6 +48,15 @@
 : troff 0 echo ! ;
 : tron  1 echo ! ;
 
+\ The 2... versions of the standard operators work on pairs of stack entries.
+
+: 2dup over over ;
+: 2drop drop drop ;
+
+\ ( ... ) multiline comments.
+
+: ( 0x29 parse 2drop ; immediate
+
 : constant create   , does> @ ;
 : variable create 0 , does> ;
 : value	   create   , does> @ ;
@@ -62,164 +71,16 @@
 : hex ( -- ) 16 base ! ;
 : binary ( -- ) 2 base ! ;
 
-( aligned takes an address and rounds it up to the next 8 byte boundary.)
-: aligned	( addr -- addr )
-  7 + 7 invert and	( addr+7 & ~7 )
+
+( Some more complicated stack examples, showing the stack notation. )
+: nip ( x y -- y ) swap drop ;
+: tuck ( x y -- y x y ) swap over ;
+: pick ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u )
+	1+		( add one because of 'u' on the stack )
+	8 *		( multiply by the word size )
+	dsp@ +		( add to the stack pointer )
+	@    		( and fetch )
 ;
-
-( ALIGN aligns the HERE pointer, so the next word appended will be aligned properly.)
-: align here @ aligned here ! ;
-
-( C, appends a byte to the current compiled word. )
-( c -- )
-: c,
-	here @ c!	( store the character in the compiled image )
-	1 here +!	( increment here pointer by 1 byte )
-;
-
-( copy a string to the current compiled word. )
-( addr len -- )
-: s,
-  0 ?do
-    dup c@ here @ c! 1 here +! 1+
-  loop
-  drop
-;
-
-: s"                    ( -- addr len )
-  state @ if	( compiling? )
-  	' litstring ,	( compile litstring )
-  	here @		( save the address of the length word on the stack )
-  	0 ,		( dummy length - we don't know what it is yet )
-                '"' parse s,
-  	dup		( get the saved address of the length word )
-  	here @ swap -	( calculate the length )
-  	8 -		( subtract 8 because we measured from the start of the length word )
-  	swap !		( and back-fill the length location )
-  	align		( round up to next multiple of 4 bytes for the remaining code )
-  else		( immediate mode )
-                '"' parse 2dup here @ swap cmove
-                nip here @ swap
-  then
-; immediate
-
-( ." is the print string operator in FORTH.  Example: ." Something to print"
-  The space after the operator is the ordinary space required between words and is not
-  a part of what is printed.
-
-  In immediate mode we just keep reading characters and printing them until we get to
-  the next double quote.
-
-  In compile mode we use S" to store the string, then add TELL afterwards:
-  LITSTRING <string length> <string rounded up to 4 bytes> TELL
-)
-
-: ." immediate		( -- )
-	state @ if	( compiling? )
-		[compile] s"	( read the string, and compile litstring, etc. )
-		' tell ,	( compile the final tell )
-	else
-          '"' parse tell
-	then
-;
-
-
-( Building up to the key word . It takes the number at the top
-  of the stack and prints it out. First I'm going to implement some lower-level FORTH words:
-	u.r	 u width -- 	which prints an unsigned number, space-padded to a width
-        u.r0     u width --     which prints an unsigned number, zero-padded to a  width
-	u.             u -- 	which prints an unsigned number
-	.r	 n width -- 	which prints a signed number, space-padded to a width.
-)
-
-: u.		( u -- )
-	base @ /mod	( width rem quot )
-	?dup if			( if quotient <> 0 then )
-		recurse		( print the quotient )
-	then
-
-	( print the remainder )
-	dup 10 < if
-		'0'		( decimal digits 0..9 )
-	else
-		10 -		( hex and beyond digits a..z )
-		'a'
-	then
-	+
-	emit
-;
-
-
-( This word returns the width -- in char -- of an unsigned number in the current base )
-: uwidth	( u -- width )
-	base @ /	( rem quot )
-	?dup if		( if quotient <> 0 then )
-		recurse 1+	( return 1+recursive call )
-	else
-		1		( return 1 )
-	then
-;
-
-: u.r		( u width -- )
-	swap		( width u )
-	dup		( width u u )
-	uwidth		( width u uwidth )
-	rot		( u uwidth width )
-	swap -		( u width-uwidth )
-	spaces
-	u.
-;
-
-( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
-: u.r0 swap dup uwidth rot swap - zeroes u. ;
-: %02x base @ swap hex 2 u.r0 base ! ;
-: %04x base @ swap hex 4 u.r0 base ! ;
-: %08x base @ swap hex 8 u.r0 base ! ;
-: %016x base @ swap hex 16 u.r0 base ! ;
-
-( .R prints a signed number, padded to a certain width.  We can't just print the sign
-  and call U.R because we want the sign to be next to the number, so
-  '-123' instead of '-  123'.)
-: .r		( n width -- )
-	swap		( width n )
-	dup 0< if
-		negate		( width u )
-		1		( save a flag to remember that it was negative | width u 1 )
-		swap		( width 1 u )
-		rot		( 1 u width )
-		1-		( 1 u width-1 )
-	else
-		0		( width u 0 )
-		swap		( width 0 u )
-		rot		( 0 u width )
-	then
-	swap		( flag width u )
-	dup		( flag width u u )
-	uwidth		( flag width u uwidth )
-	rot		( flag u uwidth width )
-	swap -		( flag u width-uwidth )
-
-	spaces		( flag u )
-	swap		( u flag )
-
-	if			( was it negative? print the - character )
-		'-' emit
-	then
-
-	u.
-;
-
-( Finally we can define word . in terms of .R, with a trailing space. )
-: . 0 .r space ;
-
-( The real U., note the trailing space. )
-: u. u. space ;
-
-
-( TBD assembler here )
-
-
-
 
 \ Define some character constants
 : '\t' 9 ;
@@ -236,11 +97,6 @@
 \ tab prints a horizontal tab
 : tab '\t' emit ;
 
-\ The 2... versions of the standard operators work on pairs of stack entries.
-
-: 2dup over over ;
-: 2drop drop drop ;
-
 \ More standard FORTH words.
 : 2* 2 * ;
 : 2/ 2 / ;
@@ -251,9 +107,6 @@
 
 \ negate leaves the negative of a number on the stack.
 : negate 0 swap - ;
-
-\ Leaves the max of two numbers on the stack.
-: max 2dup <= if swap then drop ;
 
 \ Standard words for booleans.
 : true  1 ;
@@ -302,7 +155,6 @@
 \ the corresponding ). From now on we can use ( ... ) for multiline comments.
 \ Note that nested parens don't work.
 
-: ( ')' parse 2drop ; immediate
 
 
 \ while compiling, '[compile] word' compiles 'word' if it would otherwise be IMMEDIATE.
@@ -515,10 +367,165 @@
   [compile] +loop
 ; immediate
 
+\ Leaves the max of two numbers on the stack.
+: max 2dup <= if swap then drop ;
 
 ( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
 : spaces ( n -- ) 0 max 0 ?do space loop ;
 : zeroes ( n -- ) 0 max 0 ?do '0' emit loop ;
+
+( aligned takes an address and rounds it up to the next 8 byte boundary.)
+: aligned	( addr -- addr )
+  7 + 7 invert and	( addr+7 & ~7 )
+;
+
+( ALIGN aligns the HERE pointer, so the next word appended will be aligned properly.)
+: align here @ aligned here ! ;
+
+( C, appends a byte to the current compiled word. )
+( c -- )
+: c,
+	here @ c!	( store the character in the compiled image )
+	1 here +!	( increment here pointer by 1 byte )
+;
+
+( copy a string to the current compiled word. )
+( addr len -- )
+: s,
+  0 ?do
+    dup c@ here @ c! 1 here +! 1+
+  loop
+  drop
+;
+
+: s"                    ( -- addr len )
+  state @ if	( compiling? )
+  	' litstring ,	( compile litstring )
+  	here @		( save the address of the length word on the stack )
+  	0 ,		( dummy length - we don't know what it is yet )
+                '"' parse s,
+  	dup		( get the saved address of the length word )
+  	here @ swap -	( calculate the length )
+  	8 -		( subtract 8 because we measured from the start of the length word )
+  	swap !		( and back-fill the length location )
+  	align		( round up to next multiple of 4 bytes for the remaining code )
+  else		( immediate mode )
+                '"' parse 2dup here @ swap cmove
+                nip here @ swap
+  then
+; immediate
+
+( ." is the print string operator in FORTH.  Example: ." Something to print"
+  The space after the operator is the ordinary space required between words and is not
+  a part of what is printed.
+
+  In immediate mode we just keep reading characters and printing them until we get to
+  the next double quote.
+
+  In compile mode we use S" to store the string, then add TELL afterwards:
+  LITSTRING <string length> <string rounded up to 4 bytes> TELL
+)
+
+: ." immediate		( -- )
+	state @ if	( compiling? )
+		[compile] s"	( read the string, and compile litstring, etc. )
+		' tell ,	( compile the final tell )
+	else
+          '"' parse tell
+	then
+;
+
+
+( Building up to the key word . It takes the number at the top
+  of the stack and prints it out. First I'm going to implement some lower-level FORTH words:
+	u.r	 u width -- 	which prints an unsigned number, space-padded to a width
+        u.r0     u width --     which prints an unsigned number, zero-padded to a  width
+	u.             u -- 	which prints an unsigned number
+	.r	 n width -- 	which prints a signed number, space-padded to a width.
+)
+
+: u.		( u -- )
+	base @ /mod	( width rem quot )
+	?dup if			( if quotient <> 0 then )
+		recurse		( print the quotient )
+	then
+
+	( print the remainder )
+	dup 10 < if
+		'0'		( decimal digits 0..9 )
+	else
+		10 -		( hex and beyond digits a..z )
+		'a'
+	then
+	+
+	emit
+;
+
+
+( This word returns the width -- in char -- of an unsigned number in the current base )
+: uwidth	( u -- width )
+	base @ /	( rem quot )
+	?dup if		( if quotient <> 0 then )
+		recurse 1+	( return 1+recursive call )
+	else
+		1		( return 1 )
+	then
+;
+
+: u.r		( u width -- )
+	swap		( width u )
+	dup		( width u u )
+	uwidth		( width u uwidth )
+	rot		( u uwidth width )
+	swap -		( u width-uwidth )
+	spaces
+	u.
+;
+
+( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
+: u.r0 swap dup uwidth rot swap - zeroes u. ;
+: %02x base @ swap hex 2 u.r0 base ! ;
+: %04x base @ swap hex 4 u.r0 base ! ;
+: %08x base @ swap hex 8 u.r0 base ! ;
+: %016x base @ swap hex 16 u.r0 base ! ;
+
+( .R prints a signed number, padded to a certain width.  We can't just print the sign
+  and call U.R because we want the sign to be next to the number, so
+  '-123' instead of '-  123'.)
+: .r		( n width -- )
+	swap		( width n )
+	dup 0< if
+		negate		( width u )
+		1		( save a flag to remember that it was negative | width u 1 )
+		swap		( width 1 u )
+		rot		( 1 u width )
+		1-		( 1 u width-1 )
+	else
+		0		( width u 0 )
+		swap		( width 0 u )
+		rot		( 0 u width )
+	then
+	swap		( flag width u )
+	dup		( flag width u u )
+	uwidth		( flag width u uwidth )
+	rot		( flag u uwidth width )
+	swap -		( flag u width-uwidth )
+
+	spaces		( flag u )
+	swap		( u flag )
+
+	if			( was it negative? print the - character )
+		'-' emit
+	then
+
+	u.
+;
+
+( Finally we can define word . in terms of .R, with a trailing space. )
+: . 0 .r space ;
+
+( The real U., note the trailing space. )
+: u. u. space ;
 
 
 : xt word find >cfa ;
@@ -549,15 +556,6 @@
 	 -- 		means the word has no effect on the stack
 )
 
-( Some more complicated stack examples, showing the stack notation. )
-: nip ( x y -- y ) swap drop ;
-: tuck ( x y -- y x y ) swap over ;
-: pick ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u )
-	1+		( add one because of 'u' on the stack )
-	8 *		( multiply by the word size )
-	dsp@ +		( add to the stack pointer )
-	@    		( and fetch )
-;
 ( ? fetches the integer at an address and prints it. )
 : ? ( addr -- ) @ . ;
 
