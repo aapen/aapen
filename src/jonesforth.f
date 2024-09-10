@@ -44,11 +44,182 @@
 \
 \	FORTH is case-sensitive.  Use capslock!
 
-\ The primitive word /MOD (DIVMOD) leaves both the quotient and the remainder on the stack.  (On
-\ i386, the idivl instruction gives both anyway).  Now we can define the / and MOD in terms of /MOD
-\ and a few other primitives.
+
+: troff 0 echo ! ;
+: tron  1 echo ! ;
+
+: constant create   , does> @ ;
+: variable create 0 , does> ;
+: value	   create   , does> @ ;
+
+\ Division and mod
+
 : / /mod swap drop ;
 : mod /mod drop ;
+
+( Standard words for manipulating BASE. )
+: decimal ( -- ) 10 base ! ;
+: hex ( -- ) 16 base ! ;
+: binary ( -- ) 2 base ! ;
+
+( aligned takes an address and rounds it up to the next 8 byte boundary.)
+: aligned	( addr -- addr )
+  7 + 7 invert and	( addr+7 & ~7 )
+;
+
+( ALIGN aligns the HERE pointer, so the next word appended will be aligned properly.)
+: align here @ aligned here ! ;
+
+( C, appends a byte to the current compiled word. )
+( c -- )
+: c,
+	here @ c!	( store the character in the compiled image )
+	1 here +!	( increment here pointer by 1 byte )
+;
+
+( copy a string to the current compiled word. )
+( addr len -- )
+: s,
+  0 ?do
+    dup c@ here @ c! 1 here +! 1+
+  loop
+  drop
+;
+
+: s"                    ( -- addr len )
+  state @ if	( compiling? )
+  	' litstring ,	( compile litstring )
+  	here @		( save the address of the length word on the stack )
+  	0 ,		( dummy length - we don't know what it is yet )
+                '"' parse s,
+  	dup		( get the saved address of the length word )
+  	here @ swap -	( calculate the length )
+  	8 -		( subtract 8 because we measured from the start of the length word )
+  	swap !		( and back-fill the length location )
+  	align		( round up to next multiple of 4 bytes for the remaining code )
+  else		( immediate mode )
+                '"' parse 2dup here @ swap cmove
+                nip here @ swap
+  then
+; immediate
+
+( ." is the print string operator in FORTH.  Example: ." Something to print"
+  The space after the operator is the ordinary space required between words and is not
+  a part of what is printed.
+
+  In immediate mode we just keep reading characters and printing them until we get to
+  the next double quote.
+
+  In compile mode we use S" to store the string, then add TELL afterwards:
+  LITSTRING <string length> <string rounded up to 4 bytes> TELL
+)
+
+: ." immediate		( -- )
+	state @ if	( compiling? )
+		[compile] s"	( read the string, and compile litstring, etc. )
+		' tell ,	( compile the final tell )
+	else
+          '"' parse tell
+	then
+;
+
+
+( Building up to the key word . It takes the number at the top
+  of the stack and prints it out. First I'm going to implement some lower-level FORTH words:
+	u.r	 u width -- 	which prints an unsigned number, space-padded to a width
+        u.r0     u width --     which prints an unsigned number, zero-padded to a  width
+	u.             u -- 	which prints an unsigned number
+	.r	 n width -- 	which prints a signed number, space-padded to a width.
+)
+
+: u.		( u -- )
+	base @ /mod	( width rem quot )
+	?dup if			( if quotient <> 0 then )
+		recurse		( print the quotient )
+	then
+
+	( print the remainder )
+	dup 10 < if
+		'0'		( decimal digits 0..9 )
+	else
+		10 -		( hex and beyond digits a..z )
+		'a'
+	then
+	+
+	emit
+;
+
+
+( This word returns the width -- in char -- of an unsigned number in the current base )
+: uwidth	( u -- width )
+	base @ /	( rem quot )
+	?dup if		( if quotient <> 0 then )
+		recurse 1+	( return 1+recursive call )
+	else
+		1		( return 1 )
+	then
+;
+
+: u.r		( u width -- )
+	swap		( width u )
+	dup		( width u u )
+	uwidth		( width u uwidth )
+	rot		( u uwidth width )
+	swap -		( u width-uwidth )
+	spaces
+	u.
+;
+
+( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
+: u.r0 swap dup uwidth rot swap - zeroes u. ;
+: %02x base @ swap hex 2 u.r0 base ! ;
+: %04x base @ swap hex 4 u.r0 base ! ;
+: %08x base @ swap hex 8 u.r0 base ! ;
+: %016x base @ swap hex 16 u.r0 base ! ;
+
+( .R prints a signed number, padded to a certain width.  We can't just print the sign
+  and call U.R because we want the sign to be next to the number, so
+  '-123' instead of '-  123'.)
+: .r		( n width -- )
+	swap		( width n )
+	dup 0< if
+		negate		( width u )
+		1		( save a flag to remember that it was negative | width u 1 )
+		swap		( width 1 u )
+		rot		( 1 u width )
+		1-		( 1 u width-1 )
+	else
+		0		( width u 0 )
+		swap		( width 0 u )
+		rot		( 0 u width )
+	then
+	swap		( flag width u )
+	dup		( flag width u u )
+	uwidth		( flag width u uwidth )
+	rot		( flag u uwidth width )
+	swap -		( flag u width-uwidth )
+
+	spaces		( flag u )
+	swap		( u flag )
+
+	if			( was it negative? print the - character )
+		'-' emit
+	then
+
+	u.
+;
+
+( Finally we can define word . in terms of .R, with a trailing space. )
+: . 0 .r space ;
+
+( The real U., note the trailing space. )
+: u. u. space ;
+
+
+( TBD assembler here )
+
+
+
 
 \ Define some character constants
 : '\t' 9 ;
@@ -65,8 +236,8 @@
 \ tab prints a horizontal tab
 : tab '\t' emit ;
 
-\ The 2... versions of the standard operators work on pairs of stack entries.  They're not used
-\ very commonly so not really worth writing in assembler.  Here is how they are defined in FORTH.
+\ The 2... versions of the standard operators work on pairs of stack entries.
+
 : 2dup over over ;
 : 2drop drop drop ;
 
@@ -81,6 +252,9 @@
 \ negate leaves the negative of a number on the stack.
 : negate 0 swap - ;
 
+\ Leaves the max of two numbers on the stack.
+: max 2dup <= if swap then drop ;
+
 \ Standard words for booleans.
 : true  1 ;
 : false 0 ;
@@ -92,10 +266,8 @@
 	,		\ compile the literal itself (from the stack)
 	;
 
-\ Now we can use [ and ] to insert literals which are calculated at compile time.  (Recall that
-\ [ and ] are the FORTH words which switch into and out of immediate mode.)
-\ Within definitions, use [ ... ] LITERAL anywhere that '...' is a constant expression which you
-\ would rather only compute once (at compile time, rather than calculating it each time your word runs).
+\ Compile a colon.
+
 : ':'
 	[		\ go into immediate mode (temporarily)
 	char :		\ push the number 58 (ASCII code of colon) on the parameter stack
@@ -125,7 +297,16 @@
 
 : 'esc' 27 ;
 
+\ FORTH allows ( ... ) as comments within function definitions.  This works by having 
+\ an immediate word called ( which just drops input characters until it hits 
+\ the corresponding ). From now on we can use ( ... ) for multiline comments.
+\ Note that nested parens don't work.
+
+: ( ')' parse 2drop ; immediate
+
+
 \ while compiling, '[compile] word' compiles 'word' if it would otherwise be IMMEDIATE.
+
 : [compile]
 	word		\ get the next word
 	find		\ find it in the dictionary
@@ -134,27 +315,20 @@
 ; immediate
 
 \ recurse makes a recursive call to the current word that is being compiled.
-\
 \ Normally while a word is being compiled, it is marked HIDDEN so that references to the
-\ same word within are calls to the previous definition of the word.  However we still have
+\ same word are calls to the previous definition of the word.  However we still have
 \ access to the word which we are currently compiling through the LATEST pointer so we
 \ can use that to compile a recursive call.
+
 : recurse
 	latest @	\ latest points to the word being compiled at the moment
 	>cfa		\ get the codeword
 	,		\ compile it
 ; immediate
 
-\	CONTROL STRUCTURES ----------------------------------------------------------------------
+\ Control structures.
+\ Note that the control structures will only work inside compiled words.
 \
-\ So far we have defined only very simple definitions.  Before we can go further, we really need to
-\ make some control structures, like IF ... THEN and loops.  Luckily we can define arbitrary control
-\ structures directly in FORTH.
-\
-\ Please note that the control structures as I have defined them here will only work inside compiled
-\ words.  If you try to type in expressions using IF, etc. in immediate mode, then they won't work.
-\ Making these work in immediate mode is left as an exercise for the reader.
-
 \ condition IF true-part THEN rest
 \	-- compiles to: --> condition 0BRANCH OFFSET true-part rest
 \	where OFFSET is the offset of 'rest'
@@ -165,6 +339,7 @@
 \ IF is an IMMEDIATE word which compiles 0BRANCH followed by a dummy offset, and places
 \ the address of the 0BRANCH on the stack.  Later when we see THEN, we pop that address
 \ off the stack, calculate the offset, and back-fill the offset.
+
 : if
 	' 0branch ,                   \ compile 0branch
 	here @                        \ save location of the offset on the stack
@@ -173,7 +348,7 @@
 
 : then
 	dup
-	here @ swap -                 \ calculate the offset from the address saved on the stack
+	here @ swap -                 \ calculate offset from the addr saved on the stack
 	swap !                        \ store the offset in the back-filled location
 ; immediate
 
@@ -191,6 +366,7 @@
 \	-- compiles to: --> loop-part condition 0branch offset
 \	where offset points back to the loop-part
 \ This is like do { loop-part } while (condition) in the C language
+
 : begin immediate
 	here @                        \ save location on the stack
 ;
@@ -205,6 +381,7 @@
 \	-- compiles to: --> loop-part branch offset
 \	where offset points back to the loop-part
 \ In other words, an infinite loop which can only be returned from with EXIT
+
 : again immediate
 	' branch ,                    \ compile branch
 	here @ -                      \ calculate the offset back
@@ -215,6 +392,7 @@
 \	-- compiles to: --> condition 0branch offset2 loop-part branch offset
 \	where offset points back to condition (the beginning) and offset2 points to after the whole piece of code
 \ So this is like a while (condition) { loop-part } loop in the C language
+
 : while immediate
 	' 0branch ,                   \ compile 0branch
 	here @                        \ save location of the offset2 on the stack
@@ -231,29 +409,22 @@
 ;
 
 \ unless is the same as if but the test is reversed.
-\
-\ note the use of [compile]: since `if` is immediate we don't want it to be executed while `unless`
-\ is compiling, but while `unless` is running (which happens to be when whatever word using `unless` is
-\ being compiled -- whew!).  So we use `[compile]` to reverse the effect of marking `if` as immediate.
-\ this trick is generally used when we want to write our own control words without having to
-\ implement them all in terms of the primitives `0branch` and `branch`, but instead reusing simpler
-\ control words like (in this instance) `if`.
+
 : unless immediate
 	' not ,                       \ compile not (to reverse the test)
 	[compile] if                  \ continue by calling the normal if
 ;
 
-\ do..loop is a workhorse. We can view it as a composite of several of the control flow words we've
-\ just written. The `do` is similar to `begin`, but it has some extra runtime behavior to take the
+\ `do` is similar to `begin`, but it has some extra runtime behavior to take the
 \ start and limit from the stack and tuck them away on the rstack.
 \
-\ Inside the loop body, RSP will be reserved for use by the loop itself. RSP@ will hold the loop
-\ limit and RSP@ + 8 will hold the current count.
+\ Inside the loop body, RSP will be reserved for use by the loop itself.
+\ RSP@ will hold the loop limit and RSP@ + 8 will hold the current count.
 \
 \ do loop-body loop
 \	-- compiles to: --> setup loop-body 1 (loop-inc) (loop-done?) 0branch offset
 \ where offset points back to just before the loop-body
-\
+
 : do
   0                             \ remember this was not a qdo
   ' >r ,                        \ compile >r to push initial count on rstack
@@ -261,15 +432,18 @@
   here @                        \ save location that will be the branch target
 ; immediate
 
-\ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal. In other
-\ words you can use this when it's possible for the loop body to be executed zero times.
+\ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal.
+\ In other words you can use this when it's possible for the loop body to be 
+\ executed zero times.
 \
 \ ?do loop-body loop
 \	-- compiles to: --> bounds<>? 0branch offset2 setup loop-body (loop-inc) (loop-done?) 0branch offset1
 \ where offset2 points just after the final 0branch and lets us skip the whole thing
 \ and offset1 points back to just before the loop-body
 \
-\ Note that we unconditionally put the limit and count onto rstack so the +loop can drop them later.
+\ Note that we unconditionally put the limit and count onto rstack so the
+\ +loop can drop them later.
+
 : ?do
   ' 2dup ,
   ' >r , ' >r ,                 \ push initial count and limit onto rstack
@@ -281,8 +455,9 @@
   here @                        \ save location that will be the loop target
 ; immediate
 
-\ This hijacking of the rstack has a dangerous side effect: `exit` will "return" execution to some
-\ small, probably misaligned address unless we clean up the return stack before executing it. That's
+\ This hijacking of the rstack has a dangerous side effect:
+\ `exit` will "return" execution to some small, probably 
+\ misaligned address unless we clean up the return stack before executing it. That's
 \ where `unloop` comes in. It restores the return stack so we can `exit` cleanly.
 
 : unloop
@@ -290,30 +465,34 @@
   ' rdrop ,
 ; immediate
 
-\ There are two words to end the loop's body: `loop` and `+loop`. The first one increments the loop
-\ counter by 1. The second increments it by some number. We will start with the general case, then
-\ define the simple case as a usage of the general one.
+\ There are two words to end the loop's body: `loop` and `+loop`.
+\ The first one increments the loop counter by 1. The second increments it by
+\ some number. We will start with the general case, then define the simple case
+\ as a usage of the general one.
 \
-\ Since there's quite a bit of rstack manipulation needed, we define some helper words. None of
-\ these change the rstack, they just access or manipulate the loop control structure in place.
+\ Since there's quite a bit of rstack manipulation needed, we define some helper words.
+\ None of these change the rstack, they just access or manipulate the loop control
+\ structure in place.
 \
-\ Given the way we defined the loop control structure, you'd expect to find `i` at RSP+8. That's
-\ true, except that we had to call `i` itself, which puts another address on the rstack. Confusing?
-\ Yes. It also means that we can't use `i` except _directly_ inside a do..loop. No calling it from
-\ another word or the offsets will be all wrong. Same goes for `j` and `(loop-done?)`
+\ Given the way we defined the loop control structure, you'd expect to find `i` at RSP+8.
+\ That's true, except that we had to call `i` itself, which puts another address on
+\ the rstack. Confusing? Yes. It also means that we can't use `i` except _directly_
+\ inside a do..loop. No calling it from another word or the offsets will be 
+\ wrong. Same goes for `j` and `(loop-done?)`
 
 : i rsp@ 16 + @ ;               \ get current loop count
 : j rsp@ 32 + @ ;               \ get outer loop count
 : (loop-inc)   rsp@ 16 + @ + rsp@ 16 + ! ;
 : (loop-done?) rsp@ 8+ @ rsp@ 16 + @ <= ;
 
-\ `+loop` is a bit of a beast. It needs to compile the runtime code to update the loop count and
-\ check it against the limit. If we were writing this directly it would look like this:
+\ `+loop` is a bit of a beast. It needs to compile the runtime code to update
+\ the loop count and check it against the limit. If we were writing this 
+\ directly it would look like this:
 \
 \ ... (loop-inc) (loop-done?) < if ..not done.. else ..done.. then ...
 \
-\ Where the "not done" part branches back to the instruction after the `do` that started this whole
-\ thing and the "done" part cleans up the rstack.
+\ Where the "not done" part branches back to the instruction after the `do` 
+\ that started this whole thing and the "done" part cleans up the rstack.
 
 : +loop
   ' (loop-inc) ,
@@ -329,20 +508,18 @@
 ; immediate
 
 \ And here's the special case to just step by 1.
+
 : loop
   ' lit ,
   1 ,
   [compile] +loop
 ; immediate
 
-\	COMMENTS ----------------------------------------------------------------------
-\
-\ FORTH allows ( ... ) as comments within function definitions.  This works by having an immediate
-\ word called ( which just drops input characters until it hits the corresponding ).
-: ( ')' parse 2drop ; immediate
 
-\ From now on we can use ( ... ) for multiline comments, but they don't allow nested parens like the
-\ original jonesforth definition.
+( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
+: spaces ( n -- ) 0 max 0 ?do space loop ;
+: zeroes ( n -- ) 0 max 0 ?do '0' emit loop ;
+
 
 : xt word find >cfa ;
 
@@ -381,138 +558,6 @@
 	dsp@ +		( add to the stack pointer )
 	@    		( and fetch )
 ;
-
-( a b -- a>b?a:b )
-: max 2dup <= if swap then drop ;
-
-( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
-: spaces ( n -- ) 0 max 0 ?do space loop ;
-: zeroes ( n -- ) 0 max 0 ?do '0' emit loop ;
-
-( Standard words for manipulating BASE. )
-: decimal ( -- ) 10 base ! ;
-: hex ( -- ) 16 base ! ;
-: binary ( -- ) 2 base ! ;
-
-(
-	PRINTING NUMBERS ----------------------------------------------------------------------
-
-	The standard FORTH word . "DOT" is very important.  It takes the number at the top
-	of the stack and prints it out.  However first I'm going to implement some lower-level
-	FORTH words:
-
-	u.r	 u width -- 	which prints an unsigned number, space-padded to a certain width
-        u.r0     u width --     which prints an unsigned number, zero-padded to a certain width
-	u.             u -- 	which prints an unsigned number
-	.r	 n width -- 	which prints a signed number, space-padded to a certain width.
-
-	For example:
-		-123 6 .r
-	will print out these characters:
-		<space> <space> - 1 2 3
-
-	In other words, the number padded left to a certain number of characters.
-
-	The full number is printed even if it is wider than width, and this is what allows us to
-	define the ordinary functions U. and . -- we just set width to zero knowing that the full
-	number will be printed anyway.
-
-	Another wrinkle of . and friends is that they obey the current base in the variable BASE.
-	BASE can be anything in the range 2 to 36.
-
-	While we're defining . &c we can also define .S which is a useful debugging tool.  This
-	word prints the current stack -- non-destructively -- from top to bottom.
-)
-
-( This is the underlying recursive definition of U. )
-: u.		( u -- )
-	base @ /mod	( width rem quot )
-	?dup if			( if quotient <> 0 then )
-		recurse		( print the quotient )
-	then
-
-	( print the remainder )
-	dup 10 < if
-		'0'		( decimal digits 0..9 )
-	else
-		10 -		( hex and beyond digits a..z )
-		'a'
-	then
-	+
-	emit
-;
-
-
-( This word returns the width -- in characters -- of an unsigned number in the current base )
-: uwidth	( u -- width )
-	base @ /	( rem quot )
-	?dup if		( if quotient <> 0 then )
-		recurse 1+	( return 1+recursive call )
-	else
-		1		( return 1 )
-	then
-;
-
-: u.r		( u width -- )
-	swap		( width u )
-	dup		( width u u )
-	uwidth		( width u uwidth )
-	rot		( u uwidth width )
-	swap -		( u width-uwidth )
-	( At this point if the requested width is narrower, we'll have a negative number on the stack.
-	  Otherwise the number on the stack is the number of spaces to print.  But SPACES won't print
-	  a negative number of spaces anyway, so it's now safe to call SPACES ... )
-	spaces
-	( ... and then call the underlying implementation of U. )
-	u.
-;
-
-( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
-: u.r0 swap dup uwidth rot swap - zeroes u. ;
-: %02x base @ swap hex 2 u.r0 base ! ;
-: %04x base @ swap hex 4 u.r0 base ! ;
-: %08x base @ swap hex 8 u.r0 base ! ;
-: %016x base @ swap hex 16 u.r0 base ! ;
-
-(
-	.R prints a signed number, padded to a certain width.  We can't just print the sign
-	and call U.R because we want the sign to be next to the number -- e.g. '-123' instead of '-  123'.
-)
-: .r		( n width -- )
-	swap		( width n )
-	dup 0< if
-		negate		( width u )
-		1		( save a flag to remember that it was negative | width u 1 )
-		swap		( width 1 u )
-		rot		( 1 u width )
-		1-		( 1 u width-1 )
-	else
-		0		( width u 0 )
-		swap		( width 0 u )
-		rot		( 0 u width )
-	then
-	swap		( flag width u )
-	dup		( flag width u u )
-	uwidth		( flag width u uwidth )
-	rot		( flag u uwidth width )
-	swap -		( flag u width-uwidth )
-
-	spaces		( flag u )
-	swap		( u flag )
-
-	if			( was it negative? print the - character )
-		'-' emit
-	then
-
-	u.
-;
-
-( Finally we can define word . in terms of .R, with a trailing space. )
-: . 0 .r space ;
-
-( The real U., note the trailing space. )
-: u. u. space ;
-
 ( ? fetches the integer at an address and prints it. )
 : ? ( addr -- ) @ . ;
 
@@ -598,98 +643,22 @@
 	cr
 ;
 
+( s" string" is used in FORTH to define strings.  It leaves the address of the 
+  string and its length on the stack, with length at the top of stack.  The space
+  following S" is the normal space between FORTH words and is not a part of the string.
 
-(
-	ALIGNED takes an address and rounds it up -- aligns it -- to the next 8 byte boundary.
+  s" is tricky to define because it has to do different things depending on whether
+  we are compiling or in immediate mode.  Thus the word is marked IMMEDIATE so it can
+  detect this and do different things.
+
+  In compile mode we append LITSTRING <string length> <string rounded up 4 bytes>
+  to the current word.  The primitive LITSTRING does the right thing when the current
+  word is executed.
+
+  In immediate mode there isn't a particularly good place to put the string, but in this
+  case we put the string at HERE  -- but we _don't_ change HERE.
+  This is meant as a temporary location, likely to be overwritten soon after.
 )
-: aligned	( addr -- addr )
-	7 + 7 invert and	( addr+7 & ~7 )
-;
-
-(
-	ALIGN aligns the HERE pointer, so the next word appended will be aligned properly.
-)
-: align here @ aligned here ! ;
-
-(
-	STRINGS ----------------------------------------------------------------------
-
-	s" string" is used in FORTH to define strings.  It leaves the address of the string and
-	its length on the stack, with length at the top of stack.  The space following S" is the normal
-	space between FORTH words and is not a part of the string.
-
-	This is tricky to define because it has to do different things depending on whether
-	we are compiling or in immediate mode.  Thus the word is marked IMMEDIATE so it can
-	detect this and do different things.
-
-	In compile mode we append
-		LITSTRING <string length> <string rounded up 4 bytes>
-	to the current word.  The primitive LITSTRING does the right thing when the current
-	word is executed.
-
-	In immediate mode there isn't a particularly good place to put the string, but in this
-	case we put the string at HERE  -- but we _don't_ change HERE.  This is meant as a temporary
-	location, likely to be overwritten soon after.
-)
-
-( C, appends a byte to the current compiled word. )
-( c -- )
-: c,
-	here @ c!	( store the character in the compiled image )
-	1 here +!	( increment here pointer by 1 byte )
-;
-
-( copy a string to the current compiled word. )
-( addr len -- )
-: s,
-  0 ?do
-    dup c@ here @ c! 1 here +! 1+
-  loop
-  drop
-;
-
-: s"                    ( -- addr len )
-	state @ if	( compiling? )
-		' litstring ,	( compile litstring )
-		here @		( save the address of the length word on the stack )
-		0 ,		( dummy length - we don't know what it is yet )
-                '"' parse s,
-		dup		( get the saved address of the length word )
-		here @ swap -	( calculate the length )
-		8 -		( subtract 8 because we measured from the start of the length word )
-		swap !		( and back-fill the length location )
-		align		( round up to next multiple of 4 bytes for the remaining code )
-	else		( immediate mode )
-                '"' parse 2dup here @ swap cmove
-                nip here @ swap
-	then
-; immediate
-
-(
-	." is the print string operator in FORTH.  Example: ." Something to print"
-	The space after the operator is the ordinary space required between words and is not
-	a part of what is printed.
-
-	In immediate mode we just keep reading characters and printing them until we get to
-	the next double quote.
-
-	In compile mode we use S" to store the string, then add TELL afterwards:
-		LITSTRING <string length> <string rounded up to 4 bytes> TELL
-
-	It may be interesting to note the use of [COMPILE] to turn the call to the immediate
-	word S" into compilation of that word.  It compiles it into the definition of .",
-	not into the definition of the word being compiled when this is running. Is that complicated
-	enough for you?
-)
-: ." immediate		( -- )
-	state @ if	( compiling? )
-		[compile] s"	( read the string, and compile litstring, etc. )
-		' tell ,	( compile the final tell )
-	else
-          '"' parse tell
-	then
-;
-
 (
 	Let's define a couple of words which we can use to allocate arbitrary memory from the user
 	memory.
@@ -723,11 +692,6 @@
            since it no longer applies and I don't know how to explain `does>` in a similar manner.
 
 )
-
-: constant create   , does> @ ;
-: variable create 0 , does> ;
-: value	   create   , does> @ ;
-
 : to immediate	( n -- )
 	word		( get the name of the value )
 	find		( look it up in the dictionary )
@@ -1670,10 +1634,8 @@
   2drop
 ;
 
-: troff 0 echo ! ;
-: tron  1 echo ! ;
-
 ( align HERE to 16 byte boundary )
+
 here @ 15 + 15 invert and here !
 1024 cells allot constant scratch
 
