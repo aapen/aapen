@@ -1518,6 +1518,7 @@ var_to_in:
         defconst "lastcell",8,,lastcell,__f_hidden,LASTCELL
         defconst "peripherals",11,,peripherals,lastcell,PERIPH_BASE
         defconst "charrom",7,,charrom,peripherals,char_rom
+        defconst "fb",2,,fb,charrom,fb_parameters
 
         .macro embed src,name,namelen,label,link
         defcode \name,\namelen,,\label,\link
@@ -1535,7 +1536,7 @@ var_to_in:
         .text
         .endm
 
-        embed   "jonesforth.f","jonesforth",10,jonesforth,charrom
+        embed   "jonesforth.f","jonesforth",10,jonesforth,fb
         embed   "mailbox.f","mailbox",7,mailbox,jonesforth
         embed   "test.f","test",4,test,mailbox
         embed   "assembler.f","assembler",9,assembler,test
@@ -1669,7 +1670,7 @@ ret_template_end:
         // ( ch -- ) write a byte to output
 	defcode "emit",4,,emit,con_out
         POPPSP	x0
-        BIOS(1)
+        BIOS(3)
         next
 
 /*
@@ -1901,9 +1902,9 @@ TODO:  check the current source-id before reading from the terminal.
 
         defcode "refill",6,,refill,parse
         mov     x0, #'>'
-        bl      _con_out
+        BIOS(3)
         mov     x0, #' '
-        bl      _con_out
+        BIOS(3)
         bl      _refill
         PUSHPSP x0
         next
@@ -1914,7 +1915,8 @@ _refill:
         PUSHPSP lr
 
         ldr     x4, =buffer
-1:	bl	_con_in
+1:
+        BIOS(0)
 
         // special cases
         // no input
@@ -1933,7 +1935,7 @@ _refill:
         cmp     x0, #0x7f
         beq     _refill_bs
 
-        bl      _con_out                // echo it
+        BIOS(3)                         // outch
         strb    w0, [x4], #1            // store character, increment pointer
         b       1b                      // keep reading characters
 
@@ -1944,9 +1946,7 @@ _refill_nl:
         str     x1, [x4]                // store number of chars available
         ldr     x4, =var_to_in          // address of variable
         str     xzr, [x4]               // store zero in >in
-        bl      _con_out                // no, echo the \r
-        mov     w0, #'\n'               // we also need to emit a \n
-        bl      _con_out
+        BIOS(3)                         // outch
         POPPSP  lr
         POPPSP  x4
         POPPSP  x7
@@ -1958,12 +1958,8 @@ _refill_bs:
         cmp     x1, x0                  // compare ptr-1 to start
         blt     1b                      // no input so far, do nothing
 
-        mov     w0, #8
-        bl      _con_out                // echo the backspace
-        mov     w0, #' '                // overwrite the previous character
-        bl      _con_out
-        mov     w0, #8                  // reposition the cursor
-        bl      _con_out
+        mov     x0, #'\b'
+        BIOS(3)                         // outch
         subs    x4, x4, 1               // drop the last character
         b       1b                      // keep looking
 
@@ -2712,7 +2708,7 @@ _tell:
         cmp     x2, #0
         beq     2f
 1:      ldrb    w0, [x1], #1
-        bl      _con_out
+        BIOS(3)
         subs    x2, x2, #1
         bgt     1b
 2:      POPPSP  lr
@@ -2772,7 +2768,7 @@ _tell:
         mov     x1, x0
         bl      _tell                   // use tell to echo the word
         mov     x0, #' '
-        bl      _con_out
+        BIOS(3)
 9:      POPPSP  x2
         POPPSP  x1
         POPPSP  x0
@@ -2943,13 +2939,7 @@ _saymsg:
         // ( charcode bgcolor fgcolor pitch addr -- )
         defcode "drawchar",8,,drawchar,hellohello
         POPPSP  x0
-        POPPSP  x1
-        POPPSP  x2
-        POPPSP  x3
-        POPPSP  x4
-        PUSHPSP lr
         bl      draw_char
-        POPPSP  lr
         next
 
 	defcode "char",4,,char,drawchar

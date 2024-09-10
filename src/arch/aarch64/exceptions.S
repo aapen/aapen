@@ -161,6 +161,7 @@ __exception_handler_table:
         puts    abort_msg
         outsysr ESR_EL1, esr_label
         outsysr FAR_EL1, far_label
+        outsysr ELR_EL1, elr_label
         outreg  x28, x28_label
         outreg  x29, x29_label
         outreg  x10, x10_label
@@ -289,6 +290,7 @@ abort_msg:      .asciz "CORE ABORT!\r\n"
 // Data section for register labels
 esr_label:      .asciz "ESR_EL1: 0x"
 far_label:      .asciz "FAR_EL1: 0x"
+elr_label:      .asciz "ELR_EL1: 0x"
 x28_label:      .asciz "PSP x28: 0x"
 x29_label:      .asciz "RSP x29: 0x"
 x10_label:      .asciz "NIP x10: 0x"

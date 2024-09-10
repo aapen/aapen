@@ -41,15 +41,20 @@
         bne     1f
 
         bl      _con_init
+        bl      _video_init
 
         LDR_IMM64 x3, 0x10000
         ldr     x2, =_con_in            // BIOS vector 0
         str     x2, [x3], #8
         ldr     x2, =_con_out           // BIOS vector 1
         str     x2, [x3], #8
+        ldr     x2, =_vid_out           // BIOS vector 2
+        str     x2, [x3], #8
+        ldr     x2, =_outch             // BIOS vector 3
+        str     x2, [x3], #8
 
         mov     x0, #'F'
-        BIOS(1)
+        BIOS(3)
 
         orr     x0, xzr, #1
         str     x0, [x1]
@@ -210,6 +215,90 @@
         ldp     x29, x30, [sp], #16
         ret
         END(_con_in)
+
+// ----------------------------------------------------------------------
+// fn _vid_out()
+//
+// Write a character to the display
+//
+// Arguments: x0 - ASCII code of the character to draw
+// Returns: none
+// Clobbers: none
+// ----------------------------------------------------------------------
+        ENTRY(_vid_out)
+        // Function prologue, create invocation frame, save x0, x1, x2
+        stp     x29, x30, [sp, #-16]!
+        mov     x29, sp
+
+        bl      draw_char
+        mov     x0, #1
+        bl      advance_cursor
+
+        // Function epilogue, restore saved registers and stack
+        ldp     x29, x30, [sp], #16
+        ret
+        END(_vid_out)
+
+// ----------------------------------------------------------------------
+// fn _outch()
+//
+// Write a character to the UART and display. Handles some special
+// characters correctly for each device:
+//	Character	UART effect	Display effect
+//	0x0a		\r\n		cursor-x = 0, cursor-y += 1
+//      0x08            ' ' \b ' '	cursor-x -= 1, draw_char(' ')
+//
+// Arguments: x0 - ASCII code of the character to draw
+// Returns: none
+// Clobbers: none
+// ----------------------------------------------------------------------
+        ENTRY(_outch)
+        // Function prologue, create invocation frame, save x0, x1, x2
+        stp     x29, x30, [sp, #-16]!
+        stp     x0,  xzr, [sp, #-16]!
+        mov     x29, sp
+
+        cmp     x0, #0x0a
+        b.eq    _outch_nl
+        cmp     x0, #0x0d
+        b.eq    _outch_nl
+        cmp     x0, #0x08
+        b.eq    _outch_bs
+        cmp     x0, #0x7f
+        b.eq    _outch_bs
+
+        // not special, just draw it
+        bl      _con_out
+        bl      _vid_out
+        b       1f
+
+_outch_nl:
+        // newline
+        mov     x0, #'\r'
+        bl      _con_out
+        mov     x0, #'\n'
+        bl      _con_out
+        bl      newline_cursor
+        b       1f
+
+_outch_bs:
+        // backspace
+        mov     x0, #'\b'
+        bl      _con_out
+        mov     x0, #' '
+        bl      _con_out
+        mov     x0, #'\b'
+        bl      _con_out
+        mov     x0, #-1
+        bl      advance_cursor
+        bl      erase_char
+
+1:      // Function epilogue, restore saved registers and stack
+        ldp     x0,  xzr, [sp], #16
+        ldp     x29, x30, [sp], #16
+        ret
+        END(_outch)
+
 
 // ----------------------------------------------------------------------
 // Data

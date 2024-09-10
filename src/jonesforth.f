@@ -57,7 +57,7 @@
 : bl   32 ; \ bl (BLank) is a standard FORTH word for space.
 
 \ cr prints a carriage return
-: cr '\r' emit '\n' emit ;
+: cr '\n' emit ;
 
 \ space prints a space
 : space bl emit ;
@@ -356,6 +356,11 @@
   drop
 ;
 
+: +field ( n1 n2 <name> -- n3 )
+  create over , +
+  does> ( addr1 -- addr2 ) @ +
+;
+
 (
 	STACK NOTATION ----------------------------------------------------------------------
 
@@ -593,11 +598,6 @@
 	cr
 ;
 
-( Clear the screen )
-
-: cls ( -- )
-  'esc' emit 'c' emit
-;
 
 (
 	ALIGNED takes an address and rounds it up -- aligns it -- to the next 8 byte boundary.
@@ -1677,27 +1677,119 @@
 here @ 15 + 15 invert and here !
 1024 cells allot constant scratch
 
-(
-	WELCOME MESSAGE ----------------------------------------------------------------------
-
-	Print the version and OK prompt.
-)
-
 : unused lastcell here @ - 8 / ;
+
+( BIOS INTERFACE )
+0
+1 cells +field -.xres
+1 cells +field -.yres
+1 cells +field -.addr
+1 cells +field -.size
+1 cells +field -.pitch
+1 cells +field -.bgcolor
+1 cells +field -.fgcolor
+1 cells +field -.cursorx
+1 cells +field -.cursory
+constant fb%
+
+fb -.xres @  8 / constant screen-cols
+fb -.yres @ 16 / constant screen-rows
+
+00 value black
+01 value white
+02 value red
+03 value cyan
+04 value violet
+05 value green
+06 value blue
+07 value yellow
+08 value orange
+09 value brown
+10 value light-red
+11 value dark-grey
+12 value grey
+13 value light-green
+14 value light-blue
+15 value light-grey
+
+: clr@ fb -.bgcolor @ fb -.fgcolor @ ;
+: clr! fb -.fgcolor ! fb -.bgcolor ! ;
+
+blue light-blue clr!
+
+: csr@ fb -.cursorx @ fb -.cursory @ ;
+: csr! fb -.cursory ! fb -.cursorx ! ;
+
+: next-line
+  csr@
+  nip 0 swap
+  1+
+  dup screen-rows >= if
+    drop 0
+  then
+  csr!
+;
+
+: next-char
+  csr@
+  swap 1+
+  dup screen-cols >= if
+    2drop next-line
+  else
+    swap csr!
+  then
+;
+
+: home 0 0 csr! ;
+: fg! clr@ drop swap clr! ;
+: bg! clr@ nip       clr! ;
+
+: aapen-logo
+  home cr cr
+  yellow fg!
+  s"                 AAA                              AAA                                                                        " tell cr
+  s"                A:::A                            A:::A                                                                       " tell cr
+  s"               A:::::A                          A:::::A                                                                      " tell cr
+  green fg!
+  s"              A:::::::A                        A:::::::A                                                                     " tell cr
+  s"             A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " tell cr
+  s"            A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " tell cr
+  red fg!
+  s"           A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " tell cr
+  s"          A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" tell cr
+  yellow fg!
+  s"         A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" tell cr
+  s"        A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" tell cr
+  s"       A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" tell cr
+  green fg!
+  s"      A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" tell cr
+  s"     A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" tell cr
+  red fg!
+  s"    A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" tell cr
+  s"   A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" tell cr
+  s"  AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" tell cr
+  s"                                                                  A:::::A                                                    " tell cr
+  yellow fg!
+  s"                                                                  A:::::A                                                    " tell cr
+  s"                                                                 A:::::::A                                                   " tell cr
+  s"                                                                 A:::::::A                                                   " tell cr
+  green fg!
+  s"                                                                 A:::::::A                                                   " tell cr
+  s"                                                                 AAAAAAAAA                                                   " tell cr
+  light-blue fg!
+;
+
+: (concls) 'esc' >con 'c' >con ;
+: (dispcls) home screen-rows screen-cols * 0 do bl emit loop home ;
+: cls  (dispcls) (concls) ;
 
 test evaluate
 assembler evaluate
 
-: welcome
-        cr
-	s" test-mode" find not if
-		." jonesforth version " version . cr
-                unused . ." cells remaining" cr
-		." ok "
-	then
-        cr
-;
+cls
+aapen-logo
+cr
+s" V 0.01" tell cr
+s" READY" tell cr
 
-welcome
-hide welcome
 quit
