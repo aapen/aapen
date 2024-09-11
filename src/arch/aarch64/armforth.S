@@ -632,10 +632,10 @@ _forth_start:
 
         RESET_INPUT
         ldr     x0, =var_inbuf
-        ldr     x1, =jonesforth_src
+        ldr     x1, =boot0_src
         str     x1, [x0]
         ldr     x0, =var_srclen
-        ldr     x1, =jonesforth_len
+        ldr     x1, =boot0_len
         str     x1, [x0]
         ldr     x0, =var_to_in
         str     xzr, [x0]
@@ -1536,8 +1536,9 @@ var_to_in:
         .text
         .endm
 
-        embed   "jonesforth.f","jonesforth",10,jonesforth,fb
-        embed   "mailbox.f","mailbox",7,mailbox,jonesforth
+        embed   "boot0.f","boot0",5,boot0,fb
+        embed   "boot1.f","boot1",5,boot1,boot0
+        embed   "mailbox.f","mailbox",7,mailbox,boot1
         embed   "test.f","test",4,test,mailbox
         embed   "assembler.f","assembler",9,assembler,test
         embed   "sdcard.f","sdcard",6,sdcard,assembler
