@@ -1,4 +1,7 @@
 \ -*- forth -*-
+\ 
+\ Based on jonesforth.f. Original license:
+\
 \	A sometimes minimal FORTH compiler and tutorial for Linux / i386 systems.
 \	By Richard W.M. Jones <rich@annexia.org> http://annexia.org/forth
 \	This is PUBLIC DOMAIN (see public domain release statement below).
@@ -27,7 +30,7 @@
 \ the corresponding ). From now on we can use ( ... ) for multiline comments.
 \ Note that nested parens don't work.
 
-: ( 0x29 parse 2drop ; immediate
+: ( 0x29 parse 2drop ; immediate       \ 0x29 is the close paren.
 
 : constant create   , does> @ ;
 : variable create 0 , does> ;
@@ -39,12 +42,14 @@
 : mod /mod drop ;
 
 ( Standard words for manipulating BASE. )
+
 : decimal ( -- ) 10 base ! ;
 : hex ( -- ) 16 base ! ;
 : binary ( -- ) 2 base ! ;
 
 
-( Some more complicated stack examples, showing the stack notation. )
+( Some more complicated stack utilities. )
+
 : nip ( x y -- y ) swap drop ;
 : tuck ( x y -- y x y ) swap over ;
 : pick ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u )
@@ -55,37 +60,46 @@
 ;
 
 ( Define some character constants )
+
 : '\t' 9 ;
 : '\n' 10 ;
 : '\r' 13 ;
 : bl   32 ; ( bl is a standard FORTH word for space. )
 
 ( cr prints a carriage return )
+
 : cr '\n' emit ;
 
 ( space prints a space )
+
 : space bl emit ;
 
 ( tab prints a horizontal tab )
+
 : tab '\t' emit ;
 
 ( More standard FORTH words. )
+
 : 2* 2 * ;
 : 2/ 2 / ;
 
 ( Inc and dec by one CPU word size, 64 bits )
+
 : 8+ 8 + ;
 : 8- 8 - ;
 
 ( negate leaves the negative of a number on the stack. )
+
 : negate 0 swap - ;
 
 ( Standard words for booleans. )
+
 : true  1 ;
 : false 0 ;
 : not   0= ;
 
 ( literal takes whatever is on the stack and compiles lit <foo> )
+
 : literal immediate
 	' lit ,		( compile lit )
 	,		( compile the literal itself from the stack )
@@ -101,6 +115,7 @@
 ;
 
 ( A few more character constants defined the same way as above. )
+
 : ';' [ char ; ] literal ;
 : '(' [ char ( ] literal ;
 : ')' [ char ) ] literal ;
@@ -338,30 +353,34 @@
 ; immediate
 
 ( Leaves the max of two numbers on the stack. )
+
 : max 2dup <= if swap then drop ;
 
 ( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
+
 : spaces ( n -- ) 0 max 0 ?do space loop ;
 : zeroes ( n -- ) 0 max 0 ?do '0' emit loop ;
 
 ( aligned takes an address and rounds it up to the next 8 byte boundary.)
+
 : aligned	( addr -- addr )
   7 + 7 invert and	( addr+7 & ~7 )
 ;
 
 ( ALIGN aligns the HERE pointer, so the next word appended will be aligned properly.)
+
 : align here @ aligned here ! ;
 
-( C, appends a byte to the current compiled word. )
-( c -- )
-: c,
+( Appends a byte to the current compiled word. )
+
+: c, ( c -- )
 	here @ c!	( store the character in the compiled image )
 	1 here +!	( increment here pointer by 1 byte )
 ;
 
-( copy a string to the current compiled word. )
-( addr len -- )
-: s,
+( Copy a string to the current compiled word. )
+
+: s, ( addr len -- )
   0 ?do
     dup c@ here @ c! 1 here +! 1+
   loop
@@ -450,6 +469,7 @@
 
 
 ( This word returns the width -- in char -- of an unsigned number in the current base )
+
 : uwidth	( u -- width )
 	base @ /	( rem quot )
 	?dup if		( if quotient <> 0 then )
@@ -470,6 +490,7 @@
 ;
 
 ( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
+
 : u.r0 swap dup uwidth rot swap - zeroes u. ;
 : %02x base @ swap hex 2 u.r0 base ! ;
 : %04x base @ swap hex 4 u.r0 base ! ;
@@ -479,6 +500,7 @@
 ( .R prints a signed number, padded to a certain width.  We can't just print the sign
   and call U.R because we want the sign to be next to the number, so
   '-123' instead of '-  123'.)
+
 : .r		( n width -- )
 	swap		( width n )
 	dup 0< if
@@ -509,12 +531,15 @@
 ;
 
 ( Finally we can define word . in terms of .R, with a trailing space. )
+
 : . 0 .r space ;
 
 ( The real U., note the trailing space. )
+
 : u. u. space ;
 
 ( w, appends a 32-bit value to the current compiled word. )
+
 : w,
 	here @ w!	( store the character in the compiled image )
 	4 here +!	( increment here pointer by 4 bytes )
@@ -540,10 +565,12 @@
 ;
 
 ( ? fetches the integer at an address and prints it. )
+
 : ? ( addr -- ) @ . ;
 
 ( c a b WITHIN returns true if a <= c and c < b )
 (  or define without ifs: OVER - >R - R>  U<  )
+
 : within
 	-rot		( b c a )
 	over		( b c a c )
@@ -560,6 +587,7 @@
 ;
 
 ( .x print the tos in hex )
+
 : .x ( x -- )
 	base @ 			( cur-base x )
 	swap			( x cur-base )
@@ -569,6 +597,7 @@
 ;
 
 ( .b print the tos in binary )
+
 : .b ( x -- )
 	base @ 			( cur-base x )
 	swap			( x cur-base )
@@ -578,6 +607,7 @@
 ;
 
 ( .d print the tos in decimal )
+
 : .d ( x -- )
 	base @ 			( cur-base x )
 	swap			( x cur-base )
@@ -587,12 +617,13 @@
 ;
 
 ( .base prints the current base in decimal )
+
 : .base ( -- )
 	base @ .d
 ;
 
-
 ( depth returns the depth of the stack. )
+
 : depth		( -- n )
 	s0 @ dsp@ -
 	8-			( adjust because S0 was on the stack when we pushed DSP )
@@ -654,6 +685,7 @@
 ;
 
 ( x +to val adds x to val )
+
 : +to immediate
 	word		( get the name of the value )
 	find		( look it up in the dictionary )
@@ -668,6 +700,7 @@
 ;
 
 ( Given a word address, return the name of the word. )
+
 : id. ( waddr -- len addr )
 	9 +		( skip over the link pointer )
 	dup c@		( get the length byte )
@@ -1288,6 +1321,7 @@
 : abort" ( -- ) '"' parse -2 throw ;
 
 ( Print a stack trace by walking up the return stack. )
+
 : print-stack-trace
 	rsp@				( start at caller of this function )
 	begin
@@ -1344,6 +1378,7 @@
   extra NUL to the string and also a drop instruction afterwards.  Apart from that the
   implementation just a modified s".
 )
+
 : z" immediate
 	state @ if	( compiling? )
 		' litstring ,	( compile litstring )
@@ -1428,8 +1463,7 @@
 
 : source-id srcid @ ;
 
-( -- i*k k )
-: save-input
+: save-input ( -- i*k k )
   inbuf @
   >in @
   srclen @
@@ -1438,8 +1472,7 @@
   5
 ;
 
-( i*k k -- )
-: restore-input
+: restore-input ( i*k k -- )
   ( todo use abort" -- if it's possible to define abort" )
   5 <> if ." stack mismatch" -1 throw then
   0xabacab <> if ." stack mismatch" -1 throw then
@@ -1453,8 +1486,7 @@
   >in @ srclen @ >
 ;
 
-( i*j c-addr u -- i*k )
-: evaluate
+: evaluate ( i*j c-addr u -- i*k )
   >r >r
   save-input
 
