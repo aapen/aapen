@@ -1,15 +1,8 @@
-ZIG             = zig
-ZIG_BUILD_ARGS  = -Doptimize=Debug -freference-trace --verbose-cc --verbose-link
-
-# Could we possibly have a zig build command that would simply output
-# all of the different board flavors? Otherwise we can make this
-# a simple make assignment.
-#BOARD_FLAVORS   = $(shell echo pi3 pi4 pi400 pi5)
 BOARD_FLAVORS   = $(shell echo pi3 pi4)
 
 # Change this to set the board flavor used in the emulator.
 # Must be one in the list above.
-BOARD    = pi3
+BOARD        = pi3
 
 EMU_pi3      = raspi3b
 FIRMWARE_pi3 = bcm2710-rpi-3-b.dtb
@@ -20,18 +13,11 @@ FIRMWARE_pi4 = bcm2711-rpi-4-b.dtb
 EMUBOARD     = ${EMU_${BOARD}}
 FIRMWARE     = ${FIRMWARE_${BOARD}}
 
-ELF_FILES = $(addprefix zig-out/kernel-,$(addsuffix .elf,$(BOARD_FLAVORS)))
-KERNEL_FILES = $(addprefix zig-out/kernel-,$(addsuffix .img,$(BOARD_FLAVORS)))
-TEST_KERNEL = zig-out/kernel-$(BOARD).img
-TEST_KERNEL_ELF = zig-out/kernel-$(BOARD).elf
+KERNEL_ELF   = kernel-$(BOARD)
+KERNEL       = $(KERNEL_ELF).img
 
-# temporarily removing 'queue' from KERNEL_UNIT_TESTS because it
-# doesn't exit correctly.
-KERNEL_UNIT_TESTS = atomic bcd confirm_qemu console_output event heap mailbox root_hub schedule semaphore stack string synchronize
-KERNEL_UNIT_TEST_TARGETS = $(addprefix kernel_test_, $(KERNEL_UNIT_TESTS))
-
-CORE_COUNT      = 4
-QEMU_EXEC       = qemu-system-aarch64 -semihosting -smp $(CORE_COUNT)
+CORE_COUNT   = 4
+QEMU_EXEC    = qemu-system-aarch64 -semihosting -smp $(CORE_COUNT)
 
 ifdef SDIMAGE
   SD_ARGS=-drive if=sd,format=raw,file=$(SDIMAGE)
@@ -46,75 +32,73 @@ QEMU_UNIT_TEST_ARGS = -nographic
 # Use this to get USB tracing from the emulator.
 QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -device usb-mouse -trace 'events=trace_events.txt'
 
-OS              = $(shell uname)
+OS           = $(shell uname)
 ifeq ($(OS), Darwin)
-GDB_EXEC        = aarch64-elf-gdb
+GDB_EXEC     = aarch64-elf-gdb
 else
-GDB_EXEC        = aarch64-unknown-linux-gnu-gdb
+GDB_EXEC     = aarch64-unknown-linux-gnu-gdb
 endif
 
-GDB_ARGS        = -s lib
+GDB_ARGS     = -s lib
 GDB_TARGET_HOST = --ex "target extended-remote :1234"
 GDB_TARGET_DEV  = --ex "target extended-remote :3333"
 
-rwildcard       =$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+rwildcard    = $(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
 # How to recursively find all files that match a pattern
-SRCS           := $(call rwildcard,src/,*.zig) $(call rwildcard,src/,*.f) $(call rwildcard,src/,*.S) $(call rwildcard,src/,*.c) $(call rwildcard,include,*.h) $(call rwildcard,include/*,*.h)
+SRCS        := $(call rwildcard,src/,*.f)
+ARCH         = src/arch/aarch64
+OBJS        := $(ARCH)/boot.o $(ARCH)/armforth.o $(ARCH)/bios.o $(ARCH)/exceptions.o $(ARCH)/util.o $(ARCH)/video.o
+
+TARGET	     = aarch64-freestanding-gnu
+AS 	     = zig cc
+ASFLAGS      = -I src -I include -DBOARD=$(BOARD) -target $(TARGET)
+
+LD	     = zig cc
+LDFLAGS	     = -T $(ARCH)/kernel.ld -target $(TARGET)
+
+OBJCOPY	     = zig objcopy
+OBJFLAGS     = -O binary
 
 .PHONY: kernel_test clean kernels emulate
 
-all: init emulate
+all: download_firmware emulate
 
-init: download_firmware dirs
+$(KERNEL): $(KERNEL_ELF)
+	$(OBJCOPY) $(OBJFLAGS) $(KERNEL_ELF) $@
 
-.PHONEY: build
-build: $(TEST_KERNEL)
+$(KERNEL_ELF): $(OBJS) $(ARCH)/kernel.ld
+	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
-dirs:
-	mkdir -p zig-out
-
-kernels: $(KERNEL_FILES)
-
-zig-out/kernel-%.img: $(SRCS)
-	$(ZIG) build -Dboard=$(*F) -Dimage=kernel-$(*F) $(ZIG_BUILD_ARGS)
+$(ARCH)/armforth.o: $(SRCS)
 
 download_firmware: firmware/COPYING.linux
 
 firmware/COPYING.linux:
 	./tools/fetch_firmware.sh
 
-.PHONEY: kernel_tests $(KERNEL_UNIT_TEST_TARGETS)
-
-kernel_tests: $(KERNEL_UNIT_TEST_TARGETS)
-
-kernel_test_%:
-	@echo Kernel Test: $(*F)
-	@$(ZIG) build -Dboard=pi3 -Dtestname=$(*F) -Dimage=$(*F) $(ZIG_BUILD_ARGS)
-	@$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_UNIT_TEST_ARGS) -kernel zig-out/$(*F).img
-
-emulate: $(TEST_KERNEL) firmware/COPYING.linux
-	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(TEST_KERNEL)
+emulate: $(KERNEL) firmware/COPYING.linux
+	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(KERNEL)
 
 debug_emulate: $(TEST_KERNEL) firmware/COPYING.linux
-	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_DEBUG_ARGS) $(QEMU_TEST_ARGS) -kernel $(TEST_KERNEL)
+	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_DEBUG_ARGS) $(QEMU_TEST_ARGS) -kernel $(KERNEL)
 
-gdb: $(TEST_KERNEL)
-	$(GDB_EXEC) $(GDB_ARGS) $(GDB_TARGET_HOST) $(TEST_KERNEL_ELF)
+gdb: $(KERNEL)
+	$(GDB_EXEC) $(GDB_ARGS) $(GDB_TARGET_HOST) $(KERNEL_ELF)
 
-openocd_gdb: $(TEST_KERNEL)
-	$(GDB_EXEC) $(GDB_ARGS) $(GDB_TARGET_DEV) $(TEST_KERNEL_ELF)
+openocd_gdb: $(KERNEL)
+	$(GDB_EXEC) $(GDB_ARGS) $(GDB_TARGET_DEV) $(KERNEL_ELF)
 
-openocd_gdb2: $(TEST_KERNEL)
-	$(GDB_EXEC) $(GDB_ARGS) --ex "target extended-remote :3334" $(TEST_KERNEL_ELF)
+openocd_gdb2: $(KERNEL)
+	$(GDB_EXEC) $(GDB_ARGS) --ex "target extended-remote :3334" $(KERNEL_ELF)
 
-sdcard: $(KERNEL_FILES) firmware/COPYING.linux
+sdcard: $(KERNEL) firmware/COPYING.linux
 ifndef SDCARD_PATH
 	$(error "SDCARD_PATH must be defined as an environment variable.")
 else
 	mkdir -p $(SDCARD_PATH)
 	cp -r firmware/* $(SDCARD_PATH)
-	cp $(KERNEL_FILES) $(SDCARD_PATH)
+	cp $(KERNEL) $(SDCARD_PATH)
 	cp sdfiles/config.txt $(SDCARD_PATH)
 endif
 
@@ -124,5 +108,6 @@ sdfiles/infloop.bin:
 	echo "0000: 0000 0014" | xxd -r - sdfiles/infloop.bin
 
 clean:
-	rm -rf .zig-cache
-	rm -rf zig-out/*
+	@rm -rf .zig-cache
+	@rm -rf zig-out/*
+	@rm -f $(OBJS) $(KERNEL) $(KERNEL_ELF)
