@@ -899,62 +899,59 @@ name_0: .quad 0
         PUSHPSP x1                      // n1
 	next
 
-	// -ROT ( n1 n2 n3 -- n3 n1 n2 )
-	defcode "-rot",4,,nrot,rot
-        POPPSP  x3                      // n3
-        POPPSP  x2                      // n2
-        POPPSP  x1                      // n1
-
-        PUSHPSP x3                      // n3
-        PUSHPSP x1                      // n1
-        PUSHPSP x2                      // n2
+	// . ( n -- ) Simple version of . prints in hex
+	defcode ".",1,,simple_dot,rot
+        POPPSP  x1                      // n
+        bl      print_hex
+        mov     x0, #' '
+        BIOS(3)
 	next
 
-        defcode "?dup",4,,qdup,nrot     // duplicate top of stack if it is non-zero
+        defcode "?dup",4,,qdup,simple_dot     // duplicate top of stack if it is non-zero
         ldr     x0, [PSP]
         cmp     x0, #0
         beq     1f
         PUSHPSP x0
 1:      next
 
-        defcode "1+",2,,incr,qdup
-        POPPSP  x0
-        add     x0, x0, #1
-        PUSHPSP x0
-        next
+//        defcode "qq1+",2,,incr,qdup
+//        POPPSP  x0
+//        add     x0, x0, #1
+//        PUSHPSP x0
+//        next
+//
+//        defcode "qq1-",2,,decr,incr
+//        POPPSP  x0
+//        sub     x0, x0, #1
+//        PUSHPSP x0
+//        next
+//
+//        defcode "qq4+",2,,incr4,decr
+//        POPPSP  x0
+//        add     x0,x0,#4
+//        PUSHPSP x0
+//        next
+//
+//        defcode "qq4-",2,,decr4,incr4
+//        POPPSP  x0
+//        sub     x0,x0,#4
+//        PUSHPSP x0
+//        next
 
-        defcode "1-",2,,decr,incr
-        POPPSP  x0
-        sub     x0, x0, #1
-        PUSHPSP x0
-        next
-
-        defcode "4+",2,,incr4,decr
-        POPPSP  x0
-        add     x0,x0,#4
-        PUSHPSP x0
-        next
-
-        defcode "4-",2,,decr4,incr4
-        POPPSP  x0
-        sub     x0,x0,#4
-        PUSHPSP x0
-        next
-
-        defcode "8+",2,,incr8,decr4
+        defcode "8+",2,,incr8,qdup
         POPPSP  x0
         add     x0,x0,#8
         PUSHPSP x0
         next
 
-        defcode "8-",2,,decr8,incr8
+        defcode "qq8-",2,,decr8,incr8
         POPPSP  x0
         sub     x0,x0,#8
         PUSHPSP x0
         next
 
 	// + ( a b -- a+b )
-	defcode "+",1,,add,decr8
+	defcode "+",1,,add,incr8
         POPPSP  x1
         POPPSP  x0
 	add	x0, x1, x0
@@ -1064,7 +1061,7 @@ name_0: .quad 0
 	next
 
 	// >= (a b -- a>=b)
-	defcode ">=",2,,ge,le
+	defcode "qq>=",2,,ge,le
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
 	cmp	x0, x1                  // test a vs b
@@ -1072,56 +1069,56 @@ name_0: .quad 0
 	PUSHPSP	x0
 	next
 
-        // 0= (a -- a == 0)
-        defcode "0=",2,,zeroeq,ge
-        POPPSP  x0
-        cmp     x0, xzr
-        csinc   x0, xzr, xzr, ne
-        PUSHPSP x0
-        next
+//        // 0= (a -- a == 0)
+//        defcode "0=",2,,zeroeq,le
+//        POPPSP  x0
+//        cmp     x0, xzr
+//        csinc   x0, xzr, xzr, ne
+//        PUSHPSP x0
+//        next
 
-        // 0<> (a -- a <> 0)
-        defcode "0<>",3,,zerone,zeroeq
-        POPPSP  x0
-        cmp     x0, xzr
-        csinc   x0, xzr, xzr, eq
-        PUSHPSP x0
-        next
-
-        // 0< (a -- a<0)
-        defcode "0<",2,,zlt,zerone
-        POPPSP  x0
-        cmp     x0, xzr
-        csinc   x0, xzr, xzr, ge
-        PUSHPSP x0
-        next
-
+//        // 0<> (a -- a <> 0)
+//        defcode "qq-0<>",3,,zerone,zeroeq
+//        POPPSP  x0
+//        cmp     x0, xzr
+//        csinc   x0, xzr, xzr, eq
+//        PUSHPSP x0
+//        next
+//
+//        // 0< (a -- a<0)
+//        defcode "0qq<",2,,zlt,zerone
+//        POPPSP  x0
+//        cmp     x0, xzr
+//        csinc   x0, xzr, xzr, ge
+//        PUSHPSP x0
+//        next
+//
         // 0> (a -- a>0)
-        defcode "0>",2,,zgt,zlt
+        defcode "qq0>",2,,zgt,le
         POPPSP  x0
         cmp     x0, xzr
         csinc   x0, xzr, xzr, le
         PUSHPSP x0
         next
 
-        // 0<= (a -- a<=0)
-        defcode "0<=",3,,zle,zgt
-        POPPSP  x0
-        cmp     x0, xzr
-        csinc   x0, xzr, xzr, gt
-        PUSHPSP x0
-        next
-
-        // 0>= (a -- a>=0)
-        defcode "0>=",3,,zge,zle
-        POPPSP  x0
-        cmp     x0, xzr
-        csinc   x0, xzr, xzr, lt
-        PUSHPSP x0
-        next
+//        // 0<= (a -- a<=0)
+//        defcode "qq0<=",3,,zle,zgt
+//        POPPSP  x0
+//        cmp     x0, xzr
+//        csinc   x0, xzr, xzr, gt
+//        PUSHPSP x0
+//        next
+//
+//        // 0>= (a -- a>=0)
+//        defcode "qq0>=",3,,zge,zle
+//        POPPSP  x0
+//        cmp     x0, xzr
+//        csinc   x0, xzr, xzr, lt
+//        PUSHPSP x0
+//        next
 
 	// AND (a b -- a&b)
-	defcode "and",3,,and,zge
+	defcode "and",3,,and,zgt
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
 	and	x0, x1, x0
@@ -1137,7 +1134,7 @@ name_0: .quad 0
 	next
 
 	// XOR (a b -- a^b)
-	defcode "xor",3,,xor,or
+	defcode "qqxor",3,,xor,or
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
 	eor	x0, x1, x0
@@ -1258,7 +1255,7 @@ name_0: .quad 0
 	next
 
 	// -! (value address -- ) M[address] -= value
-	defcode "-!",2,,substore,addstore
+	defcode "qq-!",2,,substore,addstore
         POPPSP  x0
         POPPSP  x1
 	ldr	x2, [x0]
@@ -1286,7 +1283,7 @@ name_0: .quad 0
 	next
 
 /* C@C! is a useful byte copy operation */
-	defcode "c@c!",4,,ccopy,fetchbyte
+	defcode "qqc@c!",4,,ccopy,fetchbyte
 	ldr	x0, [PSP, #8]	// source address
 	ldr	x1, [PSP]	// destination address
 	ldrb	w2, [x0], #1	// load and increment

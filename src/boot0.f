@@ -95,7 +95,7 @@
 
 : true  1 ;
 : false 0 ;
-: not   0= ;
+: not   0 = ;
 
 ( literal takes whatever is on the stack and compiles lit <foo> )
 
@@ -910,7 +910,7 @@ with the two forms of relative jumps. )
 
 : defprim
   create		( Create a new word )
-  here @ dup 8- !       ( Put DFA into CFA )
+  here @ dup 8 - !       ( Put DFA into CFA )
 ;
 
 ( Close out an open primitive word. This is essentially
@@ -966,12 +966,6 @@ defprim 4-
   0 		pushpsp-x w,
 ;;
 
-defprim 8+
-  0 		poppsp-x w,
-  0 0 8 	add-xx# w,
-  0 		pushpsp-x w,
-;;
-
 defprim 8-
   0 		poppsp-x w,
   0 0 8 	sub-xx# w,
@@ -1014,17 +1008,17 @@ defprim 0<
   0 		pushpsp-x w,
 ;;
 
+defprim 0=
+  0 		poppsp-x w,
+  0 zr 		cmp-xx w,
+  0 zr zr c-ne 	csinc-xxxc w,
+  0 		pushpsp-x w,
+;;
+
 defprim 0>
   0 		poppsp-x w,
   0 zr 		cmp-xx w,
   0 zr zr c-le 	csinc-xxxc w,
-  0 		pushpsp-x w,
-;;
-
-defprim 0<=
-  0 		poppsp-x w,
-  0 zr 		cmp-xx w,
-  0 zr zr c-gt 	csinc-xxxc w,
   0 		pushpsp-x w,
 ;;
 
