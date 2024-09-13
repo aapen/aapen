@@ -98,6 +98,289 @@
 	' lit ,		( compile lit )
 ;
 
+
+
+( find the word after the given one )
+
+: after ( word -- next-word )
+  here @                        ( address of the end of the last compiled word )
+  latest @                      ( word last curr )
+  begin
+    2 pick                      ( word last curr word )
+    over                        ( word last curr word curr )
+    <>                          ( word last curr word<>curr? )
+  while                         ( word last curr )
+    nip                         ( word curr )
+    dup @                       ( word curr prev -- which becomes: word last curr )
+  repeat
+  drop
+  nip
+;
+
+( 'forget word' deletes the definition of 'word' from the dictionary 
+  and everything defined after it, including any variables and other 
+  memory allocated after.
+
+  The implementation is very simple - we look up the word, which returns
+  the dictionary entry address. Then we set HERE to point to that address,
+  so in effect all future allocations and definitions will overwrite memory
+  starting at the word.  We also need to set LATEST to point to the previous word.
+
+  You should not try to forget built-in words. 
+
+  xxx: because we wrote variable to store the variable in memory allocated before 
+  the word, in the current implementation 'variable foo forget foo' will leak 1 cell 
+  of memory.
+)
+
+: forget
+	word find	( find the word, gets the dictionary entry address )
+	dup @ latest !	( set latest to point to the previous word )
+	here !		( and store here with the dictionary address )
+;
+
+: forget-latest
+	latest @	( get the most recent word defined )
+	dup @ latest !	( get the previous word )
+	here !		( and move here back to that prevous word )
+;
+
+
+( Given a word address, return the hidden flag. )
+
+: ?hidden  ( waddr -- hidden-flag )
+	8 +		( skip over the link pointer )
+	c@		( get the flags byte )
+	f_hidden and	( mask the f_hidden flag and return it -- as a truth value )
+;
+
+( Given a word address, return the immediate flag. )
+
+: ?immediate ( waddr -- immed-flag )
+
+	8 +		( skip over the link pointer )
+	c@		( get the flags byte )
+	f_immed and	( mask the F_IMMED flag and return it -- as a truth value )
+;
+
+( Given a word address, return the name of the word. )
+
+: id. ( waddr -- len addr )
+	9 +		( skip over the link pointer )
+	dup c@		( get the length byte )
+
+	begin
+		dup 0>		( length > 0? )
+	while
+		swap 1+		( addr len -- len addr+1 )
+		dup c@		( len addr -- len addr char | get the next character)
+		emit		( len addr char -- len addr | and print it)
+		swap 1-		( len addr -- addr len-1    | subtract one from length )
+	repeat
+	2drop		( len addr -- )
+;
+
+( Prints all the words defined in the dictionary, most recently defined first.
+  Does not print hidden words. )
+
+: words ( -- )
+	latest @	( start at latest dictionary entry )
+	begin
+		?dup		( while link pointer is not null )
+	while
+		dup ?hidden not if	( ignore hidden words )
+			dup id.		( but if not hidden, print the word )
+			space
+		then
+		@		( dereference the link pointer - go to previous word )
+	repeat
+	cr
+;
+
+( see decompiles a FORTH word.
+
+  We search for the dictionary entry of the word, then search again for the next
+  word -- effectively, the end of the compiled word.  This results in two pointers:
+
+  +---------+---+---+---+---+------------+------------+------------+------------+
+  | LINK    | 3 | T | E | N | DOCOL      | LIT        | 10         | EXIT       |
+  +---------+---+---+---+---+------------+------------+------------+------------+
+   ^									       ^
+   |									       |
+  Start of word							      End of word
+
+  With this information we can have a go at decompiling the word.  We need to
+  recognise "meta-words" like LIT, LITSTRING, BRANCH, etc. and treat those separately.
+)
+
+: see
+	word find	( find the dictionary entry to decompile )
+
+        ?dup 0= if ." not found " exit then
+
+	( Now we search again, looking for the next word in the dictionary.  This gives us
+	  the length of the word that we will be decompiling.  Well, mostly it does. )
+        dup after swap                 ( end-of-word start-of-word )
+
+	( begin the definition with : NAME [IMMEDIATE] )
+	':' emit space dup id. space
+	dup ?immediate if ." immediate " then
+
+        dup >cfa @ dovar = if
+          ." <var> " >dfa dup @ . ." @0x" .x cr
+          drop
+          exit
+        then
+
+        dup >cfa @ docol = if
+	  >dfa		( get the data address, ie. points after DOCOL | end-of-word start-of-data )
+        else
+          ( This might be a primitive, or it might be a child word given 
+	    behavior by `does>`. I'm not sure how to tell the difference here.
+
+            If it is a does> child word then the current word's >cfa points to 
+	    some assembly inlined in the parent. To decompile this we need to 
+	    find the correct start & end to use for the parent word. The start
+	    will be the target of the current word's >cfa plus 32
+            bytes -- that's due to the 8 instruction shim that gets inlined 
+	    into the parent word by does>. To find the end, we have to do 
+	    _another_ search. This time instead of `find` we need to look for a 
+	    word that contains the >cfa's target address and get it's end.)
+
+          dup >dfa ." 0x" .x ." ( does 0x" dup >cfa @ .x  ." ) "
+          nip                   ( start-of-child-word )
+          >cfa @ 0d32 +         ( thread-of-parent-word )
+          dup cfa> after swap   ( end-of-parent-word thread-of-parent-word )
+        then
+
+	( now we start decompiling until we hit the end of the word )
+	begin		( end start )
+		2dup >
+	while
+		dup @		( end start codeword )
+
+		case
+		' lit of		( is it lit ? )
+			cell+ dup @		( get next word which is the integer constant )
+			.			( and print it )
+		endof
+		' litstring of		( is it litstring ? )
+			[ char s ] literal emit '"' emit space ( print s"<space> )
+			cell+ dup @		( get the length word )
+			swap cell+ swap		( end start+8 length )
+			2dup tell		( print the string )
+			'"' emit space		( finish the string with a final quote )
+			+ aligned		( end start+8+len, aligned )
+			1 cells -		( because we're about to add 8 below )
+		endof
+		' 0branch of		( is it 0branch ? )
+			." 0branch ( "
+			cell+ dup @		( print the offset )
+			.
+			." ) "
+		endof
+		' branch of		( is it branch ? )
+			." branch ( "
+			cell+ dup @		( print the offset )
+			.
+			." ) "
+		endof
+		' ' of			( is it ' <tick> ? )
+			[ char ' ] literal emit space
+			cell+ dup @		( get the next codeword )
+			cfa>			( and force it to be printed as a dictionary entry )
+			id. space
+		endof
+                ' (does>) of            ( is it does>?)
+                        ." does> "
+                        0d32 +                  ( skip the shim )
+                endof
+		' exit of		( is it exit? )
+			( we expect the last word to be exit, and if it is then we don't print it
+			  because exit is normally implied by ;.  exit can also appear in the middle
+			  of words, and then it needs to be printed. )
+			2dup			( end start end start )
+			cell+			( end start end start+4 )
+			<> if			( end start | we're not at the end )
+				." exit "
+			then
+		endof
+					( default case: )
+			dup			( in the default case we always need to dup before using )
+			cfa>			( look up the codeword to get the dictionary entry )
+			id. space		( and print it )
+		endcase
+
+		cell+		( end start+8 )
+	repeat
+
+	';' emit cr
+
+	2drop		( restore stack )
+;
+
+( dump out the contents of memory, in the 'traditional' hexdump format.
+  Note that the parameters to dump -- address, length -- are compatible with string words
+  such as WORD and S".
+
+  You can dump out the raw code for the last word you defined by doing something like:
+  latest @ 128 dump)
+
+: dump		( addr len -- )
+        cr
+	base @ -rot		( base addr len | save the current base at the bottom of the stack )
+	hex			( and switch to hexadecimal mode )
+
+	begin
+		dup 0>		( while len > 0 )
+	while
+		over 8 u.r0	( print the address | base addr len )
+		space
+
+		( print up to 16 words on this line )
+		2dup		( base addr len addr len )
+		1- 15 and 1+	( base addr len addr linelen )
+		begin
+			dup 0>		( while linelen > 0 )
+		while
+			swap		( base addr len linelen addr )
+			dup c@		( base addr len linelen addr byte )
+			2 u.r0 space	( base addr len linelen addr | print the byte )
+			1+ swap 1-	( base addr len linelen addr -- base addr len addr+1 linelen-1 )
+		repeat
+		2drop		( base addr len )
+                space
+
+		( print the ascii equivalents )
+		2dup 1- 15 and 1+ ( base addr len addr linelen )
+		begin
+			dup 0>		( while linelen > 0)
+		while
+			swap		( base addr len linelen addr )
+			dup c@		( base addr len linelen addr byte )
+			dup 32 128 within if	( 32 <= c < 128? )
+				emit
+			else
+				drop '.' emit
+			then
+			1+ swap 1-	( base addr len linelen addr -- base addr len addr+1 linelen-1 )
+		repeat
+		2drop		( base addr len )
+		cr
+
+		dup 1- 15 and 1+ ( base addr len linelen )
+		dup		( base addr len linelen linelen )
+		-rot		( base addr linelen len linelen )
+		-		( base addr linelen len-linelen )
+		-rot		( base len-linelen addr linelen )
+		+		( base len-linelen addr+linelen )
+		swap		( base addr-linelen len-linelen )
+	repeat
+
+	2drop			( base | restore stack )
+	base !			( | restore saved base )
+;
+
 ( Print a stack trace by walking up the return stack. )
 
 : print-stack-trace
@@ -389,5 +672,4 @@ aapen-logo
 cr
 s" V 0.01" tell cr
 s" READY" tell cr
-
 quit
