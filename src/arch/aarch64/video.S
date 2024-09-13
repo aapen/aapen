@@ -159,7 +159,7 @@
         mov     x29, sp
 
         ldr     x0, =fb_init_message
-        ldr     x1, =fb_init_message_end-fb_init_message
+        mov     x1, #fb_init_message_len
         bl      _mailbox_send
 
         ldr     x3, =fb_parameters
@@ -527,3 +527,4 @@ fb_init_message:
         .word 0x00ffffff
         .word 0x00000000
 fb_init_message_end:
+        .set fb_init_message_len,fb_init_message_end - fb_init_message

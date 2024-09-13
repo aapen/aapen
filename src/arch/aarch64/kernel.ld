@@ -68,8 +68,6 @@ SECTIONS
         .data :
         {
                 *(.data*)
-                /* fill remaining space with a pattern */
-                =0x77889900;
                 . = ALIGN(PAGE_SIZE);
         } :segment_data
         __data_end_exclusive = .;
