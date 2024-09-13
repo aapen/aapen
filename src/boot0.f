@@ -23,8 +23,6 @@
 : troff 0 echo ! ;
 : tron  1 echo ! ;
 
-0xdeadbeef . 0xffff .
-
 \ The 2... versions of the standard operators work on pairs of stack entries.
 
 : 2dup over over ;
@@ -58,7 +56,7 @@
 : nip ( x y -- y ) swap drop ;
 : tuck ( x y -- y x y ) swap over ;
 : pick ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u )
-	1+		( add one because of 'u' on the stack )
+	1 +		( add one because of 'u' on the stack )
 	8 *		( multiply by the word size )
 	dsp@ +		( add to the stack pointer )
 	@    		( and fetch )
@@ -84,14 +82,10 @@
 : tab '\t' emit ;
 
 ( More standard FORTH words. )
+( TBD define these in assembly later)
 
 : 2* 2 * ;
 : 2/ 2 / ;
-
-( Inc and dec by one CPU word size, 64 bits )
-
-: 8+ 8 + ;
-: 8- 8 - ;
 
 ( negate leaves the negative of a number on the stack. )
 
@@ -387,7 +381,7 @@
 
 : s, ( addr len -- )
   0 ?do
-    dup c@ here @ c! 1 here +! 1+
+    dup c@ here @ c! 1 here +! 1 +
   loop
   drop
 ;
@@ -445,103 +439,6 @@
           '"' parse tell
 	then
 ;
-
-
-( Building up to the key word . It takes the number at the top
-  of the stack and prints it out. First I'm going to implement some lower-level FORTH words:
-	u.r	 u width -- 	which prints an unsigned number, space-padded to a width
-        u.r0     u width --     which prints an unsigned number, zero-padded to a  width
-	u.             u -- 	which prints an unsigned number
-	.r	 n width -- 	which prints a signed number, space-padded to a width.
-)
-
-: u.		( u -- )
-	base @ /mod	( width rem quot )
-	?dup if			( if quotient <> 0 then )
-		recurse		( print the quotient )
-	then
-
-	( print the remainder )
-	dup 10 < if
-		'0'		( decimal digits 0..9 )
-	else
-		10 -		( hex and beyond digits a..z )
-		'a'
-	then
-	+
-	emit
-;
-
-
-( This word returns the width -- in char -- of an unsigned number in the current base )
-
-: uwidth	( u -- width )
-	base @ /	( rem quot )
-	?dup if		( if quotient <> 0 then )
-		recurse 1+	( return 1+recursive call )
-	else
-		1		( return 1 )
-	then
-;
-
-: u.r		( u width -- )
-	swap		( width u )
-	dup		( width u u )
-	uwidth		( width u uwidth )
-	rot		( u uwidth width )
-	swap -		( u width-uwidth )
-	spaces
-	u.
-;
-
-( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
-
-: u.r0 swap dup uwidth rot swap - zeroes u. ;
-: %02x base @ swap hex 2 u.r0 base ! ;
-: %04x base @ swap hex 4 u.r0 base ! ;
-: %08x base @ swap hex 8 u.r0 base ! ;
-: %016x base @ swap hex 16 u.r0 base ! ;
-
-( .R prints a signed number, padded to a certain width.  We can't just print the sign
-  and call U.R because we want the sign to be next to the number, so
-  '-123' instead of '-  123'.)
-
-: .r		( n width -- )
-	swap		( width n )
-	dup 0< if
-		negate		( width u )
-		1		( save a flag to remember that it was negative | width u 1 )
-		swap		( width 1 u )
-		rot		( 1 u width )
-		1-		( 1 u width-1 )
-	else
-		0		( width u 0 )
-		swap		( width 0 u )
-		rot		( 0 u width )
-	then
-	swap		( flag width u )
-	dup		( flag width u u )
-	uwidth		( flag width u uwidth )
-	rot		( flag u uwidth width )
-	swap -		( flag u width-uwidth )
-
-	spaces		( flag u )
-	swap		( u flag )
-
-	if			( was it negative? print the - character )
-		'-' emit
-	then
-
-	u.
-;
-
-( Finally we can define word . in terms of .R, with a trailing space. )
-
-: . 0 .r space ;
-
-( The real U., note the trailing space. )
-
-: u. u. space ;
 
 ( w, appends a 32-bit value to the current compiled word. )
 
@@ -1045,14 +942,6 @@ defprim -rot
   2 		pushpsp-x w,
 ;;
 
-defprim ?dup
-  0 28 		ldr-x[x] w,
-  0 0 		cmp-x# w,
-  ->1f 		beq-# w,
-  0 		pushpsp-x w,
-  1f:
-;;
-
 defprim 1+
   0 		poppsp-x w,
   0 0 1 	add-xx# w,
@@ -1103,14 +992,6 @@ defprim rshift
   1 		pushpsp-x w,
 ;;
 
-defprim <=
-  1 		poppsp-x w,
-  0 		poppsp-x w,
-  0 1 		cmp-xx w,
-  0 zr zr c-gt 	csinc-xxxc w,
-  0 		pushpsp-x w,
-;;
-
 defprim >=
   1 		poppsp-x w,
   0 		poppsp-x w,
@@ -1119,19 +1000,12 @@ defprim >=
   0 		pushpsp-x w,
 ;;
 
-defprim 0=
-  0 		poppsp-x w,
-  0 zr 		cmp-xx w,
-  0 zr zr c-ne 	csinc-xxxc w,
-  0 		pushpsp-x w,
-;;
-
 defprim 0<>
   0 		poppsp-x w,
   0 zr 		cmp-xx w,
   0 zr zr c-eq 	csinc-xxxc w,
   0 		pushpsp-x w,
-;;
+	;;
 
 defprim 0<
   0 		poppsp-x w,
@@ -1168,14 +1042,6 @@ defprim xor
   0 		pushpsp-x w,
 ;;
 
-defprim +!
-  0 		poppsp-x w,
-  1 		poppsp-x w,
-  2 0 		ldr-x[x] w,
-  2 2 1 	add-xxx w,
-  2 0 		str-x[x] w,
-;;
-
 defprim -!
   0 		poppsp-x w,
   1 		poppsp-x w,
@@ -1184,17 +1050,6 @@ defprim -!
   2 0 		str-x[x] w,
 ;;
 
-defprim c!
-  0 		poppsp-x w,
-  1 		poppsp-x w,
-  1 0 		strb-w[x] w,
-;;
-
-defprim c@
-  0 		poppsp-x w,
-  1 0 		ldrb-w[x] w,
-  1 		pushpsp-x w,
-;;
 
 defprim c@c!
   0 28 8 	ldr-x[x#] w,
@@ -1205,19 +1060,6 @@ defprim c@c!
   1 28 		str-x[x] w,
 ;;
 
-defprim cmove
-  0 		poppsp-x w,
-  1 		poppsp-x w,
-  2 		poppsp-x w,
-  0 0 		cmp-x# w,
-  ->2f 		beq-# w,
-  1b:     
-  3 2 1 	ldrb-w[x]# w,
-  3 1 1 	strb-w[x]# w,
-  0 0 1 	subs-xx# w,
-  ->1b 		bgt-# w,
-  2f:
-;;
 
 (
 defprim fence
@@ -1241,6 +1083,103 @@ defprim dcci
 )
 
 ( END ASSEMBLER )
+
+
+( Building up to the key word . It takes the number at the top
+  of the stack and prints it out. First I'm going to implement some lower-level FORTH words:
+	u.r	 u width -- 	which prints an unsigned number, space-padded to a width
+        u.r0     u width --     which prints an unsigned number, zero-padded to a  width
+	u.             u -- 	which prints an unsigned number
+	.r	 n width -- 	which prints a signed number, space-padded to a width.
+)
+
+: u.		( u -- )
+	base @ /mod	( width rem quot )
+	?dup if			( if quotient <> 0 then )
+		recurse		( print the quotient )
+	then
+
+	( print the remainder )
+	dup 10 < if
+		'0'		( decimal digits 0..9 )
+	else
+		10 -		( hex and beyond digits a..z )
+		'a'
+	then
+	+
+	emit
+;
+
+
+( This word returns the width -- in char -- of an unsigned number in the current base )
+
+: uwidth	( u -- width )
+	base @ /	( rem quot )
+	?dup if		( if quotient <> 0 then )
+		recurse 1+	( return 1+recursive call )
+	else
+		1		( return 1 )
+	then
+;
+
+: u.r		( u width -- )
+	swap		( width u )
+	dup		( width u u )
+	uwidth		( width u uwidth )
+	rot		( u uwidth width )
+	swap -		( u width-uwidth )
+	spaces
+	u.
+;
+
+( TODO: refactor duplication in u.r, u.r0 and %02x, %08x )
+
+: u.r0 swap dup uwidth rot swap - zeroes u. ;
+: %02x base @ swap hex 2 u.r0 base ! ;
+: %04x base @ swap hex 4 u.r0 base ! ;
+: %08x base @ swap hex 8 u.r0 base ! ;
+: %016x base @ swap hex 16 u.r0 base ! ;
+
+( .R prints a signed number, padded to a certain width.  We can't just print the sign
+  and call U.R because we want the sign to be next to the number, so
+  '-123' instead of '-  123'.)
+
+: .r		( n width -- )
+	swap		( width n )
+	dup 0< if
+		negate		( width u )
+		1		( save a flag to remember that it was negative | width u 1 )
+		swap		( width 1 u )
+		rot		( 1 u width )
+		1-		( 1 u width-1 )
+	else
+		0		( width u 0 )
+		swap		( width 0 u )
+		rot		( 0 u width )
+	then
+	swap		( flag width u )
+	dup		( flag width u u )
+	uwidth		( flag width u uwidth )
+	rot		( flag u uwidth width )
+	swap -		( flag u width-uwidth )
+
+	spaces		( flag u )
+	swap		( u flag )
+
+	if			( was it negative? print the - character )
+		'-' emit
+	then
+
+	u.
+;
+
+( Finally we can define word . in terms of .R, with a trailing space. )
+
+: . 0 .r space ;
+
+( The real U., note the trailing space. )
+
+: u. u. space ;
 
 
 
