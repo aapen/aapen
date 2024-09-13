@@ -51,6 +51,7 @@ ARCH         = src/arch/aarch64
 OBJS        := $(ARCH)/boot.o $(ARCH)/armforth.o $(ARCH)/bios.o $(ARCH)/exceptions.o $(ARCH)/util.o $(ARCH)/video.o
 
 TARGET	     = aarch64-freestanding-gnu
+CC           = zig cc
 AS 	     = zig cc
 ASFLAGS      = -I src -I include -DBOARD=$(BOARD) -target $(TARGET)
 
