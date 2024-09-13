@@ -1,64 +1,64 @@
-BOARD_FLAVORS   = $(shell echo pi3 pi4)
+BOARD_FLAVORS	= $(shell echo pi3 pi4)
 
 # Change this to set the board flavor used in the emulator.
 # Must be one in the list above.
-BOARD        = pi3
+BOARD		= pi3
 
-EMU_pi3      = raspi3b
-FIRMWARE_pi3 = bcm2710-rpi-3-b.dtb
+EMU_pi3		= raspi3b
+FIRMWARE_pi3	= bcm2710-rpi-3-b.dtb
 
-EMU_pi4      = raspi4b
-FIRMWARE_pi4 = bcm2711-rpi-4-b.dtb
+EMU_pi4		= raspi4b
+FIRMWARE_pi4	= bcm2711-rpi-4-b.dtb
 
-EMUBOARD     = ${EMU_${BOARD}}
-FIRMWARE     = ${FIRMWARE_${BOARD}}
+EMUBOARD	= ${EMU_${BOARD}}
+FIRMWARE	= ${FIRMWARE_${BOARD}}
 
-KERNEL_ELF   = kernel-$(BOARD)
-KERNEL       = $(KERNEL_ELF).img
+KERNEL_ELF	= kernel-$(BOARD)
+KERNEL		= $(KERNEL_ELF).img
 
-CORE_COUNT   = 4
-QEMU_EXEC    = qemu-system-aarch64 -semihosting -smp $(CORE_COUNT)
+CORE_COUNT	= 4
+QEMU_EXEC	= qemu-system-aarch64 -semihosting -smp $(CORE_COUNT)
 
 ifdef SDIMAGE
-  SD_ARGS=-drive if=sd,format=raw,file=$(SDIMAGE)
+  SD_ARGS	= -drive if=sd,format=raw,file=$(SDIMAGE)
 else
-  SD_ARGS=
+  SD_ARGS	=
 endif
 
-QEMU_BOARD_ARGS = -M $(EMUBOARD) -dtb firmware/$(FIRMWARE) $(SD_ARGS)
-QEMU_DEBUG_ARGS = -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd -device usb-mouse -trace 'events=trace_events.txt'
-QEMU_UNIT_TEST_ARGS = -nographic
+QEMU_BOARD_ARGS	= -M $(EMUBOARD) -dtb firmware/$(FIRMWARE) $(SD_ARGS)
+QEMU_DEBUG_ARGS	= -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd -device usb-mouse -trace 'events=trace_events.txt'
 
 # Use this to get USB tracing from the emulator.
-QEMU_NOBUG_ARGS = -serial stdio -device usb-kbd -device usb-mouse -trace 'events=trace_events.txt'
+QEMU_NOBUG_ARGS	= -serial stdio -device usb-kbd -device usb-mouse -trace 'events=trace_events.txt'
 
-OS           = $(shell uname)
+OS		= $(shell uname)
 ifeq ($(OS), Darwin)
-GDB_EXEC     = aarch64-elf-gdb
+TOOLS_PREFIX	= aarch64-elf-
 else
-GDB_EXEC     = aarch64-unknown-linux-gnu-gdb
+TOOLS_PREFIX	= aarch64-unknown-linux-gnu-
 endif
+GDB_EXEC	= $(TOOLS_PREFIX)gdb
 
-GDB_ARGS     = -s lib
-GDB_TARGET_HOST = --ex "target extended-remote :1234"
-GDB_TARGET_DEV  = --ex "target extended-remote :3333"
-
-rwildcard    = $(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+GDB_ARGS	= -s lib
+GDB_TARGET_HOST	= --ex "target extended-remote :1234"
+GDB_TARGET_DEV	= --ex "target extended-remote :3333"
 
 # How to recursively find all files that match a pattern
-SRCS        := $(call rwildcard,src/,*.f)
-ARCH         = src/arch/aarch64
-OBJS        := $(ARCH)/boot.o $(ARCH)/armforth.o $(ARCH)/bios.o $(ARCH)/exceptions.o $(ARCH)/util.o $(ARCH)/video.o
+rwildcard	= $(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
-TARGET	     = aarch64-freestanding-gnu
-AS 	     = zig cc
-ASFLAGS      = -I src -I include -DBOARD=$(BOARD) -target $(TARGET)
+SRCS		:= $(call rwildcard,src/,*.f)
+ARCH		= src/arch/aarch64
+OBJS		:= $(ARCH)/boot.o $(ARCH)/armforth.o $(ARCH)/bios.o $(ARCH)/exceptions.o $(ARCH)/util.o $(ARCH)/video.o
 
-LD	     = zig cc
-LDFLAGS	     = -T $(ARCH)/kernel.ld -target $(TARGET)
+CC		= $(TOOLS_PREFIX)gcc
+AS		= $(TOOLS_PREFIX)as
+ASFLAGS		= -I src -I include -DBOARD=$(BOARD)
 
-OBJCOPY	     = zig objcopy
-OBJFLAGS     = -O binary
+LD		= $(TOOLS_PREFIX)ld
+LDFLAGS		= -T $(ARCH)/kernel.ld
+
+OBJCOPY		= $(TOOLS_PREFIX)objcopy
+OBJFLAGS	= -O binary
 
 .PHONY: kernel_test clean kernels emulate
 
@@ -70,7 +70,7 @@ $(KERNEL): $(KERNEL_ELF)
 $(KERNEL_ELF): $(OBJS) $(ARCH)/kernel.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
-$(ARCH)/armforth.o: $(SRCS)
+$(ARCH)/armforth.o: $(ARCH)/armforth.S $(SRCS)
 
 download_firmware: firmware/COPYING.linux
 
@@ -108,6 +108,4 @@ sdfiles/infloop.bin:
 	echo "0000: 0000 0014" | xxd -r - sdfiles/infloop.bin
 
 clean:
-	@rm -rf .zig-cache
-	@rm -rf zig-out/*
 	@rm -f $(OBJS) $(KERNEL) $(KERNEL_ELF)
