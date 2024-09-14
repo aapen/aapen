@@ -35,7 +35,7 @@ OS		= $(shell uname)
 ifeq ($(OS), Darwin)
 TOOLS_PREFIX	= aarch64-elf-
 else
-TOOLS_PREFIX	= aarch64-unknown-linux-gnu-
+TOOLS_PREFIX	= aarch64-unknown-elf-
 endif
 GDB_EXEC	= $(TOOLS_PREFIX)gdb
 
