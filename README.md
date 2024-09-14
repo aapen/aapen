@@ -42,11 +42,11 @@ Currently supports Raspberry Pi 3b only.
 
 ### One-time host setup for cross-compilation
 
-We are currently using Zig build: 0.13.0
+You will need a GNU CC cross-compilation toolchain for aarch64.
 
-- Linux download: https://ziglang.org/builds/zig-linux-x86_64-0.13.0.tar.xz
-- Mac (on Apple Silicon) download: https://ziglang.org/builds/zig-macos-aarch64-0.13.0.tar.xz
-- Mac (on Intel) download: https://ziglang.org/builds/zig-macos-x86_64-0.13.0.tar.xz
+On Linux, the [Crosstool-NG](https://crosstool-ng.github.io/docs/) project is a good way to get up and running.
+
+On macOS, you can use Homebrew to install `aarch64-elf-gcc` and `aarch64-elf-binutils`.
 
 ### One-time project setup for firmware
 
@@ -269,7 +269,7 @@ Use `stepi` (or `si` for short) to step by assembly instruction or
 
 If you want to use the emmc-/sdcard- forth commands in
 the emulator then you need to specify a path to an
-ISO image when you run make. For example:
+MBR-formatted disk image when you run make. For example:
 
     make SDIMAGE=../ros/2023-12-05-raspios-bookworm-armhf.img
 
@@ -279,10 +279,6 @@ ISO image when you run make. For example:
 If all has gone well, you should have a prompt that looks like:
 
 ```
-forth>>
+>
 ```
 
-Take a look at forth.md for a description of the basic words, that should
-get you started. Or if you like to explore, use `??` to show the whole
-dictionary and `? _word_` to see the stack effect and comment for a single
-word.
