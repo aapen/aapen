@@ -1067,16 +1067,8 @@ name_0: .quad 0
 	PUSHPSP	x0
 	next
 
-	// XOR (a b -- a^b)
-	defcode "qqxor",3,,xor,or
-        POPPSP  x1                      // x1 <- b
-        POPPSP  x0                      // x0 <- a
-	eor	x0, x1, x0
-	PUSHPSP	x0
-	next
-
 	// INVERT (a -- ~a)
-	defcode "invert",6,,invert,xor
+	defcode "invert",6,,invert,or
 	ldr	x0, [PSP]
 	mvn	x0, x0
 	str	x0, [PSP]
