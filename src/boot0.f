@@ -540,6 +540,12 @@
   swap set-rt			( instruction )
 ;
 
+: rn-rm-im6-instruction ( rn rm im6 opcode -- instruction )
+  swap set-im6
+  swap set-rm
+  swap set-rn
+;
+
 : rt-rn-im9-instruction ( rt rn im9 opcode -- instruction )
   swap set-im9			( rt rn instruction )
   swap set-rn			( rt instuction )
@@ -708,12 +714,13 @@
 : subs-xx# ( rt rn im12 -- instruction ) 0xf1000000 rt-rn-im12-instruction ;
 : subs-ww# ( rt rn im12 -- instruction ) subs-xx# ->w ;
 
-: cmp-x#  ( rn im12 -- instruction ) 0x1f  rot rot subs-xx# ;
-: cmp-w#  ( rt im12 -- instruction )   cmp-x# ->w ;
+: cmp-x#  ( rn im12 -- instruction ) 0x1f rot rot subs-xx# ;
+: cmp-w#  ( rt im12 -- instruction ) cmp-x# ->w ;
 
 : cmp-xx  ( rm rn -- instruction  )
-  0x1f rot rot
-  0xeb000000 
+  0
+  0xeb000000
+  rn-rm-im6-instruction
 ;
 
 : madd-xxxx ( rt rm rn ra -- instruction ) 0x9b000000 rt-rn-rm-ra-instruction ;
@@ -772,9 +779,7 @@
 : ble-# ( im19 -- instruction ) c-le b-cond ;
 : bge-# ( im19 -- instruction ) c-ge b-cond ;
 
-
-: csinc-xxxc ( rt rn rm cond-- instruction )
-  0x9a800400   ( rt rn rm cond opcode  )
+: csop-xxxc ( rt rn rm cond opcode -- instruction )
   rot        ( rt rn cond opcode rm  )
   set-rm     ( rt rn cond opcode  )
   rot        ( rt cond opcode rn  )
@@ -785,6 +790,9 @@
   0b1111 and
   0d12 lshift or
 ;
+
+: csinc-xxxc ( rt rn rm cond-- instruction ) 0x9a800400 csop-xxxc ;
+: csel-xxxc ( rt rn rm cond -- instruction ) 0x9a800000 csop-xxxc ;
 
 ( System register instructions )
 
@@ -993,7 +1001,7 @@ defprim 0<>
   0 zr 		cmp-xx w,
   0 zr zr c-eq 	csinc-xxxc w,
   0 		pushpsp-x w,
-	;;
+;;
 
 defprim 0<
   0 		poppsp-x w,
