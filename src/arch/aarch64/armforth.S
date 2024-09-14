@@ -1465,36 +1465,12 @@ var_to_in:
         embed   "test.f","test",4,test,mailbox
         embed   "assembler.f","assembler",9,assembler,test
         embed   "sdcard.f","sdcard",6,sdcard,assembler
-        embed   "direct_thread.f","direct-thread",13,direct_thread,sdcard
 
-	/* This is the instruction template for all of our direct word calls. */
-
-test_template:
-	add	x3, x10, #42
-	add	w3, w10, #42
-	sub	x3, x10, #42
-	sub	w3, w10, #42
-
-call_template:
-	adr     x30,#24 	// 0:  Load return address
-	adr	x17,#12		// 4:  Load addr of f address
-	ldr	x17,[x17]     	// 8:  Load f address
-	br	x17          	// 12: Branch to f
-call_template_end:
-
-ret_template:
-	next
-ret_template_end:
-	
 	/* Plain old assembly language function. */
-	defconst "say-msg",7,,__say_msg,direct_thread,_saymsg
+	defconst "say-msg",7,,__say_msg,sdcard,_saymsg
 
 	/* Instruction templates, used by compiler. */
 
-	defconst "call-template",13,,__call_template,__say_msg,call_template
-	defconst "call-template-len",17,,__call_template_len,__call_template,(call_template_end-call_template)/4
-	defconst "ret-template",12,,__ret_template,__call_template_len,ret_template
-	defconst "ret-template-len",16,,__ret_template_len,__ret_template,(ret_template_end-ret_template)/4
 /*
 	RETURN STACK ----------------------------------------------------------------------
 
@@ -1502,7 +1478,7 @@ ret_template_end:
 	the top of the return stack.
 */
 
-	defcode ">r",2,,tor,__ret_template_len
+	defcode ">r",2,,tor,__say_msg
 	POPPSP	x0                      // pop parameter stack into x0
 	PUSHRSP	x0                      // and push it onto the return stack
 	next
