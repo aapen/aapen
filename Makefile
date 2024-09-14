@@ -13,7 +13,7 @@ FIRMWARE_pi4	= bcm2711-rpi-4-b.dtb
 EMUBOARD	= ${EMU_${BOARD}}
 FIRMWARE	= ${FIRMWARE_${BOARD}}
 
-KERNEL_ELF	= kernel-$(BOARD)
+KERNEL_ELF	= build/kernel-$(BOARD)
 KERNEL		= $(KERNEL_ELF).img
 
 CORE_COUNT	= 4
@@ -48,7 +48,9 @@ rwildcard	= $(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2
 
 SRCS		:= $(call rwildcard,src/,*.f)
 ARCH		= src/arch/aarch64
-OBJS		:= $(ARCH)/boot.o $(ARCH)/armforth.o $(ARCH)/bios.o $(ARCH)/exceptions.o $(ARCH)/util.o $(ARCH)/video.o
+S_SRCS          := $(ARCH)/boot.o $(ARCH)/armforth.o $(ARCH)/bios.o $(ARCH)/exceptions.o $(ARCH)/util.o $(ARCH)/video.o
+
+OBJS		:= $(patsubst %.S,%.o,$(patsubst src/%,build/%,$(S_SRCS)))
 
 CC		= $(TOOLS_PREFIX)gcc
 AS		= $(TOOLS_PREFIX)as
@@ -64,13 +66,19 @@ OBJFLAGS	= -O binary
 
 all: download_firmware emulate
 
-$(KERNEL): $(KERNEL_ELF)
+init::
+	@mkdir -p $(dir $(OBJS))
+
+build/%.o: src/%.S
+	$(CC) -c $(ASFLAGS) -o $@ $<
+
+$(KERNEL): init $(KERNEL_ELF)
 	$(OBJCOPY) $(OBJFLAGS) $(KERNEL_ELF) $@
 
-$(KERNEL_ELF): $(OBJS) $(ARCH)/kernel.ld
+$(KERNEL_ELF): init $(OBJS) $(ARCH)/kernel.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
-$(ARCH)/armforth.o: $(ARCH)/armforth.S $(SRCS)
+$(ARCH)/armforth.o: $(OBJS)
 
 download_firmware: firmware/COPYING.linux
 
@@ -102,10 +110,12 @@ else
 	cp sdfiles/config.txt $(SDCARD_PATH)
 endif
 
+
+
 nuke:	clean all
 
 sdfiles/infloop.bin:
 	echo "0000: 0000 0014" | xxd -r - sdfiles/infloop.bin
 
 clean:
-	@rm -f $(OBJS) $(KERNEL) $(KERNEL_ELF)
+	@rm -rf build
