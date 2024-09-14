@@ -711,6 +711,7 @@
 : sub-ww# ( rt rn im12 -- instruction ) sub-xx# ->w ;
 : sub-www ( rt rm rn -- instruction )  sub-xxx ->w ;
 
+: subs-xxx ( rt rn rm   -- instruction ) 0xeb200000 rt-rn-rm-instruction ;
 : subs-xx# ( rt rn im12 -- instruction ) 0xf1000000 rt-rn-im12-instruction ;
 : subs-ww# ( rt rn im12 -- instruction ) subs-xx# ->w ;
 
@@ -1049,6 +1050,35 @@ defprim c@c!
   1 28 		str-x[x] w,
 ;;
 
+( c-addr1 u1 c-addr2 u2 -- n )
+defprim compare
+	0	poppsp-x   w,
+	1	poppsp-x   w,
+	2	poppsp-x   w,
+	3	poppsp-x   w,
+        4 0	mov-x#     w,
+1b:
+        2 0     cmp-x#     w,
+ 2 0 2 c-eq     csel-xxxc  w,
+        0 0     cmp-x#     w,
+ 0 2 0 c-eq     csel-xxxc  w,
+     0 ->3f     cbz-x#     w,
+      5 3 1     ldrb-w[x]# w,
+      6 1 1     ldrb-w[x]# w,
+      7 5 6     subs-xxx   w,
+       ->2f     bne-#      w,
+      2 2 1     sub-xx#    w,
+      0 0 1     sub-xx#    w,
+       ->1b     b-#        w,
+2f:
+        1 1     mov-x#     w,
+        2 0     mov-x#     w,
+      2 2 1     sub-xx#    w,
+4 zr 1 c-gt     csel-xxxc  w,
+ 4 4 2 c-lt     csel-xxxc  w,
+3f:
+          4     pushpsp-x  w,
+;;
 
 (
 defprim fence
