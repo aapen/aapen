@@ -12,3 +12,4 @@ zig-out
 /actual_output
 /.zig-cache/
 /kernel-pi3
+/build/
