@@ -26,10 +26,10 @@ else
 endif
 
 QEMU_BOARD_ARGS	= -M $(EMUBOARD) -dtb firmware/$(FIRMWARE) $(SD_ARGS)
-QEMU_DEBUG_ARGS	= -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd -device usb-mouse -trace 'events=trace_events.txt'
+QEMU_DEBUG_ARGS	= -s -S -serial pty -monitor telnet:localhost:1235,server,nowait -device usb-kbd -device usb-mouse -trace 'events=etc/trace_events.txt'
 
 # Use this to get USB tracing from the emulator.
-QEMU_NOBUG_ARGS	= -serial stdio -device usb-kbd -device usb-mouse -trace 'events=trace_events.txt'
+QEMU_NOBUG_ARGS	= -serial stdio -device usb-kbd -device usb-mouse -trace 'events=etc/trace_events.txt'
 
 OS		= $(shell uname)
 ifeq ($(OS), Darwin)
@@ -109,8 +109,6 @@ else
 	cp $(KERNEL) $(SDCARD_PATH)
 	cp sdfiles/config.txt $(SDCARD_PATH)
 endif
-
-
 
 nuke:	clean all
 
