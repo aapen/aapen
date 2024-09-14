@@ -95,7 +95,7 @@
 
 : true  1 ;
 : false 0 ;
-: not   0 = ;
+: not   0= ;
 
 ( literal takes whatever is on the stack and compiles lit <foo> )
 
@@ -966,12 +966,6 @@ defprim 4-
   0 		pushpsp-x w,
 ;;
 
-defprim 8-
-  0 		poppsp-x w,
-  0 0 8 	sub-xx# w,
-  0 		pushpsp-x w,
-;;
-
 defprim lshift
   0 		poppsp-x w,
   1 		poppsp-x w,
@@ -1005,13 +999,6 @@ defprim 0<
   0 		poppsp-x w,
   0 zr 		cmp-xx w,
   0 zr zr c-ge 	csinc-xxxc w,
-  0 		pushpsp-x w,
-;;
-
-defprim 0=
-  0 		poppsp-x w,
-  0 zr 		cmp-xx w,
-  0 zr zr c-ne 	csinc-xxxc w,
   0 		pushpsp-x w,
 ;;
 

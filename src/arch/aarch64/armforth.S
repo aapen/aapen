@@ -914,44 +914,20 @@ name_0: .quad 0
         PUSHPSP x0
 1:      next
 
-//        defcode "qq1+",2,,incr,qdup
-//        POPPSP  x0
-//        add     x0, x0, #1
-//        PUSHPSP x0
-//        next
-//
-//        defcode "qq1-",2,,decr,incr
-//        POPPSP  x0
-//        sub     x0, x0, #1
-//        PUSHPSP x0
-//        next
-//
-//        defcode "qq4+",2,,incr4,decr
-//        POPPSP  x0
-//        add     x0,x0,#4
-//        PUSHPSP x0
-//        next
-//
-//        defcode "qq4-",2,,decr4,incr4
-//        POPPSP  x0
-//        sub     x0,x0,#4
-//        PUSHPSP x0
-//        next
-
         defcode "8+",2,,incr8,qdup
         POPPSP  x0
         add     x0,x0,#8
         PUSHPSP x0
         next
 
-        defcode "qq8-",2,,decr8,incr8
+	defcode "8-",2,,decr8,incr8
         POPPSP  x0
         sub     x0,x0,#8
         PUSHPSP x0
         next
 
 	// + ( a b -- a+b )
-	defcode "+",1,,add,incr8
+	defcode "+",1,,add,decr8
         POPPSP  x1
         POPPSP  x0
 	add	x0, x1, x0
@@ -1060,62 +1036,20 @@ name_0: .quad 0
 	PUSHPSP	x0
 	next
 
-	// >= (a b -- a>=b)
-	defcode "qq>=",2,,ge,le
-        POPPSP  x1                      // x1 <- b
-        POPPSP  x0                      // x0 <- a
-	cmp	x0, x1                  // test a vs b
-        csinc   x0, xzr, xzr, lt        // x0 <- (a < b) ? 0 : 1
-	PUSHPSP	x0
-	next
+        // 0= (a -- a == 0)
+        defcode "0=",2,,zeroeq,le
+        POPPSP  x0
+        cmp     x0, xzr
+        csinc   x0, xzr, xzr, ne
+        PUSHPSP x0
+        next
 
-//        // 0= (a -- a == 0)
-//        defcode "0=",2,,zeroeq,le
-//        POPPSP  x0
-//        cmp     x0, xzr
-//        csinc   x0, xzr, xzr, ne
-//        PUSHPSP x0
-//        next
-
-//        // 0<> (a -- a <> 0)
-//        defcode "qq-0<>",3,,zerone,zeroeq
-//        POPPSP  x0
-//        cmp     x0, xzr
-//        csinc   x0, xzr, xzr, eq
-//        PUSHPSP x0
-//        next
-//
-//        // 0< (a -- a<0)
-//        defcode "0qq<",2,,zlt,zerone
-//        POPPSP  x0
-//        cmp     x0, xzr
-//        csinc   x0, xzr, xzr, ge
-//        PUSHPSP x0
-//        next
-//
-        // 0> (a -- a>0)
-        defcode "qq0>",2,,zgt,le
+        defcode "0>",2,,zgt,zeroeq
         POPPSP  x0
         cmp     x0, xzr
         csinc   x0, xzr, xzr, le
         PUSHPSP x0
         next
-
-//        // 0<= (a -- a<=0)
-//        defcode "qq0<=",3,,zle,zgt
-//        POPPSP  x0
-//        cmp     x0, xzr
-//        csinc   x0, xzr, xzr, gt
-//        PUSHPSP x0
-//        next
-//
-//        // 0>= (a -- a>=0)
-//        defcode "qq0>=",3,,zge,zle
-//        POPPSP  x0
-//        cmp     x0, xzr
-//        csinc   x0, xzr, xzr, lt
-//        PUSHPSP x0
-//        next
 
 	// AND (a b -- a&b)
 	defcode "and",3,,and,zgt
