@@ -43,13 +43,11 @@ GDB_ARGS	= -s lib
 GDB_TARGET_HOST	= --ex "target extended-remote :1234"
 GDB_TARGET_DEV	= --ex "target extended-remote :3333"
 
-# How to recursively find all files that match a pattern
+# Recursively find all files that match a pattern
 rwildcard	= $(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
-SRCS		:= $(call rwildcard,src/,*.f)
 ARCH		= src/arch/aarch64
-S_SRCS          := $(ARCH)/boot.o $(ARCH)/armforth.o $(ARCH)/bios.o $(ARCH)/exceptions.o $(ARCH)/util.o $(ARCH)/video.o
-
+S_SRCS          := $(call rwildcard,src/,*.S)
 OBJS		:= $(patsubst %.S,%.o,$(patsubst src/%,build/%,$(S_SRCS)))
 
 CC		= $(TOOLS_PREFIX)gcc
@@ -67,7 +65,9 @@ OBJFLAGS	= -O binary
 all: download_firmware emulate
 
 init::
-	@mkdir -p $(dir $(OBJS))
+	# A side effect of sort is the it deletes duplicates,
+	# which is why we use it here.
+	mkdir -p $(sort $(dir $(OBJS)))
 
 build/%.o: src/%.S
 	$(CC) -c $(ASFLAGS) -o $@ $<
@@ -118,4 +118,4 @@ sdfiles/infloop.bin:
 	echo "0000: 0000 0014" | xxd -r - sdfiles/infloop.bin
 
 clean:
-	@rm -rf build
+	rm -rf build
