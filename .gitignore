@@ -10,3 +10,4 @@ build
 .gdb_history
 /actual_output
 /kernel-pi3
+/build/

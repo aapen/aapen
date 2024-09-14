@@ -171,28 +171,30 @@ Memory:
 ** DONE Write characters to the screen
 ** DONE Echo typed characters to the screen
 ** DONE Make panics write to the screen
+* DONE Milestone: Get Zig out of the kernel and build
 * Milestone: Up and running on the 4
+** TODO Boot on RPi4
 ** TODO Read from UART on RPi4
 * Milestone: Up and running on the 400
 ** TODO Initialize video system on RPi 400
 ** TODO Clear screen on RPi 400
 * Milestone: USB keyboard working
-** DONE Write DWC OTG USB driver for RPi3
-** DONE Read from USB keyboard input under QEMU
-** NEXT Read from USB on RPi3 hardware
+** TODO Write DWC OTG USB driver for RPi3
+** TODO Read from USB keyboard input under QEMU
+** TODO Read from USB on RPi3 hardware
 ** TODO Write PCI driver for RPi4
 ** TODO Write xHCI driver for RPi4 
 ** TODO Read from USB on RPi4 hardware
 ** TODO Read from USB keyboard on RPi 400
 * Milestone: Better video performance
-** DONE Enable DMA for video blitting
-** DONE Scroll the window instead of wrapping
+** TODO Enable DMA for video blitting
+** TODO Scroll the window instead of wrapping
 * Milestone: Interact with the graphics
 ** TODO select-screen ( n — ) switch to the nth frame buffer screen
-** DONE blit (sx sy xh hw dx dy --) copy a rectangle from one part of the screen to another
-** DONE fill (l t r b color  --) fill a rectangle
-** DONE line (x y x y color --) draw a line
-** DONE text (str x y —) draw text at the given location
+** TODO blit (sx sy xh hw dx dy --) copy a rectangle from one part of the screen to another
+** TODO fill (l t r b color  --) fill a rectangle
+** TODO line (x y x y color --) draw a line
+** TODO text (str x y —) draw text at the given location
 ** TODO some palette defining or selecting words?
 * Other references
 ** Understanding the ARM ecosystem

@@ -540,6 +540,12 @@
   swap set-rt			( instruction )
 ;
 
+: rn-rm-im6-instruction ( rn rm im6 opcode -- instruction )
+  swap set-im6
+  swap set-rm
+  swap set-rn
+;
+
 : rt-rn-im9-instruction ( rt rn im9 opcode -- instruction )
   swap set-im9			( rt rn instruction )
   swap set-rn			( rt instuction )
@@ -705,15 +711,17 @@
 : sub-ww# ( rt rn im12 -- instruction ) sub-xx# ->w ;
 : sub-www ( rt rm rn -- instruction )  sub-xxx ->w ;
 
+: subs-xxx ( rt rn rm   -- instruction ) 0xeb200000 rt-rn-rm-instruction ;
 : subs-xx# ( rt rn im12 -- instruction ) 0xf1000000 rt-rn-im12-instruction ;
 : subs-ww# ( rt rn im12 -- instruction ) subs-xx# ->w ;
 
-: cmp-x#  ( rn im12 -- instruction ) 0x1f  rot rot subs-xx# ;
-: cmp-w#  ( rt im12 -- instruction )   cmp-x# ->w ;
+: cmp-x#  ( rn im12 -- instruction ) 0x1f rot rot subs-xx# ;
+: cmp-w#  ( rt im12 -- instruction ) cmp-x# ->w ;
 
 : cmp-xx  ( rm rn -- instruction  )
-  0x1f rot rot
-  0xeb000000 
+  0
+  0xeb000000
+  rn-rm-im6-instruction
 ;
 
 : madd-xxxx ( rt rm rn ra -- instruction ) 0x9b000000 rt-rn-rm-ra-instruction ;
@@ -772,9 +780,7 @@
 : ble-# ( im19 -- instruction ) c-le b-cond ;
 : bge-# ( im19 -- instruction ) c-ge b-cond ;
 
-
-: csinc-xxxc ( rt rn rm cond-- instruction )
-  0x9a800400   ( rt rn rm cond opcode  )
+: csop-xxxc ( rt rn rm cond opcode -- instruction )
   rot        ( rt rn cond opcode rm  )
   set-rm     ( rt rn cond opcode  )
   rot        ( rt cond opcode rn  )
@@ -785,6 +791,9 @@
   0b1111 and
   0d12 lshift or
 ;
+
+: csinc-xxxc ( rt rn rm cond-- instruction ) 0x9a800400 csop-xxxc ;
+: csel-xxxc ( rt rn rm cond -- instruction ) 0x9a800000 csop-xxxc ;
 
 ( System register instructions )
 
@@ -993,7 +1002,7 @@ defprim 0<>
   0 zr 		cmp-xx w,
   0 zr zr c-eq 	csinc-xxxc w,
   0 		pushpsp-x w,
-	;;
+;;
 
 defprim 0<
   0 		poppsp-x w,
@@ -1041,6 +1050,35 @@ defprim c@c!
   1 28 		str-x[x] w,
 ;;
 
+( c-addr1 u1 c-addr2 u2 -- n )
+defprim compare
+	0	poppsp-x   w,
+	1	poppsp-x   w,
+	2	poppsp-x   w,
+	3	poppsp-x   w,
+        4 0	mov-x#     w,
+1b:
+        2 0     cmp-x#     w,
+ 2 0 2 c-eq     csel-xxxc  w,
+        0 0     cmp-x#     w,
+ 0 2 0 c-eq     csel-xxxc  w,
+     0 ->3f     cbz-x#     w,
+      5 3 1     ldrb-w[x]# w,
+      6 1 1     ldrb-w[x]# w,
+      7 5 6     subs-xxx   w,
+       ->2f     bne-#      w,
+      2 2 1     sub-xx#    w,
+      0 0 1     sub-xx#    w,
+       ->1b     b-#        w,
+2f:
+        1 1     mov-x#     w,
+        2 0     mov-x#     w,
+      2 2 1     sub-xx#    w,
+4 zr 1 c-gt     csel-xxxc  w,
+ 4 4 2 c-lt     csel-xxxc  w,
+3f:
+          4     pushpsp-x  w,
+;;
 
 (
 defprim fence
