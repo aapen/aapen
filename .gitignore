@@ -6,9 +6,7 @@
 *.img
 a.out
 firmware/*
-zig-cache
-zig-out
+build
 .gdb_history
 /actual_output
-/.zig-cache/
 /kernel-pi3

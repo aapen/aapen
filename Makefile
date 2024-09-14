@@ -50,6 +50,8 @@ ARCH		= src/arch/aarch64
 S_SRCS          := $(call rwildcard,src/,*.S)
 OBJS		:= $(patsubst %.S,%.o,$(patsubst src/%,build/%,$(S_SRCS)))
 
+F_SRCS          := $(call rwildcard,src/,*.f)
+
 CC		= $(TOOLS_PREFIX)gcc
 AS		= $(TOOLS_PREFIX)as
 ASFLAGS		= -I src -I include -DBOARD=$(BOARD)
@@ -65,12 +67,12 @@ OBJFLAGS	= -O binary
 all: download_firmware emulate
 
 init::
-	# A side effect of sort is the it deletes duplicates,
-	# which is why we use it here.
 	mkdir -p $(sort $(dir $(OBJS)))
 
 build/%.o: src/%.S
 	$(CC) -c $(ASFLAGS) -o $@ $<
+
+build/arch/aarch64/armforth.o: $(F_SRCS) 
 
 $(KERNEL): init $(KERNEL_ELF)
 	$(OBJCOPY) $(OBJFLAGS) $(KERNEL_ELF) $@
@@ -78,7 +80,6 @@ $(KERNEL): init $(KERNEL_ELF)
 $(KERNEL_ELF): init $(OBJS) $(ARCH)/kernel.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
-$(ARCH)/armforth.o: $(OBJS)
 
 download_firmware: firmware/COPYING.linux
 
