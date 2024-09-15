@@ -13,7 +13,7 @@ FIRMWARE_pi4	= bcm2711-rpi-4-b.dtb
 EMUBOARD	= ${EMU_${BOARD}}
 FIRMWARE	= ${FIRMWARE_${BOARD}}
 
-KERNEL_ELF	= build/kernel-$(BOARD)
+KERNEL_ELF	= $(BUILD_DIR)/kernel-$(BOARD)
 KERNEL		= $(KERNEL_ELF).img
 
 CORE_COUNT	= 4
@@ -46,18 +46,20 @@ GDB_TARGET_DEV	= --ex "target extended-remote :3333"
 # Recursively find all files that match a pattern
 rwildcard	= $(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
-ARCH		= src/arch/aarch64
-S_SRCS          := $(call rwildcard,src/,*.S)
-OBJS		:= $(patsubst %.S,%.o,$(patsubst src/%,build/%,$(S_SRCS)))
+SRC_DIR		= src
+BUILD_DIR	= build
 
-F_SRCS          := $(call rwildcard,src/,*.f)
+S_SRCS          := $(call rwildcard,$(SRC_DIR)/,*.S)
+OBJS		:= $(patsubst %.S,%.o,$(patsubst src/%,$(BUILD_DIR)/%,$(S_SRCS)))
+
+F_SRCS          := $(call rwildcard,$(SRC_DIR)/,*.f)
 
 CC		= $(TOOLS_PREFIX)gcc
 AS		= $(TOOLS_PREFIX)as
-ASFLAGS		= -I src -I include -DBOARD=$(BOARD)
+ASFLAGS		= -I $(SRC_DIR) -I include -DBOARD=$(BOARD)
 
 LD		= $(TOOLS_PREFIX)ld
-LDFLAGS		= -T $(ARCH)/kernel.ld
+LDFLAGS		= -T $(SRC_DIR)/kernel.ld
 
 OBJCOPY		= $(TOOLS_PREFIX)objcopy
 OBJFLAGS	= -O binary
@@ -69,15 +71,15 @@ all: download_firmware emulate
 init::
 	mkdir -p $(sort $(dir $(OBJS)))
 
-build/%.o: src/%.S
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.S
 	$(CC) -c $(ASFLAGS) -o $@ $<
 
-build/arch/aarch64/armforth.o: $(F_SRCS) 
+$(BUILD_DIR)/armforth.o: $(F_SRCS) 
 
 $(KERNEL): init $(KERNEL_ELF)
 	$(OBJCOPY) $(OBJFLAGS) $(KERNEL_ELF) $@
 
-$(KERNEL_ELF): init $(OBJS) $(ARCH)/kernel.ld
+$(KERNEL_ELF): init $(OBJS) $(SRC_DIR)/kernel.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
 
@@ -117,4 +119,4 @@ sdfiles/infloop.bin:
 	echo "0000: 0000 0014" | xxd -r - sdfiles/infloop.bin
 
 clean:
-	rm -rf build
+	rm -rf $(BUILD_DIR)
