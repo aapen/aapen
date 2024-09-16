@@ -27,6 +27,8 @@
 
 : 2dup over over ;
 : 2drop drop drop ;
+: 2@ dup 8+ @ swap @ ;
+: 2! dup 8+ rot rot ! ! ;
 
 \ FORTH allows ( ... ) as comments within function definitions.  This works by having 
 \ an immediate word called ( which just drops input characters until it hits 

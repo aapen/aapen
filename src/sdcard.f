@@ -1,56 +1,25 @@
 base @ value sd-old-base
 decimal
 
-peripherals  0x200000 + constant gpio-base
-gpio-base         0x0 + constant gpio-fsel0
-gpio-base         0x4 + constant gpio-fsel1
-gpio-base         0x8 + constant gpio-fsel2
-gpio-base         0xc + constant gpio-fsel3
-gpio-base        0x10 + constant gpio-fsel4
-gpio-base        0x14 + constant gpio-fsel5
-gpio-base        0x1c + constant gpio-set0
-gpio-base        0x20 + constant gpio-set1
-gpio-base        0x28 + constant gpio-clr0
-gpio-base        0x2c + constant gpio-clr1
-gpio-base        0x34 + constant gpio-lev0
-gpio-base        0x38 + constant gpio-lev1
-gpio-base        0x40 + constant gpio-eds0
-gpio-base        0x44 + constant gpio-eds1
-gpio-base        0x4c + constant gpio-ren0
-gpio-base        0x50 + constant gpio-ren1
-gpio-base        0x58 + constant gpio-fen0
-gpio-base        0x5c + constant gpio-fen1
-gpio-base        0x64 + constant gpio-hen0
-gpio-base        0x68 + constant gpio-hen1
-gpio-base        0x70 + constant gpio-len0
-gpio-base        0x74 + constant gpio-len1
-gpio-base        0x7c + constant gpio-paren0
-gpio-base        0x80 + constant gpio-paren1
-gpio-base        0x88 + constant gpio-afen0
-gpio-base        0x8c + constant gpio-afen1
-gpio-base        0x94 + constant gpio-pud
-gpio-base        0x98 + constant gpio-pudclk0
-gpio-base        0x9c + constant gpio-pudclk1
+peripherals  0x200000 +
+reg gpio-fsel0  reg gpio-fsel1   reg  gpio-fsel2 reg gpio-fsel3 reg gpio-fsel4 reg gpio-fsel5 res0
+reg gpio-set0   reg gpio-set1    res0
+reg gpio-clr0   reg gpio-clr1    res0 res0
+reg gpio-lev0   reg gpio-lev1    res0
+reg gpio-eds0   reg gpio-eds1    res0
+reg gpio-ren0   reg gpio-ren1    res0
+reg gpio-fen0   reg gpio-fen1    res0
+reg gpio-hen0   reg gpio-hen1    res0
+reg gpio-len0   reg gpio-len1    res0
+reg gpio-paren0 reg gpio-paren1  res0
+reg gpio-afen0  reg gpio-afen1   res0
+reg gpio-pud    reg gpio-pudclk0 reg  gpio-pudclk1
+drop
 
-peripherals  0x300000 + constant sd-base
-sd-base           0x0 + constant sd-arg2
-sd-base           0x4 + constant sd-blksizecnt
-sd-base           0x8 + constant sd-arg1
-sd-base           0xc + constant sd-cmdtm
-sd-base          0x10 + constant sd-resp0
-sd-base          0x14 + constant sd-resp1
-sd-base          0x18 + constant sd-resp2
-sd-base          0x1c + constant sd-resp3
-sd-base          0x20 + constant sd-data
-sd-base          0x24 + constant sd-status
-sd-base          0x28 + constant sd-control0
-sd-base          0x2c + constant sd-control1
-sd-base          0x30 + constant sd-irpt
-sd-base          0x34 + constant sd-irpt-mask
-sd-base          0x38 + constant sd-irpt-en
-sd-base          0x3c + constant sd-control2
-sd-base          0x88 + constant sd-tune-step
-sd-base          0xfc + constant sd-slotisr-ver
+peripherals  0x300000 +
+reg sd-arg2 reg sd-blksizecnt reg sd-arg1 reg sd-cmdtm reg sd-resp0 reg sd-resp1 reg sd-resp2 reg sd-resp3 reg sd-data reg sd-status reg sd-control0 reg sd-control1 reg sd-irpt reg sd-irpt-mask reg sd-irpt-en reg sd-control2 drop
+sd-arg2 0x88 + reg sd-tune-step drop
+sd-arg2 0xfc + reg sd-slotisr-ver drop
 
 1 32 lshift 1- constant ~0
 
@@ -259,12 +228,14 @@ variable sdcard.bus-width
 : write-ready? 0x00000010 await-interrupt ;
 : read-ready?  0x00000020 await-interrupt ;
 
+: rpeek rsp@ @ ;
+
 ( inhibit -- )
 : not-busy?
   >r
   1000000 ticks +
   begin
-    sd-status w@  rsp@ @ and      ( indicated inhibit bit )
+    sd-status w@ rpeek and         ( indicated inhibit bit )
     sd-irpt   w@ 0x17f8000 and not ( any error interrupt )
     and
   while
@@ -574,6 +545,7 @@ variable sdcard.bus-width
 
 : h@ dup c@ swap 1+ c@ 8 lshift or ;
 
+( hex print value at addr and step addr )
 : c.@+ ( a -- a+1 ) dup c@ %02x  1 + ;
 : h.@+ ( a -- a+2 ) dup h@ %04x  2 + ;
 : w.@+ ( a -- a+4 ) dup w@ %08x  4 + ;
@@ -655,6 +627,8 @@ variable sdcard.bus-width
 
 ( a-buf a-card -- )
 : sd-read-block
+  2dup ." reading block at " .x ." into memory at " .x cr
+
   0x02 not-busy?
 
   ( HC uses addr / 512, others just addr )
@@ -669,14 +643,14 @@ variable sdcard.bus-width
   dup 0> if ." expected " . ." more bytes " cr efail throw else drop then
 ;
 
-: blocks sdcard.block-size @ * + ;
+: blocks  sdcard.block-size @ * ;
+: blocks+ blocks + ;
 
 ( a-buf a-card nblks -- a-buf' a-card' )
 : sd-read-blocks
   0 do
-    over i blocks
-    over i blocks
-    .s
+    over i blocks+
+    over i blocks+
     sd-read-block
   loop
   2drop
@@ -686,46 +660,42 @@ variable sdcard.bus-width
 	FILE SYSTEM INTERFACE ----------------------------------------------------------------
 )
 
-0 value drive
-0 value dir
-16 cells allot constant file-descriptors
-
 (
         PARTITION TABLE ----------------------------------------------------------------------
 )
 
-( reserve space for reading blocks )
-128 cells allot constant sdbuf
+: bs?  scratch dup   c@ 0xeb = swap 1+ c@ 0xe9 = or ;
+: mbr? scratch 508 + w@ 0xaa550000 = ;
+: gpt? scratch 512 +  @ 0x00005452415020494645 = ;
+
+0
+1 +field -.status
+1 +field -.head-start
+2 +field -.cyl-start
+1 +field -.type
+1 +field -.head-end
+2 +field -.cyl-end
+4 +field -.sector
+4 +field -.sectors
+constant ptentry%
 
 ( reserve space to hold partition table )
-16 cells allot constant partitions
-0 value active-partition
-
-: part[] 16 * partitions + ;
-
-: bs?  sdbuf dup c@ 0xeb = swap 1+ c@ 0xe9 = or ;
-: mbr? sdbuf 508 + w@ 0xaa550000 = ;
-: gpt? sdbuf 512 +  @ 0x00005452415020494645 = ;
-
-: ppart-bs ;
-: mount-bs ;
+ptentry% 1 cells / 4 * array ptable drop
 
 ( n -- b )
-: part-active? part[] c@ 0x80 = ;
+: active? ptable -.status  c@ 0x80 = ;
+: fat?    ptable -.type    c@ 0x0b = ;
+: sector  ptable -.sector  h@ ;
+: sectors ptable -.sectors h@ ;
+
+2 cells allot constant mounted
 
 ( n -- )
-: part-info
-  base @ >r hex
-  part[]
-  c.@+ space                            ( status )
-  c.@+ space                            ( head start )
-  h.@+ space                            ( cyl & sect start )
-  c.@+ space                            ( part type )
-  c.@+ space                            ( head end )
-  h.@+ space                            ( cyl & sect end )
-  w.@+ space                            ( first sector )
-  w.@+ space                            ( sectors total )
-  r> base !
+: .ptentry
+  dup . space
+  ptable
+  c.@+ space c.@+ space h.@+ space c.@+ space c.@+ space h.@+ space w.@+ space w.@+ cr
+  drop
 ;
 
 ( a -- )
@@ -734,26 +704,92 @@ variable sdcard.bus-width
   ." MBR partition table" cr
   ." # A? HS CSTR TP HE CEND FRSTSECT TOTLSECT" cr
   4 0 do
-    i part-active? if
-      i 1 u.r space
-      i part-info
-      cr
-    then
-  loop
-  cr
+    i active? if i .ptentry then
+  loop cr
 ;
 
-: mount-mbr ( -- ) sdbuf 446 + partitions 64 cmove ;
-: ppart-gpt ( -- ) ." gpt" cr ;
-: mount-gpt ( -- ) ." mount-gpt" cr ;
+: mount-mbr ( -- )
+  scratch 446 + 0 ptable 64 cmove
+  4 0 do
+    i dup active? swap fat? and if
+      i dup sectors swap sector mounted 2!
+      ." mounting partition " i . cr
+      ( read first sector of partition )
+      unloop exit
+    then
+  loop
+;
 
 : mount
-  sdbuf 0 2 sd-read-blocks
-  bs?  if mount-bs  ppart-bs  else
-  gpt? if mount-gpt ppart-gpt else
-  mbr? if mount-mbr ppart-mbr else
+  scratch 0 2 sd-read-blocks
+  bs?  if ." boot sector disks are not supported" abort else
+  gpt? if ." gpt partitioned disks are not supported" abort else
+  mbr? if mount-mbr else
   ." partition table??" efail throw
   then then then
+;
+
+
+(
+        FAT 12/16/23  ----------------------------------------------------------------------
+)
+
+0
+3 +field -.bs-jmpboot
+8 +field -.bs-oemname
+2 +field -.bytes-per-sector
+1 +field -.sectors-per-cluster
+2 +field -.reserved-sector-count
+1 +field -.num-fats
+2 +field -.root-entry-count
+2 +field -.total-sectors16
+1 +field -.media
+2 +field -.fat-size16
+2 +field -.sectors-per-track
+2 +field -.num-heads
+4 +field -.hidden-sectors
+4 +field -.total-sectors32
+54 +field -.fat12-16-32-ext
+constant fat-bpb%
+
+0
+11 +field -.sfn-name
+1  +field -.attrib
+1  +field -.nt-reserved
+1  +field -.time-tenth
+2  +field -.write-time
+2  +field -.write-date
+2  +field -.last-access-date
+2  +field -.first-cluster-hi
+2  +field -.create-time
+2  +field -.create-date
+2  +field -.first-cluster-lo
+4  +field -.file-size
+constant dirent-sfn%
+
+0
+1  +field -.ldir-seq-num
+10 +field -.ldir-name1
+1  +field -.ldir-attr
+1  +field -.ldir-type
+1  +field -.ldir-chksum
+12 +field -.ldir-name2
+2  +field -.ldir-first-cluster-lo
+4  +field -.ldir_name3
+constant dirent-lfn%
+
+: .fat-info
+  scratch mounted @ blocks 1 sd-read-blocks
+  scratch -.bytes-per-sector
+  ." bytes per sector: " h.@+ cr
+  ." sectors per cluster: " c.@+ cr
+  ." reserved sector count: " h.@+ cr
+  drop
+
+  scratch -.fat-size16 h@ 0=
+  scratch -.root-entry-count h@ 0=
+  and if ." looks like fat32" cr else ." maybe fat16" cr then
+
 ;
 
 sd-old-base base ! hide sd-old-base

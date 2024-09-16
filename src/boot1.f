@@ -554,6 +554,8 @@
   2drop
 ;
 
+: array create cells allot does> swap cells + ;
+
 ( align HERE to 16 byte boundary )
 
 here @ 15 + 15 invert and here !

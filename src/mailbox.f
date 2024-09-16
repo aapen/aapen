@@ -1,10 +1,11 @@
 base @ value mbox-old-base
 decimal
 
-peripherals 0xb880 + constant mbox-read
-mbox-read   0x10   + constant mbox-peek
-mbox-read   0x18   + constant mbox-status
-mbox-read   0x20   + constant mbox-write
+: iota dup 4+ swap ;
+: reg iota constant ;
+: res0 4+ ;
+
+peripherals 0xb880 + reg mbox-read res0 reg mbox-peek res0 reg mbox-status res0 reg mbox-write drop
 
 0x40 constant cache-line
 
