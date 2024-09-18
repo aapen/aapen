@@ -327,7 +327,6 @@
   latest @ 128 dump)
 
 : dump		( addr len -- )
-        cr
 	base @ -rot		( base addr len | save the current base at the bottom of the stack )
 	hex			( and switch to hexadecimal mode )
 

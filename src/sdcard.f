@@ -627,7 +627,7 @@ variable sdcard.bus-width
 
 ( a-buf a-card -- )
 : sd-read-block
-  2dup ." reading block at " .x ." into memory at " .x cr
+\  2dup ." reading block at " .x ." into memory at " .x cr
 
   0x02 not-busy?
 
@@ -839,8 +839,9 @@ variable total-clusters
 
 ( cluster -- )
 : next-cluster
-  dup cluster-first-sector blocks bbuf swap sectors-per-cluster @ sd-read-blocks
-  swap fat@
+  dup cluster-first-sector blocks bbuf swap sectors-per-cluster @
+  sd-read-blocks
+  fat@
 ;
 
 ( -- dirent )
@@ -851,8 +852,9 @@ variable total-clusters
 : dirent        ( n -- addr ) dirent-sfn% * bbuf + ;
 : dirent-attrib ( n -- attr ) dirent -.attrib c@ ;
 : lfn?          ( n -- flg )  dirent-attrib 0xf = ;
-: empty?        ( n -- flg )  dirent c@ 0x00 = ;
-: deleted?      ( n -- flg )  dirent c@ 0xe5 = ;
+: free?         ( n -- flg )  dirent c@ 0xe5 = ;
+: last?         ( n -- flg )  dirent c@ 0x00 = ;
+: subdir?       ( n -- flg )  dirent-attrib 0x10 and 0<> ;
 
 : dirent-first-cluster
   dirent
@@ -860,29 +862,35 @@ variable total-clusters
   swap -.first-cluster-lo h@ or
 ;
 
+: .dirents-h
+  ." NAME     EXT FST_CLST" cr
+;
+
 : .dirents
-  ." directory listing" cr
-  ." #  AT NAME     EXT FST_CLST" cr
   16 0 do
-    i empty? i deleted? i lfn? or or not if
-      i 2 u.r space                       ( index of entry )
-      i dirent-attrib %02x space
+    i last? if unloop 1 exit then
+    i free? i lfn? or not if
+     \ i 2 u.r space                       ( index of entry )
+     \ i dirent-attrib %02x space
       i dirent -.sfn-name 8 tell '.' emit
       i dirent -.sfn-name 8 + 3 tell space
       i dirent-first-cluster %08x space
+      i subdir? if ." <dir> " then
       cr
     then
   loop
+  0
 ;
 
 : dir/
-  root
+  .dirents-h
+  root-cluster @
   begin
     dup fat-end? not
   while
-    .dirents
-    ?dup if ." <end>" cr exit then
     next-cluster
+    .dirents
+    if ." <end>" cr exit then
   repeat
 ;
 
