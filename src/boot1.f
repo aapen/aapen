@@ -668,6 +668,8 @@ blue light-blue clr!
 : cls  (dispcls) (concls) ;
 
 test evaluate
+mailbox evaluate
+sdcard evaluate
 
 cls
 aapen-logo

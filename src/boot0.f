@@ -802,12 +802,14 @@
 : sysreg 5 lshift constant ;
 
 ( See ARMARM Section D19 for system register encoding )
+( bit order here is op0 op1 CRn CRm op2 )
 0b1101111100000000 sysreg CNTFRQ_EL0
 0b1101111100010001 sysreg CNTP_CTL_EL0
 0b1101111100011001 sysreg CNTV_CTL_EL0
 0b1101111100010000 sysreg CNTP_TVAL_EL0
 0b1101111100011000 sysreg CNTV_TVAL_EL0
 0b1101111100000010 sysreg CNTVCT_EL0
+0b1100000010000000 sysreg SCTLR_EL1
 0b1100011000000000 sysreg VBAR_EL1
 
 : rt-sysreg-instruction swap set-rt or ;

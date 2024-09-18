@@ -657,16 +657,16 @@ variable sdcard.bus-width
 ;
 
 (
-	FILE SYSTEM INTERFACE ----------------------------------------------------------------
+	FILE SYSTEM INTERFACE --------------------------------------------------------------
 )
 
 (
-        PARTITION TABLE ----------------------------------------------------------------------
+
+	PARTITION VARIABLES ----------------------------------------------------------------
+
 )
 
-: bs?  scratch dup   c@ 0xeb = swap 1+ c@ 0xe9 = or ;
-: mbr? scratch 508 + w@ 0xaa550000 = ;
-: gpt? scratch 512 +  @ 0x00005452415020494645 = ;
+2 cells allot constant mounted
 
 0
 1 +field -.status
@@ -682,75 +682,43 @@ constant ptentry%
 ( reserve space to hold partition table )
 ptentry% 1 cells / 4 * array ptable drop
 
-( n -- b )
-: active? ptable -.status  c@ 0x80 = ;
-: fat?    ptable -.type    c@ 0x0b = ;
-: sector  ptable -.sector  h@ ;
-: sectors ptable -.sectors h@ ;
-
-2 cells allot constant mounted
-
-( n -- )
-: .ptentry
-  dup . space
-  ptable
-  c.@+ space c.@+ space h.@+ space c.@+ space c.@+ space h.@+ space w.@+ space w.@+ cr
-  drop
-;
-
-( a -- )
-: ppart-mbr
-  cr
-  ." MBR partition table" cr
-  ." # A? HS CSTR TP HE CEND FRSTSECT TOTLSECT" cr
-  4 0 do
-    i active? if i .ptentry then
-  loop cr
-;
-
-: mount-mbr ( -- )
-  scratch 446 + 0 ptable 64 cmove
-  4 0 do
-    i dup active? swap fat? and if
-      i dup sectors swap sector mounted 2!
-      ." mounting partition " i . cr
-      ( read first sector of partition )
-      unloop exit
-    then
-  loop
-;
-
-: mount
-  scratch 0 2 sd-read-blocks
-  bs?  if ." boot sector disks are not supported" abort else
-  gpt? if ." gpt partitioned disks are not supported" abort else
-  mbr? if mount-mbr else
-  ." partition table??" efail throw
-  then then then
-;
-
-
 (
         FAT 12/16/23  ----------------------------------------------------------------------
 )
 
 0
-3 +field -.bs-jmpboot
-8 +field -.bs-oemname
-2 +field -.bytes-per-sector
-1 +field -.sectors-per-cluster
-2 +field -.reserved-sector-count
-1 +field -.num-fats
-2 +field -.root-entry-count
-2 +field -.total-sectors16
-1 +field -.media
-2 +field -.fat-size16
-2 +field -.sectors-per-track
-2 +field -.num-heads
-4 +field -.hidden-sectors
-4 +field -.total-sectors32
-54 +field -.fat12-16-32-ext
+3 +field -.bs-jmpboot \ 0..2
+8 +field -.bs-oemname \ 3..10
+2 +field -.bytes-per-sector \ 11..12
+1 +field -.sectors-per-cluster \ 13
+2 +field -.reserved-sector-count \ 14..15
+1 +field -.num-fats \ 16
+2 +field -.root-entry-count \ 17..18
+2 +field -.total-sectors16  \ 19..20
+1 +field -.media \ 21
+2 +field -.fat-size16  \ 22..23
+2 +field -.sectors-per-track \ 24..25
+2 +field -.num-heads \ 26..27
+4 +field -.hidden-sectors \ 28..31
+4 +field -.total-sectors32 \ 32..35
 constant fat-bpb%
+
+( fat32 specific part that follows fat-bpb% )
+fat-bpb%
+4 +field -.fat32-size \ 36..39
+2 +field -.fat32-ext-flags \ 40..41
+2 +field -.fat32-fsversion \ 42..43
+4 +field -.fat32-root-cluster \ 44..47
+2 +field -.fat32-fsinfo \ 48..49
+2 +field -.fat32-bk-boot-sec \ 50..51
+12 +field -.fat32-reserved-0 \ 52..63
+1 +field -.fat32-drv-nbr \ 64
+1 +field -.fat32-reserved-1 \ 65
+1 +field -.fat32-boot-sig \ 66
+4 +field -.fat32-volume-id \ 67..70
+11 +field -.fat32-volume-label \ 71..81
+8 +field -.fat32-fs-type \ 82..89
+constant fat-bpb-f32-ext%
 
 0
 11 +field -.sfn-name
@@ -778,18 +746,199 @@ constant dirent-sfn%
 4  +field -.ldir_name3
 constant dirent-lfn%
 
-: .fat-info
-  scratch mounted @ blocks 1 sd-read-blocks
-  scratch -.bytes-per-sector
-  ." bytes per sector: " h.@+ cr
-  ." sectors per cluster: " c.@+ cr
-  ." reserved sector count: " h.@+ cr
+( align HERE to 16 byte boundary )
+
+here @ 15 + 15 invert and here !
+128 cells allot constant bbuf
+
+variable bytes-per-sector
+variable reserved-sector-count
+variable first-fat-sector
+variable first-data-sector
+variable data-sectors
+variable sectors-per-cluster
+variable root-cluster
+variable total-clusters
+
+( unaligned access to 32 bit value )
+( addr -- n )
+: w@un
+  here @ aligned ( addr addr' )
+  dup >r         ( addr addr' | r: addr' )
+  4 cmove        ( | r: addr' | byte copy to aligned temp space )
+  r> w@          ( n | r: | then read as a word )
+;
+
+: fat-info
+  bbuf mounted @ blocks 1 sd-read-blocks
+
+  bbuf -.bytes-per-sector h@ bytes-per-sector !
+  bbuf -.sectors-per-cluster c@ sectors-per-cluster !
+  bbuf -.reserved-sector-count h@ reserved-sector-count !
+
+  bbuf -.fat-size16 h@ 0=
+  bbuf -.root-entry-count h@ 0=
+  and if
+    bbuf -.fat32-root-cluster w@
+    root-cluster !
+
+    bbuf -.reserved-sector-count h@
+    bbuf -.hidden-sectors w@ +
+    dup
+    first-fat-sector !
+
+    bbuf -.fat32-size w@
+    bbuf -.num-fats c@ * +
+    dup
+    first-data-sector !
+
+    bbuf -.total-sectors32 w@
+    swap -
+    data-sectors !
+
+    ."    FAT32 volume label: " bbuf -.fat32-volume-label 11 tell cr
+    ."       FAT32 volume id: " bbuf -.fat32-volume-id w@un .x cr
+  else
+    ." maybe fat16" cr -5 abort
+  then
+
+  data-sectors @ sectors-per-cluster @ / total-clusters !
+  ."      first fat sector: " first-fat-sector @ . cr
+  ."     first data sector: " first-data-sector @ . cr
+  ."          data sectors: " data-sectors @ . cr
+  ."      bytes per sector: " bytes-per-sector @ . cr
+  ."   sectors per cluster: " sectors-per-cluster @ . cr
+  ." reserved sector count: " reserved-sector-count @ . cr
+  ."        total clusters: " total-clusters @ . cr
+  ."          root cluster: " root-cluster @ . cr
+;
+
+( n_entry -- n_sector)
+: fat-sector          128 / first-fat-sector @ + ;
+: fat-entry-in-sector 128 mod ;
+
+( this is horribly inefficient and will cause many re-reads of the sectors )
+( n_entry -- u )
+: fat@
+  dup fat-sector
+  here @ aligned swap                   ( we will read the fat entry's sector into temp space )
+  blocks                                ( get the card address )
+  sd-read-block                         ( read the table )
+  fat-entry-in-sector 4 *               ( byte offset of u32 entry )
+  here @ aligned +                      ( addr of entry in temp space )
+  w@
+;
+
+( n -- flg )
+: fat-end? 0x0ffffff8 >= ;
+
+: is-dir? 1 ;
+
+( n -- n )
+: cluster-first-sector 2 - sectors-per-cluster @ * first-data-sector @ + ;
+
+( cluster -- )
+: next-cluster
+  dup cluster-first-sector blocks bbuf swap sectors-per-cluster @ sd-read-blocks
+  swap fat@
+;
+
+( -- dirent )
+: root
+  root-cluster @ next-cluster
+;
+
+: dirent        ( n -- addr ) dirent-sfn% * bbuf + ;
+: dirent-attrib ( n -- attr ) dirent -.attrib c@ ;
+: lfn?          ( n -- flg )  dirent-attrib 0xf = ;
+: empty?        ( n -- flg )  dirent c@ 0x00 = ;
+: deleted?      ( n -- flg )  dirent c@ 0xe5 = ;
+
+: dirent-first-cluster
+  dirent
+  dup  -.first-cluster-hi h@ 16 lshift
+  swap -.first-cluster-lo h@ or
+;
+
+: .dirents
+  ." directory listing" cr
+  ." #  AT NAME     EXT FST_CLST" cr
+  16 0 do
+    i empty? i deleted? i lfn? or or not if
+      i 2 u.r space                       ( index of entry )
+      i dirent-attrib %02x space
+      i dirent -.sfn-name 8 tell '.' emit
+      i dirent -.sfn-name 8 + 3 tell space
+      i dirent-first-cluster %08x space
+      cr
+    then
+  loop
+;
+
+: dir/
+  root
+  begin
+    dup fat-end? not
+  while
+    .dirents
+    ?dup if ." <end>" cr exit then
+    next-cluster
+  repeat
+;
+
+
+
+(
+        PARTITION TABLE ----------------------------------------------------------------------
+)
+
+: bs?  bbuf dup   c@ 0xeb = swap 1+ c@ 0xe9 = or ;
+: mbr? bbuf 508 + w@ 0xaa550000 = ;
+: gpt? bbuf 512 +  @ 0x00005452415020494645 = ;
+
+( n -- b )
+: active? ptable -.status  c@ 0x80 = ;
+: fat?    ptable -.type    c@ 0x0b = ;
+: sector  ptable -.sector  h@ ;
+: sectors ptable -.sectors h@ ;
+
+( n -- )
+: .ptentry
+  dup . space
+  ptable
+  c.@+ space c.@+ space h.@+ space c.@+ space c.@+ space h.@+ space w.@+ space w.@+ cr
   drop
+;
 
-  scratch -.fat-size16 h@ 0=
-  scratch -.root-entry-count h@ 0=
-  and if ." looks like fat32" cr else ." maybe fat16" cr then
+( a -- )
+: ppart-mbr
+  cr
+  ." MBR partition table" cr
+  ." # A? HS CSTR TP HE CEND FRSTSECT TOTLSECT" cr
+  4 0 do
+    i active? if i .ptentry then
+  loop cr
+;
 
+: mount-mbr ( -- )
+  bbuf 446 + 0 ptable 64 cmove
+  4 0 do
+    i dup active? swap fat? and if
+      i dup sectors swap sector mounted 2!
+      ." mounting partition " i . cr
+      fat-info
+      unloop exit
+    then
+  loop
+;
+
+: mount
+  bbuf 0 2 sd-read-blocks
+  bs?  if ." boot sector disks are not supported" abort else
+  gpt? if ." gpt partitioned disks are not supported" abort else
+  mbr? if mount-mbr else
+  ." partition table??" efail throw
+  then then then
 ;
 
 sd-old-base base ! hide sd-old-base
