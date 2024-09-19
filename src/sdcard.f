@@ -863,20 +863,30 @@ variable total-clusters
 ;
 
 : .dirents-h
-  ." NAME     EXT CLUSTER   SIZE" cr
+  ." CLUSTER  DIR?  SIZE     NAME" cr
+;
+
+: c@c!+ ( c-addr1 c-addr2 -- c-addr1+ c-addr2+ )
+  2dup c@ swap c! 1+ swap 1+ swap
+;
+
+: dfn ( c-addr1 n -- )
+  dirent
+  8 0 do c@c!+ loop
+  swap 1+ '.' over c! 1+ swap
+  3 0 do c@c!+ loop
+  2drop
 ;
 
 : .dirents
   16 0 do
     i last? if unloop 1 exit then
     i free? i lfn? or not if
-     \ i 2 u.r space                       ( index of entry )
-     \ i dirent-attrib %02x space
-      i dirent -.sfn-name 8 tell '.' emit
-      i dirent -.sfn-name 8 + 3 tell space
       i dirent-first-cluster %08x space
+      i subdir? if ." <dir> " else ."       " then
       i dirent -.file-size w@ %08x space
-      i subdir? if ." <dir> " then
+      here @ i dfn
+      here @ 13 tell space
       cr
     then
   loop
@@ -897,8 +907,6 @@ variable total-clusters
 ;
 
 : dir/ root-cluster @ dir ;
-
-
 
 (
         PARTITION TABLE ----------------------------------------------------------------------
