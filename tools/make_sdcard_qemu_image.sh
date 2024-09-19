@@ -31,7 +31,10 @@ sudo mount -o user,uid=$(id -u),gid=$(id -g) ${PARTITION} ${MOUNT_POINT}
 # the root of that partition. Copy kernel binaries from `zig-out`
 cp -r firmware/* ${MOUNT_POINT}/
 cp -r sdfiles/* ${MOUNT_POINT}/
-cp zig-out/*.img ${MOUNT_POINT}/
+cp -r build/kernel* ${MOUNT_POINT}/
+
+mkdir -p ${MOUNT_POINT}/src
+cp -r src/* ${MOUNT_POINT}/src/
 
 # Ensure the copy operation completes
 sync

@@ -505,7 +505,7 @@
   dup ." Name len: " 9 + c@ .x cr
         dup ." Name: " 10 + 30 dump 
   dup ." Code Word: " 40 + @ .x cr
-  ." Next 128 bytes: " 48 + 128 dump
+  ." Next 128 bytes: " cr 48 + 128 dump
 ;
 
 

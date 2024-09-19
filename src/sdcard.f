@@ -468,12 +468,12 @@ variable sdcard.bus-width
 ( a n -- n )
 : sd-read-bytes
   >r
-  ticks 100000 +
+  ticks 1000000 +
   begin
-    sd-status w@ 0x800 and if  ( read available? )
-      sd-data w@ 2 pick w!      ( read the word, store it )
-      swap 4+ swap                ( advance buffer pointer )
-      r> 4- >r                    ( decrement remaining )
+    sd-status w@ 0x800 and if           ( read available? )
+      sd-data w@ 2 pick w!              ( read the word, store it )
+      swap 4+ swap                      ( advance buffer pointer )
+      r> 4- >r                          ( decrement remaining )
     then
     rsp@ @ 0>
   while
@@ -863,7 +863,7 @@ variable total-clusters
 ;
 
 : .dirents-h
-  ." NAME     EXT FST_CLST" cr
+  ." NAME     EXT CLUSTER   SIZE" cr
 ;
 
 : .dirents
@@ -875,6 +875,7 @@ variable total-clusters
       i dirent -.sfn-name 8 tell '.' emit
       i dirent -.sfn-name 8 + 3 tell space
       i dirent-first-cluster %08x space
+      i dirent -.file-size w@ %08x space
       i subdir? if ." <dir> " then
       cr
     then
@@ -882,17 +883,20 @@ variable total-clusters
   0
 ;
 
-: dir/
+: dir
   .dirents-h
-  root-cluster @
   begin
     dup fat-end? not
   while
     next-cluster
     .dirents
-    if ." <end>" cr exit then
+    if drop ." <end>" cr exit then
   repeat
+  ." <unexpected end>"
+  drop
 ;
+
+: dir/ root-cluster @ dir ;
 
 
 
