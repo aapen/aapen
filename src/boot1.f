@@ -180,11 +180,11 @@
 	2drop		( len addr -- )
 ;
 
-( Prints all the words defined in the dictionary, most recently defined first.
+( Prints the n most recent words in the dictionary.
   Does not print hidden words. )
 
-: words ( -- )
-	latest @	( start at latest dictionary entry )
+: recent-words ( n -- )
+	latest @                ( n latest )
 	begin
 		?dup		( while link pointer is not null )
 	while
@@ -193,8 +193,22 @@
 			space
 		then
 		@		( dereference the link pointer - go to previous word )
+                swap 1-         ( word-p n )
+                dup not if      ( printed enough? )
+                        2drop
+                        cr
+                        exit
+                then
+                swap
 	repeat
+        drop
 	cr
+;
+
+( Prints all the words defined in the dictionary, most recently defined first. )
+
+: words ( -- )
+  0xefffffff recent-words
 ;
 
 ( see decompiles a FORTH word.

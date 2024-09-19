@@ -943,20 +943,22 @@ with the two forms of relative jumps. )
 defprim do-nothing
 ;;
 
+defprim clear-stack
+;;
 
 defprim -rot
-  3 		poppsp-x w,
-  2 		poppsp-x w,
-  1 		poppsp-x w,
-  3 		pushpsp-x w,
-  1 		pushpsp-x w,
-  2 		pushpsp-x w,
+  3     poppsp-x w,
+  2     poppsp-x w,
+  1     poppsp-x w,
+  3     pushpsp-x w,
+  1     pushpsp-x w,
+  2     pushpsp-x w,
 ;;
 
 defprim 1+
-  0 		poppsp-x w,
-  0 0 1 	add-xx# w,
-  0 		pushpsp-x w,
+  0     poppsp-x w,
+  0 0 1	add-xx# w,
+  0    	pushpsp-x w,
 ;;
 
 defprim 1-
@@ -1285,6 +1287,12 @@ defprim dcci
 	s0 @ dsp@ -
 	8-			( adjust because S0 was on the stack when we pushed DSP )
 	8 /
+;
+
+( clear the data stack )
+
+: clear-stack   ( <whatever> -- <empty> )
+        s0 @ dsp!
 ;
 
 ( .s prints the contents of the stack.  It doesn't alter the stack.

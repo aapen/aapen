@@ -56,7 +56,7 @@ F_SRCS          := $(call rwildcard,$(SRC_DIR)/,*.f)
 
 CC		= $(TOOLS_PREFIX)gcc
 AS		= $(TOOLS_PREFIX)as
-ASFLAGS		= -I $(SRC_DIR) -I include -DBOARD=$(BOARD)
+ASFLAGS		= -g -I $(SRC_DIR) -I include -DBOARD=$(BOARD)
 
 LD		= $(TOOLS_PREFIX)ld
 LDFLAGS		= -T $(SRC_DIR)/kernel.ld
@@ -81,6 +81,8 @@ $(KERNEL): init $(KERNEL_ELF)
 
 $(KERNEL_ELF): init $(OBJS) $(SRC_DIR)/kernel.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
+
+kernels: $(KERNEL)
 
 
 download_firmware: firmware/COPYING.linux
