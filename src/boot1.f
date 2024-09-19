@@ -341,7 +341,6 @@
   latest @ 128 dump)
 
 : dump		( addr len -- )
-        cr
 	base @ -rot		( base addr len | save the current base at the bottom of the stack )
 	hex			( and switch to hexadecimal mode )
 
@@ -520,7 +519,7 @@
   dup ." Name len: " 9 + c@ .x cr
         dup ." Name: " 10 + 30 dump 
   dup ." Code Word: " 40 + @ .x cr
-  ." Next 128 bytes: " 48 + 128 dump
+  ." Next 128 bytes: " cr 48 + 128 dump
 ;
 
 
@@ -682,6 +681,8 @@ blue light-blue clr!
 : cls  (dispcls) (concls) ;
 
 test evaluate
+mailbox evaluate
+sdcard evaluate
 
 cls
 aapen-logo
