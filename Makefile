@@ -56,10 +56,11 @@ F_SRCS          := $(call rwildcard,$(SRC_DIR)/,*.f)
 
 CC		= $(TOOLS_PREFIX)gcc
 AS		= $(TOOLS_PREFIX)as
-ASFLAGS		= -g -I $(SRC_DIR) -I include -DBOARD=$(BOARD)
-
 LD		= $(TOOLS_PREFIX)ld
-LDFLAGS		= -T $(SRC_DIR)/kernel.ld
+
+DEBUG_FLAGS	= -g
+ASFLAGS		= $(DEBUG_FLAGS) -I $(SRC_DIR) -I include -DBOARD=$(BOARD)
+LDFLAGS		= $(DEBUG_FLAGS) -T $(SRC_DIR)/kernel.ld
 
 OBJCOPY		= $(TOOLS_PREFIX)objcopy
 OBJFLAGS	= -O binary
