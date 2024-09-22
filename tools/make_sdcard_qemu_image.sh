@@ -28,7 +28,7 @@ mkdir -p ${MOUNT_POINT}
 sudo mount -o user,uid=$(id -u),gid=$(id -g) ${PARTITION} ${MOUNT_POINT}
 
 # Step 5: Recursively copy files from `firmware` and `sdfiles` into
-# the root of that partition. Copy kernel binaries from `zig-out`
+# the root of that partition. Copy kernel binaries from `build`
 cp -r firmware/* ${MOUNT_POINT}/
 cp -r sdfiles/* ${MOUNT_POINT}/
 cp -r build/kernel* ${MOUNT_POINT}/

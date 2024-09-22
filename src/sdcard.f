@@ -660,6 +660,9 @@ variable sdcard.bus-width
 	FILE SYSTEM INTERFACE --------------------------------------------------------------
 )
 
+variable curdir
+0 curdir !
+
 (
 
 	PARTITION VARIABLES ----------------------------------------------------------------
@@ -687,37 +690,37 @@ ptentry% 1 cells / 4 * array ptable drop
 )
 
 0
-3 +field -.bs-jmpboot \ 0..2
-8 +field -.bs-oemname \ 3..10
-2 +field -.bytes-per-sector \ 11..12
-1 +field -.sectors-per-cluster \ 13
+3 +field -.bs-jmpboot            \ 0..2
+8 +field -.bs-oemname            \ 3..10
+2 +field -.bytes-per-sector      \ 11..12
+1 +field -.sectors-per-cluster   \ 13
 2 +field -.reserved-sector-count \ 14..15
-1 +field -.num-fats \ 16
-2 +field -.root-entry-count \ 17..18
-2 +field -.total-sectors16  \ 19..20
-1 +field -.media \ 21
-2 +field -.fat-size16  \ 22..23
-2 +field -.sectors-per-track \ 24..25
-2 +field -.num-heads \ 26..27
-4 +field -.hidden-sectors \ 28..31
-4 +field -.total-sectors32 \ 32..35
+1 +field -.num-fats              \ 16
+2 +field -.root-entry-count      \ 17..18
+2 +field -.total-sectors16       \ 19..20
+1 +field -.media                 \ 21
+2 +field -.fat-size16            \ 22..23
+2 +field -.sectors-per-track     \ 24..25
+2 +field -.num-heads             \ 26..27
+4 +field -.hidden-sectors        \ 28..31
+4 +field -.total-sectors32       \ 32..35
 constant fat-bpb%
 
 ( fat32 specific part that follows fat-bpb% )
 fat-bpb%
-4 +field -.fat32-size \ 36..39
-2 +field -.fat32-ext-flags \ 40..41
-2 +field -.fat32-fsversion \ 42..43
-4 +field -.fat32-root-cluster \ 44..47
-2 +field -.fat32-fsinfo \ 48..49
-2 +field -.fat32-bk-boot-sec \ 50..51
-12 +field -.fat32-reserved-0 \ 52..63
-1 +field -.fat32-drv-nbr \ 64
-1 +field -.fat32-reserved-1 \ 65
-1 +field -.fat32-boot-sig \ 66
-4 +field -.fat32-volume-id \ 67..70
-11 +field -.fat32-volume-label \ 71..81
-8 +field -.fat32-fs-type \ 82..89
+4 +field -.fat32-size            \ 36..39
+2 +field -.fat32-ext-flags       \ 40..41
+2 +field -.fat32-fsversion       \ 42..43
+4 +field -.fat32-root-cluster    \ 44..47
+2 +field -.fat32-fsinfo          \ 48..49
+2 +field -.fat32-bk-boot-sec     \ 50..51
+12 +field -.fat32-reserved-0     \ 52..63
+1 +field -.fat32-drv-nbr         \ 64
+1 +field -.fat32-reserved-1      \ 65
+1 +field -.fat32-boot-sig        \ 66
+4 +field -.fat32-volume-id       \ 67..70
+11 +field -.fat32-volume-label   \ 71..81
+8 +field -.fat32-fs-type         \ 82..89
 constant fat-bpb-f32-ext%
 
 0
@@ -769,6 +772,8 @@ variable total-clusters
   r> w@          ( n | r: | then read as a word )
 ;
 
+: cd/  root-cluster @ curdir ! ;
+
 : fat-info
   bbuf mounted @ blocks 1 sd-read-blocks
 
@@ -781,6 +786,8 @@ variable total-clusters
   and if
     bbuf -.fat32-root-cluster w@
     root-cluster !
+
+    cd/
 
     bbuf -.reserved-sector-count h@
     bbuf -.hidden-sectors w@ +
@@ -850,63 +857,107 @@ variable total-clusters
 ;
 
 : dirent        ( n -- addr ) dirent-sfn% * bbuf + ;
-: dirent-attrib ( n -- attr ) dirent -.attrib c@ ;
-: lfn?          ( n -- flg )  dirent-attrib 0xf = ;
-: free?         ( n -- flg )  dirent c@ 0xe5 = ;
-: last?         ( n -- flg )  dirent c@ 0x00 = ;
-: subdir?       ( n -- flg )  dirent-attrib 0x10 and 0<> ;
+: lfn?          ( n -- flg )  -.attrib c@ 0xf = ;
+: free?         ( n -- flg )  c@ 0xe5 = ;
+: last?         ( n -- flg )  c@ 0x00 = ;
+: subdir?       ( n -- flg )  -.attrib c@ 0x10 and 0<> ;
 
-: dirent-first-cluster
-  dirent
+: first-cluster
   dup  -.first-cluster-hi h@ 16 lshift
   swap -.first-cluster-lo h@ or
-;
-
-: .dirents-h
-  ." CLUSTER  DIR?  SIZE     NAME" cr
 ;
 
 : c@c!+ ( c-addr1 c-addr2 -- c-addr1+ c-addr2+ )
   2dup c@ swap c! 1+ swap 1+ swap
 ;
 
-: dfn ( c-addr1 n -- )
-  dirent
+: dfn ( dest-addr src-addr -- )
   8 0 do c@c!+ loop
-  swap 1+ '.' over c! 1+ swap
+  swap '.' over c! 1+ swap
   3 0 do c@c!+ loop
   2drop
 ;
 
-: .dirents
-  16 0 do
-    i last? if unloop 1 exit then
-    i free? i lfn? or not if
-      i dirent-first-cluster %08x space
-      i subdir? if ." <dir> " else ."       " then
-      i dirent -.file-size w@ %08x space
-      here @ i dfn
-      here @ 13 tell space
-      cr
-    then
-  loop
-  0
+( addr -- )
+: .dirent
+  dup last? if ." <end>" exit then
+  dup free? if exit then
+  dup lfn?  if exit then
+
+  dup first-cluster %08x space
+  dup subdir? if ." <dir> " else ."       " then
+  dup -.file-size w@ %08x space
+  here @ swap dfn
+  here @ 13 tell space
+  cr
+;
+
+variable dirwalk-cur-cluster
+variable dirwalk-cur-entry
+variable dirwalk-saw-last?
+
+: dirwalk-continue?
+  dirwalk-cur-cluster @ dup fat-end? not swap 0> and
+  dirwalk-saw-last? @ not and
+;
+
+: dirwalk-next-block
+  dirwalk-cur-cluster @
+  dup fat-end? if 0 else next-cluster then
+  -1 dirwalk-cur-entry !
+  dup dirwalk-cur-cluster !
+;
+
+: dirwalk-start
+  dirwalk-cur-cluster !
+  0 dirwalk-saw-last? !
+  dirwalk-next-block
+;
+
+: dirwalk-need-next-block? dirwalk-cur-entry @ 16 >= ;
+
+( return addr of next dirent or 0 if done )
+: dirwalk-next-entry
+  dirwalk-cur-entry @ 1+ dirwalk-cur-entry !
+  dirwalk-need-next-block? if
+    dirwalk-next-block 0= if 0 exit then
+    0 dirwalk-cur-entry !
+  then
+  dirwalk-cur-entry @ dirent
+  dup last? if 1 dirwalk-saw-last? ! drop 0 then
+;
+
+: dirwalk-end
+  0 dirwalk-cur-cluster !
+  -1 dirwalk-cur-entry !
 ;
 
 : dir
-  .dirents-h
-  begin
-    dup fat-end? not
-  while
-    next-cluster
-    .dirents
-    if drop ." <end>" cr exit then
+  ." CLUSTER  DIR?  SIZE     NAME" cr
+  curdir @ dirwalk-start
+  begin dirwalk-next-entry dup while
+    .dirent
   repeat
-  ." <unexpected end>"
-  drop
+  ." <end>" cr
+  dirwalk-end
 ;
 
-: dir/ root-cluster @ dir ;
+: dir/ curdir @ cd/ dir curdir ! ;
+
+\ : find-file
+\   dirwalk-start
+\   begin dirwalk-continue? while
+\     dirwalk-scan
+\     dirwalk-next-block
+\   repeat
+\ ;
+
+\ : cd
+\   bl parse find-file
+\   ?dup 0= if ." not found" cr exit then
+\   first-cluster curdir !
+\ ;
+
 
 (
         PARTITION TABLE ----------------------------------------------------------------------
