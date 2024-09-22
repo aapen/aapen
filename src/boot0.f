@@ -1695,45 +1695,41 @@ defprim dcci
   word will push the address of the first element of the buffer array onto the stack.
 )
 
-: []buffer ( buf-size-bytes n <name> -- )
-        create          ( buf-size-bytes n )
-        2dup            ( buf-size-bytes n buf-size-bytes n)
-        ,               ( buf-size-bytes n buf-size-bytes )               
-        ,               ( n buf-size-bytes )
+: []buffer ( el-size-bytes n <name> -- )
+        create          ( el-size-bytes n )
+        2dup            ( el-size-bytes n el-size-bytes n)
+        ,               ( el-size-bytes n el-size-bytes )               
+        ,               ( n el-size-bytes )
         *               ( n-bytes )
         allot         
         align
-        does>
-               16 + 
-;
-
-( Size of each buffer or element in a buf array )
-
-: []% ( buffer -- buf-size ) 
-        1 cells - @ 
-;
-
-( Number of elements in buf array )
-
-: []# ( buffer -- len ) 
-        2 cells - @ 
-;
-
-( Address of item i in the buffer array )
-
-: []& ( buffer i - addr )
-        dup 0< if
+        does> ( i buffer )
+        over 0< if
                 ." Index is negative! " abort
         then
-        2dup                    ( buffer i buffer i )
-        swap []#                ( buffer i i n )
-        >= if
+        2dup            ( i buffer i buffer )
+        @ >= if
                 ." Index > n! " abort
         then
-        swap dup []%            ( i buffer buf-size-bytes )
-        rot                     ( buffer buf-size-bytes i )
+        dup 1 cells + @ ( i buffer el-size )
+        rot             ( buffer el-size i )
         * +
+        2 cells +
 ;
+
+( Given addr of the 1st element, return the el size of an array )
+
+: []% ( buffer[0] -- el-size ) 
+        1 cells - @
+;
+
+( Given addr of the 1st element, return the # elements of an array )
+( Number of elements in buf array )
+
+: []# ( buffer[0] -- len ) 
+        2 cells - @
+;
+
 
 ( Pull in the rest of the basic Forth boot-up code. )
 
