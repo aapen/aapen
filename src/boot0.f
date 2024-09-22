@@ -1677,7 +1677,67 @@ defprim dcci
   again
 ;
 
-( Pull the rest of the basic Forth boot-up code. )
+
+
+( buffer arrays )
+
+( Create an array of buffers. Each buffer is buf-size-bytes long
+  and there are n of these buffers in the array. So this:
+
+        16 9 []buffer data
+
+  Creates a new buffer called "data" that contains nine 16 byte elements.
+  The size of the individual elements don't have to be aligned in any way,
+  so you can have 7 or 93 byte elements in your array.
+
+  The data section of the array starts with two cells, one for n and one for the 
+  buffer size. This is followed by the actual elements. When executed, the resulting
+  word will push the address of the first element of the buffer array onto the stack.
+)
+
+: []buffer ( buf-size-bytes n <name> -- )
+        create          ( buf-size-bytes n )
+        2dup            ( buf-size-bytes n buf-size-bytes n)
+        ,               ( buf-size-bytes n buf-size-bytes )               
+        ,               ( n buf-size-bytes )
+        *               ( n-bytes )
+        allot         
+        align
+        does>
+               16 + 
+;
+
+( Size of each buffer or element in a buf array )
+
+: []% ( buffer -- buf-size ) 
+        1 cells - @ 
+;
+
+( Number of elements in buf array )
+
+: []# ( buffer -- len ) 
+        2 cells - @ 
+;
+
+( Address of item i in the buffer array )
+
+: []& ( buffer i - addr )
+        dup 0< if
+                ." Index is negative! " abort
+        then
+        2dup                    ( buffer i buffer i )
+        swap []#                ( buffer i i n )
+        >= if
+                ." Index > n! " abort
+        then
+        swap dup []%            ( i buffer buf-size-bytes )
+        rot                     ( buffer buf-size-bytes i )
+        * +
+;
+
+( Pull in the rest of the basic Forth boot-up code. )
 
 boot1 evaluate
+
+
 
