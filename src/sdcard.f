@@ -753,6 +753,7 @@ constant dirent-lfn%
 
 here @ 15 + 15 invert and here !
 128 cells allot constant bbuf
+128 cells allot constant fatbuf
 
 variable bytes-per-sector
 variable reserved-sector-count
@@ -775,36 +776,36 @@ variable total-clusters
 : cd/  root-cluster @ curdir ! ;
 
 : fat-info
-  bbuf mounted @ blocks 1 sd-read-blocks
+  fatbuf mounted @ blocks 1 sd-read-blocks
 
-  bbuf -.bytes-per-sector h@ bytes-per-sector !
-  bbuf -.sectors-per-cluster c@ sectors-per-cluster !
-  bbuf -.reserved-sector-count h@ reserved-sector-count !
+  fatbuf -.bytes-per-sector h@ bytes-per-sector !
+  fatbuf -.sectors-per-cluster c@ sectors-per-cluster !
+  fatbuf -.reserved-sector-count h@ reserved-sector-count !
 
-  bbuf -.fat-size16 h@ 0=
-  bbuf -.root-entry-count h@ 0=
+  fatbuf -.fat-size16 h@ 0=
+  fatbuf -.root-entry-count h@ 0=
   and if
-    bbuf -.fat32-root-cluster w@
+    fatbuf -.fat32-root-cluster w@
     root-cluster !
 
     cd/
 
-    bbuf -.reserved-sector-count h@
-    bbuf -.hidden-sectors w@ +
+    fatbuf -.reserved-sector-count h@
+    fatbuf -.hidden-sectors w@ +
     dup
     first-fat-sector !
 
-    bbuf -.fat32-size w@
-    bbuf -.num-fats c@ * +
+    fatbuf -.fat32-size w@
+    fatbuf -.num-fats c@ * +
     dup
     first-data-sector !
 
-    bbuf -.total-sectors32 w@
+    fatbuf -.total-sectors32 w@
     swap -
     data-sectors !
 
-    ."    FAT32 volume label: " bbuf -.fat32-volume-label 11 tell cr
-    ."       FAT32 volume id: " bbuf -.fat32-volume-id w@un .x cr
+    ."    FAT32 volume label: " fatbuf -.fat32-volume-label 11 tell cr
+    ."       FAT32 volume id: " fatbuf -.fat32-volume-id w@un .x cr
   else
     ." maybe fat16" cr -5 abort
   then
@@ -828,11 +829,11 @@ variable total-clusters
 ( n_entry -- u )
 : fat@
   dup fat-sector
-  here @ aligned swap                   ( we will read the fat entry's sector into temp space )
+  fatbuf swap                           ( we will read the fat entry's sector into temp space )
   blocks                                ( get the card address )
   sd-read-block                         ( read the table )
   fat-entry-in-sector 4 *               ( byte offset of u32 entry )
-  here @ aligned +                      ( addr of entry in temp space )
+  fatbuf +                              ( addr of entry in temp space )
   w@
 ;
 
@@ -867,33 +868,37 @@ variable total-clusters
   swap -.first-cluster-lo h@ or
 ;
 
-: c@c!+ ( c-addr1 c-addr2 -- c-addr1+ c-addr2+ )
-  2dup c@ swap c! 1+ swap 1+ swap
+\ : c@c!+ ( c-addr1 c-addr2 -- c-addr1+ c-addr2+ )
+\   2dup c@ swap c! 1+ swap 1+ swap
+\ ;
+
+\ : dfn ( dest-addr src-addr -- )
+\   8 0 do c@c!+ loop
+\   swap '.' over c! 1+ swap
+\   3 0 do c@c!+ loop
+\   2drop
+\ ;
+
+: 8.3 ( addr -- )
+  8 0 do dup c@ emit 1+ loop
+  '.' emit
+  3 0 do dup c@ emit 1+ loop
+  drop
 ;
 
-: dfn ( dest-addr src-addr -- )
-  8 0 do c@c!+ loop
-  swap '.' over c! 1+ swap
-  3 0 do c@c!+ loop
-  2drop
-;
-
-( addr -- )
-: .dirent
-  dup last? if ." <end>" exit then
-  dup free? if exit then
-  dup lfn?  if exit then
+: .dirent ( addr -- )
+  dup free? if drop exit then
+  dup lfn?  if drop exit then
 
   dup first-cluster %08x space
   dup subdir? if ." <dir> " else ."       " then
   dup -.file-size w@ %08x space
-  here @ swap dfn
-  here @ 13 tell space
+  8.3
   cr
 ;
 
 variable dirwalk-cur-cluster
-variable dirwalk-cur-entry
+variable dirwalk-cur-index
 variable dirwalk-saw-last?
 
 : dirwalk-continue?
@@ -904,32 +909,32 @@ variable dirwalk-saw-last?
 : dirwalk-next-block
   dirwalk-cur-cluster @
   dup fat-end? if 0 else next-cluster then
-  -1 dirwalk-cur-entry !
+  -1 dirwalk-cur-index !
   dup dirwalk-cur-cluster !
 ;
 
-: dirwalk-start
+: dirwalk-start ( cluster -- )
   dirwalk-cur-cluster !
   0 dirwalk-saw-last? !
-  dirwalk-next-block
+  dirwalk-next-block drop
 ;
 
-: dirwalk-need-next-block? dirwalk-cur-entry @ 16 >= ;
+: dirwalk-need-next-block? dirwalk-cur-index @ 16 >= ;
 
 ( return addr of next dirent or 0 if done )
 : dirwalk-next-entry
-  dirwalk-cur-entry @ 1+ dirwalk-cur-entry !
+  dirwalk-cur-index @ 1+ dirwalk-cur-index !
   dirwalk-need-next-block? if
     dirwalk-next-block 0= if 0 exit then
-    0 dirwalk-cur-entry !
+    0 dirwalk-cur-index !
   then
-  dirwalk-cur-entry @ dirent
+  dirwalk-cur-index @ dirent
   dup last? if 1 dirwalk-saw-last? ! drop 0 then
 ;
 
 : dirwalk-end
   0 dirwalk-cur-cluster !
-  -1 dirwalk-cur-entry !
+  -1 dirwalk-cur-index !
 ;
 
 : dir
@@ -938,26 +943,39 @@ variable dirwalk-saw-last?
   begin dirwalk-next-entry dup while
     .dirent
   repeat
+  drop
   ." <end>" cr
   dirwalk-end
 ;
 
 : dir/ curdir @ cd/ dir curdir ! ;
 
-\ : find-file
-\   dirwalk-start
-\   begin dirwalk-continue? while
-\     dirwalk-scan
-\     dirwalk-next-block
-\   repeat
-\ ;
+( In curdir, find file matching string. Put first cluster in TOS if )
+( found, -1 otherwise. )
+: find-file ( c-addr u -- u )
+  curdir @ dirwalk-start
+  begin
+    dirwalk-next-entry dup              ( c-addr u i i )
+  while                                 ( c-addr u i )
+    >r 2dup r>                          ( c-addr u c-addr u dirent )
+    0d11                                ( c-addr u c-addr u dirent 11 )
+    compare                             ( c-addr u cmp )
+    0= if
+      2drop
+      dirwalk-cur-index @ dirent first-cluster
+      exit
+    then
+  repeat
+  dirwalk-end                           ( c-addr u )
+  2drop -1
+;
 
-\ : cd
-\   bl parse find-file
-\   ?dup 0= if ." not found" cr exit then
-\   first-cluster curdir !
-\ ;
-
+: cd
+  '"' parse find-file
+  dup 0< if ." not found" cr exit then
+  dup 0= if drop root-cluster @ then    ( special case for .. from first-level directory )
+  curdir !
+;
 
 (
         PARTITION TABLE ----------------------------------------------------------------------
