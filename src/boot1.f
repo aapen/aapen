@@ -572,7 +572,7 @@
 ( align HERE to 16 byte boundary )
 
 here @ 15 + 15 invert and here !
-1024 cells allot constant scratch
+variable scratch 1024 cells allot
 
 : unused lastcell here @ - 8 / ;
 

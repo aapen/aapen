@@ -163,9 +163,8 @@ sd-arg2 0xfc + reg sd-slotisr-ver drop
   drop drop drop
 ;
 
-( todo: there has to be a better way to make an array variable )
-2 cells allot constant sdcard.csd
-2 cells allot constant sdcard.cid
+variable sdcard.csd 2 cells allot
+variable sdcard.cid 2 cells allot
 variable sdcard.status
 variable sdcard.card-state
 variable sdcard.rca
@@ -669,7 +668,7 @@ variable curdir
 
 )
 
-2 cells allot constant mounted
+variable mounted 2 cells allot
 
 0
 1 +field -.status
@@ -683,7 +682,7 @@ variable curdir
 constant ptentry%
 
 ( reserve space to hold partition table )
-ptentry% 1 cells / 4 * array ptable drop
+ptentry% 1 cells / 4 * array ptable
 
 (
         FAT 12/16/23  ----------------------------------------------------------------------
@@ -752,8 +751,8 @@ constant dirent-lfn%
 ( align HERE to 16 byte boundary )
 
 here @ 15 + 15 invert and here !
-128 cells allot constant bbuf
-128 cells allot constant fatbuf
+variable bbuf 128 cells allot
+variable fatbuf 128 cells allot
 
 variable bytes-per-sector
 variable reserved-sector-count

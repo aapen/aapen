@@ -1321,10 +1321,7 @@ defprim dcci
  at least that next time a word is compiled that HERE has been
  left as a multiple of 8.)
 
-: allot		( n -- addr )
-	here @ swap	( here n )
-	here +!		( adds n to here, after this the old value of here is still on the stack )
-;
+: allot	( n -- ) here +! ;
 
 ( cells just multiplies the top of stack by 8 giving us the number of bytes in
   some number of integer "cells".)
@@ -1676,8 +1673,6 @@ defprim dcci
     then
   again
 ;
-
-
 
 ( buffer arrays )
 

@@ -16,7 +16,7 @@ hex
 
 
 variable actual-depth
-20 cells allot constant actual-results
+variable actual-results 20 cells allot
 variable start-depth
 variable error-xt
 
