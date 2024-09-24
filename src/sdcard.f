@@ -750,8 +750,8 @@ constant dirent-lfn%
 
 ( align HERE to 16 byte boundary )
 here @ 15 + 15 invert and here !
+4 256 []buffer fatbuf
 variable bbuf 128 cells allot
-variable fatbuf 128 cells allot
 variable bytes-per-sector
 variable reserved-sector-count
 variable first-fat-sector
@@ -773,36 +773,36 @@ variable total-clusters
 : cd/  root-cluster @ curdir ! ;
 
 : fat-info
-  fatbuf mounted @ blocks 1 sd-read-blocks
+  bbuf mounted @ blocks 1 sd-read-blocks
 
-  fatbuf -.bytes-per-sector h@ bytes-per-sector !
-  fatbuf -.sectors-per-cluster c@ sectors-per-cluster !
-  fatbuf -.reserved-sector-count h@ reserved-sector-count !
+  bbuf -.bytes-per-sector h@ bytes-per-sector !
+  bbuf -.sectors-per-cluster c@ sectors-per-cluster !
+  bbuf -.reserved-sector-count h@ reserved-sector-count !
 
-  fatbuf -.fat-size16 h@ 0=
-  fatbuf -.root-entry-count h@ 0=
+  bbuf -.fat-size16 h@ 0=
+  bbuf -.root-entry-count h@ 0=
   and if
-    fatbuf -.fat32-root-cluster w@
+    bbuf -.fat32-root-cluster w@
     root-cluster !
 
     cd/
 
-    fatbuf -.reserved-sector-count h@
-    fatbuf -.hidden-sectors w@ +
+    bbuf -.reserved-sector-count h@
+    bbuf -.hidden-sectors w@ +
     dup
     first-fat-sector !
 
-    fatbuf -.fat32-size w@
-    fatbuf -.num-fats c@ * +
+    bbuf -.fat32-size w@
+    bbuf -.num-fats c@ * +
     dup
     first-data-sector !
 
-    fatbuf -.total-sectors32 w@
+    bbuf -.total-sectors32 w@
     swap -
     data-sectors !
 
-    ."    FAT32 volume label: " fatbuf -.fat32-volume-label 11 tell cr
-    ."       FAT32 volume id: " fatbuf -.fat32-volume-id w@un .x cr
+    ."    FAT32 volume label: " bbuf -.fat32-volume-label 11 tell cr
+    ."       FAT32 volume id: " bbuf -.fat32-volume-id w@un .x cr
   else
     ." maybe fat16" cr -5 abort
   then
@@ -826,39 +826,29 @@ variable total-clusters
 ( n_entry -- u )
 : fat@
   dup fat-sector
-  fatbuf swap                           ( we will read the fat entry's sector into temp space )
+  0 fatbuf swap                         ( we will read the fat entry's sector into temp space )
   blocks                                ( get the card address )
   sd-read-block                         ( read the table )
-  fat-entry-in-sector 4 *               ( byte offset of u32 entry )
-  fatbuf +                              ( addr of entry in temp space )
+  fat-entry-in-sector                   ( index of FAT entry )
+  fatbuf                                ( addr of FAT entry )
   w@
 ;
 
-( n -- flg )
-: fat-end? 0x0ffffff8 >= ;
+: fat-end? ( n -- flg ) 0x0ffffff8 >= ;
+: cluster-first-sector ( n -- n ) 2 - sectors-per-cluster @ * first-data-sector @ + ;
 
-: is-dir? 1 ;
-
-( n -- n )
-: cluster-first-sector 2 - sectors-per-cluster @ * first-data-sector @ + ;
-
-( cluster -- )
-: next-cluster
+: next-cluster ( cluster -- )
   dup cluster-first-sector blocks bbuf swap sectors-per-cluster @
   sd-read-blocks
   fat@
 ;
 
-( -- dirent )
-: root
-  root-cluster @ next-cluster
-;
-
-: dirent        ( n -- addr ) dirent-sfn% * bbuf + ;
-: lfn?          ( n -- flg )  -.attrib c@ 0xf = ;
-: free?         ( n -- flg )  c@ 0xe5 = ;
-: last?         ( n -- flg )  c@ 0x00 = ;
-: subdir?       ( n -- flg )  -.attrib c@ 0x10 and 0<> ;
+: root    ( -- cluster# ) root-cluster @ next-cluster ;
+: dirent  ( n -- addr )   dirent-sfn% * bbuf + ;
+: lfn?    ( n -- flg )    -.attrib c@ 0xf = ;
+: free?   ( n -- flg )    c@ 0xe5 = ;
+: last?   ( n -- flg )    c@ 0x00 = ;
+: subdir? ( n -- flg )    -.attrib c@ 0x10 and 0<> ;
 
 : first-cluster
   dup  -.first-cluster-hi h@ 16 lshift

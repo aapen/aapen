@@ -1698,7 +1698,7 @@ defprim dcci
         *               ( n-bytes )
         allot         
         align
-        does> ( i buffer )
+        does> ( i buffer -- addr )
         over 0< if
                 ." Index is negative! " abort
         then
