@@ -682,7 +682,7 @@ variable mounted 2 cells allot
 constant ptentry%
 
 ( reserve space to hold partition table )
-ptentry% 1 cells / 4 * array ptable
+ptentry% 4 []buffer ptable
 
 (
         FAT 12/16/23  ----------------------------------------------------------------------
@@ -749,11 +749,9 @@ constant dirent-sfn%
 constant dirent-lfn%
 
 ( align HERE to 16 byte boundary )
-
 here @ 15 + 15 invert and here !
 variable bbuf 128 cells allot
 variable fatbuf 128 cells allot
-
 variable bytes-per-sector
 variable reserved-sector-count
 variable first-fat-sector
