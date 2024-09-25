@@ -737,6 +737,63 @@ constant fat-bpb-f32-ext%
 4  +field -.file-size
 constant dirent-sfn%
 
+: bl? bl = ;
+
+: append-here ( c -- )
+  here @ c! 1 here +!
+;
+
+( convert the 11 byte name from an SFN dir entry to a 'name.ext' string )
+( note: this modifies `here` )
+: normalize-8.3 ( c-addr -- c-addr u )
+  here @ swap                           ( tmp c-addr )
+  8 0 do
+    dup c@ dup                          ( tmp c-addr c c )
+    bl? not                             ( tmp c-addr c flag )
+    if
+      append-here                       ( tmp c-addr )
+    else
+      drop                              ( tmp c-addr )
+    then
+    1+                                  ( tmp c-addr+1 )
+  loop
+  ( if extension exists, add a dot and copy up to 3 chars )
+  dup c@ dup bl? not                     ( tmp c-addr c flag )
+  if
+    '.' append-here                     ( tmp c-addr c )
+    append-here 1+                      ( tmp c-addr+1 )
+    dup c@ dup bl? not if               ( tmp c-addr+1 c )
+      append-here 1+
+      dup c@ dup bl? not if             ( tmp c-addr+2 c )
+        append-here                     ( tmp c-addr+2 )
+      then
+    then                                ( tmp c-addr+n )
+   0                                    ( tmp c-addr+n 0 )
+  then                                  ( tmp c-addr+n c )
+  2drop                                 ( tmp )
+  dup here @ swap -                     ( tmp u )
+;
+
+: 8.3 ( addr -- )
+  8 0 do
+    dup c@ dup bl? not
+    if
+      emit
+    else
+      drop
+    then
+    1+
+  loop
+  dup c@ dup bl? not if
+    '.' emit emit 1+
+    dup c@ dup bl? not if emit else drop then 1+
+    dup c@ dup bl? not if emit else drop then
+  then
+  drop
+;
+
+
+
 0
 1  +field -.ldir-seq-num
 10 +field -.ldir-name1
@@ -855,13 +912,6 @@ variable total-clusters
   swap -.first-cluster-lo h@ or
 ;
 
-: 8.3 ( addr -- )
-  8 0 do dup c@ emit 1+ loop
-  '.' emit
-  3 0 do dup c@ emit 1+ loop
-  drop
-;
-
 : .dirent ( addr -- )
   dup free? if drop exit then
   dup lfn?  if drop exit then
@@ -926,16 +976,24 @@ variable dirwalk-saw-last?
 
 : dir/ curdir @ cd/ dir curdir ! ;
 
+: fn8.3compare ( c-addr1 u1 c-addr2 -- flag )
+  here @ >r
+  normalize-8.3
+  2swap
+  compare
+  r> here !
+;
+
 ( In curdir, find file matching string. Put first cluster in TOS if )
 ( found, -1 otherwise. )
 : find-file ( c-addr u -- u )
   curdir @ dirwalk-start
   begin
-    dirwalk-next-entry dup              ( c-addr u i i )
-  while                                 ( c-addr u i )
-    >r 2dup r>                          ( c-addr u c-addr u dirent )
-    0d11                                ( c-addr u c-addr u dirent 11 )
-    compare                             ( c-addr u cmp )
+    dirwalk-next-entry                  ( c-addr u i )
+  while                                 ( c-addr u )
+    2dup                                ( c-addr u c-addr u )
+    dirwalk-cur-index @ dirent          ( c-addr u c-addr u dirent )
+    fn8.3compare                        ( c-addr u c-addr u cmp )
     0= if
       2drop
       dirwalk-cur-index @ dirent first-cluster

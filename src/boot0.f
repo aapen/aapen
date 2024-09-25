@@ -27,6 +27,7 @@
 
 : 2dup over over ;
 : 2drop drop drop ;
+: 2swap rot >r rot r> ;
 : 2@ dup 8+ @ swap @ ;
 : 2! dup 8+ rot rot ! ! ;
 
