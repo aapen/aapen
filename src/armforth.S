@@ -1748,7 +1748,7 @@ _parse:
         ldrb    w0, [x4], #1            // get next character
 
         cmp     x4, x6                  // input exhausted?
-        bgt     5f                      // yes, we got nothing
+        bgt     6f                      // yes, return what we've got so far
 
         cmp     w0, w2                  // == delimiter?
         beq     6f                      // yes, we're done

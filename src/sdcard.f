@@ -855,17 +855,6 @@ variable total-clusters
   swap -.first-cluster-lo h@ or
 ;
 
-\ : c@c!+ ( c-addr1 c-addr2 -- c-addr1+ c-addr2+ )
-\   2dup c@ swap c! 1+ swap 1+ swap
-\ ;
-
-\ : dfn ( dest-addr src-addr -- )
-\   8 0 do c@c!+ loop
-\   swap '.' over c! 1+ swap
-\   3 0 do c@c!+ loop
-\   2drop
-\ ;
-
 : 8.3 ( addr -- )
   8 0 do dup c@ emit 1+ loop
   '.' emit
