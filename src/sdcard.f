@@ -662,6 +662,24 @@ variable sdcard.bus-width
 variable curdir
 0 curdir !
 
+0
+1 cells +field file.flags
+1 cells +field file.first-cluster
+1 cells +field file.size
+1 cells +field file.position
+constant file%
+
+file% 20 []buffer files
+0 files file% 20 * 0x00 fill
+
+: file-inuse?   ( fileid -- flag )  files @ 0<> ;
+: file-position ( fileid -- u ior ) dup file-inuse? if files file.position @ 0 else drop 0 -1 then ;
+: file-size     ( fileid -- u ior ) dup file-inuse? if files file.size @ 0 else drop 0 -1 then ;
+: r/o ( -- fam ) 0b01 ;
+: w/o ( -- fam ) 0b10 ;
+: r/w ( -- fam ) 0b11 ;
+: bin ( fam1 -- fam2 ) ;
+
 (
 
 	PARTITION VARIABLES ----------------------------------------------------------------
@@ -738,56 +756,60 @@ constant fat-bpb-f32-ext%
 constant dirent-sfn%
 
 : bl? bl = ;
+: nb? bl = not ;
 
-: append-here ( c -- )
-  here @ c! 1 here +!
-;
+variable normalizebuf 256 allot
+normalizebuf 256 0 fill
+variable &normalize
+
+: cappend ( c -- )             &normalize @ c! 1 &normalize +! ;
+: cnext   ( c-addr -- c flag ) c@ dup nb? ;
 
 ( convert the 11 byte name from an SFN dir entry to a 'name.ext' string )
 ( note: this modifies `here` )
 : normalize-8.3 ( c-addr -- c-addr u )
-  here @ swap                           ( tmp c-addr )
+  normalizebuf &normalize !             ( c-addr )
   8 0 do
-    dup c@ dup                          ( tmp c-addr c c )
-    bl? not                             ( tmp c-addr c flag )
+    dup cnext                           ( c-addr c flag )
     if
-      append-here                       ( tmp c-addr )
+      cappend                           ( c-addr )
     else
-      drop                              ( tmp c-addr )
+      drop                              ( c-addr )
     then
-    1+                                  ( tmp c-addr+1 )
+    1+                                  ( c-addr+1 )
   loop
   ( if extension exists, add a dot and copy up to 3 chars )
-  dup c@ dup bl? not                     ( tmp c-addr c flag )
+  dup cnext                             ( c-addr c flag )
   if
-    '.' append-here                     ( tmp c-addr c )
-    append-here 1+                      ( tmp c-addr+1 )
-    dup c@ dup bl? not if               ( tmp c-addr+1 c )
-      append-here 1+
-      dup c@ dup bl? not if             ( tmp c-addr+2 c )
-        append-here                     ( tmp c-addr+2 )
+    '.' cappend                         ( c-addr c )
+    cappend 1+                          ( c-addr+1 )
+    dup cnext if                        ( c-addr+1 c )
+      cappend 1+
+      dup cnext if                      ( c-addr+2 c )
+        cappend                         ( c-addr+2 )
+      else
+        drop
       then
-    then                                ( tmp c-addr+n )
-   0                                    ( tmp c-addr+n 0 )
-  then                                  ( tmp c-addr+n c )
-  2drop                                 ( tmp )
-  dup here @ swap -                     ( tmp u )
+    else
+      drop
+    then                                ( c-addr+n )
+  else
+    drop
+  then                                  ( c-addr+n c )
+  drop                                  ( )
+  normalizebuf dup &normalize @ swap -  ( buf u )
 ;
 
 : 8.3 ( addr -- )
   8 0 do
-    dup c@ dup bl? not
-    if
-      emit
-    else
-      drop
-    then
-    1+
+    dup cnext if emit else drop then 1+
   loop
-  dup c@ dup bl? not if
+  dup cnext if
     '.' emit emit 1+
-    dup c@ dup bl? not if emit else drop then 1+
-    dup c@ dup bl? not if emit else drop then
+    dup cnext if emit else drop then 1+
+    dup cnext if emit else drop then
+  else
+    drop
   then
   drop
 ;
@@ -927,25 +949,27 @@ variable dirwalk-cur-cluster
 variable dirwalk-cur-index
 variable dirwalk-saw-last?
 
-: dirwalk-continue?
-  dirwalk-cur-cluster @ dup fat-end? not swap 0> and
-  dirwalk-saw-last? @ not and
-;
+: dirwalk-continue? ( -- flag ) dirwalk-saw-last? @ not ;
 
-: dirwalk-next-block
+: dirwalk-next-block ( -- cluster# )
   dirwalk-cur-cluster @
-  dup fat-end? if 0 else next-cluster then
+  dup fat-end? if
+    1 dirwalk-saw-last? !
+    0
+  else
+    next-cluster
+  then
   -1 dirwalk-cur-index !
   dup dirwalk-cur-cluster !
 ;
 
-: dirwalk-start ( cluster -- )
+: dirwalk-start ( cluster# -- )
   dirwalk-cur-cluster !
   0 dirwalk-saw-last? !
   dirwalk-next-block drop
 ;
 
-: dirwalk-need-next-block? dirwalk-cur-index @ 16 >= ;
+: dirwalk-need-next-block? ( -- flag ) dirwalk-cur-index @ 16 >= ;
 
 ( return addr of next dirent or 0 if done )
 : dirwalk-next-entry
@@ -966,37 +990,29 @@ variable dirwalk-saw-last?
 : dir
   ." CLUSTER  DIR?  SIZE     NAME" cr
   curdir @ dirwalk-start
-  begin dirwalk-next-entry dup while
-    .dirent
+  begin dirwalk-continue? while
+    dirwalk-next-entry ?dup if .dirent then
   repeat
-  drop
   ." <end>" cr
   dirwalk-end
 ;
 
 : dir/ curdir @ cd/ dir curdir ! ;
+: compare8.3 ( c-addr1 u1 addr2 -- flag ) normalize-8.3 2swap compare ;
 
-: fn8.3compare ( c-addr1 u1 c-addr2 -- flag )
-  here @ >r
-  normalize-8.3
-  2swap
-  compare
-  r> here !
-;
-
-( In curdir, find file matching string. Put first cluster in TOS if )
+( In curdir, find file matching string. Put dirent addr in TOS if )
 ( found, -1 otherwise. )
-: find-file ( c-addr u -- u )
+: find-file ( c-addr u -- addr )
   curdir @ dirwalk-start
   begin
-    dirwalk-next-entry                  ( c-addr u i )
+    dirwalk-continue?                   ( c-addr u i )
   while                                 ( c-addr u )
     2dup                                ( c-addr u c-addr u )
-    dirwalk-cur-index @ dirent          ( c-addr u c-addr u dirent )
-    fn8.3compare                        ( c-addr u c-addr u cmp )
+    dirwalk-next-entry                  ( c-addr u c-addr u dirent )
+    compare8.3                          ( c-addr u c-addr u cmp )
     0= if
       2drop
-      dirwalk-cur-index @ dirent first-cluster
+      dirwalk-cur-index @ dirent
       exit
     then
   repeat
@@ -1007,9 +1023,25 @@ variable dirwalk-saw-last?
 : cd
   '"' parse find-file
   dup 0< if ." not found" cr exit then
+  first-cluster
   dup 0= if drop root-cluster @ then    ( special case for .. from first-level directory )
   curdir !
 ;
+
+(
+        FILE SYSTEM INTERFACE PART 2 ---------------------------------------------------------
+)
+
+: file-status ( c-addr u -- x ior )
+  find-file dup -1 <> if
+    dup first-cluster 32 lshift swap -.file-size w@ or  ( x = first-cluster << 32 | size )
+    0                                                   ( ior = 0 )
+  else
+    drop 0 -1
+  then
+;
+
+
 
 (
         PARTITION TABLE ----------------------------------------------------------------------

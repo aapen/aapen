@@ -196,6 +196,35 @@ Memory:
 ** TODO line (x y x y color --) draw a line
 ** TODO text (str x y —) draw text at the given location
 ** TODO some palette defining or selecting words?
+* Milestone: Forth file access word set
+- [X] BIN
+- [ ] CLOSE-FILE
+- [ ] CREATE-FILE
+- [ ] DELETE-FILE
+- [X] FILE-POSITION
+- [X] FILE-SIZE
+- [X] FILE-STATUS
+- [ ] FLUSH-FILE
+- [ ] INCLUDE-FILE
+- [ ] INCLUDE
+- [ ] INCLUDED
+- [ ] OPEN-FILE
+- [X] R/O
+- [X] R/W
+- [ ] READ-FILE
+- [ ] READ-LINE
+- [ ] REFILL
+- [ ] RENAME-FILE
+- [ ] REPOSITION-FILE
+- [ ] REQUIRE
+- [ ] REQUIRED
+- [ ] RESIZE-FILE
+- [ ] SOURCE-ID
+- [ ] S\"
+- [ ] S"
+- [X] W/O
+- [ ] WRITE-FILE
+- [ ] WRITE-LINE
 * Other references
 ** Understanding the ARM ecosystem
 https://www.youtube.com/watch?v=NNol7fRGo2E

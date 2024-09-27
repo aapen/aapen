@@ -1,8 +1,4 @@
-// Boot code for Cortex-A53 and Cortex-A72
-//
-// Requires a 64-bit architecture
-//
-// This applies to Raspberry Pi 3B, 3B+, 4B, 400, CM4
+// Video initialization for RPi 3B+, 4B, 400, CM4
 
 #include <asm/macro.h>
 #include <asm/registers.h>
