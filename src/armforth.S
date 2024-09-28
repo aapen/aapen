@@ -1466,11 +1466,6 @@ var_to_in:
         embed   "assembler.f","assembler",9,assembler,test
         embed   "sdcard.f","sdcard",6,sdcard,assembler
 
-	/* Plain old assembly language function. */
-	defconst "say-msg",7,,__say_msg,sdcard,_saymsg
-
-	/* Instruction templates, used by compiler. */
-
 /*
 	RETURN STACK ----------------------------------------------------------------------
 
@@ -1478,7 +1473,7 @@ var_to_in:
 	the top of the return stack.
 */
 
-	defcode ">r",2,,tor,__say_msg
+	defcode ">r",2,,tor,sdcard
 	POPPSP	x0                      // pop parameter stack into x0
 	PUSHRSP	x0                      // and push it onto the return stack
 	next
@@ -2760,9 +2755,6 @@ hmsgend:
 hellomsg: .ascii "Hello world!\r\n"
 hellomsgend:
 
-testmsg: .ascii "Testing!\r\n"
-testmsgend:
-
 /*
 	ODDS AND ENDS ----------------------------------------------------------------------
 
@@ -2810,27 +2802,8 @@ testmsgend:
         bl      _tell
 	next
 
-	// Word to test the call subroutine instructions.
-
-        defcode "test-call",9,,test_call,hello
-	adr     x30,#24 	// 0: Load return address
-	adr	x17,#12		// 4: Load addr of f address
-	ldr	x17,[x17]     	// 8: Load f address
-	br	x17          	// 12:Branch to f
-	.ascii	"ADDRESSX"	// 16: address of message f
-	mov	x19, #42	// 24: Some place to come back to
-	next
-
-_saymsg:
-        stp     x30, x1, [sp, #-16]!
-	ldr	x1, =testmsg		// address
-	mov	x2, #testmsgend-testmsg	// length
-        bl      _tell
-        ldp     x30, x1, [sp], #16
-	ret
-
 	// Example of a secondary in assembly.
-        defword "hellohello",10,,hellohello,test_call
+        defword "hellohello",10,,hellohello,hello
 	.quad hello
 	.quad hello
 	.quad exit		// Return
