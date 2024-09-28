@@ -180,6 +180,10 @@
 	2drop		( len addr -- )
 ;
 
+( Read a word name and find it in the dictionary )
+
+: ?word  ( <word> -- w-addr ) word find ;
+
 ( Prints the n most recent words in the dictionary.
   Does not print hidden words. )
 
