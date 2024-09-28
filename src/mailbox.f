@@ -246,4 +246,4 @@ variable message-start                  ( pointer to start of message buffer )
 : power-on  1 swap 0x28001 do-power-query ;
 : power-off 0 swap 0x28001 do-power-query ;
 
-mbox-old-base base !
+mbox-old-base base ! hide mbox-old-base

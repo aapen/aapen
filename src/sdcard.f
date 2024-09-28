@@ -163,9 +163,8 @@ sd-arg2 0xfc + reg sd-slotisr-ver drop
   drop drop drop
 ;
 
-( todo: there has to be a better way to make an array variable )
-2 cells allot constant sdcard.csd
-2 cells allot constant sdcard.cid
+variable sdcard.csd 2 cells allot
+variable sdcard.cid 2 cells allot
 variable sdcard.status
 variable sdcard.card-state
 variable sdcard.rca
@@ -663,13 +662,31 @@ variable sdcard.bus-width
 variable curdir
 0 curdir !
 
+0
+1 cells +field file.flags
+1 cells +field file.first-cluster
+1 cells +field file.size
+1 cells +field file.position
+constant file%
+
+file% 20 []buffer files
+0 files file% 20 * 0x00 fill
+
+: file-inuse?   ( fileid -- flag )  files @ 0<> ;
+: file-position ( fileid -- u ior ) dup file-inuse? if files file.position @ 0 else drop 0 -1 then ;
+: file-size     ( fileid -- u ior ) dup file-inuse? if files file.size @ 0 else drop 0 -1 then ;
+: r/o ( -- fam ) 0b01 ;
+: w/o ( -- fam ) 0b10 ;
+: r/w ( -- fam ) 0b11 ;
+: bin ( fam1 -- fam2 ) ;
+
 (
 
 	PARTITION VARIABLES ----------------------------------------------------------------
 
 )
 
-2 cells allot constant mounted
+variable mounted 2 cells allot
 
 0
 1 +field -.status
@@ -683,7 +700,7 @@ variable curdir
 constant ptentry%
 
 ( reserve space to hold partition table )
-ptentry% 1 cells / 4 * array ptable drop
+ptentry% 4 []buffer ptable
 
 (
         FAT 12/16/23  ----------------------------------------------------------------------
@@ -738,6 +755,67 @@ constant fat-bpb-f32-ext%
 4  +field -.file-size
 constant dirent-sfn%
 
+: bl? bl = ;
+: nb? bl = not ;
+
+variable normalizebuf 256 allot
+normalizebuf 256 0 fill
+variable &normalize
+
+: cappend ( c -- )             &normalize @ c! 1 &normalize +! ;
+: cnext   ( c-addr -- c flag ) c@ dup nb? ;
+
+( convert the 11 byte name from an SFN dir entry to a 'name.ext' string )
+( note: this modifies `here` )
+: normalize-8.3 ( c-addr -- c-addr u )
+  normalizebuf &normalize !             ( c-addr )
+  8 0 do
+    dup cnext                           ( c-addr c flag )
+    if
+      cappend                           ( c-addr )
+    else
+      drop                              ( c-addr )
+    then
+    1+                                  ( c-addr+1 )
+  loop
+  ( if extension exists, add a dot and copy up to 3 chars )
+  dup cnext                             ( c-addr c flag )
+  if
+    '.' cappend                         ( c-addr c )
+    cappend 1+                          ( c-addr+1 )
+    dup cnext if                        ( c-addr+1 c )
+      cappend 1+
+      dup cnext if                      ( c-addr+2 c )
+        cappend                         ( c-addr+2 )
+      else
+        drop
+      then
+    else
+      drop
+    then                                ( c-addr+n )
+  else
+    drop
+  then                                  ( c-addr+n c )
+  drop                                  ( )
+  normalizebuf dup &normalize @ swap -  ( buf u )
+;
+
+: 8.3 ( addr -- )
+  8 0 do
+    dup cnext if emit else drop then 1+
+  loop
+  dup cnext if
+    '.' emit emit 1+
+    dup cnext if emit else drop then 1+
+    dup cnext if emit else drop then
+  else
+    drop
+  then
+  drop
+;
+
+
+
 0
 1  +field -.ldir-seq-num
 10 +field -.ldir-name1
@@ -750,10 +828,9 @@ constant dirent-sfn%
 constant dirent-lfn%
 
 ( align HERE to 16 byte boundary )
-
 here @ 15 + 15 invert and here !
-128 cells allot constant bbuf
-
+4 256 []buffer fatbuf
+variable bbuf 128 cells allot
 variable bytes-per-sector
 variable reserved-sector-count
 variable first-fat-sector
@@ -828,135 +905,142 @@ variable total-clusters
 ( n_entry -- u )
 : fat@
   dup fat-sector
-  here @ aligned swap                   ( we will read the fat entry's sector into temp space )
+  0 fatbuf swap                         ( we will read the fat entry's sector into temp space )
   blocks                                ( get the card address )
   sd-read-block                         ( read the table )
-  fat-entry-in-sector 4 *               ( byte offset of u32 entry )
-  here @ aligned +                      ( addr of entry in temp space )
+  fat-entry-in-sector                   ( index of FAT entry )
+  fatbuf                                ( addr of FAT entry )
   w@
 ;
 
-( n -- flg )
-: fat-end? 0x0ffffff8 >= ;
+: fat-end? ( n -- flg ) 0x0ffffff8 >= ;
+: cluster-first-sector ( n -- n ) 2 - sectors-per-cluster @ * first-data-sector @ + ;
 
-: is-dir? 1 ;
-
-( n -- n )
-: cluster-first-sector 2 - sectors-per-cluster @ * first-data-sector @ + ;
-
-( cluster -- )
-: next-cluster
+: next-cluster ( cluster -- )
   dup cluster-first-sector blocks bbuf swap sectors-per-cluster @
   sd-read-blocks
   fat@
 ;
 
-( -- dirent )
-: root
-  root-cluster @ next-cluster
-;
-
-: dirent        ( n -- addr ) dirent-sfn% * bbuf + ;
-: lfn?          ( n -- flg )  -.attrib c@ 0xf = ;
-: free?         ( n -- flg )  c@ 0xe5 = ;
-: last?         ( n -- flg )  c@ 0x00 = ;
-: subdir?       ( n -- flg )  -.attrib c@ 0x10 and 0<> ;
+: root    ( -- cluster# ) root-cluster @ next-cluster ;
+: dirent  ( n -- addr )   dirent-sfn% * bbuf + ;
+: lfn?    ( n -- flg )    -.attrib c@ 0xf = ;
+: free?   ( n -- flg )    c@ 0xe5 = ;
+: last?   ( n -- flg )    c@ 0x00 = ;
+: subdir? ( n -- flg )    -.attrib c@ 0x10 and 0<> ;
 
 : first-cluster
   dup  -.first-cluster-hi h@ 16 lshift
   swap -.first-cluster-lo h@ or
 ;
 
-: c@c!+ ( c-addr1 c-addr2 -- c-addr1+ c-addr2+ )
-  2dup c@ swap c! 1+ swap 1+ swap
-;
-
-: dfn ( dest-addr src-addr -- )
-  8 0 do c@c!+ loop
-  swap '.' over c! 1+ swap
-  3 0 do c@c!+ loop
-  2drop
-;
-
-( addr -- )
-: .dirent
-  dup last? if ." <end>" exit then
-  dup free? if exit then
-  dup lfn?  if exit then
+: .dirent ( addr -- )
+  dup free? if drop exit then
+  dup lfn?  if drop exit then
 
   dup first-cluster %08x space
   dup subdir? if ." <dir> " else ."       " then
   dup -.file-size w@ %08x space
-  here @ swap dfn
-  here @ 13 tell space
+  8.3
   cr
 ;
 
 variable dirwalk-cur-cluster
-variable dirwalk-cur-entry
+variable dirwalk-cur-index
 variable dirwalk-saw-last?
 
-: dirwalk-continue?
-  dirwalk-cur-cluster @ dup fat-end? not swap 0> and
-  dirwalk-saw-last? @ not and
-;
+: dirwalk-continue? ( -- flag ) dirwalk-saw-last? @ not ;
 
-: dirwalk-next-block
+: dirwalk-next-block ( -- cluster# )
   dirwalk-cur-cluster @
-  dup fat-end? if 0 else next-cluster then
-  -1 dirwalk-cur-entry !
+  dup fat-end? if
+    1 dirwalk-saw-last? !
+    0
+  else
+    next-cluster
+  then
+  -1 dirwalk-cur-index !
   dup dirwalk-cur-cluster !
 ;
 
-: dirwalk-start
+: dirwalk-start ( cluster# -- )
   dirwalk-cur-cluster !
   0 dirwalk-saw-last? !
-  dirwalk-next-block
+  dirwalk-next-block drop
 ;
 
-: dirwalk-need-next-block? dirwalk-cur-entry @ 16 >= ;
+: dirwalk-need-next-block? ( -- flag ) dirwalk-cur-index @ 16 >= ;
 
 ( return addr of next dirent or 0 if done )
 : dirwalk-next-entry
-  dirwalk-cur-entry @ 1+ dirwalk-cur-entry !
+  dirwalk-cur-index @ 1+ dirwalk-cur-index !
   dirwalk-need-next-block? if
     dirwalk-next-block 0= if 0 exit then
-    0 dirwalk-cur-entry !
+    0 dirwalk-cur-index !
   then
-  dirwalk-cur-entry @ dirent
+  dirwalk-cur-index @ dirent
   dup last? if 1 dirwalk-saw-last? ! drop 0 then
 ;
 
 : dirwalk-end
   0 dirwalk-cur-cluster !
-  -1 dirwalk-cur-entry !
+  -1 dirwalk-cur-index !
 ;
 
 : dir
   ." CLUSTER  DIR?  SIZE     NAME" cr
   curdir @ dirwalk-start
-  begin dirwalk-next-entry dup while
-    .dirent
+  begin dirwalk-continue? while
+    dirwalk-next-entry ?dup if .dirent then
   repeat
   ." <end>" cr
   dirwalk-end
 ;
 
 : dir/ curdir @ cd/ dir curdir ! ;
+: compare8.3 ( c-addr1 u1 addr2 -- flag ) normalize-8.3 2swap compare ;
 
-\ : find-file
-\   dirwalk-start
-\   begin dirwalk-continue? while
-\     dirwalk-scan
-\     dirwalk-next-block
-\   repeat
-\ ;
+( In curdir, find file matching string. Put dirent addr in TOS if )
+( found, -1 otherwise. )
+: find-file ( c-addr u -- addr )
+  curdir @ dirwalk-start
+  begin
+    dirwalk-continue?                   ( c-addr u i )
+  while                                 ( c-addr u )
+    2dup                                ( c-addr u c-addr u )
+    dirwalk-next-entry                  ( c-addr u c-addr u dirent )
+    compare8.3                          ( c-addr u c-addr u cmp )
+    0= if
+      2drop
+      dirwalk-cur-index @ dirent
+      exit
+    then
+  repeat
+  dirwalk-end                           ( c-addr u )
+  2drop -1
+;
 
-\ : cd
-\   bl parse find-file
-\   ?dup 0= if ." not found" cr exit then
-\   first-cluster curdir !
-\ ;
+: cd
+  '"' parse find-file
+  dup 0< if ." not found" cr exit then
+  first-cluster
+  dup 0= if drop root-cluster @ then    ( special case for .. from first-level directory )
+  curdir !
+;
+
+(
+        FILE SYSTEM INTERFACE PART 2 ---------------------------------------------------------
+)
+
+: file-status ( c-addr u -- x ior )
+  find-file dup -1 <> if
+    dup first-cluster 32 lshift swap -.file-size w@ or  ( x = first-cluster << 32 | size )
+    0                                                   ( ior = 0 )
+  else
+    drop 0 -1
+  then
+;
+
 
 
 (
