@@ -662,6 +662,8 @@ variable sdcard.bus-width
 variable curdir
 0 curdir !
 
+20 constant nfiles
+
 0
 1 cells +field file.flags
 1 cells +field file.first-cluster
@@ -669,8 +671,8 @@ variable curdir
 1 cells +field file.position
 constant file%
 
-file% 20 []buffer files
-0 files file% 20 * 0x00 fill
+file% nfiles []buffer files
+0 files file% nfiles * 0x00 fill
 
 : file-inuse?   ( fileid -- flag )  files @ 0<> ;
 : file-position ( fileid -- u ior ) dup file-inuse? if files file.position @ 0 else drop 0 -1 then ;
@@ -679,6 +681,33 @@ file% 20 []buffer files
 : w/o ( -- fam ) 0b10 ;
 : r/w ( -- fam ) 0b11 ;
 : bin ( fam1 -- fam2 ) ;
+
+: alloc-fid ( fam -- fid )
+  nfiles 0 do
+    i file-inuse? not if
+      i files !                         ( put fam in flags, indicates file in use )
+      i unloop exit                     ( return fid )
+    then
+  loop
+  drop
+  -1
+;
+
+: free-fid ( fid -- ) files file% 0x00 fill ;
+
+: .file
+  dup @ %02x space cell+
+  dup @ %08x space cell+
+  dup @ %08x space cell+
+      @ %08x space cr
+;
+
+: .files
+  ." FL CLUSTER  SIZE     POSITION" cr
+  nfiles 0 do
+    i files .file
+  loop
+;
 
 (
 
@@ -1041,7 +1070,23 @@ variable dirwalk-saw-last?
   then
 ;
 
+( Note - nothing stops a file from being opened more than once. )
+: open-file ( c-addr u fam -- fileid ior )
+  alloc-fid dup 0< if ." too many files" cr drop 0 -1 exit then           ( c-addr u fid )
+  -rot find-file dup 0< if ." not found" cr drop free-fid 0 -1 exit then  ( fid dirent )
+  over files cell+ over first-cluster                                     ( fid dirent fptr.first-cluster cluster )
+  over ! cell+                                                            ( fid dirent fptr.size )
+  over -.file-size w@ over ! cell+                                        ( fid dirent fptr.position )
+  0 swap !                                                                ( fid dirent )
+  drop 0                                                                  ( fid ior )
+;
 
+( Note - device i/o is synchronous now, so there's no need to watch for pending IO operations
+( here. Someday we will need to worry about that. )
+: close-file ( fileid -- ior )
+  dup file-inuse? not if ." file not open" cr drop -1 exit then
+  free-fid 0
+;
 
 (
         PARTITION TABLE ----------------------------------------------------------------------

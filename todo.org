@@ -198,7 +198,7 @@ Memory:
 ** TODO some palette defining or selecting words?
 * Milestone: Forth file access word set
 - [X] BIN
-- [ ] CLOSE-FILE
+- [X] CLOSE-FILE
 - [ ] CREATE-FILE
 - [ ] DELETE-FILE
 - [X] FILE-POSITION
@@ -208,7 +208,7 @@ Memory:
 - [ ] INCLUDE-FILE
 - [ ] INCLUDE
 - [ ] INCLUDED
-- [ ] OPEN-FILE
+- [X] OPEN-FILE
 - [X] R/O
 - [X] R/W
 - [ ] READ-FILE
