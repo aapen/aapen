@@ -669,10 +669,22 @@ variable curdir
 1 cells +field file.first-cluster
 1 cells +field file.size
 1 cells +field file.position
+1 cells +field file.cur-cluster
+1 cells +field file.buffer
 constant file%
 
 file% nfiles []buffer files
-0 files file% nfiles * 0x00 fill
+128   nfiles []buffer file-buffers
+
+: assign-buffer ( i -- ) dup file-buffers swap files file.buffer ! ;
+
+: files-init
+  0 files        file% nfiles * 0x00 fill
+  0 file-buffers 128   nfiles * 0x00 fill
+  nfiles 0 do i assign-buffer loop
+;
+
+files-init
 
 : file-inuse?   ( fileid -- flag )  files @ 0<> ;
 : file-position ( fileid -- u ior ) dup file-inuse? if files file.position @ 0 else drop 0 -1 then ;
@@ -693,17 +705,22 @@ file% nfiles []buffer files
   -1
 ;
 
-: free-fid ( fid -- ) files file% 0x00 fill ;
+: free-fid ( fid -- )
+  dup files file% 0x00 fill
+  assign-buffer
+;
 
 : .file
   dup @ %02x space cell+
   dup @ %08x space cell+
   dup @ %08x space cell+
-      @ %08x space cr
+  dup @ %08x space cell+
+  dup @ %08x space cell+
+      @ %08x cr
 ;
 
 : .files
-  ." FL CLUSTER  SIZE     POSITION" cr
+  ." FL CLUSTER1 SIZE     POSITION CURCLST  BUFFER" cr
   nfiles 0 do
     i files .file
   loop
@@ -945,11 +962,9 @@ variable total-clusters
 : fat-end? ( n -- flg ) 0x0ffffff8 >= ;
 : cluster-first-sector ( n -- n ) 2 - sectors-per-cluster @ * first-data-sector @ + ;
 
-: next-cluster ( cluster -- )
-  dup cluster-first-sector blocks bbuf swap sectors-per-cluster @
-  sd-read-blocks
-  fat@
-;
+: load-cluster ( addr cluster -- ) cluster-first-sector blocks sectors-per-cluster @ sd-read-blocks ;
+
+: next-cluster ( cluster -- ) dup bbuf swap load-cluster fat@ ;
 
 : root    ( -- cluster# ) root-cluster @ next-cluster ;
 : dirent  ( n -- addr )   dirent-sfn% * bbuf + ;
@@ -1017,7 +1032,7 @@ variable dirwalk-saw-last?
 ;
 
 : dir
-  ." CLUSTER  DIR?  SIZE     NAME" cr
+  ." CLUSTER1 DIR?  SIZE     NAME" cr
   curdir @ dirwalk-start
   begin dirwalk-continue? while
     dirwalk-next-entry ?dup if .dirent then
@@ -1061,6 +1076,9 @@ variable dirwalk-saw-last?
         FILE SYSTEM INTERFACE PART 2 ---------------------------------------------------------
 )
 
+: file-load-curclst ( fid -- ) files dup file.buffer @ swap file.cur-cluster @ load-cluster ;
+: file-find-nxtclst ( fid -- ) files file.cur-cluster dup @ fat@ swap ! ;
+
 : file-status ( c-addr u -- x ior )
   find-file dup -1 <> if
     dup first-cluster 32 lshift swap -.file-size w@ or  ( x = first-cluster << 32 | size )
@@ -1074,11 +1092,15 @@ variable dirwalk-saw-last?
 : open-file ( c-addr u fam -- fileid ior )
   alloc-fid dup 0< if ." too many files" cr drop 0 -1 exit then           ( c-addr u fid )
   -rot find-file dup 0< if ." not found" cr drop free-fid 0 -1 exit then  ( fid dirent )
-  over files cell+ over first-cluster                                     ( fid dirent fptr.first-cluster cluster )
-  over ! cell+                                                            ( fid dirent fptr.size )
-  over -.file-size w@ over ! cell+                                        ( fid dirent fptr.position )
-  0 swap !                                                                ( fid dirent )
-  drop 0                                                                  ( fid ior )
+  ( fill in the file structure )
+  over files cell+                      ( fid dirent fptr.first-cluster )
+  over first-cluster over ! cell+       ( fid dirent fptr.size )
+  over -.file-size w@ over ! cell+      ( fid dirent fptr.position )
+  0 over ! cell+                        ( fid dirent fptr.cur-cluster )
+  over first-cluster over ! drop        ( fid dirent )
+  ( load the first cluster into the buffer )
+  over file-load-curclst
+  drop 0                                ( fid ior )
 ;
 
 ( Note - device i/o is synchronous now, so there's no need to watch for pending IO operations
@@ -1086,6 +1108,13 @@ variable dirwalk-saw-last?
 : close-file ( fileid -- ior )
   dup file-inuse? not if ." file not open" cr drop -1 exit then
   free-fid 0
+;
+
+: reposition-file ( u fileid -- ior )
+  dup file-inuse? not if ." file not open" cr 2drop -1 exit then
+  over 0< if ." position cannot be negative" cr 2drop -1 exit then
+  dup file-size drop 2 pick < if ." position > file size" cr 2drop -1 exit then
+  files file.position ! 0
 ;
 
 (
