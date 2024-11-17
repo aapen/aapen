@@ -100,6 +100,22 @@
 
 : @execute @ dup 0= if drop exit then execute ;
 
+( DEFER and IS provide a convenient way to manage an execution
+  vector. DEFER defines a word that can have its behavior replaced later by IS.
+
+  For example:
+
+  defer <name>
+  <xt> IS <name>
+)
+
+: defer ( "name" -- )
+  create ['] abort ,            ( create word, default behavior is to abort )
+  does> @execute                ( look up xt from data field, execute it )
+;
+
+: is ( xt "name" -- ) word find dup 0= if ." notfound " abort then >dfa ! ;
+
 ( find the word after the given one )
 
 : after ( word -- next-word )
