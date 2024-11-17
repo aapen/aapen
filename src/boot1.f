@@ -98,7 +98,7 @@
 	' lit ,		( compile lit )
 ;
 
-
+: @execute @ dup 0= if drop exit then execute ;
 
 ( find the word after the given one )
 
@@ -618,30 +618,30 @@ fb -.yres @ 16 / constant screen-rows
 
 blue light-blue clr!
 
-: csr@ fb -.cursorx @ fb -.cursory @ ;
-: csr! fb -.cursory ! fb -.cursorx ! ;
+: get-xy ( -- x y ) fb -.cursorx @ fb -.cursory @ ;
+: at-xy  ( x y -- ) fb -.cursory ! fb -.cursorx ! ;
 
 : next-line
-  csr@
+  get-xy
   nip 0 swap
   1+
   dup screen-rows >= if
     drop 0
   then
-  csr!
+  at-xy
 ;
 
 : next-char
-  csr@
+  get-xy
   swap 1+
   dup screen-cols >= if
     2drop next-line
   else
-    swap csr!
+    swap at-xy
   then
 ;
 
-: home 0 0 csr! ;
+: home 0 0 at-xy ;
 : fg! clr@ drop swap clr! ;
 : bg! clr@ nip       clr! ;
 
@@ -681,8 +681,9 @@ blue light-blue clr!
 ;
 
 : (concls) 'esc' >con 'c' >con ;
-: (dispcls) home screen-rows screen-cols * 0 do bl emit loop home ;
-: cls  (dispcls) (concls) ;
+: (dispcls) home screen-rows screen-cols * 0 do bl emit loop ;
+: cls (dispcls) (concls) ;
+: page cls home ;
 
 test evaluate
 mailbox evaluate
@@ -693,4 +694,5 @@ aapen-logo
 cr
 s" V 0.01" tell cr
 s" READY" tell cr
+
 quit

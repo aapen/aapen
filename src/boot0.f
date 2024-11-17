@@ -1730,6 +1730,3 @@ defprim dcci
 ( Pull in the rest of the basic Forth boot-up code. )
 
 boot1 evaluate
-
-
-
