@@ -102,10 +102,10 @@
 
 ( literal takes whatever is on the stack and compiles lit <foo> )
 
-: literal immediate
-	' lit ,		( compile lit )
-	,		( compile the literal itself from the stack )
-	;
+: literal
+        ['] lit ,        ( compile lit )
+	,                ( compile the literal itself from the stack )
+; immediate
 
 ( Compile a colon. )
 
@@ -178,7 +178,7 @@
  off the stack, calculate the offset, and back-fill the offset. )
 
 : if
-	' 0branch ,                   ( compile 0branch )
+	['] 0branch ,                   ( compile 0branch )
 	here @                        ( save location of the offset on the stack )
 	0 ,                           ( compile a dummy offset )
 ; immediate
@@ -190,7 +190,7 @@
 ; immediate
 
 : else
-	' branch ,                    ( definite branch to just over the false-part )
+	['] branch ,                    ( definite branch to just over the false-part )
 	here @                        ( save location of the offset on the stack )
 	0 ,                           ( compile a dummy offset )
 	swap                          ( now back-fill the original if offset )
@@ -209,7 +209,7 @@
 ;
 
 : until immediate
-	' 0branch ,                   \ compile 0branch
+	['] 0branch ,                   \ compile 0branch
 	here @ -                      \ calculate the offset from the address saved on the stack
 	,                             \ compile the offset here
 ;
@@ -220,7 +220,7 @@
  In other words, an infinite loop which can only be returned from with EXIT )
 
 : again immediate
-	' branch ,                    \ compile branch
+	['] branch ,                    \ compile branch
 	here @ -                      \ calculate the offset back
 	,                             \ compile the offset here
 ;
@@ -232,13 +232,13 @@
         So this is like a while condition { loop-part } loop in the C language.)
 
 : while immediate
-	' 0branch ,                   ( compile 0branch )
+	['] 0branch ,                   ( compile 0branch )
 	here @                        ( save location of the offset2 on the stack )
 	0 ,                           ( compile a dummy offset2 )
 ;
 
 : repeat immediate
-	' branch ,                    ( compile branch )
+	['] branch ,                    ( compile branch )
 	swap                          ( get the original offset from begin)
 	here @ - ,                    ( and compile it after branch )
 	dup
@@ -249,7 +249,7 @@
 ( unless is the same as if but the test is reversed. )
 
 : unless immediate
-	' not ,                       ( compile not to reverse the test )
+	['] not ,                       ( compile not to reverse the test )
 	[compile] if                  ( continue by calling the normal if )
 ;
 
@@ -265,8 +265,8 @@
 
 : do
   0                             ( remember this was not a qdo )
-  ' >r ,                        ( compile >r to push initial count on rstack )
-  ' >r ,                        ( another >r to push the limit onto rstack )
+  ['] >r ,                        ( compile >r to push initial count on rstack )
+  ['] >r ,                        ( another >r to push the limit onto rstack )
   here @                        ( save location that will be the branch target )
 ; immediate
 
@@ -284,10 +284,10 @@
 \ +loop can drop them later.
 
 : ?do
-  ' 2dup ,
-  ' >r , ' >r ,                 ( push initial count and limit onto rstack )
-  ' = , ' not ,                 ( compile execution-time test on bounds )
-  ' 0branch ,                   ( if bounds equal, we will skip the body )
+  ['] 2dup ,
+  ['] >r , ['] >r ,                 ( push initial count and limit onto rstack )
+  ['] = , ['] not ,                 ( compile execution-time test on bounds )
+  ['] 0branch ,                   ( if bounds equal, we will skip the body )
   here @                        ( remember where to fill in the offset )
   0 ,                           ( dummy placeholder to fix up later )
   1                             ( remember this was a qdo )
@@ -300,8 +300,8 @@
  where `unloop` comes in. It restores the return stack so we can `exit` cleanly. )
 
 : unloop
-  ' rdrop ,
-  ' rdrop ,
+  ['] rdrop ,
+  ['] rdrop ,
 ; immediate
 
 \ There are two words to end the loop's body: `loop` and `+loop`.
@@ -334,22 +334,22 @@
 \ that started this whole thing and the "done" part cleans up the rstack.
 
 : +loop
-  ' (loop-inc) ,
-  ' (loop-done?) ,
-  ' 0branch ,                   ( compile branch )
+  ['] (loop-inc) ,
+  ['] (loop-done?) ,
+  ['] 0branch ,                   ( compile branch )
   here @ - ,
   if                            ( was this a qdo? )
     here @ over -               ( find offset from the qdo's branch to here )
     swap !                      ( backpatch the qdo's branch target )
   then
-  ' rdrop ,
-  ' rdrop ,
+  ['] rdrop ,
+  ['] rdrop ,
 ; immediate
 
 ( And here's the special case to just step by 1. )
 
 : loop
-  ' lit ,
+  ['] lit ,
   1 ,
   [compile] +loop
 ; immediate
@@ -408,7 +408,7 @@
 
 : s"   ( -- addr len )
   state @ if	( compiling? )
-  	' litstring ,	( compile litstring )
+  	['] litstring ,	( compile litstring )
   	here @		( save the address of the length word on the stack )
   	0 ,		( dummy length - we don't know what it is yet )
                 '"' parse s,
@@ -437,7 +437,7 @@
 : ." immediate		( -- )
 	state @ if	( compiling? )
 		[compile] s"	( read the string, and compile litstring, etc. )
-		' tell ,	( compile the final tell )
+		['] tell ,	( compile the final tell )
 	else
           '"' parse tell
 	then
@@ -1341,9 +1341,9 @@ defprim dcci
 	find		( look it up in the dictionary )
 	>dfa		( get a pointer to the first cell of the data field )
 	state @ if	( compiling? )
-		' lit ,		( compile lit )
+		['] lit ,		( compile lit )
 		,		( compile the address of the value )
-		' ! ,		( compile ! )
+		['] ! ,		( compile ! )
 	else		( immediate mode )
 		!		( update it straightaway )
 	then
@@ -1356,9 +1356,9 @@ defprim dcci
 	find		( look it up in the dictionary )
 	>dfa		( get a pointer to the first cell of the data field )
 	state @ if	( compiling? )
-		' lit ,		( compile lit )
+		['] lit ,		( compile lit )
 		,		( compile the address of the value )
-		' +! ,		( compile +! )
+		['] +! ,		( compile +! )
 	else		( immediate mode )
 		+!		( update it straightaway )
 	then
@@ -1434,10 +1434,10 @@ defprim dcci
 ;
 
 : of immediate
-	' over ,	( compile over )
-	' = ,		( compile = )
+	['] over ,	( compile over )
+	['] = ,		( compile = )
 	[compile] if	( compile if )
-	' drop ,  	( compile drop )
+	['] drop ,  	( compile drop )
 ;
 
 : endof immediate
@@ -1445,7 +1445,7 @@ defprim dcci
 ;
 
 : endcase immediate
-	' drop ,	( compile drop )
+	['] drop ,	( compile drop )
 
 	( keep compiling then until we get to our zero marker )
 	begin
@@ -1578,7 +1578,7 @@ defprim dcci
 
 : catch		( xt -- exn? )
 	dsp@ 8+ >r		( save parameter stack pointer -- +8 because of xt -- on the return stack )
-	' exception-marker 8+	( push the address of the rdrop inside exception-marker ... )
+	['] exception-marker 8+	( push the address of the rdrop inside exception-marker ... )
 	>r			( ... on to the return stack so it acts like a return address )
 	execute			( execute the nested function )
 ;
@@ -1590,7 +1590,7 @@ defprim dcci
 			dup r0 8- <		( rsp < r0 )
 		while
 			dup @			( get the return stack entry )
-			' exception-marker 8+ = if	( found the exception-marker on the return stack )
+			['] exception-marker 8+ = if	( found the exception-marker on the return stack )
 				8+			( skip the exception-marker on the return stack )
 				rsp!			( restore the return stack pointer )
 

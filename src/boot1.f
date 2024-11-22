@@ -94,10 +94,6 @@
 	]		( go into compile mode )
 ;
 
-: ['] immediate
-	' lit ,		( compile lit )
-;
-
 : @execute @ dup 0= if drop exit then execute ;
 
 ( DEFER and IS provide a convenient way to manage an execution
@@ -294,11 +290,11 @@
 		dup @		( end start codeword )
 
 		case
-		' lit of		( is it lit ? )
+		['] lit of		( is it lit ? )
 			cell+ dup @		( get next word which is the integer constant )
 			.			( and print it )
 		endof
-		' litstring of		( is it litstring ? )
+		['] litstring of		( is it litstring ? )
 			[ char s ] literal emit '"' emit space ( print s"<space> )
 			cell+ dup @		( get the length word )
 			swap cell+ swap		( end start+8 length )
@@ -307,29 +303,29 @@
 			+ aligned		( end start+8+len, aligned )
 			1 cells -		( because we're about to add 8 below )
 		endof
-		' 0branch of		( is it 0branch ? )
+		['] 0branch of		( is it 0branch ? )
 			." 0branch ( "
 			cell+ dup @		( print the offset )
 			.
 			." ) "
 		endof
-		' branch of		( is it branch ? )
+		['] branch of		( is it branch ? )
 			." branch ( "
 			cell+ dup @		( print the offset )
 			.
 			." ) "
 		endof
-		' ' of			( is it ' <tick> ? )
+		['] ' of			( is it ' <tick> ? )
 			[ char ' ] literal emit space
 			cell+ dup @		( get the next codeword )
 			cfa>			( and force it to be printed as a dictionary entry )
 			id. space
 		endof
-                ' (does>) of            ( is it does>?)
+                ['] (does>) of            ( is it does>?)
                         ." does> "
                         0d32 +                  ( skip the shim )
                 endof
-		' exit of		( is it exit? )
+		['] exit of		( is it exit? )
 			( we expect the last word to be exit, and if it is then we don't print it
 			  because exit is normally implied by ;.  exit can also appear in the middle
 			  of words, and then it needs to be printed. )
@@ -423,7 +419,7 @@
 	while
 		dup @			( get the return stack entry )
 		case
-		' exception-marker 8+ of	( is it the exception stack frame? )
+		['] exception-marker 8+ of	( is it the exception stack frame? )
 			." catch ( dsp="
 			8+ dup @ u.		( print saved stack pointer )
 			." ) "
@@ -475,7 +471,7 @@
 
 : z" immediate
 	state @ if	( compiling? )
-		' litstring ,	( compile litstring )
+		['] litstring ,	( compile litstring )
 		here @		( save the address of the length word on the stack )
 		0 ,		( dummy length - we don't know what it is yet )
                 '"' parse s,
@@ -487,7 +483,7 @@
 		8-		( subtract 4 -- because we measured from the start of the length word )
 		swap !		( and back-fill the length location )
 		align		( round up to next multiple of 4 bytes for the remaining code )
-		' drop ,	( compile drop -- to drop the length )
+		['] drop ,	( compile drop -- to drop the length )
 	else		( immediate mode )
 	        here @		( get the start address of the temporary space )
                 '"' parse s,

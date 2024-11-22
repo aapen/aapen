@@ -1465,6 +1465,7 @@ var_to_in:
         embed   "test.f","test",4,test,mailbox
         embed   "assembler.f","assembler",9,assembler,test
         embed   "sdcard.f","sdcard",6,sdcard,assembler
+        embed   "whichway.f","whichway",8,whichway,sdcard
 
 /*
 	RETURN STACK ----------------------------------------------------------------------
@@ -1473,7 +1474,7 @@ var_to_in:
 	the top of the return stack.
 */
 
-	defcode ">r",2,,tor,sdcard
+	defcode ">r",2,,tor,whichway
 	POPPSP	x0                      // pop parameter stack into x0
 	PUSHRSP	x0                      // and push it onto the return stack
 	next
@@ -2478,10 +2479,10 @@ _comma:
 	next
 
         defword "hide",4,,hide,hidden
-	.quad word		// Get the word (after HIDE).
-	.quad find		// Look up in the dictionary.
-	.quad hidden		// Set F_HIDDEN flag.
-	.quad exit		// Retu
+	.quad word		        // Get the word (after HIDE).
+	.quad find		        // Look up in the dictionary.
+	.quad hidden		        // Set F_HIDDEN flag.
+	.quad exit		        // Return
 
 /*
 	' (TICK) is a standard FORTH word which returns the codeword pointer of the next word.
@@ -2490,13 +2491,12 @@ _comma:
 
 	' FOO ,
 
-	which appends the codeword of FOO to the current word we are defining (this only works in compiled code).
-
-	You tend to use ' in IMMEDIATE words.  For example an alternate (and rather useless) way to define
-	a literal 2 might be:
+	which appends the codeword of FOO to the current word we are
+        defining. This only works in interpreted mode. The equivalent
+        during compilation is ['], like so:
 
 	: LIx2 IMMEDIATE
-		' LIT ,		\ Appends LIT to the currently-being-defined word
+		['] LIT ,	\ Appends LIT to the currently-being-defined word
 		2 ,		\ Appends the number 2 to the currently-being-defined word
 	;
 
@@ -2504,17 +2504,41 @@ _comma:
 
 	: double LIx2 * ;
 
-	(If you don't understand how LIx2 works, then you should review the material about compiling words
-	and immediate mode).
+        Jonesforth originally defined only ', using a "cheat" he
+	describes like this:
 
-	This definition of ' uses a cheat which I copied from buzzard92.  As a result it only works in
-	compiled code.  It is possible to write a version of ' based on WORD, FIND, >CFA which works in
-	immediate mode too.
+	  This definition of ' uses a cheat which I copied from buzzard92.  As a result it only works in
+	  compiled code.  It is possible to write a version of ' based on WORD, FIND, >CFA which works in
+	  immediate mode too.
+
+        Our implementation uses that for its definition of [']. TICK
+        itself is defined in the more conventional way, basically
+        `word find >cfa`. Since it uses `word`, a "naked" tick looks
+        at the next word in the input stream at the time it is
+        executed. This means it does _not_ function like the
+        Jonesforth version of TICK but is closer to ANS Forth.
+
 */
 
-	defcode "'",1,,tick,hide
+	defcode "[']",3,,compile_tick,hide
 	ldr	x0, [NIP], #8   	// load address of next word from NIP, increment NIP to skip it
 	PUSHPSP	x0
+	next
+
+        // note to self ... the implementation below might indeed work
+        // for interpreted mode. but when executing a
+        // previously-compiled tick, it finds at the input stream _at
+        // execution time_ when it should have already looked at the
+        // input stream during compilation to get the xt of the next
+        // word then.
+
+        defcode "'",1,,tick,compile_tick
+        PUSHPSP lr
+        bl      _word
+        bl      _find
+        bl      _tcfa
+        POPPSP  lr
+        PUSHPSP x0
 	next
 
 /*
