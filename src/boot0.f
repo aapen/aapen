@@ -53,7 +53,6 @@
 : hex ( -- ) 16 base ! ;
 : binary ( -- ) 2 base ! ;
 
-
 ( Some more complicated stack utilities. )
 
 : nip ( x y -- y ) swap drop ;
@@ -96,7 +95,7 @@
 
 ( Standard words for booleans. )
 
-: true  1 ;
+: true  -1 ;
 : false 0 ;
 : not   0= ;
 
@@ -136,11 +135,7 @@
 : '-' [ char - ] literal ;
 : '.' [ char . ] literal ;
 : '[' [ char [ ] literal ;
-
 : 'esc' 27 ;
-
-
-
 
 ( while compiling, '[compile] word' compiles 'word' if it would otherwise be IMMEDIATE. )
 
@@ -252,6 +247,9 @@
 	['] not ,                       ( compile not to reverse the test )
 	[compile] if                  ( continue by calling the normal if )
 ;
+
+
+
 
 \ `do` is similar to `begin`, but it has some extra runtime behavior to take the
 \ start and limit from the stack and tuck them away on the rstack.
@@ -923,7 +921,7 @@ with the two forms of relative jumps. )
   surly crash. )
 
 : defprim
-  create		( Create a new word )
+  create                 ( Create a new word )
   here @ dup 8 - !       ( Put DFA into CFA )
 ;
 
@@ -999,37 +997,51 @@ defprim rshift
 defprim >=
   1 		poppsp-x w,
   0 		poppsp-x w,
+  2 0           mov-x# w,
   0 1 		cmp-xx w,
-  0 zr zr c-lt 	csinc-xxxc w,
-  0 		pushpsp-x w,
+  ->1f          blt-#   w,
+  2 2 1         sub-xx# w,
+1f:
+  2 		pushpsp-x w,
 ;;
 
 defprim 0<>
-  0 		poppsp-x w,
-  0 zr 		cmp-xx w,
-  0 zr zr c-eq 	csinc-xxxc w,
-  0 		pushpsp-x w,
+  0 		poppsp-x  w,
+  1 0           mov-x#    w,
+  0 ->1f        cbz-x#    w,
+  1 1 1         sub-xx#   w,
+1f:
+  1 		pushpsp-x w,
 ;;
 
 defprim 0<
   0 		poppsp-x w,
+  1 0           mov-x# w,
   0 zr 		cmp-xx w,
-  0 zr zr c-ge 	csinc-xxxc w,
-  0 		pushpsp-x w,
+  ->1f          bge-#  w,
+  1 1 1         sub-xx# w,
+1f:
+  1 		pushpsp-x w,
 ;;
 
 defprim 0>
   0 		poppsp-x w,
+  1 0           mov-x# w,
   0 zr 		cmp-xx w,
-  0 zr zr c-le 	csinc-xxxc w,
-  0 		pushpsp-x w,
+  ->1f          ble-# w,
+  1 1 1         sub-xx# w,
+1f:
+  1 		pushpsp-x w,
 ;;
 
 defprim 0>=
   0 		poppsp-x w,
+  1 0           mov-x# w,
   0 zr 		cmp-xx w,
-  0 zr zr c-lt 	csinc-xxxc w,
-  0 		pushpsp-x w,
+  ->1f          blt-# w,
+  1 1 1         sub-xx# w,
+1f:
+  1 		pushpsp-x w,
 ;;
 
 defprim xor

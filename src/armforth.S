@@ -985,70 +985,85 @@ name_0: .quad 0
         next
 
 // 	Lots of comparison operations.
-//
-//	ANS FORTH says that the comparison words should return all (binary) 1's for
-//	TRUE and all 0's for FALSE.  However this is a bit of a strange convention
-//	so this FORTH breaks it and returns the more normal (for C programmers ...)
-//	1 meaning TRUE and 0 meaning FALSE.
 
 	// = (a b -- a=b)
 	defcode "=",1,,equ,brk
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
+        mov     x2, #0
 	cmp	x0, x1                  // test a vs b
-        csinc   x0, xzr, xzr, ne        // x0 <- (a != b) ? 0 : 1
-	PUSHPSP	x0
+        b.ne    1f
+        sub     x2, x2, #1
+1:
+	PUSHPSP	x2
 	next
 
 	// <> (a b -- a<>b)
 	defcode "<>",2,,nequ,equ
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
+        mov     x2, #0
 	cmp	x0, x1                  // test a vs b
-        csinc   x0, xzr, xzr, eq        // x0 <- (a == b) ? 0 : 1
-	PUSHPSP	x0
+        b.eq    1f
+        sub     x2, x2, #1
+1:
+	PUSHPSP	x2
 	next
 
 	// < (a b -- a<b)
 	defcode "<",1,,lt,nequ
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
+        mov     x2, #0
 	cmp	x0, x1                  // test a vs b
-        csinc   x0, xzr, xzr, ge        // x0 <- (a >= b) ? 0 : 1
-	PUSHPSP	x0
+        b.ge    1f
+        sub     x2, x2, #1
+1:
+	PUSHPSP	x2
 	next
 
 	// > (a b -- a>b)
 	defcode ">",1,,gt,lt
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
+        mov     x2, #0
 	cmp	x0, x1                  // test a vs b
-        csinc   x0, xzr, xzr, le        // x0 <- (a <= b) ? 0 : 1
-	PUSHPSP	x0
+        b.le    1f
+        sub     x2, x2, #1
+1:
+        PUSHPSP	x2
 	next
 
 	// <= (a b -- a<=b)
 	defcode "<=",2,,le,gt
         POPPSP  x1                      // x1 <- b
         POPPSP  x0                      // x0 <- a
+        mov     x2, #0
 	cmp	x0, x1                  // test a vs b
-        csinc   x0, xzr, xzr, gt        // x0 <- (a > b) ? 0 : 1
-	PUSHPSP	x0
+        b.gt    1f
+        sub     x2, x2, #1
+1:
+	PUSHPSP	x2
 	next
 
         // 0= (a -- a == 0)
         defcode "0=",2,,zeroeq,le
         POPPSP  x0
-        cmp     x0, xzr
-        csinc   x0, xzr, xzr, ne
-        PUSHPSP x0
+        mov     x1, #0
+        cbnz    x0, 1f
+        sub     x1, x1, #1
+1:
+        PUSHPSP x1
         next
 
         defcode "0>",2,,zgt,zeroeq
         POPPSP  x0
+        mov     x1, #0
         cmp     x0, xzr
-        csinc   x0, xzr, xzr, le
-        PUSHPSP x0
+        b.le    1f
+        sub     x1, x1, #1
+1:
+        PUSHPSP x1
         next
 
 	// AND (a b -- a&b)

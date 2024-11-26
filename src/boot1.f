@@ -157,22 +157,16 @@
 	here !		( and move here back to that prevous word )
 ;
 
+: flags ( waddr -- c ) 8 + c@ ;
 
 ( Given a word address, return the hidden flag. )
-
 : ?hidden  ( waddr -- hidden-flag )
-	8 +		( skip over the link pointer )
-	c@		( get the flags byte )
-	f_hidden and	( mask the f_hidden flag and return it -- as a truth value )
+  flags f_hidden and 0<> ( mask the f_hidden flag and return it -- as a truth value )
 ;
 
 ( Given a word address, return the immediate flag. )
-
 : ?immediate ( waddr -- immed-flag )
-
-	8 +		( skip over the link pointer )
-	c@		( get the flags byte )
-	f_immed and	( mask the F_IMMED flag and return it -- as a truth value )
+  flags f_immed and 0<> ( mask the F_IMMED flag and return it -- as a truth value )
 ;
 
 ( Given a word address, return the name of the word. )
