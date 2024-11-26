@@ -54,15 +54,4 @@ create greetings
 ' german-greet ,
 ' aussie-greet ,
 
-\ 1 cells 4 []buffer greetings
-
-\ : init-greetings
-\   ['] english-greet english greetings !
-\   ['] french-greet  french greetings !
-\   ['] german-greet  german greetings !
-\   ['] aussie-greet  aussie greetings !
-\ ;
-
-\ init-greetings
-
 : greeting ( n -- ) cells greetings + @execute ;
