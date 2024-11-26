@@ -99,7 +99,16 @@
 : false 0 ;
 : not   0= ;
 
-( literal takes whatever is on the stack and compiles lit <foo> )
+(
+ Append to the word being compiled. For Aapen this is the same as , )
+: compile, , ;
+: lit, ( x -- ) ['] lit compile, , ;
+
+(
+  literal takes whatever is on the stack and compiles lit <foo>. note
+  that the only difference between lit, and literal is that the latter
+  literal is immediate.
+)
 
 : literal
         ['] lit ,        ( compile lit )
@@ -193,6 +202,7 @@
 	here @ swap -
 	swap !
 ; immediate
+
 
 ( begin loop-part condition until
   -- compiles to: --> loop-part condition 0branch offset

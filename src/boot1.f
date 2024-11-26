@@ -169,6 +169,17 @@
   flags f_immed and 0<> ( mask the F_IMMED flag and return it -- as a truth value )
 ;
 
+: ?compiling state @ 0<> ;
+
+: execute-compiling ( xt -- ) ?compiling if execute else ] execute [ then ;
+
+: postpone ( compilation: "name" -- )
+  ?compiling 0= -14 and throw                      ( ensure `postpone` only happens in compilation )
+  word find dup 0= -13 and throw                ( waddr | locate word )
+  dup ?immediate swap >cfa lit,                 ( compile xt in current word, leave tos with ?immediate )
+  if ['] execute-compiling else ['] compile, then compile,
+; immediate
+
 ( Given a word address, return the name of the word. )
 
 : id. ( waddr -- len addr )
