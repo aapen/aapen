@@ -2597,13 +2597,13 @@ _comma:
 */
         defword "if",2,f_immed,if,zbranch
         .quad compile_tick,zbranch,comma // ['] 0branch ,  | compile 0branch
-        .quad here,fetch                 // here @         | save location of the offset on the stack
+        .quad here,fetch                 // here @         | save location of the offset on parameter stack
         .quad lit,0,comma                // 0 ,            | compile a placeholder offset
         .quad exit
 
         defword "then",4,f_immed,then,if
         .quad dup                        // dup
-        .quad here,fetch,swap,sub        // here @ swap -  | calculate offset from addr saved on stack
+        .quad here,fetch,swap,sub        // here @ swap -  | calculate offset from addr saved on parameter stack
         .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
         .quad exit
 

@@ -329,11 +329,15 @@
 \	-- compiles to: --> setup loop-body 1 (loop-inc) (loop-done?) 0branch offset
 \ where offset points back to just before the loop-body
 
-: do
-  0                                     ( remember this was not a qdo )
-  postpone >r                           ( compile >r to push initial count on rstack )
-  postpone >r                           ( another >r to push the limit onto rstack  )
-  here @                                ( save location that will be the branch target )
+\ (do) puts the initial count and limit on the rstack, tucked under the return addr for the call to (do) itself.
+: (do) ( p: lim curr ; r: curr lim )
+  r> -rot >r >r >r
+;
+
+: do ( runtime: lim curr --  ; r: -- curr lim )
+  0                                     ( at compile time, remember on the stack this was not a qdo )
+  postpone (do)
+  here @                                ( save location that will be the branch target on stack at compile tiem)
 ; immediate
 
 \ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal.
@@ -351,12 +355,12 @@
 
 : ?do
   postpone 2dup
-  postpone >r postpone >r               ( push initial count and limit onto rstack )
+  postpone (do)
   postpone = postpone not               ( compile execution-time test on bounds )
   postpone 0branch                      ( if bounds equal, we will skip the body )
   here @                                ( remember where to fill in the offset )
   0 ,                                   ( dummy placeholder to fix up later )
-  1                                     ( remember this was a qdo )
+  1                                     ( remember on the stack this was a qdo )
   here @                                ( save location that will be the loop target )
 ; immediate
 
@@ -386,7 +390,7 @@
 
 : i rsp@ 16 + @ ;               ( get current loop count )
 : j rsp@ 32 + @ ;               ( get outer loop count )
-: (loop-inc)   rsp@ 16 + @ + rsp@ 16 + ! ;
+: (loop-inc) rsp@ 16 + @ + rsp@ 16 + ! ;
 : (loop-done?) rsp@ 8+ @ rsp@ 16 + @ <= ;
 
 \ `+loop` is a bit of a beast. It needs to compile the runtime code to update
@@ -407,8 +411,7 @@
     here @ over -                       ( find offset from the qdo's branch to here )
     swap !                              ( backpatch the qdo's branch target )
   then
-  postpone rdrop
-  postpone rdrop
+  postpone unloop
 ; immediate
 
 ( And here's the special case to just step by 1. )
