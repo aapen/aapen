@@ -2600,6 +2600,199 @@ _comma:
 	next
 
 /*
+
+        Attempting to bring some of the flow control into primitives,
+        so I can use them in defer/postpone/@execute earlier in the
+        boot code.
+
+*/
+        defword "if",2,f_immed,if,zbranch
+        .quad compile_tick,zbranch,comma // ['] 0branch ,  | compile 0branch
+        .quad here,fetch                 // here @         | save location of the offset on the stack
+        .quad lit,0,comma                // 0 ,            | compile a placeholder offset
+        .quad exit
+
+        defword "then",4,f_immed,then,if
+        .quad dup                        // dup
+        .quad here,fetch,swap,sub        // here @ swap -  | calculate offset from addr saved on stack
+        .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
+        .quad exit
+
+        defword "else",4,f_immed,else,then
+        .quad compile_tick,branch,comma  // ['] 0branch ,  | unconditional branch over the false-part
+        .quad here,fetch                 // here @         | save location of offset on the stack
+        .quad lit,0,comma                // 0 ,            | compile a placeholder offset
+        .quad swap                       // swap           | now backfill the original 'if' offset
+        .quad dup                        // dup
+        .quad here,fetch,swap,sub        // here @ swap -  | calculate offset from addr saved on stack
+        .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
+        .quad exit
+
+/*
+
+        Exceptions and aborts
+
+
+  Exception numbers are non-zero integers.  By convention the positive numbers can be used
+  for app-specific exceptions and the negative numbers have certain meanings defined in
+  the ANS FORTH standard.  For example, -1 is the exception thrown by abort.
+
+  0 throw does nothing.  this is the stack signature of throw:
+
+  	 0 --
+  	 * e -- ?_n-1 ... ?_1 ?_0 e 	the stack is restored to the state from the corresponding catch
+
+  The implementation hangs on the definitions of catch and throw and the state shared
+  between them.
+
+  Up to this point, the return stack has consisted merely of a list of return addresses,
+  with the top of the return stack being the return address where we will resume executing
+  when the current word exits.  However catch will push a more complicated 'exception stack
+  frame' on the return stack.  The exception stack frame records some things about the
+  state of execution at the time that catch was called.
+
+  When called, throw walks up the return stack -- the process is called 'unwinding' -- until
+  it finds the exception stack frame.  It then uses the data in the exception stack frame
+  to restore the state allowing execution to continue after the matching catch.  If it
+  unwinds the stack and doesn't find the exception stack frame then it prints a message
+  and drops back to the prompt, which is also normal behaviour for so-called 'uncaught
+  exceptions'.
+
+  This is what the exception stack frame looks like. As is conventional, the return stack
+  is shown growing downwards from higher to lower memory addresses.
+
+  	+------------------------------+
+  	| return address from CATCH    |   Notice this is already on the
+  	|                              |   return stack when CATCH is called.
+  	+------------------------------+
+  	| original parameter stack     |
+  	| pointer                      |
+  	+------------------------------+  ^
+  	| exception stack marker       |  |
+  	| EXCEPTION-MARKER             |  |   Direction of stack
+  	+------------------------------+  |   unwinding by THROW.
+  					  |
+  					  |
+
+  The exception-marker marks the entry as being an exception stack frame rather than an
+  ordinary return address, and it is this which THROW "notices" as it is unwinding the
+  stack.  If you want to implement more advanced exceptions such as TRY...WITH then
+  you'll need to use a different value of marker if you want the old and new exception stack
+  frame layouts to coexist.
+
+  What happens if the executed word doesn't throw an exception?  It will eventually
+  return and call exception-marker, so exception-marker had better do something sensible
+  without us needing to modify exit.  This nicely gives us a suitable definition of
+  exception-marker, namely a function that just drops the stack frame and itself
+  returns -- thus "returning" from the original catch.
+
+  One thing to take from this is that exceptions are a relatively lightweight mechanism
+  in FORTH.
+
+*/
+
+        defword "exception-marker",16,,exception_marker,else
+        .quad rdrop           // drop original parameter stack pointer
+        .quad lit,0           // there was no exception, this is the normal return path
+        .quad exit
+
+        defword "catch",5,,catch,exception_marker
+        .quad dspfetch,incr8,tor                   // dsp@ 8+ >r		|  save parameter stack pointer -- +8 because of xt -- on the return stack
+        .quad compile_tick,exception_marker,incr8  // ['] exception-marker 8+	|  push the address of the rdrop inside exception-marker ...
+        .quad tor                                  // >r			|  ... on to the return stack so it acts like a return address
+        .quad execute                              // execute			|  execute the nested function
+        .quad exit
+
+/*
+
+        DANGER
+
+        The branch and zbranch constants here were calculated by Aapen
+        from a high-level definition that used proper 'if', 'while',
+        and 'case' logic. If you change any of the behavior you will
+        have to recalculate all the offsets.
+
+        Here is the original code:
+
+: throw		( n -- )
+	?dup if			( only act if the exception code <> 0 )
+		rsp@ 			( get return stack pointer )
+		begin
+			dup r0 8- <		( rsp < r0 )
+		while
+			dup @			( get the return stack entry )
+			['] exception-marker 8+ = if	( found the exception-marker on the return stack )
+				8+			( skip the exception-marker on the return stack )
+				rsp!			( restore the return stack pointer )
+
+				( restore the parameter stack. )
+				dup dup dup		( reserve some working space so the stack for this word
+							  doesn't coincide with the part of the stack being restored )
+				r>			( get the saved parameter stack pointer | n dsp )
+				8-			( reserve space on the stack to store n )
+				swap over		( dsp n dsp )
+				!			( write n on the stack )
+				dsp! exit		( restore the parameter stack pointer, immediately exit )
+			then
+			8+
+		repeat
+
+		( no matching catch - print a message and restart the interpreter. )
+		drop
+
+		case
+		-1 of	( abort )
+                  (msg-aborted)
+		endof
+                -2 of	( abort" )
+		  (msg-aborts)
+		endof
+		( default case )
+                (msg-uncaught)
+		endcase
+		quit
+	then
+;
+
+        To get the offsets, use 'see' on your modifications to that definition, which will yield something like this:
+
+        : throw ?dup 0branch ( 440 ) rsp@ dup r0 8- < 0branch ( 192 ) dup @ ['] exception-marker 8+ = 0branch ( 104 ) 8+ rsp! dup dup dup r> 8- swap over ! dsp! exit 8+ branch ( -224 ) drop -1 over = 0branch ( 40 ) drop (msg-aborted) branch ( 104 ) -2 over = 0branch ( 40 ) drop (msg-aborts) branch ( 24 ) (msg-uncaught) drop quit ;
+
+*/
+
+        defword "throw",5,,throw,catch
+        .quad qdup,zbranch,440                              // ?dup if      | only act if the exception code <> 0
+        .quad rspfetch                                      // rsp@         | get return stack pointer
+                                                            // begin
+        .quad dup,rz,decr8,lt                               // dup r0 8- <  | rsp < r0?
+                                                            // while
+        .quad zbranch,192
+        .quad dup,fetch                                     // dup @        | get return stack entry
+
+        .quad compile_tick,exception_marker,incr8,equ       // ['] exception-marker 8+ = | found marker?
+        .quad zbranch,104                                   // if
+        .quad incr8,rspstore                                // 8+ rsp!      | skip the marker & restore rsp
+        .quad dup,dup,dup                                   // dup dup dup  | reserve working space
+        // r> 8- swap over ! dsp! exit
+        .quad fromr                                         // r>           | get saved parameter stack pointer
+        .quad decr8                                         // 8-           | reserve space on parameter stack to store n
+        .quad swap,over,store                               // swap over    | write n on the parameter stack
+        .quad dspstore,exit                                 // dsp! exit    | restore parameter stack pointer, exit
+                                                            // then
+        .quad incr8
+                                                            // repeat
+        .quad branch,-224
+        .quad drop                                          // drop         | no matching catch found
+        .quad lit,-1,over,equ,zbranch,40,drop               // case -1 of   | was an abort
+        .quad msg_aborted,branch,104                        // msg_aborted endcase
+        .quad lit,-2,over,equ,zbranch,40,drop               // case -2 of   | was abort"
+        .quad tell,branch,24                                // msg_abort_string endcase
+        .quad msg_uncaught                                  // (default case) msg_uncaught
+        .quad drop                                          // endcase
+        .quad quit                                          // quit         | restart the interpreter
+        .quad exit
+
+/*
 	LITERAL STRINGS ----------------------------------------------------------------------
 
 	LITSTRING is a primitive used to implement the ." and S" operators (which are written in
@@ -2609,7 +2802,7 @@ _comma:
 	can make it a single Linux syscall.
 */
 
-	defcode "litstring",9,,litstring,zbranch
+	defcode "litstring",9,,litstring,throw
 	ldr	x0, [NIP], #8	// get length of string, increment
 	PUSHPSP	NIP		// push address of string
 	PUSHPSP	x0		// push length of string
@@ -2776,13 +2969,41 @@ errmsgend:
 errmsgnl: .ascii "'\r\n"
 errmsgnlend:
 
-crnl:	.ascii "\r\n"
-
-hmsg: .ascii " (hidden) "
-hmsgend:
-
 hellomsg: .ascii "Hello world!\r\n"
 hellomsgend:
+
+        defcode "(msg_aborted)",13,,msg_aborted,interpret
+        PUSHPSP x1
+        PUSHPSP x2
+        PUSHPSP lr
+        ldr     x1,=aborted
+        mov     x2,#abortedend-aborted
+        bl      _tell
+        POPPSP  lr
+        POPPSP  x2
+        POPPSP  x1
+        next
+
+aborted:        .ascii "aborted"
+abortedend:
+
+        defcode "(msg_uncaught)",14,,msg_uncaught,msg_aborted
+        POPPSP  x3
+        PUSHPSP lr
+        PUSHPSP x1
+        PUSHPSP x2
+        ldr     x1,=uncaught
+        mov     x2,#uncaughtend-uncaught
+        bl      _tell
+        mov     x1,x3
+        bl      print_hex
+        POPPSP  x2
+        POPPSP  x1
+        POPPSP  lr
+        next
+
+uncaught:       .ascii "uncaught throw 0x"
+uncaughtend:
 
 /*
 	ODDS AND ENDS ----------------------------------------------------------------------
@@ -2799,7 +3020,7 @@ hellomsgend:
 
 */
 
-        defcode "fence",5,,fence,interpret
+        defcode "fence",5,,fence,msg_uncaught
         dmb     st                      // memory barrier. this is too pessimistic it will be slow
         next
 

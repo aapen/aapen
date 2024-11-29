@@ -31,16 +31,34 @@
 : 2@ dup 8+ @ swap @ ;
 : 2! dup 8+ rot rot ! ! ;
 
-\ FORTH allows ( ... ) as comments within function definitions.  This works by having 
-\ an immediate word called ( which just drops input characters until it hits 
-\ the corresponding ). From now on we can use ( ... ) for multiline comments.
-\ Note that nested parens don't work.
-
-: ( 0x29 parse 2drop ; immediate       \ 0x29 is the close paren.
+\ Some common defining words.  In Aapen, a constant and a value behave
+\ the same. Technically you could re-assign a new value to a constant,
+\ but that would be bad form.
 
 : constant create   , does> @ ;
 : variable create 0 , does> ;
 : value	   create   , does> @ ;
+
+\ FORTH allows ( ... ) as comments within function definitions. This
+\ works by having an immediate word called ( which asks the parser to
+\ parse the input stream until ')' is found. Then we ignore everything
+\ that we just parsed. This has the effect of dropping input
+\ characters from the ( to the ). From now on we can use ( ... ) for
+\ multiline comments.  Note that nested parens won't work.
+
+0d41 constant ')'
+: ( ')' parse 2drop ; immediate
+
+(
+  Ways to raise an exception. The magic numbers -1 and -2 are standard
+  for 'abort without message' and 'abort with message'.
+)
+
+: abort	 ( -- ) -1 throw ;
+
+0d34 constant '"'
+: abort" ( "msg" -- ) '"' parse -2 throw ;
+
 
 ( Division and mod )
 
@@ -50,8 +68,8 @@
 ( Standard words for manipulating BASE. )
 
 : decimal ( -- ) 10 base ! ;
-: hex ( -- ) 16 base ! ;
-: binary ( -- ) 2 base ! ;
+: hex     ( -- ) 16 base ! ;
+: binary  ( -- ) 2 base ! ;
 
 ( Some more complicated stack utilities. )
 
@@ -66,22 +84,15 @@
 
 ( Define some character constants )
 
-: '\t' 9 ;
-: '\n' 10 ;
-: '\r' 13 ;
-: bl   32 ; ( bl is a standard FORTH word for space. )
-
-( cr prints a carriage return )
-
-: cr '\n' emit ;
-
-( space prints a space )
-
-: space bl emit ;
-
-( tab prints a horizontal tab )
+0d09 constant '\t'
+0d10 constant '\n'
+0d13 constant '\r'
+0d27 constant 'esc'
+0d32 constant bl
 
 : tab '\t' emit ;
+: cr '\n' emit ;
+: space bl emit ;
 
 ( More standard FORTH words. )
 ( TBD define these in assembly later)
@@ -98,53 +109,22 @@
 : true  -1 ;
 : false 0 ;
 : not   0= ;
+: 0<>   0= not ;
 
 (
- Append to the word being compiled. For Aapen this is the same as , )
-: compile, , ;
-: lit, ( x -- ) ['] lit compile, , ;
-
-(
-  literal takes whatever is on the stack and compiles lit <foo>. note
-  that the only difference between lit, and literal is that the latter
-  literal is immediate.
+  Append to the word being compiled. For Aapen, `compile,` is the same as `,`
 )
 
-: literal
-        ['] lit ,        ( compile lit )
-	,                ( compile the literal itself from the stack )
-; immediate
+: compile, , ;
 
-( Compile a colon. )
+( `literal` takes whatever is on the stack and compiles `lit <foo>.` )
+: literal ['] lit compile, , ; immediate
 
-: ':'
-	[		( go into immediate mode temporarily )
-	char :		( push the number 58--ASCII code of colon--on the parameter stack )
-	]		( go back to compile mode )
-	literal		( compile lit 58 as the definition of ':' word )
-;
+( Here we also define `lit,` which does the same thing as `literal` but is not
+  immediate. )
 
-( A few more character constants defined the same way as above. )
-
-: ';' [ char ; ] literal ;
-: '(' [ char ( ] literal ;
-: ')' [ char ) ] literal ;
-: '<' [ char < ] literal ;
-: '>' [ char > ] literal ;
-: '"' [ char " ] literal ;
-: 'A' [ char A ] literal ;
-: 'J' [ char J ] literal ;
-: 'H' [ char H ] literal ;
-: 'a' [ char a ] literal ;
-: 'b' [ char b ] literal ;
-: 'c' [ char c ] literal ;
-: '0' [ char 0 ] literal ;
-: '1' [ char 1 ] literal ;
-: '2' [ char 2 ] literal ;
-: '-' [ char - ] literal ;
-: '.' [ char . ] literal ;
-: '[' [ char [ ] literal ;
-: 'esc' 27 ;
+: lit, ( x -- ) ['] lit compile, , ;
+: [char] word drop c@ lit, ; immediate
 
 ( while compiling, '[compile] word' compiles 'word' if it would otherwise be IMMEDIATE. )
 
@@ -155,7 +135,53 @@
 	,		( and compile that )
 ; immediate
 
-( recurse makes a recursive call to the current word that is being compiled. 
+: (0skip) ['] 0branch , 8 , ; immediate
+: @execute @ dup (0skip) execute ;
+
+( DEFER and IS provide a convenient way to manage an execution
+  vector. DEFER defines a word that can have its behavior replaced later by IS.
+
+  For example:
+
+  defer <name>
+  <xt> IS <name>
+
+  You'll find IS much later, since it requires "throw", which in turn requires "IF" and friends.
+)
+
+: defer ( "name" -- )
+  create ['] abort ,            ( create word, default behavior is to abort )
+  does> @execute                ( look up xt from data field, execute it )
+;
+
+( Here is the long-awaited definition of IS )
+
+: is ( xt "name" -- ) word find dup 0= -13 and throw >dfa ! ;
+
+: flags ( waddr -- c ) 8 + c@ ;
+
+( Given a word address, return the hidden flag. )
+: ?hidden  ( waddr -- hidden-flag )
+  flags f_hidden and 0<> ( mask the f_hidden flag and return it -- as a truth value )
+;
+
+( Given a word address, return the immediate flag. )
+: ?immediate ( waddr -- immed-flag )
+  flags f_immed and 0<> ( mask the F_IMMED flag and return it -- as a truth value )
+;
+
+: ?compiling state @ 0<> ;
+
+: execute-compiling ( xt -- ) ?compiling if execute else ] execute [ then ;
+
+: postpone ( compilation: "name" -- )
+  ?compiling 0= -14 and throw                   ( ensure `postpone` only happens in compilation )
+  word find dup 0= -13 and throw                ( waddr | locate word )
+  dup ?immediate swap >cfa lit,                 ( compile xt in current word, leave tos with ?immediate )
+  if ['] execute-compiling else ['] compile, then compile,
+; immediate
+
+( recurse makes a recursive call to the current word that is being compiled.
  Normally while a word is being compiled, it is marked HIDDEN so that references to the
  same word are calls to the previous definition of the word.  However we still have
  access to the word which we are currently compiling through the LATEST pointer so we
@@ -167,8 +193,32 @@
 	,		( compile it )
 ; immediate
 
+( Some more character constants )
+: ':' [char] : ;
+: ';' [char] ; ;
+: ')' [char] ) ;
+: '<' [char] < ;
+: '>' [char] > ;
+: 'A' [char] A ;
+: 'J' [char] J ;
+: 'H' [char] H ;
+: 'a' [char] a ;
+: 'b' [char] b ;
+: 'c' [char] c ;
+: '0' [char] 0 ;
+: '1' [char] 1 ;
+: '2' [char] 2 ;
+: '-' [char] - ;
+: '.' [char] . ;
+: '[' [char] [ ;
+
+
 ( Control structures. 
  Note that the control structures will only work inside compiled words. 
+
+ `if`, `else`, and `then` are defined in armforth.S because we need
+ them to implement `postpone`, and we then use `postpone` to define
+ the others.
 
  condition IF true-part THEN rest
 	-- compiles to: --> condition 0BRANCH OFFSET true-part rest
@@ -179,30 +229,13 @@
 
  IF is an IMMEDIATE word which compiles 0BRANCH followed by a dummy offset, and places
  the address of the 0BRANCH on the stack.  Later when we see THEN, we pop that address
- off the stack, calculate the offset, and back-fill the offset. )
+ off the stack, calculate the offset, and back-fill the offset.
 
-: if
-	['] 0branch ,                   ( compile 0branch )
-	here @                        ( save location of the offset on the stack )
-	0 ,                           ( compile a dummy offset )
-; immediate
+ Note that IF, ELSE, and THEN are defined as secondary words in
+ armforth.S. This is so they are available for use earlier in the boot
+ code.
 
-: then
-	dup
-	here @ swap -                 ( calculate offset from the addr saved on the stack )
-	swap !                        ( store the offset in the back-filled location )
-; immediate
-
-: else
-	['] branch ,                    ( definite branch to just over the false-part )
-	here @                        ( save location of the offset on the stack )
-	0 ,                           ( compile a dummy offset )
-	swap                          ( now back-fill the original if offset )
-	dup                           ( same as for then word above )
-	here @ swap -
-	swap !
-; immediate
-
+ )
 
 ( begin loop-part condition until
   -- compiles to: --> loop-part condition 0branch offset
@@ -257,8 +290,6 @@
 	['] not ,                       ( compile not to reverse the test )
 	[compile] if                  ( continue by calling the normal if )
 ;
-
-
 
 
 \ `do` is similar to `begin`, but it has some extra runtime behavior to take the
@@ -458,7 +489,6 @@
 	4 here +!	( increment here pointer by 4 bytes )
 ;
 
-
 ( ASSEMBLER HERE )
 
 
@@ -468,6 +498,7 @@
 : set-rt ( instruction rt - instruction )
   or
 ;
+
 
 : set-ra ( instruction ra -- instruction )
   0b11111 and
@@ -621,7 +652,6 @@
 : c-le 0b1101 ;
 : c-al 0b1110 ;
 : c-nv 0b1111 ;
-
 
 ( Instruction modifiers )
 
@@ -1015,15 +1045,6 @@ defprim >=
   2 		pushpsp-x w,
 ;;
 
-defprim 0<>
-  0 		poppsp-x  w,
-  1 0           mov-x#    w,
-  0 ->1f        cbz-x#    w,
-  1 1 1         sub-xx#   w,
-1f:
-  1 		pushpsp-x w,
-;;
-
 defprim 0<
   0 		poppsp-x w,
   1 0           mov-x# w,
@@ -1131,7 +1152,6 @@ defprim dcci
 )
 
 ( END ASSEMBLER )
-
 
 ( Building up to the key word . It takes the number at the top
   of the stack and prints it out. First I'm going to implement some lower-level FORTH words:
@@ -1504,150 +1524,6 @@ defprim dcci
 	drop		( restore stack )
 	0		( sorry, nothing found )
 ;
-
-( Amazingly enough, exceptions can be implemented directly in FORTH, in fact rather easily.
-
-  The general usage is as follows:
-
-  	: foo throw ;
-
-  	: test-exceptions
-  		25 ['] foo catch	\ execute 25 foo, catching any exception
-  		?dup if
-  			." called foo and it threw exception number: "
-  			. cr
-  			drop		\ we have to drop the argument of foo -- 25
-  		then
-  	;
-  	\ prints: called FOO and it threw exception number: 25
-
-  catch runs an execution token and detects whether it throws any exception or not.  The
-  stack signature of CATCH is rather complicated:
-
-  	 a_n-1 ... a_1 a_0 xt -- r_m-1 ... r_1 r_0 0 		if xt did NOT throw an exception
-  	 a_n-1 ... a_1 a_0 xt -- ?_n-1 ... ?_1 ?_0 e 		if xt DID throw exception 'e'
-
-  where a_i and r_i are the -- arbitrary number of -- argument and return stack contents
-  before and after xt is EXECUTEd.  Notice in particular the case where an exception
-  is thrown, the stack pointer is restored so that there are n of _something_ on the
-  stack in the positions where the arguments a_i used to be.  We don't really guarantee
-  what is on the stack -- perhaps the original arguments, and perhaps other nonsense --
-  it largely depends on the implementation of the word that was executed.
-
-  throw, abort and a few others throw exceptions.
-
-  Exception numbers are non-zero integers.  By convention the positive numbers can be used
-  for app-specific exceptions and the negative numbers have certain meanings defined in
-  the ANS FORTH standard.  For example, -1 is the exception thrown by abort.
-
-  0 throw does nothing.  this is the stack signature of throw:
-
-  	 0 --
-  	 * e -- ?_n-1 ... ?_1 ?_0 e 	the stack is restored to the state from the corresponding catch
-
-  The implementation hangs on the definitions of catch and throw and the state shared
-  between them.
-
-  Up to this point, the return stack has consisted merely of a list of return addresses,
-  with the top of the return stack being the return address where we will resume executing
-  when the current word exits.  However catch will push a more complicated 'exception stack
-  frame' on the return stack.  The exception stack frame records some things about the
-  state of execution at the time that catch was called.
-
-  When called, throw walks up the return stack -- the process is called 'unwinding' -- until
-  it finds the exception stack frame.  It then uses the data in the exception stack frame
-  to restore the state allowing execution to continue after the matching catch.  If it
-  unwinds the stack and doesn't find the exception stack frame then it prints a message
-  and drops back to the prompt, which is also normal behaviour for so-called 'uncaught
-  exceptions'.
-
-  This is what the exception stack frame looks like. As is conventional, the return stack
-  is shown growing downwards from higher to lower memory addresses.
-
-  	+------------------------------+
-  	| return address from CATCH    |   Notice this is already on the
-  	|                              |   return stack when CATCH is called.
-  	+------------------------------+
-  	| original parameter stack     |
-  	| pointer                      |
-  	+------------------------------+  ^
-  	| exception stack marker       |  |
-  	| EXCEPTION-MARKER             |  |   Direction of stack
-  	+------------------------------+  |   unwinding by THROW.
-  					  |
-  					  |
-
-  The exception-marker marks the entry as being an exception stack frame rather than an
-  ordinary return address, and it is this which THROW "notices" as it is unwinding the
-  stack.  If you want to implement more advanced exceptions such as TRY...WITH then
-  you'll need to use a different value of marker if you want the old and new exception stack
-  frame layouts to coexist.
-
-  What happens if the executed word doesn't throw an exception?  It will eventually
-  return and call exception-marker, so exception-marker had better do something sensible
-  without us needing to modify exit.  This nicely gives us a suitable definition of
-  exception-marker, namely a function that just drops the stack frame and itself
-  returns -- thus "returning" from the original catch.
-
-  One thing to take from this is that exceptions are a relatively lightweight mechanism
-  in FORTH.
-)
-
-: exception-marker
-	rdrop			( drop the original parameter stack pointer )
-	0			( there was no exception, this is the normal return path )
-;
-
-: catch		( xt -- exn? )
-	dsp@ 8+ >r		( save parameter stack pointer -- +8 because of xt -- on the return stack )
-	['] exception-marker 8+	( push the address of the rdrop inside exception-marker ... )
-	>r			( ... on to the return stack so it acts like a return address )
-	execute			( execute the nested function )
-;
-
-: throw		( n -- )
-	?dup if			( only act if the exception code <> 0 )
-		rsp@ 			( get return stack pointer )
-		begin
-			dup r0 8- <		( rsp < r0 )
-		while
-			dup @			( get the return stack entry )
-			['] exception-marker 8+ = if	( found the exception-marker on the return stack )
-				8+			( skip the exception-marker on the return stack )
-				rsp!			( restore the return stack pointer )
-
-				( restore the parameter stack. )
-				dup dup dup		( reserve some working space so the stack for this word
-							  doesn't coincide with the part of the stack being restored )
-				r>			( get the saved parameter stack pointer | n dsp )
-				8-			( reserve space on the stack to store n )
-				swap over		( dsp n dsp )
-				!			( write n on the stack )
-				dsp! exit		( restore the parameter stack pointer, immediately exit )
-			then
-			8+
-		repeat
-
-		( no matching catch - print a message and restart the interpreter. )
-		drop
-
-		case
-		-1 of	( abort )
-			." aborted" cr
-		endof
-                -2 of	( abort" )
-		  	tell cr
-		endof
-			( default case )
-			." uncaught throw "
-			dup . cr
-		endcase
-		quit
-	then
-;
-
-: abort	( -- ) -1 throw ;
-: abort" ( -- ) '"' parse -2 throw ;
 
 
 ( These words interact with the system implementation to provide I/O facilities. Where
