@@ -1223,18 +1223,8 @@ name_0: .quad 0
 	PUSHPSP	x1
 	next
 
-/* C@C! is a useful byte copy operation */
-	defcode "qqc@c!",4,,ccopy,fetchbyte
-	ldr	x0, [PSP, #8]	// source address
-	ldr	x1, [PSP]	// destination address
-	ldrb	w2, [x0], #1	// load and increment
-	strb	w2, [x1], #1	// store and increment
-	str	x0, [PSP, #8]	// update source
-	str	x1, [PSP]	// update destination
-	next
-
 /* and CMOVE is a block copy operation. */
-	defcode "cmove",5,,cmove,ccopy
+	defcode "cmove",5,,cmove,fetchbyte
 	POPPSP	x0		// length
 	POPPSP	x1		// destination address
 	POPPSP	x2		// source address
