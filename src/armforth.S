@@ -888,19 +888,8 @@ name_0: .quad 0
 	PUSHPSP	x0                      // and push it on top
 	next
 
-	// ROT ( n1 n2 n3 -- n2 n3 n1 )
-	defcode "rot",3,,rot,over
-        POPPSP  x3                      // n3
-        POPPSP  x2                      // n2
-        POPPSP  x1                      // n1
-
-        PUSHPSP x2                      // n2
-        PUSHPSP x3                      // n3
-        PUSHPSP x1                      // n1
-	next
-
 	// . ( n -- ) Simple version of . prints in hex
-	defcode ".",1,,simple_dot,rot
+	defcode ".",1,,simple_dot,over
         POPPSP  x1                      // n
         bl      print_hex
         mov     x0, #' '

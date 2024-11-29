@@ -23,6 +23,9 @@
 : troff 0 echo ! ;
 : tron  1 echo ! ;
 
+:  rot >r swap r> swap ;
+: -rot swap >r swap r> ;
+
 \ The 2... versions of the standard operators work on pairs of stack entries.
 
 : 2dup over over ;
@@ -124,7 +127,6 @@
   immediate. )
 
 : lit, ( x -- ) ['] lit compile, , ;
-: [char] word drop c@ lit, ; immediate
 
 ( while compiling, '[compile] word' compiles 'word' if it would otherwise be IMMEDIATE. )
 
@@ -188,12 +190,14 @@
  can use that to compile a recursive call. )
 
 : recurse
-	latest @	( latest points to the word being compiled at the moment )
-	>cfa		( get the codeword )
-	,		( compile it )
+  latest @                              ( latest points to the word being compiled at the moment )
+  >cfa                                  ( get the codeword )
+  ,		                        ( compile it )
 ; immediate
 
 ( Some more character constants )
+: [char] word drop c@ lit, ; immediate
+
 : ':' [char] : ;
 : ';' [char] ; ;
 : ')' [char] ) ;
@@ -212,8 +216,7 @@
 : '.' [char] . ;
 : '[' [char] [ ;
 
-
-( Control structures. 
+( Control structures.
  Note that the control structures will only work inside compiled words. 
 
  `if`, `else`, and `then` are defined in armforth.S because we need
@@ -242,26 +245,26 @@
    where offset points back to the loop-part
  This is like do { loop-part } while condition in the C language. )
 
-: begin immediate
-	here @                        \ save location on the stack
-;
+: begin
+  here @                                ( save location on the stack )
+; immediate
 
-: until immediate
-	['] 0branch ,                   \ compile 0branch
-	here @ -                      \ calculate the offset from the address saved on the stack
-	,                             \ compile the offset here
-;
+: until
+  postpone 0branch                      ( compile 0branch )
+  here @ -                              ( calculate the offset from the address saved on the stack )
+  ,                                     ( compile the offset here )
+; immediate
 
 ( begin loop-part again 
 	-- compiles to: --> loop-part branch offset
 	where offset points back to the loop-part
  In other words, an infinite loop which can only be returned from with EXIT )
 
-: again immediate
-	['] branch ,                    \ compile branch
-	here @ -                      \ calculate the offset back
-	,                             \ compile the offset here
-;
+: again
+  postpone branch                       ( compile branch )
+  here @ -                              ( calculate the offset back )
+  ,                                     ( compile the offset here )
+; immediate
 
 ( begin condition while loop-part repeat
 	-- compiles to: --> condition 0branch offset2 loop-part branch offset
@@ -269,28 +272,52 @@
 	points to after the whole piece of code
         So this is like a while condition { loop-part } loop in the C language.)
 
-: while immediate
-	['] 0branch ,                   ( compile 0branch )
-	here @                        ( save location of the offset2 on the stack )
-	0 ,                           ( compile a dummy offset2 )
-;
+: while
+  postpone 0branch                      ( compile 0branch )
+  here @                                ( save location of the offset2 on the stack )
+  0 ,                                   ( compile a dummy offset2 )
+; immediate
 
-: repeat immediate
-	['] branch ,                    ( compile branch )
-	swap                          ( get the original offset from begin)
-	here @ - ,                    ( and compile it after branch )
-	dup
-	here @ swap -                 ( calculate the offset2 )
-	swap !                        ( and back-fill it in the original location )
-;
+: repeat
+  postpone branch                       ( compile branch )
+  swap                                  ( get the original offset from begin)
+  here @ - ,                            ( and compile it after branch )
+  dup
+  here @ swap -                         ( calculate the offset2 )
+  swap !                                ( and back-fill it in the original location )
+; immediate
 
 ( unless is the same as if but the test is reversed. )
 
-: unless immediate
-	['] not ,                       ( compile not to reverse the test )
-	[compile] if                  ( continue by calling the normal if )
+: unless
+  postpone not                  ( compile not to reverse the test )
+  postpone if                   ( continue by calling the normal if )
+; immediate
+
+\ transfer N items and count to return stack
+: n>r ( xn .. x1 n -- ;  r: -- x1 .. xn n )
+  dup
+  begin
+    dup
+  while
+    rot r> swap >r >r
+    1 -
+  repeat
+  drop
+  r> swap >r >r
 ;
 
+\ pull N items and count off the return stack
+: nr> ( -- xn .. x1 n ; r: x1 .. xn n -- )
+  r> r> swap >r dup
+  begin
+    dup
+  while
+    r> r> swap >r -rot
+    1 -
+  repeat
+  drop
+;
 
 \ `do` is similar to `begin`, but it has some extra runtime behavior to take the
 \ start and limit from the stack and tuck them away on the rstack.
@@ -303,10 +330,10 @@
 \ where offset points back to just before the loop-body
 
 : do
-  0                             ( remember this was not a qdo )
-  ['] >r ,                        ( compile >r to push initial count on rstack )
-  ['] >r ,                        ( another >r to push the limit onto rstack )
-  here @                        ( save location that will be the branch target )
+  0                                     ( remember this was not a qdo )
+  postpone >r                           ( compile >r to push initial count on rstack )
+  postpone >r                           ( another >r to push the limit onto rstack  )
+  here @                                ( save location that will be the branch target )
 ; immediate
 
 \ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal.
@@ -323,14 +350,14 @@
 \ +loop can drop them later.
 
 : ?do
-  ['] 2dup ,
-  ['] >r , ['] >r ,                 ( push initial count and limit onto rstack )
-  ['] = , ['] not ,                 ( compile execution-time test on bounds )
-  ['] 0branch ,                   ( if bounds equal, we will skip the body )
-  here @                        ( remember where to fill in the offset )
-  0 ,                           ( dummy placeholder to fix up later )
-  1                             ( remember this was a qdo )
-  here @                        ( save location that will be the loop target )
+  postpone 2dup
+  postpone >r postpone >r               ( push initial count and limit onto rstack )
+  postpone = postpone not               ( compile execution-time test on bounds )
+  postpone 0branch                      ( if bounds equal, we will skip the body )
+  here @                                ( remember where to fill in the offset )
+  0 ,                                   ( dummy placeholder to fix up later )
+  1                                     ( remember this was a qdo )
+  here @                                ( save location that will be the loop target )
 ; immediate
 
 ( This hijacking of the rstack has a dangerous side effect: 
@@ -339,8 +366,7 @@
  where `unloop` comes in. It restores the return stack so we can `exit` cleanly. )
 
 : unloop
-  ['] rdrop ,
-  ['] rdrop ,
+  postpone rdrop postpone rdrop
 ; immediate
 
 \ There are two words to end the loop's body: `loop` and `+loop`.
@@ -355,7 +381,7 @@
 \ Given the way we defined the loop control structure, you'd expect to find `i` at RSP+8.
 \ That's true, except that we had to call `i` itself, which puts another address on
 \ the rstack. Confusing? Yes. It also means that we can't use `i` except _directly_
-\ inside a do..loop. No calling it from another word or the offsets will be 
+\ inside a do..loop. No calling it from another word or the offsets will be
 \ wrong. Same goes for `j` and `(loop-done?)`
 
 : i rsp@ 16 + @ ;               ( get current loop count )
@@ -373,24 +399,23 @@
 \ that started this whole thing and the "done" part cleans up the rstack.
 
 : +loop
-  ['] (loop-inc) ,
-  ['] (loop-done?) ,
-  ['] 0branch ,                   ( compile branch )
-  here @ - ,
-  if                            ( was this a qdo? )
-    here @ over -               ( find offset from the qdo's branch to here )
-    swap !                      ( backpatch the qdo's branch target )
+  postpone (loop-inc)
+  postpone (loop-done?)
+  postpone 0branch                      ( compile branch )
+  here @ - ,                            (  )
+  if                                    ( was this a qdo? )
+    here @ over -                       ( find offset from the qdo's branch to here )
+    swap !                              ( backpatch the qdo's branch target )
   then
-  ['] rdrop ,
-  ['] rdrop ,
+  postpone rdrop
+  postpone rdrop
 ; immediate
 
 ( And here's the special case to just step by 1. )
 
 : loop
-  ['] lit ,
-  1 ,
-  [compile] +loop
+  1 lit,
+  postpone +loop
 ; immediate
 
 ( Leaves the max of two numbers on the stack. )
@@ -445,20 +470,20 @@
   This is meant as a temporary location, likely to be overwritten soon after.
 )
 
-: s"   ( -- addr len )
-  state @ if	( compiling? )
-  	['] litstring ,	( compile litstring )
-  	here @		( save the address of the length word on the stack )
-  	0 ,		( dummy length - we don't know what it is yet )
-                '"' parse s,
-  	dup		( get the saved address of the length word )
-  	here @ swap -	( calculate the length )
-  	8 -		( subtract 8 because we measured from the start of the length word )
-  	swap !		( and back-fill the length location )
-  	align		( round up to next multiple of 4 bytes for the remaining code )
-  else		( immediate mode )
-                '"' parse 2dup here @ swap cmove
-                nip here @ swap
+: s"   ( c: "ccc<quote>" -- ; r: -- c-addr u )
+  state @ if                    ( compiling? )
+    postpone litstring          ( compile litstring )
+    here @                      ( save the address of the length word on the stack )
+    0 ,                         (  dummy length - we don't know what it is yet )
+    '"' parse s,
+    dup		                (  get the saved address of the length word )
+    here @ swap -               ( calculate the length )
+    8 -                         (  subtract 8 because we measured from the start of the length word )
+    swap !                      ( and back-fill the length location )
+    align		        ( round up to next multiple of 4 bytes for the remaining code )
+  else                          ( immediate mode )
+    '"' parse 2dup here @ swap cmove
+    nip here @ swap
   then
 ; immediate
 
@@ -473,20 +498,20 @@
   LITSTRING <string length> <string rounded up to 4 bytes> TELL
 )
 
-: ." immediate		( -- )
-	state @ if	( compiling? )
-		[compile] s"	( read the string, and compile litstring, etc. )
-		['] tell ,	( compile the final tell )
-	else
-          '"' parse tell
-	then
-;
+: ." ( "ccc<quote>" -- )
+  state @ if                    ( compiling? )
+    postpone s"                 ( read the string, and compile litstring, etc. )
+    postpone tell               ( compile the final tell )
+  else
+    '"' parse tell
+  then
+; immediate
 
 ( w, appends a 32-bit value to the current compiled word. )
 
 : w,
-	here @ w!	( store the character in the compiled image )
-	4 here +!	( increment here pointer by 4 bytes )
+  here @ w!                     ( store the character in the compiled image )
+  4 here +!                     ( increment here pointer by 4 bytes )
 ;
 
 ( ASSEMBLER HERE )
@@ -987,15 +1012,6 @@ defprim do-nothing
 defprim clear-stack
 ;;
 
-defprim -rot
-  3     poppsp-x w,
-  2     poppsp-x w,
-  1     poppsp-x w,
-  3     pushpsp-x w,
-  1     pushpsp-x w,
-  2     pushpsp-x w,
-;;
-
 defprim 1+
   0     poppsp-x w,
   0 0 1	add-xx# w,
@@ -1249,19 +1265,7 @@ defprim dcci
 
 : u. u. space ;
 
-
-
 : xt word find >cfa ;
-
-( addr len -- )
-: tell
-  0
-  do
-    dup c@ emit
-    1+
-  loop
-  drop
-;
 
 : +field ( n1 n2 <name> -- n3 )
   create over , +
