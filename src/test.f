@@ -4,23 +4,52 @@ hex
 (
   Test harness
 
-  The tester defines functions that compare the results of a test with a set of expected
-  results. The syntax for each test starts with "t{" followed by a code sequence to test. This is
-  followed by "->", the expected results, and "}t". For example, the following:
+  A utility for testing Forth words, with a long derivation:
 
-  t{ 1 1 + -> 2 }t
+  Aapen source derived from https://www.forth200x.org/tests/ttester.fs, which includes this
+  attribution:
 
-  tests that one plus one indeed equals two.
+\ ttester is based on the original tester suite by Hayes:
+\ From: John Hayes S1I
+\ Subject: tester.fr
+\ Date: Mon, 27 Nov 95 13:10:09 PST
+\ (C) 1995 JOHNS HOPKINS UNIVERSITY / APPLIED PHYSICS LABORATORY
+\ MAY BE DISTRIBUTED FREELY AS LONG AS THIS COPYRIGHT NOTICE REMAINS.
+\ VERSION 1.1
+\ All the subsequent changes have been placed in the public domain.
+\ The primary changes from the original are the replacement of "{" by "T{"
+\ and "}" by "}T" (to avoid conflicts with the uses of { for locals and }
+\ for FSL arrays), modifications so that the stack is allowed to be non-empty
+\ before T{, and extensions for the handling of floating point tests.
+\ Code for testing equality of floating point values comes
+\ from ftester.fs written by David N. Williams, based on the idea of
+\ approximate equality in Dirk Zoller's float.4th.
+\ Further revisions were provided by Anton Ertl, including the ability
+\ to handle either integrated or separate floating point stacks.
+\ Revision history and possibly newer versions can be found at
+\ http://www.complang.tuwien.ac.at/cvsweb/cgi-bin/cvsweb/gforth/test/ttester.fs
+\ Explanatory material and minor reformatting (no code changes) by
+\ C. G. Montgomery March 2009, with helpful comments from David Williams
+\ and Krishna Myneni.
+
+  The basic usage takes the form `t{ <code> -> <expected stack> }t`. This executes <code> and
+  compares the resulting stack contents with the <expected stack> values, and reports any
+  discrepancy between the two sets of values.
+
+  Examples:
+  t{ 1 2 3 swap -> 1 3 2 }t \  outputs nothing
+  t{ 1 2 3 swap -> 1 2 2 }t \  outputs "incorrect result: t{ 1 2 3 swap -> 1 2 2 }t"
+  t{ 1 2 3 swap -> 1 2 }t   \  outputs "wrong number of results: t{ 1 2 3 swap -> 1 2 }t"
+
+  The word `error` is vectored, so you can change its action as needed.
 
  )
-
 
 variable actual-depth
 variable actual-results 20 cells allot
 variable start-depth
-variable error-xt
 
-: error error-xt @ execute ;
+defer error
 
 \ ( ... -- ) empties the stack
 : empty-stack
@@ -39,8 +68,7 @@ variable error-xt
   empty-stack                   \ throw away everything else
 ;
 
-\ TODO: make ' work while executing
-\ ' error1 error-xt !
+' error1 is error
 
 \ ( -- ) record the pre-test depth
 : t{
@@ -63,11 +91,11 @@ variable error-xt
     depth start-depth @ > if
       depth start-depth @ - 0 do
         actual-results i cells + @
-        <> if s" incorrect result " error1 unloop exit then
+        <> if s" incorrect result " error unloop exit then
       loop
     then
   else
-    s" wrong number of results " error1
+    s" wrong number of results " error
   then
 ;
 

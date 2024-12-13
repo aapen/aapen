@@ -449,11 +449,8 @@
 
 ( Copy a string to the current compiled word. )
 
-: s, ( addr len -- )
-  0 ?do
-    dup c@ here @ c! 1 here +! 1 +
-  loop
-  drop
+: s, ( c-addr u -- )
+  2dup here @ swap cmove here +! drop
 ;
 
 ( s" string" is used in FORTH to define strings.  It leaves the address of the 
