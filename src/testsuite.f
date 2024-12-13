@@ -88,6 +88,13 @@ t{ msb 1  rshift 2*      -> msb }t
 0s constant <false>
 1s constant <true>
 
+.\ F.6.1.0250	0<
+t{       0 0< -> <false> }t
+t{      -1 0< -> <true>  }t
+t{ min-int 0< -> <true>  }t
+t{       1 0< -> <false> }t
+t{ max-int 0< -> <false> }t
+
 .\ F.6.1.0270	0=
 t{        0 0= -> <true>  }t
 t{        1 0= -> <false> }t
@@ -96,6 +103,36 @@ t{       -1 0= -> <false> }t
 t{ max-uint 0= -> <false> }t
 t{  min-int 0= -> <false> }t
 t{  max-int 0= -> <false> }t
+
+.\ F.6.1.0290	1+
+t{        0 1+ -> 1          }t
+t{       -1 1+ -> 0          }t
+t{        1 1+ -> 2          }t
+t{ mid-uint 1+ -> mid-uint+1 }t
+
+.\ F.6.1.0300	1-
+t{          2 1- -> 1        }t
+t{          1 1- -> 0        }t
+t{          0 1- -> -1       }t
+t{ mid-uint+1 1- -> mid-uint }t
+
+.\ F.6.1.0480	<
+t{ 0 1             < -> <true>  }t
+t{ 1 2             < -> <true>  }t
+t{ -1 0            < -> <true>  }t
+t{ -1 1            < -> <true>  }t
+t{ min-int 0       < -> <true>  }t
+t{ min-int max-int < -> <true>  }t
+t{ 0 max-int       < -> <true>  }t
+t{ 0 0             < -> <false> }t
+t{ 1 1             < -> <false> }t
+t{ 1 0             < -> <false> }t
+t{ 2 1             < -> <false> }t
+t{ 0 -1            < -> <false> }t
+t{ 1 -1            < -> <false> }t
+t{ 0 min-int       < -> <false> }t
+t{ max-int min-int < -> <false> }t
+t{ max-int 0       < -> <false> }t
 
 .\ F.6.1.0530	=
 t{  0  0 = -> <true>  }t
@@ -106,30 +143,124 @@ t{ -1  0 = -> <false> }t
 t{  0  1 = -> <false> }t
 t{  0 -1 = -> <false> }t
 
-.\ 6.1.0850	>r
+.\ F.6.1.0540	>
+t{ 0 1             > -> <false> }t
+t{ 1 2             > -> <false> }t
+t{ -1 0            > -> <false> }t
+t{ -1 1            > -> <false> }t
+t{ min-int 0       > -> <false> }t
+t{ min-int max-int > -> <false> }t
+t{ 0 max-int       > -> <false> }t
+t{ 0 0             > -> <false> }t
+t{ 1 1             > -> <false> }t
+t{ 1 0             > -> <true>  }t
+t{ 2 1             > -> <true>  }t
+t{ 0 -1            > -> <true>  }t
+t{ 1 -1            > -> <true>  }t
+t{ 0 min-int       > -> <true>  }t
+t{ max-int min-int > -> <true>  }t
+t{ max-int 0       > -> <true>  }t
+
+.\ F.6.1.1870	max
+t{ 0 1             max -> 1       }t
+t{ 1 2             max -> 2       }t
+t{ -1 0            max -> 0       }t
+t{ -1 1            max -> 1       }t
+t{ min-int 0       max -> 0       }t
+t{ min-int max-int max -> max-int }t
+t{ 0 max-int       max -> max-int }t
+t{ 0 0             max -> 0       }t
+t{ 1 1             max -> 1       }t
+t{ 1 0             max -> 1       }t
+t{ 2 1             max -> 2       }t
+t{ 0 -1            max -> 0       }t
+t{ 1 -1            max -> 1       }t
+t{ 0 min-int       max -> 0       }t
+t{ max-int min-int max -> max-int }t
+t{ max-int 0       max -> max-int }t
+
+.\ F.6.1.1880	min
+t{ 0 1             min -> 0       }t
+t{ 1 2             min -> 1       }t
+t{ -1 0            min -> -1      }t
+t{ -1 1            min -> -1      }t
+t{ min-int 0       min -> min-int }t
+t{ min-int max-int min -> min-int }t
+t{ 0 max-int       min -> 0       }t
+t{ 0 0             min -> 0       }t
+t{ 1 1             min -> 1       }t
+t{ 1 0             min -> 0       }t
+t{ 2 1             min -> 1       }t
+t{ 0 -1            min -> -1      }t
+t{ 1 -1            min -> -1      }t
+t{ 0 min-int       min -> min-int }t
+t{ max-int min-int min -> min-int }t
+t{ max-int 0       min -> 0       }t
+
+.\ F.3.6		Stack Operators
+.\ F.6.1.1260	drop
+t{ 1 2 drop -> 1 }t
+t{ 0 drop -> }t
+
+.\ F.6.1.1290	dup
+t{ 1 dup -> 1 1 }t
+
+.\ F.6.1.1990	over
+t{ 1 2 over -> 1 2 1 }t
+
+.\ F.6.1.2160	rot
+t{ 1 2 3 rot -> 2 3 1 }t
+
+.\ F.6.1.2260	swap
+t{ 1 2 swap -> 2 1 }t
+
+.\ F.6.1.0370	2drop
+t{ 1 2 2drop -> }t
+
+.\ F.6.1.0380	2dup
+t{ 1 2 2dup -> 1 2 1 2 }t
+
+.\ F.6.1.0400	2over
+t{ 1 2 3 4 2over -> 1 2 3 4 1 2 }t
+
+.\ F.6.1.0430	2swap
+t{ 1 2 3 4 2swap -> 3 4 1 2 }t
+
+.\ F.6.1.0630	?dup
+t{ -1 ?dup -> -1 -1 }t
+t{  0 ?dup ->  0    }t
+t{  1 ?dup ->  1  1 }t
+
+.\ F.6.1.1200	depth
+\ these don't work right now because 'evaluate' puts 6 things on the stack before we start the tests.
+\ t{ 0 1 depth -> 0 1 2 }t
+\ t{   0 depth -> 0 1   }t
+\ t{     depth -> 0     }t
+
+.\ F.6.1.0850	>r
 t{ : gr1 >r r> ; -> }t
 t{ : gr2 >r rsp@ @ r> drop ; -> }t
 t{ 123 gr1 -> 123 }t
 t{ 123 gr2 -> 123 }t
 t{  1s gr1 -> 1s }t
 
-.\ 6.1.0950	constant
+.\ F.6.1.0950	constant
 t{ 123 constant x123 -> }t
 t{ x123 -> 123 }t
 t{ : equ constant ; -> }t
 t{ x123 equ y123 -> }t
 t{ y123 -> 123 }t
 
-.\ 6.1.0750	base
+.\ F.6.1.0750	base
 : gn2 base @ >r hex base @ decimal base @ r> base ! ;
 t{ gn2 -> 10 a }t
 
-.\ 6.1.0690	abs
+.\ F.6.1.0690	abs
 t{  0 abs -> 0 }t
 t{  1 abs -> 1 }t
 t{ -1 abs -> 1 }t
 
-.\ 6.1.2165	s-quote
+.\ F.6.1.2165	s-quote
 t{ : gc4 s" XY" ; -> }t
 t{ gc4 swap drop -> 2 }t
 t{ gc4 drop dup c@ swap char+ c@ -> 58 59 }t

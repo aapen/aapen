@@ -21,7 +21,7 @@
 \
 
 : abs ( n -- u ) dup 0< if negate then ;
-
+: min 2dup > if swap then drop ;
 
 ( Standard FORTH defines a concept called an 'execution token' -- or 'xt' -- which is very
   similar to a function pointer in C.  We map the execution token to a codeword address.

@@ -84,6 +84,7 @@
 	dsp@ +		( add to the stack pointer )
 	@    		( and fetch )
 ;
+: 2over ( x y z w -- x y z w x y ) 3 pick 3 pick ;
 
 ( Define some character constants )
 
@@ -426,7 +427,7 @@
 ; immediate
 
 ( Leaves the max of two numbers on the stack. )
-: max 2dup <= if swap then drop ;
+: max 2dup < if swap then drop ;
 
 ( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
 
