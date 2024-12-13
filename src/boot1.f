@@ -20,6 +20,8 @@
 \	without any conditions, unless such conditions are required by law.
 \
 
+: abs ( n -- u ) dup 0< if negate then ;
+
 
 ( Standard FORTH defines a concept called an 'execution token' -- or 'xt' -- which is very
   similar to a function pointer in C.  We map the execution token to a codeword address.
@@ -535,6 +537,18 @@
   positions beginning at c-addr. )
 
 : blank ( c-addr u -- ) bl fill ;
+
+( Convert a counted string to an addr & count on the stack )
+
+: count ( c-addr -- c-addr u ) dup cell+ swap @ ;
+
+( create a counted string at c-addr2 from the string c-addr1 u )
+
+: place ( c-addr1 u c-addr2 ) 2dup ! cell+ swap cmove ;
+
+( compile a string as a counted string )
+
+: string, ( c-addr u -- ) 2dup here @ place cell+ here +! drop ;
 
 ( copy n words from addr to , )
 

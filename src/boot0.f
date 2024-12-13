@@ -97,6 +97,10 @@
 : cr '\n' emit ;
 : space bl emit ;
 
+( an "echoed comment" )
+
+: .\ '\n' parse tell cr ;
+
 ( More standard FORTH words. )
 ( TBD define these in assembly later)
 
@@ -422,7 +426,6 @@
 ; immediate
 
 ( Leaves the max of two numbers on the stack. )
-
 : max 2dup <= if swap then drop ;
 
 ( With the looping constructs, we can now write SPACES, which writes n spaces to stdout. )
@@ -447,7 +450,7 @@
 	1 here +!	( increment here pointer by 1 byte )
 ;
 
-( Copy a string to the current compiled word. )
+( compile a string into the current compiled word. )
 
 : s, ( c-addr u -- )
   2dup here @ swap cmove here +! drop
@@ -476,9 +479,9 @@
     here @                      ( save the address of the length word on the stack )
     0 ,                         (  dummy length - we don't know what it is yet )
     '"' parse s,
-    dup		                (  get the saved address of the length word )
+    dup		                ( get the saved address of the length word )
     here @ swap -               ( calculate the length )
-    8 -                         (  subtract 8 because we measured from the start of the length word )
+    8 -                         ( subtract 8 because we measured from the start of the length word )
     swap !                      ( and back-fill the length location )
     align		        ( round up to next multiple of 4 bytes for the remaining code )
   else                          ( immediate mode )

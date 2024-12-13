@@ -1460,6 +1460,7 @@ var_to_in:
         embed   "assembler.f","assembler",9,assembler,test
         embed   "sdcard.f","sdcard",6,sdcard,assembler
         embed   "whichway.f","whichway",8,whichway,sdcard
+        embed   "testsuite.f","testsuite",9,testsuite,whichway
 
 /*
 	RETURN STACK ----------------------------------------------------------------------
@@ -1468,7 +1469,7 @@ var_to_in:
 	the top of the return stack.
 */
 
-	defcode ">r",2,,tor,whichway
+	defcode ">r",2,,tor,testsuite
 	POPPSP	x0                      // pop parameter stack into x0
 	PUSHRSP	x0                      // and push it onto the return stack
 	next
@@ -2785,7 +2786,8 @@ _comma:
 	LITERAL STRINGS ----------------------------------------------------------------------
 
 	LITSTRING is a primitive used to implement the ." and S" operators (which are written in
-	FORTH).  See the definition of those operators later.
+	FORTH).  See the definition of those operators later. Technically, LITSTRING expects to find
+	a counted string immediately after its own xt in the currently executing word.
 
 	TELL just prints a string.  It's more efficient to define this in assembly because we
 	can make it a single Linux syscall.
