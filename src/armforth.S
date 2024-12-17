@@ -1480,10 +1480,15 @@ var_to_in:
 	next
 
 	defcode "rsp@",4,,rspfetch,fromr
-	PUSHPSP	RSP                     // get the top of the return stack
+	PUSHPSP	RSP                     // get the addr of the top of the return stack
 	next
 
-	defcode "rsp!",4,,rspstore,rspfetch
+        defcode "r@",2,,rfetch,rspfetch
+        ldr     x0, [RSP]               // get the value of the top of the return stack
+        PUSHPSP x0
+        next
+
+	defcode "rsp!",4,,rspstore,rfetch
 	POPPSP	RSP                     // set the top of the return stack
 	next
 
