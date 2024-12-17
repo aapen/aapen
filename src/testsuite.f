@@ -4,7 +4,7 @@
 
 hex
 
-.\ F.3		Basic assumptions
+.\ F.3		Basic Assumptions
 t{ -> }t \ test the test harness
 t{ : bitsset? if 0 0 else 0 then ; -> }t \ test if any bits are set, answer in base 1
 t{ 0 bitsset? -> 0 }t                    \ zero is all bits clear
@@ -237,12 +237,162 @@ t{  1 ?dup ->  1  1 }t
 \ t{   0 depth -> 0 1   }t
 \ t{     depth -> 0     }t
 
-.\ F.6.1.0850	>r
+.\ F.3.7		Return Stack Operators
+.\ F.6.1.0850	>r r> r@
 t{ : gr1 >r r> ; -> }t
-t{ : gr2 >r rsp@ @ r> drop ; -> }t
+t{ : gr2 >r r@ r> drop ; -> }t
 t{ 123 gr1 -> 123 }t
 t{ 123 gr2 -> 123 }t
 t{  1s gr1 -> 1s }t
+
+.\ F.3.8		Addition and Subtraction
+.\ F.6.1.0120	+
+t{        0  5 + ->          5 }t
+t{        5  0 + ->          5 }t
+t{        0 -5 + ->         -5 }t
+t{       -5  0 + ->         -5 }t
+t{        1  2 + ->          3 }t
+t{        1 -2 + ->         -1 }t
+t{       -1  2 + ->          1 }t
+t{       -1 -2 + ->         -3 }t
+t{       -1  1 + ->          0 }t
+t{ mid-uint  1 + -> mid-uint+1 }t
+
+.\ F.6.1.0160	-
+t{          0  5 - ->       -5 }t
+t{          5  0 - ->        5 }t
+t{          0 -5 - ->        5 }t
+t{         -5  0 - ->       -5 }t
+t{          1  2 - ->       -1 }t
+t{          1 -2 - ->        3 }t
+t{         -1  2 - ->       -3 }t
+t{         -1 -2 - ->        1 }t
+t{          0  1 - ->       -1 }t
+t{ mid-uint+1  1 - -> mid-uint }t
+
+.\ F.6.1.0290	1+
+t{        0 1+ ->          1 }t
+t{       -1 1+ ->          0 }t
+t{        1 1+ ->          2 }t
+t{ mid-uint 1+ -> mid-uint+1 }t
+
+.\ F.6.1.0300	1-
+t{          2 1- ->        1 }t
+t{          1 1- ->        0 }t
+t{          0 1- ->       -1 }t
+t{ mid-uint+1 1- -> mid-uint }t
+
+.\ F.6.1.0690	abs
+t{        0 1+ ->          1 }t
+t{       -1 1+ ->          0 }t
+t{        1 1+ ->          2 }t
+t{ mid-uint 1+ -> mid-uint+1 }t
+
+.\ F.6.1.1910	negate
+t{  0 negate ->  0 }t
+t{  1 negate -> -1 }t
+t{ -1 negate ->  1 }t
+t{  2 negate -> -2 }t
+t{ -2 negate ->  2 }t
+
+.\ F.3.9		Multiplication
+.\ F.6.1.2170	s>d (not implemented)
+.\ F.6.1.0090	*
+t{  0  0 * ->  0 }t          \ test identities
+t{  0  1 * ->  0 }t
+t{  1  0 * ->  0 }t
+t{  1  2 * ->  2 }t
+t{  2  1 * ->  2 }t
+t{  3  3 * ->  9 }t
+t{ -3  3 * -> -9 }t
+t{  3 -3 * -> -9 }t
+t{ -3 -3 * ->  9 }t
+t{ mid-uint+1 1 rshift 2 *               -> mid-uint+1 }t
+t{ mid-uint+1 2 rshift 4 *               -> mid-uint+1 }t
+t{ mid-uint+1 1 rshift mid-uint+1 or 2 * -> mid-uint+1 }t
+
+.\ F.6.1.1810	m*		(not implemented)
+.\ F.6.1.2360	um*		(not implemented)
+
+.\ F.3.10		Division
+\ these differ from the test cases at
+\ https://forth-standard.org/standard/testsuite#test:core:/MOD
+\ because /mod is primitive for us and we do not need sm/rem or fm/mod
+
+.\ F.6.1.1561	fm/mod		(not implemented)
+.\ F.6.1.2214	sm/rem		(not implemented)
+.\ F.6.1.2370	um/mod		(not implemented)
+.\ F.6.1.0240	/mod
+t{       0       1 /mod ->       0       0 }t
+t{       1       1 /mod ->       0       1 }t
+t{       2       1 /mod ->       0       2 }t
+t{      -1       1 /mod ->       0      -1 }t
+t{      -2       1 /mod ->       0      -2 }t
+t{       0      -1 /mod ->       0       0 }t
+t{       1      -1 /mod ->       0      -1 }t
+t{       2      -1 /mod ->       0      -2 }t
+t{      -1      -1 /mod ->       0       1 }t
+t{      -2      -1 /mod ->       0       2 }t
+t{       2       2 /mod ->       0       1 }t
+t{      -1      -1 /mod ->       0       1 }t
+t{      -2      -2 /mod ->       0       1 }t
+t{       7       3 /mod ->       1       2 }t
+t{       7      -3 /mod ->       1      -2 }t
+t{      -7       3 /mod ->      -1      -2 }t
+t{      -7      -3 /mod ->      -1       2 }t
+t{ max-int       1 /mod ->       0 max-int }t
+t{ min-int       1 /mod ->       0 min-int }t
+t{ max-int max-int /mod ->       0       1 }t
+t{ min-int min-int /mod ->       0       1 }t
+
+.\ F.6.1.0230	/
+t{       0       1 /    ->       0         }t
+t{       1       1 /    ->       1         }t
+t{       2       1 /    ->       2         }t
+t{      -1       1 /    ->      -1         }t
+t{      -2       1 /    ->      -2         }t
+t{       0      -1 /    ->       0         }t
+t{       1      -1 /    ->      -1         }t
+t{       2      -1 /    ->      -2         }t
+t{      -1      -1 /    ->       1         }t
+t{      -2      -1 /    ->       2         }t
+t{       2       2 /    ->       1         }t
+t{      -1      -1 /    ->       1         }t
+t{      -2      -2 /    ->       1         }t
+t{       7       3 /    ->       2         }t
+t{       7      -3 /    ->      -2         }t
+t{      -7       3 /    ->      -2         }t
+t{      -7      -3 /    ->       2         }t
+t{ max-int       1 /    -> max-int         }t
+t{ min-int       1 /    -> min-int         }t
+t{ max-int max-int /    ->       1         }t
+t{ min-int min-int /    ->       1         }t
+
+.\ F.6.1.1890	mod
+t{       0       1 mod  -> 0               }t
+t{       1       1 mod  -> 0               }t
+t{       2       1 mod  -> 0               }t
+t{      -1       1 mod  -> 0               }t
+t{      -2       1 mod  -> 0               }t
+t{       0      -1 mod  -> 0               }t
+t{       1      -1 mod  -> 0               }t
+t{       2      -1 mod  -> 0               }t
+t{      -1      -1 mod  -> 0               }t
+t{      -2      -1 mod  -> 0               }t
+t{       2       2 mod  -> 0               }t
+t{      -1      -1 mod  -> 0               }t
+t{      -2      -2 mod  -> 0               }t
+t{       7       3 mod  -> 1               }t
+t{       7      -3 mod  -> -1              }t
+t{      -7       3 mod  -> -1              }t
+t{      -7      -3 mod  -> -1              }t
+t{ max-int       1 mod  -> max-int         }t
+t{ min-int       1 mod  -> min-int         }t
+t{ max-int max-int mod  -> 0               }t
+t{ min-int min-int mod  -> 0               }t
+
+.\ F.6.1.0100	*/
+.\ F.6.1.0110	*/mod
 
 .\ F.6.1.0950	constant
 t{ 123 constant x123 -> }t
