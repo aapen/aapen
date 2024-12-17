@@ -1855,8 +1855,9 @@ _refill_bs:
 
 
         defcode "source",6,,source,refill
-        ldr     x1, =buffer
-        PUSHPSP x1
+        ldr     x1, =var_inbuf
+        ldr     x0, [x1]
+        PUSHPSP x0
         ldr     x1, =var_srclen
         ldr     x0, [x1]
         PUSHPSP x0
