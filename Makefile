@@ -32,8 +32,12 @@ QEMU_DEBUG_ARGS	= -s -S -serial pty -monitor telnet:localhost:1235,server,nowait
 QEMU_NOBUG_ARGS	= -serial stdio -device usb-kbd -device usb-mouse -trace 'events=etc/trace_events.txt'
 
 OS		= $(shell uname)
+ARCH	= $(shell arch)
+
 ifeq ($(OS), Darwin)
 TOOLS_PREFIX	= aarch64-elf-
+else ifeq ($(ARCH), aarch64)
+TOOLS_PREFIX	=
 else
 TOOLS_PREFIX	= aarch64-unknown-elf-
 endif
