@@ -383,11 +383,11 @@ t{       2       2 mod  -> 0               }t
 t{      -1      -1 mod  -> 0               }t
 t{      -2      -2 mod  -> 0               }t
 t{       7       3 mod  -> 1               }t
-t{       7      -3 mod  -> -1              }t
+t{       7      -3 mod  -> 1               }t
 t{      -7       3 mod  -> -1              }t
 t{      -7      -3 mod  -> -1              }t
-t{ max-int       1 mod  -> max-int         }t
-t{ min-int       1 mod  -> min-int         }t
+t{ max-int       1 mod  -> 0               }t
+t{ min-int       1 mod  -> 0               }t
 t{ max-int max-int mod  -> 0               }t
 t{ min-int min-int mod  -> 0               }t
 
