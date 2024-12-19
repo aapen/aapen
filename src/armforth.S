@@ -2279,6 +2279,8 @@ _tcfa:
 _header:
 	ldr	x2, =var_here           // address of HERE
 	ldr	x3, [x2]                // x3 <- value of HERE, address of new header
+        add	x3, x3, #7              // align to 8 byte boundary
+	and	x3, x3, #~7
 	ldr	x4, =var_latest         // address of LATEST
 	ldr	x5, [x4]                // x5 <- value of LATEST, link pointer
 	str	x3, [x4]                // update LATEST to refer to new header

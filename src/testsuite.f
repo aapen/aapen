@@ -433,6 +433,105 @@ t{      -7 2      -3 */mod -> -2  4   }t
 t{ max-int 2 max-int */mod -> -2  0   }t \ overflow case
 t{ min-int 2 min-int */mod ->  0  0   }t \ overflow case
 
+.\ F.3.11		Memory
+.\ F.6.1.0150	,
+here @ 1 ,
+here @ 2 ,
+constant 2nd
+constant 1st
+t{ 1st 2nd <      -> <true> }t
+t{ 1st cell+      -> 2nd    }t
+t{ 1st 1 cells +  -> 2nd    }t
+t{ 1st @ 2nd @    -> 1 2    }t
+t{ 5 1st !        ->        }t
+t{ 1st @ 2nd @    -> 5 2    }t
+t{ 6 2nd !        ->        }t
+t{ 1st @ 2nd @    -> 5 6    }t
+t{ 1st 2@         -> 6 5    }t
+t{ 2 1 1st 2!     ->        }t
+t{ 1st 2@         -> 2 1    }t
+t{ 1s 1st ! 1st @ -> 1s     }t
+
+.\ F.6.1.0130	+!
+t{         0 1st ! ->   }t
+t{        1 1st +! ->   }t
+t{           1st @ -> 1 }t
+t{ -1 1st +! 1st @ -> 0 }t
+
+.\ F.6.1.0890	cells
+: bits ( x -- u )
+  0 swap begin
+    dup
+  while
+    dup msb and if >r 1+ r> then 2*
+  repeat drop ;
+t{         1 cells 1 < -> <false> }t
+t{ 1 cells 1 chars mod -> 0       }t
+t{        1s bits 10 < -> <false> }t
+
+.\ F.6.1.0860	c,
+here @ 1 c,
+here @ 2 c,
+constant 2ndc
+constant 1stc
+t{     1stc 2ndc < -> <true> }t
+t{      1stc char+ -> 2ndc   }t
+t{  1stc 1 chars + -> 2ndc   }t
+t{ 1stc c@ 2ndc c@ -> 1 2    }t
+t{       3 1stc c! ->        }t
+t{ 1stc c@ 2ndc c@ -> 3 2    }t
+t{       4 2ndc c! ->        }t
+t{ 1stc c@ 2ndc c@ -> 3 4    }t
+
+
+.\ F.6.1.0898	chars
+t{       1 chars 1 < -> <false> }t \ chars is at least 1 byte
+t{ 1 chars 1 cells > -> <false> }t \ chars is smaller than a cell
+
+.\ F.6.1.0705	align
+align 1 allot here @ align here @ 3 cells allot
+constant a-addr constant ua-addr
+t{                   ua-addr aligned -> a-addr        }t \ check alignment works
+t{       1 a-addr c!       a-addr       c@ -> 1       }t \ aligned access is ok for chars
+t{    1234 a-addr !        a-addr       @  -> 1234    }t
+t{ 123 456 a-addr 2!       a-addr       2@ -> 123 456 }t
+t{       2 a-addr char+ c! a-addr char+ c@ -> 2       }t \ unaligned access is ok for chars
+t{       3 a-addr cell+ c! a-addr cell+ c@ -> 3       }t
+t{    1234 a-addr cell+ !  a-addr cell+ @  -> 1234    }t
+t{ 123 456 a-addr cell+ 2! a-addr cell+ 2@ -> 123 456 }t
+
+.\ F.6.1.0710	allot
+here @ 1 allot
+here @
+constant 2nda
+constant 1sta
+t{ 1sta 2nda < -> <true> }t \ here must grow with allot
+t{     1sta 1+ -> 2nda   }t \ by one address unit
+
+.\ F.3.12		Characters
+.\ F.6.1.0770	bl
+t{ bl -> 20 }t
+
+.\ F.6.1.0895	char
+t{     char x -> 0x78 }t
+t{ char hello -> 0x68 }t
+
+.\ F.6.1.2520	[char]
+t{ : gc1 [char] X ; -> }t
+t{ : gc2 [char] HELLO ; -> }t
+t{ gc1 -> 0x58 }t
+t{ gc2 -> 0x48 }t
+
+.\ F.6.1.2500	[ and ]
+t{ : gc3 [ gc1 ] literal ; -> }t
+t{ gc3 -> 0x58 }t
+
+.\ F.6.1.2165	s"
+t{ : gc4 s" XY" ; -> }t
+t{ gc4 swap drop -> 2 }t
+t{ gc4 drop dup c@ swap char+ c@ -> 0x58 0x59 }t
+: gc5 s" A String"2drop ; \ there is no space between the " and 2drop
+t{ gc5 -> }t
 
 .\ F.6.1.0950	constant
 t{ 123 constant x123 -> }t
