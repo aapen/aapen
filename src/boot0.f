@@ -65,8 +65,10 @@
 
 ( Division and mod )
 
-: / /mod swap drop ;
-: mod /mod drop ;
+: /     /mod swap drop ;
+: mod   /mod drop ;
+: */    >r * r> / ;
+: */mod >r * r> /mod ;
 
 ( Standard words for manipulating BASE. )
 

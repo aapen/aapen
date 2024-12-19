@@ -392,7 +392,47 @@ t{ max-int max-int mod  -> 0               }t
 t{ min-int min-int mod  -> 0               }t
 
 .\ F.6.1.0100	*/
+t{       0 2       1 */ ->       0  }t
+t{       1 2       1 */ ->       2  }t
+t{       2 2       1 */ ->       4  }t
+t{      -1 2       1 */ ->      -2  }t
+t{      -2 2       1 */ ->      -4  }t
+t{       0 2      -1 */ ->       0  }t
+t{       1 2      -1 */ ->      -2  }t
+t{       2 2      -1 */ ->      -4  }t
+t{      -1 2      -1 */ ->       2  }t
+t{      -2 2      -1 */ ->       4  }t
+t{       2 2       2 */ ->       2  }t
+t{      -1 2      -1 */ ->       2  }t
+t{      -2 2      -2 */ ->       2  }t
+t{       7 2       3 */ ->       4  }t
+t{       7 2      -3 */ ->      -4  }t
+t{      -7 2       3 */ ->      -4  }t
+t{      -7 2      -3 */ ->       4  }t
+t{ max-int 2 max-int */ ->       0  }t
+t{ min-int 2 min-int */ ->       0  }t
+
 .\ F.6.1.0110	*/mod
+t{       0 2       1 */mod ->  0  0   }t
+t{       1 2       1 */mod ->  0  2   }t
+t{       2 2       1 */mod ->  0  4   }t
+t{      -1 2       1 */mod ->  0 -2   }t
+t{      -2 2       1 */mod ->  0 -4   }t
+t{       0 2      -1 */mod ->  0  0   }t
+t{       1 2      -1 */mod ->  0 -2   }t
+t{       2 2      -1 */mod ->  0 -4   }t
+t{      -1 2      -1 */mod ->  0  2   }t
+t{      -2 2      -1 */mod ->  0  4   }t
+t{       2 2       2 */mod ->  0  2   }t
+t{      -1 2      -1 */mod ->  0  2   }t
+t{      -2 2      -2 */mod ->  0  2   }t
+t{       7 2       3 */mod ->  2  4   }t
+t{       7 2      -3 */mod ->  2 -4   }t
+t{      -7 2       3 */mod -> -2 -4   }t
+t{      -7 2      -3 */mod -> -2  4   }t
+t{ max-int 2 max-int */mod -> -2  0   }t \ overflow case
+t{ min-int 2 min-int */mod ->  0  0   }t \ overflow case
+
 
 .\ F.6.1.0950	constant
 t{ 123 constant x123 -> }t
