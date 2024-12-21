@@ -91,7 +91,7 @@
 
 : :noname
 	0 0 header	( create a word with no name - we need a dictionary header because ; expects it )
-	&here @		( current here value is the address of the codeword, ie. the xt )
+	here 		( current here value is the address of the codeword, ie. the xt )
 	docol ,		( compile docol -- the codeword )
 	]		( go into compile mode )
 ;
@@ -99,7 +99,7 @@
 ( find the word after the given one )
 
 : after ( word -- next-word )
-  &here @                        ( address of the end of the last compiled word )
+  here                          ( address of the end of the last compiled word )
   latest @                      ( word last curr )
   begin
     2 pick                      ( word last curr word )
@@ -124,21 +124,12 @@
 
   You should not try to forget built-in words. 
 
-  xxx: because we wrote variable to store the variable in memory allocated before 
-  the word, in the current implementation 'variable foo forget foo' will leak 1 cell 
-  of memory.
 )
 
 : forget
 	word find	( find the word, gets the dictionary entry address )
 	dup @ latest !	( set latest to point to the previous word )
 	&here !		( and store here with the dictionary address )
-;
-
-: forget-latest
-	latest @	( get the most recent word defined )
-	dup @ latest !	( get the previous word )
-	&here !		( and move here back to that prevous word )
 ;
 
 ( Given a word address, return the name of the word. )
@@ -438,23 +429,23 @@
 : z" immediate
 	state @ if	( compiling? )
 		['] litstring ,	( compile litstring )
-		&here @		( save the address of the length word on the stack )
+		here		( save the address of the length word on the stack )
 		0 ,		( dummy length - we don't know what it is yet )
                 '"' parse s,
-		0 &here @ c!	( add the ascii nul byte )
+		0 here c!	( add the ascii nul byte )
 		1 here +!
 		drop		( drop the double quote character at the end )
 		dup		( get the saved address of the length word )
-		&here @ swap -	( calculate the length )
+		here swap -	( calculate the length )
 		8-		( subtract 4 -- because we measured from the start of the length word )
 		swap !		( and back-fill the length location )
 		align		( round up to next multiple of 4 bytes for the remaining code )
 		['] drop ,	( compile drop -- to drop the length )
 	else		( immediate mode )
-	        &here @		( get the start address of the temporary space )
+	        here		( get the start address of the temporary space )
                 '"' parse s,
-		0 &here @ c!	( store final ascii nul )
-		&here @		( push the start address )
+		0 here c!	( store final ascii nul )
+		here		( push the start address )
 	then
 ;
 
@@ -471,13 +462,13 @@
 
 : cstring	( addr len -- c-addr )
 	swap over	( len saddr len )
-	&here @ swap	( len saddr daddr len )
+	here swap	( len saddr daddr len )
 	cmove		( len )
 
-	&here @ +	( daddr+len )
+	here +		( daddr+len )
 	0 swap c!	( store terminating nul char )
 
-	&here @ 		( push start address )
+	here 		( push start address )
 ;
 
 : memset        ( len byte addr -- addr+len )
@@ -548,7 +539,7 @@
 
 ( compile a string as a counted string )
 
-: string, ( c-addr u -- ) 2dup &here @ place cell+ here +! drop ;
+: string, ( c-addr u -- ) 2dup here place cell+ allot drop ;
 
 ( copy n words from addr to , )
 
@@ -563,12 +554,11 @@
 
 : array create cells allot does> swap cells + ;
 
-( align HERE to 16 byte boundary )
+16 align-to                     ( align HERE to 16 byte boundary, as )
+                                ( many IO operations require that alignment )
+here variable scratch 1024 cells allot
 
-&here @ 15 + 15 invert and &here !
-variable scratch 1024 cells allot
-
-: unused lastcell &here @ - 8 / ;
+: unused lastcell here - 1 cells / ;
 
 ( BIOS INTERFACE )
 0

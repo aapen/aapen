@@ -1393,7 +1393,6 @@ var_\name :
 */
 
 	defvar "state",5,,state,fetchword
-//	defvar "&here",5,,here_addr,state,data_segment
 	defvar "latest",6,,latest,state,name_execute
 	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
@@ -1412,18 +1411,10 @@ var_\name :
         // this one is "hand rolled" because "var_>in" is not a valid assembly label
 	defword ">in",3,,to_in,srcid,dovar
         .global var_to_in
-        .type   var_to_in, %object
-        .size   var_to_in, 8
 var_to_in:
         .quad 0
 
-        defword "&here",5,,addr_here,to_in,doval
-        .quad   var_here
-
-        defword "here",4,,here,addr_here,doval
-        .global var_here
-        .type   var_here, %object
-        .size   var_here, 8
+        defword "here",4,,here,to_in,doval
 var_here:
         .quad data_segment
 
@@ -1460,6 +1451,7 @@ var_here:
         defconst "peripherals",11,,peripherals,lastcell,PERIPH_BASE
         defconst "charrom",7,,charrom,peripherals,char_rom
         defconst "fb",2,,fb,charrom,fb_parameters
+        defconst "&here",5,,addr_here,fb,var_here
 
         .macro embed src,name,namelen,label,link
         defcode \name,\namelen,,\label,\link
@@ -1477,7 +1469,7 @@ var_here:
         .text
         .endm
 
-        embed   "boot0.f","boot0",5,boot0,fb
+        embed   "boot0.f","boot0",5,boot0,addr_here
         embed   "boot1.f","boot1",5,boot1,boot0
         embed   "mailbox.f","mailbox",7,mailbox,boot1
         embed   "test.f","test",4,test,mailbox
@@ -2383,6 +2375,15 @@ _comma:
 	str	x2, [x1]	        // update HERE
 	ret
 
+        // C-COMMA
+        defcode "c,",2,,c_comma,comma
+        POPPSP  x0
+        ldr     x1, =var_here           // address of HERE
+        ldr     x2, [x1]                // value of HERE
+        strb    w0, [x2], #1            // store byte and increment by 1
+        str     x2, [x1]                // update HERE
+        next
+
 /*
 	Our definitions of : (COLON) and ; (SEMICOLON) will need to switch to and from compile mode.
 
@@ -2402,7 +2403,7 @@ _comma:
 	the word runs immediately, switching us back to immediate mode.
 */
 
-	defcode "[",1,f_immed,lbrac,comma
+	defcode "[",1,f_immed,lbrac,c_comma
 	ldr	x0, =var_state          // address of STATE
 	str	xzr, [x0]               // store 0 in STATE
 	next
@@ -2629,23 +2630,23 @@ _comma:
 */
         defword "if",2,f_immed,if,zbranch
         .quad compile_tick,zbranch,comma // ['] 0branch ,  | compile 0branch
-        .quad addr_here,fetch                 // &here @         | save location of the offset on parameter stack
+        .quad here                       // here           | save location of the offset on parameter stack
         .quad lit,0,comma                // 0 ,            | compile a placeholder offset
         .quad exit
 
         defword "then",4,f_immed,then,if
         .quad dup                        // dup
-        .quad addr_here,fetch,swap,sub        // &here @ swap -  | calculate offset from addr saved on parameter stack
+        .quad here,swap,sub              // here swap -    | calculate offset from addr saved on parameter stack
         .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
         .quad exit
 
         defword "else",4,f_immed,else,then
         .quad compile_tick,branch,comma  // ['] 0branch ,  | unconditional branch over the false-part
-        .quad addr_here,fetch                 // &here @         | save location of offset on the stack
+        .quad here                       // here           | save location of offset on the stack
         .quad lit,0,comma                // 0 ,            | compile a placeholder offset
         .quad swap                       // swap           | now backfill the original 'if' offset
         .quad dup                        // dup
-        .quad addr_here,fetch,swap,sub        // &here @ swap -  | calculate offset from addr saved on stack
+        .quad here,swap,sub              // here swap -    | calculate offset from addr saved on stack
         .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
         .quad exit
 

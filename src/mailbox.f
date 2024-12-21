@@ -68,9 +68,6 @@ clk-freq 1000000 / constant ticks-per-micro
   repeat
 ;
 
-: stash dup >r ;
-: unstash >r ;
-
 ( a -- )
 : send
   begin mbox-full? while repeat ( wait for space )
