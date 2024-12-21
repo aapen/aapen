@@ -792,7 +792,11 @@ name_\label :
 	.align 3
 	.global name_\label
 name_\label :
+        .ifnb \link
 	.quad name_\link                // link word
+        .else
+        .quad 0
+        .endif
 	.byte \flags			// insert flag
 	.byte \namelen			// insert name length
 	.ascii "\name"			// insert name
@@ -864,7 +868,7 @@ dodoes: add     x1, x0, #8      // x0 holds CFA, skip it to get DFA
 name_0: .quad 0
 
 	// DROP (a -- )
-	defcode "drop",4,,drop,0
+	defcode "drop",4,,drop
 	add	PSP, PSP, #8
 	next
 
