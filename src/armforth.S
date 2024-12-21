@@ -1461,8 +1461,7 @@ var_to_in:
         embed   "boot1.f","boot1",5,boot1,boot0
         embed   "mailbox.f","mailbox",7,mailbox,boot1
         embed   "test.f","test",4,test,mailbox
-        embed   "assembler.f","assembler",9,assembler,test
-        embed   "sdcard.f","sdcard",6,sdcard,assembler
+        embed   "sdcard.f","sdcard",6,sdcard,test
         embed   "whichway.f","whichway",8,whichway,sdcard
         embed   "testsuite.f","testsuite",9,testsuite,whichway
 
