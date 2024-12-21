@@ -98,7 +98,7 @@ firmware/COPYING.linux:
 emulate: $(KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_NOBUG_ARGS) -kernel $(KERNEL)
 
-debug_emulate: $(TEST_KERNEL) firmware/COPYING.linux
+debug_emulate: $(KERNEL) firmware/COPYING.linux
 	$(QEMU_EXEC) $(QEMU_BOARD_ARGS) $(QEMU_DEBUG_ARGS) $(QEMU_TEST_ARGS) -kernel $(KERNEL)
 
 gdb: $(KERNEL)
