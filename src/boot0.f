@@ -253,12 +253,12 @@
  This is like do { loop-part } while condition in the C language. )
 
 : begin
-  here @                                ( save location on the stack )
+  &here @                                ( save location on the stack )
 ; immediate
 
 : until
   postpone 0branch                      ( compile 0branch )
-  here @ -                              ( calculate the offset from the address saved on the stack )
+  &here @ -                              ( calculate the offset from the address saved on the stack )
   ,                                     ( compile the offset here )
 ; immediate
 
@@ -269,7 +269,7 @@
 
 : again
   postpone branch                       ( compile branch )
-  here @ -                              ( calculate the offset back )
+  &here @ -                              ( calculate the offset back )
   ,                                     ( compile the offset here )
 ; immediate
 
@@ -281,16 +281,16 @@
 
 : while
   postpone 0branch                      ( compile 0branch )
-  here @                                ( save location of the offset2 on the stack )
+  &here @                                ( save location of the offset2 on the stack )
   0 ,                                   ( compile a dummy offset2 )
 ; immediate
 
 : repeat
   postpone branch                       ( compile branch )
   swap                                  ( get the original offset from begin)
-  here @ - ,                            ( and compile it after branch )
+  &here @ - ,                            ( and compile it after branch )
   dup
-  here @ swap -                         ( calculate the offset2 )
+  &here @ swap -                         ( calculate the offset2 )
   swap !                                ( and back-fill it in the original location )
 ; immediate
 
@@ -344,7 +344,7 @@
 : do ( runtime: lim curr --  ; r: -- curr lim )
   0                                     ( at compile time, remember on the stack this was not a qdo )
   postpone (do)
-  here @                                ( save location that will be the branch target on stack at compile tiem)
+  &here @                                ( save location that will be the branch target on stack at compile tiem)
 ; immediate
 
 \ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal.
@@ -365,10 +365,10 @@
   postpone (do)
   postpone = postpone not               ( compile execution-time test on bounds )
   postpone 0branch                      ( if bounds equal, we will skip the body )
-  here @                                ( remember where to fill in the offset )
+  &here @                                ( remember where to fill in the offset )
   0 ,                                   ( dummy placeholder to fix up later )
   1                                     ( remember on the stack this was a qdo )
-  here @                                ( save location that will be the loop target )
+  &here @                                ( save location that will be the loop target )
 ; immediate
 
 ( This hijacking of the rstack has a dangerous side effect: 
@@ -413,9 +413,9 @@
   postpone (loop-inc)
   postpone (loop-done?)
   postpone 0branch                      ( compile branch )
-  here @ - ,                            (  )
+  &here @ - ,                            (  )
   if                                    ( was this a qdo? )
-    here @ over -                       ( find offset from the qdo's branch to here )
+    &here @ over -                       ( find offset from the qdo's branch to here )
     swap !                              ( backpatch the qdo's branch target )
   then
   postpone unloop
@@ -444,19 +444,19 @@
 
 ( ALIGN aligns the HERE pointer, so the next word appended will be aligned properly.)
 
-: align here @ aligned here ! ;
+: align &here @ aligned &here ! ;
 
 ( Appends a byte to the current compiled word. )
 
 : c, ( c -- )
-	here @ c!	( store the character in the compiled image )
-	1 here +!	( increment here pointer by 1 byte )
+	&here @ c!	( store the character in the compiled image )
+	1 &here +!	( increment here pointer by 1 byte )
 ;
 
 ( compile a string into the current compiled word. )
 
 : s, ( c-addr u -- )
-  2dup here @ swap cmove here +! drop
+  2dup &here @ swap cmove &here +! drop
 ;
 
 ( s" string" is used in FORTH to define strings.  It leaves the address of the 
@@ -479,17 +479,17 @@
 : s"   ( c: "ccc<quote>" -- ; r: -- c-addr u )
   state @ if                    ( compiling? )
     postpone litstring          ( compile litstring )
-    here @                      ( save the address of the length word on the stack )
+    &here @                      ( save the address of the length word on the stack )
     0 ,                         (  dummy length - we don't know what it is yet )
     '"' parse s,
     dup		                ( get the saved address of the length word )
-    here @ swap -               ( calculate the length )
+    &here @ swap -               ( calculate the length )
     8 -                         ( subtract 8 because we measured from the start of the length word )
     swap !                      ( and back-fill the length location )
     align		        ( round up to next multiple of 4 bytes for the remaining code )
   else                          ( immediate mode )
-    '"' parse 2dup here @ swap cmove
-    nip here @ swap
+    '"' parse 2dup &here @ swap cmove
+    nip &here @ swap
   then
 ; immediate
 
@@ -516,8 +516,8 @@
 ( w, appends a 32-bit value to the current compiled word. )
 
 : w,
-  here @ w!                     ( store the character in the compiled image )
-  4 here +!                     ( increment here pointer by 4 bytes )
+  &here @ w!                     ( store the character in the compiled image )
+  4 &here +!                     ( increment here pointer by 4 bytes )
 ;
 
 ( ASSEMBLER HERE )
@@ -907,17 +907,17 @@ variable loc-3b
 variable loc-4b
 variable loc-5b
 
-: 1b: here @ loc-1b ! ;
-: 2b: here @ loc-2b ! ;
-: 3b: here @ loc-3b ! ;
-: 4b: here @ loc-4b ! ;
-: 5b: here @ loc-5b ! ;
+: 1b: &here @ loc-1b ! ;
+: 2b: &here @ loc-2b ! ;
+: 3b: &here @ loc-3b ! ;
+: 4b: &here @ loc-4b ! ;
+: 5b: &here @ loc-5b ! ;
 
-: ->1b loc-1b @ here @ - 4 /  ;
-: ->2b loc-3b @ here @ - 4 /  ;
-: ->3b loc-3b @ here @ - 4 /  ;
-: ->4b loc-4b @ here @ - 4 /  ;
-: ->5b loc-5b @ here @ - 4 /  ;
+: ->1b loc-1b @ &here @ - 4 /  ;
+: ->2b loc-3b @ &here @ - 4 /  ;
+: ->3b loc-3b @ &here @ - 4 /  ;
+: ->4b loc-4b @ &here @ - 4 /  ;
+: ->5b loc-5b @ &here @ - 4 /  ;
 
  
 ( Forward labels and address words )
@@ -928,11 +928,11 @@ variable loc-3f
 variable loc-4f
 variable loc-5f
 
-: ->1f here @ loc-1f !  0 ;
-: ->2f here @ loc-2f !  0 ;
-: ->3f here @ loc-3f !  0 ;
-: ->4f here @ loc-4f !  0 ;
-: ->5f here @ loc-5f !  0 ;
+: ->1f &here @ loc-1f !  0 ;
+: ->2f &here @ loc-2f !  0 ;
+: ->3f &here @ loc-3f !  0 ;
+: ->4f &here @ loc-4f !  0 ;
+: ->5f &here @ loc-5f !  0 ;
 
 : word-offset ( addr1 addr2 -- word-offset )
   - 4 /
@@ -960,7 +960,7 @@ with the two forms of relative jumps. )
     ." Forward jump not defined!"
     exit
   then
-  here @ over         ( ins-addr here ins-addr  )
+  &here @ over         ( ins-addr here ins-addr  )
   word-offset         ( ins-addr offset )
   over                ( ins-addr offset ins-addr )
   w@                  ( ins-addr offset instruction-to-be-patched )
@@ -993,7 +993,7 @@ with the two forms of relative jumps. )
 
 : defprim
   create                 ( Create a new word )
-  here @ dup 8 - !       ( Put DFA into CFA )
+  &here @ dup 8 - !      ( Put DFA into CFA )
 ;
 
 ( Close out an open primitive word. This is essentially
@@ -1374,7 +1374,7 @@ defprim dcci
  at least that next time a word is compiled that HERE has been
  left as a multiple of 8.)
 
-: allot	( n -- ) here +! ;
+: allot	( n -- ) &here +! ;
 
 ( cells just multiplies the top of stack by 8 giving us the number of bytes in
   some number of integer "cells".)

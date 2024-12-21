@@ -830,10 +830,18 @@ dovar:  add     x0, x0, #8      // x0 holds CFA, skip it to get DFA
         PUSHPSP x0              // push DFA on the stack
         next
 
+        .text
+        .align 3
+        .global doval
+        .type doval, %function
+doval:  add     x0, x0, #8      // x0 holds CFA, skip it to get DFA
+        ldr     x0, [x0]        // get the value from the data field
+        PUSHPSP x0              // push the value on the stack
+        next
 
 /*
 
-	When DODOES is invoked as a codeword, the state is:
+	when DODOES is invoked as a codeword, the state is:
         - x0 points to the CFA of the word with DODOES. This CFA holds the address of the
           "does shim" instruction in the parent word's stream. This CFA was used to reach
           this point
@@ -1385,8 +1393,8 @@ var_\name :
 */
 
 	defvar "state",5,,state,fetchword
-	defvar "here",4,,here,state,data_segment
-	defvar "latest",6,,latest,here,name_execute
+//	defvar "&here",5,,here_addr,state,data_segment
+	defvar "latest",6,,latest,state,name_execute
 	defvar "s0",2,,sz,latest,data_stack_top
 	defvar "base",4,,base,sz,10
         defvar "echo",4,,echo,base,0
@@ -1404,8 +1412,20 @@ var_\name :
         // this one is "hand rolled" because "var_>in" is not a valid assembly label
 	defword ">in",3,,to_in,srcid,dovar
         .global var_to_in
+        .type   var_to_in, %object
+        .size   var_to_in, 8
 var_to_in:
         .quad 0
+
+        defword "&here",5,,addr_here,to_in,doval
+        .quad   var_here
+
+        defword "here",4,,here,addr_here,doval
+        .global var_here
+        .type   var_here, %object
+        .size   var_here, 8
+var_here:
+        .quad data_segment
 
 /*
 	BUILT-IN CONSTANTS ----------------------------------------------------------------------
@@ -1430,7 +1450,7 @@ var_to_in:
 	next
 	.endm
 
-	defconst "version",7,,version,to_in,JONES_VERSION
+	defconst "version",7,,version,here,JONES_VERSION
 	defconst "r0",2,,rz,version,return_stack_top
 	defconst "docol",5,,__docol,rz,docol
         defconst "dovar",5,,__dovar,__docol,dovar
@@ -2402,8 +2422,8 @@ _comma:
 
 	defword ":",1,,colon,rbrac
 	.quad create                    // CREATE the dictionary entry / header
-        .quad here, fetch, decr8        // get HERE, back up to the codeword
-        .quad here, store               // update HERE
+        .quad here, decr8               // get HERE, back up to the codeword
+        .quad addr_here, store          // update HERE
 	.quad lit, docol, comma         // Append DOCOL  (the codeword).
 	.quad latest, fetch, hidden     // Make the word hidden (see below for definition).
 	.quad rbrac                     // Go into compile mode.
@@ -2609,23 +2629,23 @@ _comma:
 */
         defword "if",2,f_immed,if,zbranch
         .quad compile_tick,zbranch,comma // ['] 0branch ,  | compile 0branch
-        .quad here,fetch                 // here @         | save location of the offset on parameter stack
+        .quad addr_here,fetch                 // &here @         | save location of the offset on parameter stack
         .quad lit,0,comma                // 0 ,            | compile a placeholder offset
         .quad exit
 
         defword "then",4,f_immed,then,if
         .quad dup                        // dup
-        .quad here,fetch,swap,sub        // here @ swap -  | calculate offset from addr saved on parameter stack
+        .quad addr_here,fetch,swap,sub        // &here @ swap -  | calculate offset from addr saved on parameter stack
         .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
         .quad exit
 
         defword "else",4,f_immed,else,then
         .quad compile_tick,branch,comma  // ['] 0branch ,  | unconditional branch over the false-part
-        .quad here,fetch                 // here @         | save location of offset on the stack
+        .quad addr_here,fetch                 // &here @         | save location of offset on the stack
         .quad lit,0,comma                // 0 ,            | compile a placeholder offset
         .quad swap                       // swap           | now backfill the original 'if' offset
         .quad dup                        // dup
-        .quad here,fetch,swap,sub        // here @ swap -  | calculate offset from addr saved on stack
+        .quad addr_here,fetch,swap,sub        // &here @ swap -  | calculate offset from addr saved on stack
         .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
         .quad exit
 

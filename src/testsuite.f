@@ -435,8 +435,8 @@ t{ min-int 2 min-int */mod ->  0  0   }t \ overflow case
 
 .\ F.3.11		Memory
 .\ F.6.1.0150	,
-here @ 1 ,
-here @ 2 ,
+&here @ 1 ,
+&here @ 2 ,
 constant 2nd
 constant 1st
 t{ 1st 2nd <      -> <true> }t
@@ -470,8 +470,8 @@ t{ 1 cells 1 chars mod -> 0       }t
 t{        1s bits 10 < -> <false> }t
 
 .\ F.6.1.0860	c,
-here @ 1 c,
-here @ 2 c,
+&here @ 1 c,
+&here @ 2 c,
 constant 2ndc
 constant 1stc
 t{     1stc 2ndc < -> <true> }t
@@ -489,7 +489,7 @@ t{       1 chars 1 < -> <false> }t \ chars is at least 1 byte
 t{ 1 chars 1 cells > -> <false> }t \ chars is smaller than a cell
 
 .\ F.6.1.0705	align
-align 1 allot here @ align here @ 3 cells allot
+align 1 allot &here @ align &here @ 3 cells allot
 constant a-addr constant ua-addr
 t{                   ua-addr aligned -> a-addr        }t \ check alignment works
 t{       1 a-addr c!       a-addr       c@ -> 1       }t \ aligned access is ok for chars
@@ -501,8 +501,8 @@ t{    1234 a-addr cell+ !  a-addr cell+ @  -> 1234    }t
 t{ 123 456 a-addr cell+ 2! a-addr cell+ 2@ -> 123 456 }t
 
 .\ F.6.1.0710	allot
-here @ 1 allot
-here @
+&here @ 1 allot
+&here @
 constant 2nda
 constant 1sta
 t{ 1sta 2nda < -> <true> }t \ here must grow with allot

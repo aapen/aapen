@@ -874,7 +874,7 @@ variable &normalize
 constant dirent-lfn%
 
 ( align HERE to 16 byte boundary )
-here @ 15 + 15 invert and here !
+&here @ 15 + 15 invert and &here !
 4 256 []buffer fatbuf
 variable bbuf 128 cells allot
 variable bytes-per-sector
@@ -889,10 +889,10 @@ variable total-clusters
 ( unaligned access to 32 bit value )
 ( addr -- n )
 : w@un
-  here @ aligned ( addr addr' )
-  dup >r         ( addr addr' | r: addr' )
-  4 cmove        ( | r: addr' | byte copy to aligned temp space )
-  r> w@          ( n | r: | then read as a word )
+  &here @ aligned ( addr addr' )
+  dup >r          ( addr addr' | r: addr' )
+  4 cmove         ( | r: addr' | byte copy to aligned temp space )
+  r> w@           ( n | r: | then read as a word )
 ;
 
 : cd/  root-cluster @ curdir ! ;
