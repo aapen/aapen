@@ -1,6 +1,6 @@
 # Hexdump routine for use in gdb
 #
-# From gdb, run "source script/hexdump.py"
+# From gdb, run "source tools/hexdump.py"
 #
 # Usage:
 #   hd <location> <length>
