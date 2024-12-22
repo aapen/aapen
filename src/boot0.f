@@ -1029,6 +1029,12 @@ defprim do-nothing
 defprim clear-stack
 ;;
 
+defprim >body
+  0     poppsp-x  w,
+  0 0 8 add-xx#   w,
+  0     pushpsp-x w,
+;;
+
 defprim 1+
   0     poppsp-x w,
   0 0 1	add-xx# w,

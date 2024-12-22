@@ -531,15 +531,15 @@
 
 ( Convert a counted string to an addr & count on the stack )
 
-: count ( c-addr -- c-addr u ) dup cell+ swap @ ;
+: count ( c-addr -- c-addr u ) dup char+ swap c@ ;
 
 ( create a counted string at c-addr2 from the string c-addr1 u )
 
-: place ( c-addr1 u c-addr2 ) 2dup ! cell+ swap cmove ;
+: place ( c-addr1 u c-addr2 ) 2dup c! char+ swap cmove ;
 
 ( compile a string as a counted string )
 
-: string, ( c-addr u -- ) 2dup here place cell+ allot drop ;
+: string, ( c-addr u -- ) 2dup here place char+ allot drop align ;
 
 ( copy n words from addr to , )
 

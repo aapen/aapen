@@ -1,6 +1,20 @@
 \ test cases drawn from https://forth-standard.org
 \
 \ exercise these with `testsuite evaluate`
+\
+\ A general note on test structure: these test stanzas do not stand
+\ alone and independent. They often define words that are used later
+\ by other tests. This makes them stateful, coupled, and all that. Be
+\ cautious when reordering the blocks in this file.
+\
+\ A note on input and output: There is no mechanism in the Forth
+\ standard for capturing output -- though of course some systems have
+\ their own non-standard mechanism. We just don't have one in
+\ Aapen. That means the output tests can only be verified by visual
+\ inspection.
+\
+\ I have also omitted tests for double-cell math and logic. With a
+\ 64-bit cell size, the double words are an unnecessary complication.
 
 hex
 
@@ -12,7 +26,6 @@ t{ 1 bitsset? -> 0 0 }t                  \ other numbers have at least one bit
 t{ -1 bitsset? -> 0 0 }t
 
 .\ F.3.2		Booleans
-
 t{ 0 0 and -> 0 }t
 t{ 0 1 and -> 0 }t
 t{ 1 0 and -> 0 }t
@@ -533,27 +546,316 @@ t{ gc4 drop dup c@ swap char+ c@ -> 0x58 0x59 }t
 : gc5 s" A String"2drop ; \ there is no space between the " and 2drop
 t{ gc5 -> }t
 
-.\ F.6.1.0950	constant
-t{ 123 constant x123 -> }t
-t{ x123 -> 123 }t
-t{ : equ constant ; -> }t
-t{ x123 equ y123 -> }t
-t{ y123 -> 123 }t
+.\ F.3.13		Dictionary
+.\ F.6.1.0070	'
+t{ : gt1 123 ;   ->     }t
+t{ ' gt1 execute -> 123 }t
 
+.\ F.6.1.2510	[']
+t{ : gt2 ['] gt1 ; immediate -> }t
+t{ gt2 execute -> 123 }t
+
+.\ F.6.1.1550	find
+
+\ MTN - These fail because our `find` expects ( caddr u ) but the
+\ standard expects a counted string
+
+\ leave these uncommented because they are used later
+here 3 c, char g c, char t c, char 1 c, constant gt1string
+here 3 c, char g c, char t c, char 2 c, constant gt2string
+\ t{ gt1string find -> ' gt1 -1 }t
+\ t{ gt2string find -> ' gt2  1 }t
+
+.\ F.6.1.1780	literal
+t{ : gt3 gt2 literal ; -> }t
+t{ gt3 -> ' gt1 }t
+
+.\ F.6.1.0980	count
+t{ gt1string count -> gt1string char+ 3 }t
+
+.\ F.6.1.2033	postpone
+t{ : gt4 postpone gt1 ; immediate -> }t
+t{ : gt5 gt4 ; -> }t
+t{ gt5 -> 123 }t
+t{ : gt6 345 ; immediate -> }t
+
+\ TODO: MTN - this is failing I know not why
+\ t{ : gt7 postpone gt6 ; -> }t
+\ t{ gt7 -> 345 }t
+
+.\ F.6.1.2250	state
+t{ : gt8 state @ ; immediate -> }t
+t{ gt8 -> 0 }t
+t{ : gt9 gt8 literal ; -> }t
+t{ gt9 0= -> <false> }t
+
+.\ F.3.14		Flow Control
+.\ F.6.1.1700	if else then
+t{ : gi1 if 123 then ; -> }t
+t{ : gi2 if 123 else 234 then ; -> }t
+t{   0 gi1 ->     }t
+t{   1 gi1 -> 123 }t
+t{  -1 gi1 -> 123 }t
+t{   0 gi2 -> 234 }t
+t{   1 gi2 -> 123 }t
+t{  -1 gi2 -> 123 }t
+
+\ multiple elses in an if statement (?!)
+: melse if 1 else 2 else 3 else 4 else 5 then ;
+t{ <false> melse -> 2 4 }t
+t{ <true>  melse -> 1 3 5 }t
+
+.\ F.6.1.2430	begin while repeat
+t{ : gi3 begin dup 5 < while dup 1+ repeat ; -> }t
+t{ 0 gi3 -> 0 1 2 3 4 5 }t
+t{ 4 gi3 -> 4 5 }t
+t{ 5 gi3 -> 5 }t
+t{ 6 gi3 -> 6 }t
+
+\ MTN - I don't understand gi5 at all. The double `while` with only
+\ one `begin` and `repeat` throws me. It also causes a core abort
+\ t{ : gi5 begin dup 2 > while dup 5 < while dup 1+ repeat 123 else 345 then ; -> }t
+\ t{ 1 gi5 -> 1 345 }t
+\ t{ 2 gi5 -> 2 345 }t
+\ t{ 3 gi5 -> 3 4 5 123 }t
+\ t{ 4 gi5 -> 4 5 123 }t
+\ t{ 5 gi5 -> 5 123 }t
+
+.\ F.6.1.2390	begin until
+t{ : gi4 begin dup 1+ dup 5 > until ; -> }t
+t{ 3 gi4 -> 3 4 5 6 }t
+t{ 5 gi4 -> 5 6 }t
+t{ 6 gi4 -> 6 7 }t
+
+.\ F.6.1.2120	recurse
+t{ : gi6 dup if dup >r 1- recurse r> then ; -> }t
+t{ 0 gi6 -> 0 }t
+t{ 1 gi6 -> 0 1 }t
+t{ 2 gi6 -> 0 1 2 }t
+t{ 3 gi6 -> 0 1 2 3 }t
+t{ 4 gi6 -> 0 1 2 3 4 }t
+t{ :noname dup if dup >r 1- recurse r> then ; constant rn1 -> }t
+t{ 0 rn1 execute -> 0 }t
+t{ 4 rn1 execute -> 0 1 2 3 4 }t
+decimal
+:noname 1- dup case
+          0 of exit endof
+          1 of 11 swap recurse endof
+          2 of 22 swap recurse endof
+          3 of 33 swap recurse endof
+          drop abs recurse exit
+        endcase
+; constant rn2
+t{  1 rn2 execute -> 0 }t
+t{  2 rn2 execute -> 11 0 }t
+t{  4 rn2 execute -> 33 22 11 0 }t
+t{ 25 rn2 execute -> 33 22 11 0 }t
+hex
+
+.\ F.3.15		Counted Loops
+.\ F.6.1.1800	loop
+t{ : gd1 do i loop ; -> }t
+t{ 4 1 gd1 -> 1 2 3 }t
+t{ 2 -1 gd1 -> -1 0 1 }t
+t{ mid-uint+1 mid-uint gd1 -> mid-uint }t
+
+.\ F.6.1.0140	+loop
+\ TODO: [negstep] MTN - These fail because my current implementation
+\ of +loop doesn't work with negative increments
+
+\ t{ : gd2 do i -1 +loop ; -> }t
+\ t{ 1 4 gd2 -> 4 3 2 1 }t
+\ t{ -1 2 gd2 -> 2 1 0 -1 }t
+\ t{ mid-uint mid-uint+1 gd2 -> mid-uint+1 mid-uint }t
+\ variable gditerations
+\ variable gdincrement
+\ : gd7
+\   gdincrement !
+\   0 gditerations !
+\   do
+\     1 gditerations +!
+\     i
+\     gditerations @ 6 = if leave then
+\     gdincrement @
+\   +loop
+\   gditerations @
+\ ;
+\ t{    4  4  -1 gd7 ->  4                  1  }t
+\ t{    1  4  -1 gd7 ->  4  3  2  1         4  }t
+\ t{    4  1  -1 gd7 ->  1  0 -1 -2  -3  -4 6  }t
+\ t{    4  1   0 gd7 ->  1  1  1  1   1   1 6  }t
+\ t{    0  0   0 gd7 ->  0  0  0  0   0   0 6  }t
+\ t{    1  4   0 gd7 ->  4  4  4  4   4   4 6  }t
+\ t{    1  4   1 gd7 ->  4  5  6  7   8   9 6  }t
+\ t{    4  1   1 gd7 ->  1  2  3            3  }t
+\ t{    4  4   1 gd7 ->  4  5  6  7   8   9 6  }t
+\ t{    2 -1  -1 gd7 -> -1 -2 -3 -4  -5  -6 6  }t
+\ t{   -1  2  -1 gd7 ->  2  1  0 -1         4  }t
+\ t{    2 -1   0 gd7 -> -1 -1 -1 -1  -1  -1 6  }t
+\ t{   -1  2   0 gd7 ->  2  2  2  2   2   2 6  }t
+\ t{   -1  2   1 gd7 ->  2  3  4  5   6   7 6  }t
+\ t{    2 -1   1 gd7 -> -1 0 1              3  }t
+\ t{  -20 30 -10 gd7 -> 30 20 10  0 -10 -20 6  }t
+\ t{  -20 31 -10 gd7 -> 31 21 11  1  -9 -19 6  }t
+\ t{  -20 29 -10 gd7 -> 29 19  9 -1 -11     5  }t
+
+.\ F.6.1.1730	j
+\ TODO: [negstep] MTN - Some of these fail because my current implementation
+\ of +loop doesn't work with negative increments
+t{ : gd3 do 1 0 do j loop loop ; ->               }t
+t{          4        1 gd3 -> 1 2 3               }t
+\ t{          2       -1 gd3 -> -1 0 1              }t
+t{ mid-uint+1 mid-uint gd3 -> mid-uint            }t
+\ t{ : gd4 do 1 0 do j loop -1 +loop ; ->           }t
+\ t{        1          4 gd4 -> 4 3 2 1             }t
+\ t{       -1          2 gd4 -> 2 1 0 -1            }t
+\ t{ mid-uint mid-uint+1 gd4 -> mid-uint+1 mid-uint }t
+
+.\ F.6.1.1760	leave
+\ TODO: [leave] MTN - not implemented, but should be
+\ t{ : gd5 123 swap 0 do i 4 > if drop 234 leave then loop ; -> }t
+\ t{ 1 gd5 -> 123 }t
+\ t{ 5 gd5 -> 123 }t
+\ t{ 6 gd5 -> 234 }t
+
+.\ F.6.1.2380	unloop
+t{ : gd6 0 swap 0 do
+           i 1+ 0 do
+             i j + 3 = if i unloop i unloop exit then 1+
+           loop
+         loop ; -> }t
+t{ 1 gd6 -> 1 }t
+t{ 2 gd6 -> 3 }t
+t{ 3 gd6 -> 4 1 2 }t
+
+.\ F.3.16		Defining Words
+.\ F.6.1.0450	:
+t{ : nop : postpone ; ; -> }t
+t{ nop nop1 nop nop2 -> }t
+t{ nop1 -> }t
+t{ nop2 -> }t
+
+t{ : gdx 123 ; : gdx gdx 234 ; -> }t
+t{ gdx -> 123 234 }t
+
+.\ F.6.1.0950	constant
+t{ 123 constant x123 ->     }t
+t{ x123              -> 123 }t
+t{ : equ constant ;  ->     }t
+t{ x123 equ y123     ->     }t
+t{ y123              -> 123 }t
+
+.\ F.6.1.2410	variable
+t{ variable v1 ->     }t
+t{ 123 v1 !    ->     }t
+t{ v1 @        -> 123 }t
+
+.\ F.6.1.1250	does> and create
+t{ : does1 does> @ 1 + ; -> }t
+t{ : does2 does> @ 2 + ; -> }t
+t{ create cr1 -> }t
+t{ cr1   -> here }t
+t{ 1 ,   ->   }t
+t{ cr1 @ -> 1 }t
+t{ does1 ->   }t
+t{ cr1   -> 2 }t
+t{ does2 ->   }t
+t{ cr1   -> 3 }t
+t{ : weird: create does> 1 + does> 2 + ; -> }t
+t{ weird: w1 -> }t
+t{ ' w1 >body -> here }t
+t{ w1 -> here 1 + }t
+t{ w1 -> here 2 + }t
+
+.\ F.6.1.0550	>body and create
+t{  create cr0 ->      }t
+t{ ' cr0 >body -> here }t
+
+.\ F.3.17		Evaluate
+.\ F.6.1.1360	evaluate
+
+\ MTN - these fail right now because our evaluate requires a net zero
+\ stack effect from the thing evaluated
+
+\ : ge1 s" 123" ; immediate
+\ : ge2 s" 123 1+" ; immediate
+\ : ge3 s" : ge4 345 ;" ;
+\ : ge5 evaluate ; immediate
+\ t{ ge1 evaluate -> 123 }t       ( test evaluate in interp. state )
+\ t{ ge2 evaluate -> 124 }t
+\ t{ ge3 evaluate ->     }t
+\ t{ ge4          -> 345 }t
+\ t{ : ge6 ge1 ge5 ; ->  }t       ( test evaluate in compile state )
+\ t{ ge6 -> 123 }t
+\ t{ : ge7 ge2 ge5 ; ->  }t
+\ t{ ge7 -> 124 }t
+
+.\ F.3.18		Parser Input Source Control
+.\ F.6.1.2216	source
+.\ F.6.1.0560	>in
+.\ F.6.1.2450	word
+
+.\ F.3.19		Number Patterns
+: s= ( addr1 c1 addr2 c2 -- flag )
+  >r swap r@ = if               ( check for same length )
+    r> ?dup if                  ( check not empty )
+      0 do
+        over c@ over c@ - if 2drop <false> unloop exit then
+        swap char+ swap char+
+      loop
+    then
+    2drop <true>                ( completed loop, strings match )
+  else
+    r> drop 2drop <false>       ( lengths unequal )
+  then
+;
+
+( determine log2 of largest double )
+24 constant max-base           ( base 2 ... 36 )
+: count-bits 0 0 invert begin dup while >r 1+ r> 2* repeat drop ;
+count-bits 2* constant #bits-ud
+
+.\ F.6.1.1670	hold
+.\ F.6.1.2210	sign
+.\ F.6.1.0030	<# # #>
+.\ F.6.1.0570	>number
 .\ F.6.1.0750	base
 : gn2 base @ >r hex base @ decimal base @ r> base ! ;
 t{ gn2 -> 10 a }t
 
-.\ F.6.1.0690	abs
-t{  0 abs -> 0 }t
-t{  1 abs -> 1 }t
-t{ -1 abs -> 1 }t
+.\ F.3.20		Memory Movement
+create fbuf 00 c, 00 c, 00 c,
+create sbuf 12 c, 34 c, 56 c,
+: seebuf fbuf c@ fbuf char+ c@ fbuf char+ char+ c@ ;
+.\ F.6.1.1540	fill
+.\ F.6.1.1900	move
 
-.\ F.6.1.2165	s-quote
-t{ : gc4 s" XY" ; -> }t
-t{ gc4 swap drop -> 2 }t
-t{ gc4 drop dup c@ swap char+ c@ -> 58 59 }t
-: gc5 s" A string"2drop ; \ there is no space between the " and 2drop
-t{ gc5 -> }t
+.\ F.3.21		Output
+.\ F.6.1.1320	emit
+: output-test
+  ." You should see the standard graphic characters:" cr
+  41 bl do i emit loop cr
+  61 41 do i emit loop cr
+  7f 61 do i emit loop cr
+  ." You should see 0-9 separated by a space:" cr
+  9 1+ 0 do i . loop cr
+  ." You should see 0-9 (with no spaces):" cr
+  [char] 9 1+ [char] 0 do i 0 spaces emit loop cr
+  ." You should see A-G separated by a space:" cr
+  [char] G 1+ [char] A do i emit space loop cr
+  ." You should see 0-5 separated by two spaces:" cr
+  5 1+ 0 do i [char] 0 + emit 2 spaces loop cr
+  ." You should see two separate lines:" cr
+  s" Line 1" tell cr s" Line 2" tell cr
+  ." You should see the number ranges of signed and unsigned numbers:" cr
+  ." Signed: " min-int . max-int . cr
+  ." Unsigned:" 0 u. max-uint u. cr
+;
+t{ output-test -> }t
+
+.\ F.3.22		Input
+.\ F.6.1.0695	accept
+
+.\ F.3.23		Dictionary Search Rules
 
 cr
