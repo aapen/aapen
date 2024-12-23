@@ -20,6 +20,9 @@
 \	without any conditions, unless such conditions are required by law.
 \
 
+\ : move  ( c-from c-to u -- )
+\  >r 2dup u< if cmove> else r> cmove then ;
+
 : abs ( n -- u ) dup 0< if negate then ;
 : min 2dup > if swap then drop ;
 

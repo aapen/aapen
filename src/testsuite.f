@@ -174,6 +174,20 @@ t{ 0 min-int       > -> <true>  }t
 t{ max-int min-int > -> <true>  }t
 t{ max-int 0       > -> <true>  }t
 
+.\ F.6.1.2340	u<
+t{        0        1 u< -> <true>  }t
+t{        1        2 u< -> <true>  }t
+t{        0 mid-uint u< -> <true>  }t
+t{        0 max-uint u< -> <true>  }t
+t{ mid-uint max-uint u< -> <true>  }t
+t{        0        0 u< -> <false> }t
+t{        1        1 u< -> <false> }t
+t{        1        0 u< -> <false> }t
+t{        2        1 u< -> <false> }t
+t{ mid-uint        0 u< -> <false> }t
+t{ max-uint        0 u< -> <false> }t
+t{ max-uint mid-uint u< -> <false> }t
+
 .\ F.6.1.1870	max
 t{ 0 1             max -> 1       }t
 t{ 1 2             max -> 2       }t
@@ -452,7 +466,7 @@ here 1 ,
 here 2 ,
 constant 2nd
 constant 1st
-t{ 1st 2nd <      -> <true> }t
+t{ 1st 2nd u<     -> <true> }t
 t{ 1st cell+      -> 2nd    }t
 t{ 1st 1 cells +  -> 2nd    }t
 t{ 1st @ 2nd @    -> 1 2    }t
@@ -487,7 +501,7 @@ here 1 c,
 here 2 c,
 constant 2ndc
 constant 1stc
-t{     1stc 2ndc < -> <true> }t
+t{    1stc 2ndc u< -> <true> }t
 t{      1stc char+ -> 2ndc   }t
 t{  1stc 1 chars + -> 2ndc   }t
 t{ 1stc c@ 2ndc c@ -> 1 2    }t
@@ -504,7 +518,7 @@ t{ 1 chars 1 cells > -> <false> }t \ chars is smaller than a cell
 .\ F.6.1.0705	align
 align 1 allot here align here 3 cells allot
 constant a-addr constant ua-addr
-t{                   ua-addr aligned -> a-addr        }t \ check alignment works
+t{ ua-addr aligned -> a-addr                          }t \ check alignment works
 t{       1 a-addr c!       a-addr       c@ -> 1       }t \ aligned access is ok for chars
 t{    1234 a-addr !        a-addr       @  -> 1234    }t
 t{ 123 456 a-addr 2!       a-addr       2@ -> 123 456 }t
@@ -518,8 +532,8 @@ here 1 allot
 here
 constant 2nda
 constant 1sta
-t{ 1sta 2nda < -> <true> }t \ here must grow with allot
-t{     1sta 1+ -> 2nda   }t \ by one address unit
+t{ 1sta 2nda u< -> <true> }t \ here must grow with allot
+t{      1sta 1+ -> 2nda   }t \ by one address unit
 
 .\ F.3.12		Characters
 .\ F.6.1.0770	bl
@@ -557,8 +571,8 @@ t{ gt2 execute -> 123 }t
 
 .\ F.6.1.1550	find
 
-\ MTN - These fail because our `find` expects ( caddr u ) but the
-\ standard expects a counted string
+\ TODO: [wordfind] MTN - These fail because our `find` expects ( caddr u ) but the standard expects
+\ a counted string
 
 \ leave these uncommented because they are used later
 here 3 c, char g c, char t c, char 1 c, constant gt1string
@@ -580,8 +594,9 @@ t{ gt5 -> 123 }t
 t{ : gt6 345 ; immediate -> }t
 
 \ TODO: MTN - this is failing I know not why
-\ t{ : gt7 postpone gt6 ; -> }t
-\ t{ gt7 -> 345 }t
+
+\ t{ : gt7 postpone gt6 ; ->     }t
+\ t{ gt7                  -> 345 }t
 
 .\ F.6.1.2250	state
 t{ : gt8 state @ ; immediate -> }t
@@ -612,8 +627,9 @@ t{ 4 gi3 -> 4 5 }t
 t{ 5 gi3 -> 5 }t
 t{ 6 gi3 -> 6 }t
 
-\ MTN - I don't understand gi5 at all. The double `while` with only
-\ one `begin` and `repeat` throws me. It also causes a core abort
+\ TODO: [while] MTN - I don't understand gi5 at all. The double `while` with only one `begin` and
+\ `repeat` throws me. It also causes a core abort
+
 \ t{ : gi5 begin dup 2 > while dup 5 < while dup 1+ repeat 123 else 345 then ; -> }t
 \ t{ 1 gi5 -> 1 345 }t
 \ t{ 2 gi5 -> 2 345 }t
@@ -660,8 +676,8 @@ t{ 2 -1 gd1 -> -1 0 1 }t
 t{ mid-uint+1 mid-uint gd1 -> mid-uint }t
 
 .\ F.6.1.0140	+loop
-\ TODO: [negstep] MTN - These fail because my current implementation
-\ of +loop doesn't work with negative increments
+\ TODO: [loop] MTN - These fail because my current implementation of +loop doesn't work with
+\ negative increments
 
 \ t{ : gd2 do i -1 +loop ; -> }t
 \ t{ 1 4 gd2 -> 4 3 2 1 }t
@@ -700,8 +716,8 @@ t{ mid-uint+1 mid-uint gd1 -> mid-uint }t
 \ t{  -20 29 -10 gd7 -> 29 19  9 -1 -11     5  }t
 
 .\ F.6.1.1730	j
-\ TODO: [negstep] MTN - Some of these fail because my current implementation
-\ of +loop doesn't work with negative increments
+\ TODO: [loop] MTN - Some of these fail because my current implementation of +loop doesn't work with
+\ negative increments
 t{ : gd3 do 1 0 do j loop loop ; ->               }t
 t{          4        1 gd3 -> 1 2 3               }t
 \ t{          2       -1 gd3 -> -1 0 1              }t
@@ -712,7 +728,7 @@ t{ mid-uint+1 mid-uint gd3 -> mid-uint            }t
 \ t{ mid-uint mid-uint+1 gd4 -> mid-uint+1 mid-uint }t
 
 .\ F.6.1.1760	leave
-\ TODO: [leave] MTN - not implemented, but should be
+\ TODO: [loop] MTN - not implemented, but should be
 \ t{ : gd5 123 swap 0 do i 4 > if drop 234 leave then loop ; -> }t
 \ t{ 1 gd5 -> 123 }t
 \ t{ 5 gd5 -> 123 }t
@@ -774,8 +790,8 @@ t{ ' cr0 >body -> here }t
 .\ F.3.17		Evaluate
 .\ F.6.1.1360	evaluate
 
-\ MTN - these fail right now because our evaluate requires a net zero
-\ stack effect from the thing evaluated
+\ TODO: [evaluate] MTN - these fail right now because our evaluate requires a net zero stack effect
+\ from the thing evaluated
 
 \ : ge1 s" 123" ; immediate
 \ : ge2 s" 123 1+" ; immediate
@@ -792,8 +808,30 @@ t{ ' cr0 >body -> here }t
 
 .\ F.3.18		Parser Input Source Control
 .\ F.6.1.2216	source
+\ TODO: [evaluate] MTN - these fail with a stack mismatch with the nested evaluate
+
+\ : gs1 s" source" 2dup evaluate >r swap >r = r> r> = ;
+\ t{ gs1 -> <true> <true> }t
+\ : gs4 source >in ! drop ;
+\ t{ gs4 123 456 -> }t
+
 .\ F.6.1.0560	>in
+\ TODO: [evaluate] MTN - these fail because of how we handle input during evaluate. In our evaluate,
+\ source and >in cover the entire buffer being evaluated. It looks like the standard behavior is to
+\ take it line-by-line as with `refill` in the usual definition of `quit`.
+
+\ variable scans
+\ : rescan? -1 scans +! scans @ if 0 >in ! then ;
+\ t{ 2 scans ! 345 rescan? -> 345 345 }t
+
+
 .\ F.6.1.2450	word
+\ TODO: [wordfind] MTN - these fail because our `word` returns ( caddr u ) instead of a counted
+\ string
+\ : gs3 word count swap c@ ;
+\ t{ bl gs3 hello -> 5 char h }t
+\ t{ char " gs3 goodbye" -> 7 char g }t
+\ t{ bl gs3 drop -> 0 }t \ blank lines return zero-length strings
 
 .\ F.3.19		Number Patterns
 : s= ( addr1 c1 addr2 c2 -- flag )
@@ -816,9 +854,58 @@ t{ ' cr0 >body -> here }t
 count-bits 2* constant #bits-ud
 
 .\ F.6.1.1670	hold
+\ TODO: [numpat] MTN - number patterns are not implemented yet
+\ : gp1 <# 41 hold 42 0 0 #> s" BA" s= ;
+\ t{ gp1 -> <true> }t
+
 .\ F.6.1.2210	sign
+\ TODO: [numpat] MTN - number patterns are not implemented yet
+\ : gp2 <# -1 sign 0 sign -1 sign 0 0 #> s" --" s= ;
+\ t{ gp2 -> <true> }t
+
 .\ F.6.1.0030	<# # #>
+\ TODO: [numpat] MTN - number patterns are not implemented yet
+\ : gp3 <# 1 0 # # #> s" 01" s= ;
+\ t{ gp3 -> <true> }t
+
 .\ F.6.1.0570	>number
+\ TODO: [numpat] MTN - number patterns are not implemented yet
+\ create gn-buf 0 c,
+\ : gn-string gn-buf 1 ;
+\ : gn-consumed gn-buf char+ 0 ;
+\ : gn' [char] ' word char+ c@ gn-buf c! gn-string ;
+\
+\ t{ 0 0 gn' 0' >number ->         0 0 gn-consumed }t
+\ t{ 0 0 gn' 1' >number ->         1 0 gn-consumed }t
+\ t{ 1 0 gn' 1' >number -> base @ 1+ 0 gn-consumed }t
+\ \ following should fail to convert
+\ t{ 0 0 gn' -' >number ->         0 0 gn-string   }t
+\ t{ 0 0 gn' +' >number ->         0 0 gn-string   }t
+\ t{ 0 0 gn' .' >number ->         0 0 gn-string   }t
+\
+\ : >number-based base @ >r base ! >number r> base ! ;
+\
+\ t{ 0 0 gn' 2'       10 >number-based ->  2 0 gn-consumed }t
+\ t{ 0 0 gn' 2'        2 >number-based ->  0 0 gn-string   }t
+\ t{ 0 0 gn' f'       10 >number-based ->  f 0 gn-consumed }t
+\ t{ 0 0 gn' g'       10 >number-based ->  0 0 gn-string   }t
+\ t{ 0 0 gn' g' max-base >number-based -> 10 0 gn-consumed }t
+\ t{ 0 0 gn' z' max-base >number-based -> 23 0 gn-consumed }t
+\
+\ : gn1 ( ud base -- ud' len )
+\    \ ud should equal ud' and len should be zero.
+\    base @ >r base !
+\    <# #s #>
+\    0 0 2swap >number swap drop    \ return length only
+\    r> base ! ;
+\
+\ t{        0   0        2 gn1 ->        0   0 0 }t
+\ t{ max-uint   0        2 gn1 -> max-uint   0 0 }t
+\ t{ max-uint dup        2 gn1 -> max-uint dup 0 }t
+\ t{        0   0 max-base gn1 ->        0   0 0 }t
+\ t{ max-uint   0 max-base gn1 -> max-uint   0 0 }t
+\ t{ max-uint dup max-base gn1 -> max-uint dup 0 }t
+
 .\ F.6.1.0750	base
 : gn2 base @ >r hex base @ decimal base @ r> base ! ;
 t{ gn2 -> 10 a }t
@@ -828,10 +915,32 @@ create fbuf 00 c, 00 c, 00 c,
 create sbuf 12 c, 34 c, 56 c,
 : seebuf fbuf c@ fbuf char+ c@ fbuf char+ char+ c@ ;
 .\ F.6.1.1540	fill
+t{ fbuf 0 20 fill ->          }t
+t{ seebuf         -> 00 00 00 }t
+t{ fbuf 1 20 fill ->          }t
+t{ seebuf         -> 20 00 00 }t
+t{ fbuf 3 20 fill ->          }t
+t{ seebuf         -> 20 20 20 }t
+
 .\ F.6.1.1900	move
+\ TODO: [nomove] MTN - move not implemented
+\ t{ fbuf fbuf 3 chars move       ->          }t
+\ t{ seebuf                       -> 20 20 20 }t
+\ t{ sbuf fbuf 0 chars move       ->          }t
+\ t{ seebuf                       -> 20 20 20 }t
+\ t{ sbuf fbuf 1 chars move       ->          }t
+\ t{ seebuf                       -> 12 20 20 }t
+\ t{ sbuf fbuf 3 chars move       ->          }t
+\ t{ seebuf                       -> 12 34 56 }t
+\ t{ fbuf fbuf char+ 2 chars move ->          }t
+\ t{ seebuf                       -> 12 12 34 }t
+\ t{ fbuf char+ fbuf 2 chars move ->          }t
+\ t{ seebuf                       -> 12 34 34 }t
 
 .\ F.3.21		Output
 .\ F.6.1.1320	emit
+\ TODO: [negprint] MTN - printing negative numbers is broken for some reason. The last two output
+\ lines will not be right.
 : output-test
   ." You should see the standard graphic characters:" cr
   41 bl do i emit loop cr
@@ -856,6 +965,5 @@ t{ output-test -> }t
 .\ F.3.22		Input
 .\ F.6.1.0695	accept
 
-.\ F.3.23		Dictionary Search Rules
 
 cr

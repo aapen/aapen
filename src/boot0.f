@@ -186,8 +186,8 @@
 : postpone ( compilation: "name" -- )
   ?compiling 0= -14 and throw                   ( ensure `postpone` only happens in compilation )
   word find dup 0= -13 and throw                ( waddr | locate word )
-  dup ?immediate swap >cfa lit,                 ( compile xt in current word, leave tos with ?immediate )
-  if ['] execute-compiling else ['] compile, then compile,
+  dup >cfa lit,                                 ( compile xt as literal in current word )
+  ?immediate if ['] execute-compiling else ['] compile, then compile,
 ; immediate
 
 ( recurse makes a recursive call to the current word that is being compiled.
@@ -731,8 +731,9 @@
   or
 ;
 
-
 ( These are the actual assembler instructions. )
+
+0d31 constant zr
 
 ( Load and store )
 
@@ -830,6 +831,7 @@
 : mov-x# ( rt im16 -- instruction) 0xd2800000 rt-im16-instruction ;
 : mov-w# ( rt im16 -- instruction) 0xd2800000 rt-im16-instruction ->w ;
 
+: movn-x# ( rt im16 -- instruction) 0x92800000 rt-im16-instruction ;
 
 ( Branches )
 
@@ -862,6 +864,8 @@
 : bgt-# ( im19 -- instruction ) c-gt b-cond ;
 : ble-# ( im19 -- instruction ) c-le b-cond ;
 : bge-# ( im19 -- instruction ) c-ge b-cond ;
+: bcs-# ( im19 -- instruction ) c-cs b-cond ;
+: bcc-# ( im19 -- instruction ) c-cc b-cond ;
 
 : csop-xxxc ( rt rn rm cond opcode -- instruction )
   rot        ( rt rn cond opcode rm  )
@@ -876,7 +880,10 @@
 ;
 
 : csinc-xxxc ( rt rn rm cond-- instruction ) 0x9a800400 csop-xxxc ;
-: csel-xxxc ( rt rn rm cond -- instruction ) 0x9a800000 csop-xxxc ;
+: csel-xxxc  ( rt rn rm cond -- instruction ) 0x9a800000 csop-xxxc ;
+: csneg-xxxc ( rd rn rm cond -- instruction ) 0xda800400 csop-xxxc ;
+: cset-xc    ( rt cond -- instruction ) zr swap zr swap csinc-xxxc ;
+: cneg-xxc   ( rd rn cond -- instruction ) over swap csneg-xxxc ;
 
 ( System register instructions )
 
@@ -902,7 +909,6 @@
 
 0d28 constant psp
 0d29 constant rsp
-0d31 constant zr
 
 : pushrsp-x ( r -- instruction ) rsp -8 str-x[x#]! ;
 : poprsp-x  ( r -- instruction ) rsp  8 ldr-x[x]# ;
@@ -1011,9 +1017,9 @@ with the two forms of relative jumps. )
   the code for next in the assembly. )
 
 : ;;
-  0 0xa 8 ldr-x[x]#  w,
-  1 0   ldr-x[x]   w,
-  1     br-x       w,
+  0 0xa 8 ldr-x[x]# w,
+  1 0   ldr-x[x]    w,
+  1     br-x        w,
   align			( Next word aligns )
   clear-jump-addresses  ( Prevent cross word jumps )
 ;
@@ -1112,6 +1118,32 @@ defprim 0>=
   1 1 1         sub-xx# w,
 1f:
   1 		pushpsp-x w,
+;;
+
+defprim u<
+  0             poppsp-x  w,
+  1             poppsp-x  w,
+  1 0           cmp-xx    w,
+  ->1f          bcs-#     w,
+  0 0           movn-x#   w,
+  ->2f          b-#       w,
+1f:
+  0 zr          mov-xx    w,
+2f:
+  0             pushpsp-x w,
+;;
+
+defprim u>
+  0             poppsp-x  w,
+  1             poppsp-x  w,
+  0 1           cmp-xx    w,
+  ->1f          bcs-#     w,
+  0 0           movn-x#   w,
+  ->2f          b-#       w,
+1f:
+  0 zr          mov-xx    w,
+2f:
+  0             pushpsp-x w,
 ;;
 
 defprim xor
