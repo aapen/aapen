@@ -290,6 +290,14 @@
   swap !
 ; immediate
 
+( ahead skipped-code then
+  -- compiles to: --> branch offset skipped-code )
+
+: ahead
+  postpone branch
+  here 0 ,
+; immediate
+
 ( begin loop-part condition until
   -- compiles to: --> loop-part condition 0branch offset
    where offset points back to the loop-part

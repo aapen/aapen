@@ -937,6 +937,10 @@ t{ seebuf         -> 20 20 20 }t
 \ t{ fbuf char+ fbuf 2 chars move ->          }t
 \ t{ seebuf                       -> 12 34 34 }t
 
+.\ F.15.6.2.0270	ahead
+t{ : pt1 ahead 1111 2222 then 3333 ; -> }t
+t{ pt1 -> 3333 }t
+
 .\ F.3.21		Output
 .\ F.6.1.1320	emit
 \ TODO: [negprint] MTN - printing negative numbers is broken for some reason. The last two output
