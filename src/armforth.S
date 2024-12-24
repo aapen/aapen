@@ -2623,35 +2623,6 @@ _comma:
 
 /*
 
-        Attempting to bring some of the flow control into primitives,
-        so I can use them in defer/postpone/@execute earlier in the
-        boot code.
-
-*/
-        defword "if",2,f_immed,if,zbranch
-        .quad compile_tick,zbranch,comma // ['] 0branch ,  | compile 0branch
-        .quad here                       // here           | save location of the offset on parameter stack
-        .quad lit,0,comma                // 0 ,            | compile a placeholder offset
-        .quad exit
-
-        defword "then",4,f_immed,then,if
-        .quad dup                        // dup
-        .quad here,swap,sub              // here swap -    | calculate offset from addr saved on parameter stack
-        .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
-        .quad exit
-
-        defword "else",4,f_immed,else,then
-        .quad compile_tick,branch,comma  // ['] 0branch ,  | unconditional branch over the false-part
-        .quad here                       // here           | save location of offset on the stack
-        .quad lit,0,comma                // 0 ,            | compile a placeholder offset
-        .quad swap                       // swap           | now backfill the original 'if' offset
-        .quad dup                        // dup
-        .quad here,swap,sub              // here swap -    | calculate offset from addr saved on stack
-        .quad swap,store                 // swap !         | backfill offset into the addr saved by 'if'
-        .quad exit
-
-/*
-
         Exceptions and aborts
 
 
@@ -2713,7 +2684,7 @@ _comma:
 
 */
 
-        defword "exception-marker",16,,exception_marker,else
+        defword "exception-marker",16,,exception_marker,zbranch
         .quad rdrop           // drop original parameter stack pointer
         .quad lit,0           // there was no exception, this is the normal return path
         .quad exit

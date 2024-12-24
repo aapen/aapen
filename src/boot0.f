@@ -94,12 +94,12 @@
 ;
 
 \ The 2... versions of the standard operators work on pairs of stack entries.
-
 : 2dup over over ;
 : 2drop drop drop ;
 : 2swap rot >r rot r> ;
 : 2@ dup 8+ @ swap @ ;
 : 2! dup 8+ rot rot ! ! ;
+: 2over 3 pick 3 pick ;         \ x y z w -- x y z w x y
 
 \ Some common defining words.  In Aapen, a constant and a value behave
 \ the same. Technically you could re-assign a new value to a constant,
@@ -142,10 +142,6 @@
 : decimal ( -- ) 10 base ! ;
 : hex     ( -- ) 16 base ! ;
 : binary  ( -- ) 2 base ! ;
-
-( Some more complicated stack utilities. )
-
-: 2over ( x y z w -- x y z w x y ) 3 pick 3 pick ;
 
 ( Define some character constants )
 
@@ -214,12 +210,8 @@
 
 : is ( xt "name" -- ) word find dup 0= -13 and throw >dfa ! ;
 
-: ?compiling state @ 0<> ;
-
-: execute-compiling ( xt -- ) ?compiling if execute else ] execute [ then ;
-
 : postpone ( compilation: "name" -- )
-  ?compiling 0= -14 and throw                   ( ensure `postpone` only happens in compilation )
+  state @ 0= -14 and throw                      ( ensure `postpone` only happens in compilation )
   word find dup 0= -13 and throw                ( waddr | locate word )
   name>compile swap lit, compile,               ( compile xt and "invoker" in current word )
 ; immediate
@@ -273,13 +265,30 @@
 
  IF is an IMMEDIATE word which compiles 0BRANCH followed by a dummy offset, and places
  the address of the 0BRANCH on the stack.  Later when we see THEN, we pop that address
- off the stack, calculate the offset, and back-fill the offset.
+ off the stack, calculate the offset, and back-fill the offset. )
 
- Note that IF, ELSE, and THEN are defined as secondary words in
- armforth.S. This is so they are available for use earlier in the boot
- code.
 
- )
+: if
+  postpone 0branch              ( compile 0branch )
+  here                          ( save location of the offset on the stack )
+  0 ,                           ( compile a dummy offset )
+; immediate
+
+: then
+  dup
+  here swap -                   ( calculate offset from the addr saved on the stack )
+  swap !                        ( store the offset in the back-filled location )
+; immediate
+
+: else
+  postpone branch               ( definite branch to just over the false-part )
+  here                          ( save location of the offset on the stack )
+  0 ,                           ( compile a dummy offset )
+  swap                          ( now back-fill the original if offset )
+  dup                           ( same as for then word above )
+  here swap -
+  swap !
+; immediate
 
 ( begin loop-part condition until
   -- compiles to: --> loop-part condition 0branch offset
