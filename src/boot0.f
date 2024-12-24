@@ -1,5 +1,5 @@
 \ -*- forth -*-
-\ 
+\
 \ This is the initial boot code for AApen. This file defines everything up to the 'evaluate'
 \ word (which includes the assembler).
 \
@@ -23,8 +23,75 @@
 : troff 0 echo ! ;
 : tron  1 echo ! ;
 
+: cells 8 * ;
+: cell+ 1 cells + ;
+
+: chars ;
+: char+ 1 + ;
+
+\ x y z -- y z x
 :  rot >r swap r> swap ;
+
+\ x y z -- z x y
 : -rot swap >r swap r> ;
+
+\ x y -- y
+: nip  swap drop ;
+
+\ x y -- y x y
+: tuck swap over ;
+
+\  x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u
+: pick 1 + cells dsp@ + @ ;
+
+\ Standard words for booleans.
+: true  -1 ;
+: false 0 ;
+: not   0= ;
+: 0<>   0= not ;
+
+\ We don't have `if` yet, and won't until after we have `postpone`. Instead we use this arithmetic
+\ conditional to select a value
+
+\ a b c -- (b&c)|(a&~c)
+: ?:
+  tuck                          \ a c b c
+  and                           \ a c b&c
+  -rot                          \ b&c a c
+  not and                       \ b&c a&~c
+  or                            \ (b&c)|(a&~c)
+;
+
+: count dup c@ >r 1 + r> ;
+
+\ Append to the word being compiled. For Aapen, `compile,` is the same as `,`
+: compile, , ;
+
+\ Word flags are in byte 8 of the header
+: flags 8 + c@ ;
+: ?flag flags and 0<> ;
+: ?hidden f_hidden swap ?flag ;
+: ?immediate f_immed swap ?flag ;
+
+\ The next three words are sensitive to the layout of the word header. See `armforth.S` for the
+\ layout. We're going to use these to build up our execution machinery, so they have to appear
+\ early. That also means we don't get a bunch of nice affordances that appear later, such as control
+\ flow.
+
+\ Word name is a counted string starting at +9 bytes
+\ nt -- c-addr u
+: name>string    9 + count ;
+
+\ nt -- xt | 0  : xt refers to the interpretation semantics of the word. 0 results if it has no defined interpretation semantics
+: name>interpret 40 + ;
+
+\ nt -- xt1 xt2 : xt1 refers to the compilation semantics of the word, xt2 is the 'invoker' that will perform it
+: name>compile
+  dup name>interpret swap       \ xt1 nt         |  put the word's xt on stack
+  ['] compile, ['] execute      \ xt1 nt xtc xte | compilation behavior is to execute, else to compile
+  rot ?immediate                \ xt1 xtc xte ?i
+  ?:
+;
 
 \ The 2... versions of the standard operators work on pairs of stack entries.
 
@@ -78,14 +145,6 @@
 
 ( Some more complicated stack utilities. )
 
-: nip ( x y -- y ) swap drop ;
-: tuck ( x y -- y x y ) swap over ;
-: pick ( x_u ... x_1 x_0 u -- x_u ... x_1 x_0 x_u )
-	1 +		( add one because of 'u' on the stack )
-	8 *		( multiply by the word size )
-	dsp@ +		( add to the stack pointer )
-	@    		( and fetch )
-;
 : 2over ( x y z w -- x y z w x y ) 3 pick 3 pick ;
 
 ( Define some character constants )
@@ -114,21 +173,9 @@
 
 : negate 0 swap - ;
 
-( Standard words for booleans. )
-
-: true  -1 ;
-: false 0 ;
-: not   0= ;
-: 0<>   0= not ;
-
-(
-  Append to the word being compiled. For Aapen, `compile,` is the same as `,`
-)
-
-: compile, , ;
 
 ( `literal` takes whatever is on the stack and compiles `lit <foo>.` )
-: literal ['] lit compile, , ; immediate
+: literal ['] lit compile, compile, ; immediate
 
 ( Here we also define `lit,` which does the same thing as `literal` but is not
   immediate. )
@@ -167,18 +214,6 @@
 
 : is ( xt "name" -- ) word find dup 0= -13 and throw >dfa ! ;
 
-: flags ( waddr -- c ) 8 + c@ ;
-
-( Given a word address, return the hidden flag. )
-: ?hidden  ( waddr -- hidden-flag )
-  flags f_hidden and 0<> ( mask the f_hidden flag and return it -- as a truth value )
-;
-
-( Given a word address, return the immediate flag. )
-: ?immediate ( waddr -- immed-flag )
-  flags f_immed and 0<> ( mask the F_IMMED flag and return it -- as a truth value )
-;
-
 : ?compiling state @ 0<> ;
 
 : execute-compiling ( xt -- ) ?compiling if execute else ] execute [ then ;
@@ -186,8 +221,7 @@
 : postpone ( compilation: "name" -- )
   ?compiling 0= -14 and throw                   ( ensure `postpone` only happens in compilation )
   word find dup 0= -13 and throw                ( waddr | locate word )
-  dup >cfa lit,                                 ( compile xt as literal in current word )
-  ?immediate if ['] execute-compiling else ['] compile, then compile,
+  name>compile swap lit, compile,               ( compile xt and "invoker" in current word )
 ; immediate
 
 ( recurse makes a recursive call to the current word that is being compiled.
@@ -224,7 +258,7 @@
 : '[' [char] [ ;
 
 ( Control structures.
- Note that the control structures will only work inside compiled words. 
+ Note that the control structures will only work inside compiled words.
 
  `if`, `else`, and `then` are defined in armforth.S because we need
  them to implement `postpone`, and we then use `postpone` to define
@@ -262,7 +296,7 @@
   ,                                     ( compile the offset here )
 ; immediate
 
-( begin loop-part again 
+( begin loop-part again
 	-- compiles to: --> loop-part branch offset
 	where offset points back to the loop-part
  In other words, an infinite loop which can only be returned from with EXIT )
@@ -275,7 +309,7 @@
 
 ( begin condition while loop-part repeat
 	-- compiles to: --> condition 0branch offset2 loop-part branch offset
-	where offset points back to condition--the beginning--and offset2 
+	where offset points back to condition--the beginning--and offset2
 	points to after the whole piece of code
         So this is like a while condition { loop-part } loop in the C language.)
 
@@ -348,11 +382,11 @@
 ; immediate
 
 \ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal.
-\ In other words you can use this when it's possible for the loop body to be 
+\ In other words you can use this when it's possible for the loop body to be
 \ executed zero times.
 \
 \ ?do loop-body loop
-\	-- compiles to: --> 
+\	-- compiles to: -->
 \  bounds<>? 0branch offset2 setup loop-body (loop-inc) (loop-done?) 0branch offset1
 \ where offset2 points just after the final 0branch and lets us skip the whole thing
 \ and offset1 points back to just before the loop-body
@@ -371,9 +405,9 @@
   here                                  ( save location that will be the loop target )
 ; immediate
 
-( This hijacking of the rstack has a dangerous side effect: 
- `exit` will "return" execution to some small, probably  
- misaligned address unless we clean up the return stack before executing it. That's 
+( This hijacking of the rstack has a dangerous side effect:
+ `exit` will "return" execution to some small, probably
+ misaligned address unless we clean up the return stack before executing it. That's
  where `unloop` comes in. It restores the return stack so we can `exit` cleanly. )
 
 : unloop
@@ -401,12 +435,12 @@
 : (loop-done?) rsp@ 8+ @ rsp@ 16 + @ <= ;
 
 \ `+loop` is a bit of a beast. It needs to compile the runtime code to update
-\ the loop count and check it against the limit. If we were writing this 
+\ the loop count and check it against the limit. If we were writing this
 \ directly it would look like this:
 \
 \ ... (loop-inc) (loop-done?) < if ..not done.. else ..done.. then ...
 \
-\ Where the "not done" part branches back to the instruction after the `do` 
+\ Where the "not done" part branches back to the instruction after the `do`
 \ that started this whole thing and the "done" part cleans up the rstack.
 
 : +loop
@@ -443,17 +477,6 @@
 
 : allot	( n -- ) &here +! ;
 
-( cells just multiplies the top of stack by 8 giving us the number of bytes in
-  some number of integer "cells".)
-
-: cells ( n -- n ) 8 * ;
-: cell+ 1 cells + ;
-
-( 'chars' is like 'cells' but indexes by characters. In our case, one character
-   is one byte, so really this word does nothing. )
-
-: chars ( n -- n ) 1 * ;
-: char+ 1 chars + ;
 
 ( aligned takes an address and rounds it up to the next 8 byte boundary.)
 
@@ -470,7 +493,7 @@
   2dup here swap cmove allot drop
 ;
 
-( s" string" is used in FORTH to define strings.  It leaves the address of the 
+( s" string" is used in FORTH to define strings.  It leaves the address of the
   string and its length on the stack, with length at the top of stack.  The space
   following S" is the normal space between FORTH words and is not a part of the string.
 
@@ -772,17 +795,17 @@
 : orr-www ( rt rn rm -- instruction ) orr-xxx ->w ;
 
 : eor-xxx ( rt rn rm -- instruction  )
-  0xca000000 rt-rn-rm-instruction 
+  0xca000000 rt-rn-rm-instruction
 ;
 
 : mvn-xx  ( rt rm -- instruction  )
     0x1f swap
-    0xaa200000 
+    0xaa200000
     rt-rn-rm-instruction
 ;
 
 : and-xxx ( rt rm rn -- instruction  )
-    0x8a000000 rt-rn-rm-instruction 
+    0x8a000000 rt-rn-rm-instruction
 ;
 
 : add-xx# ( rt rn im12 -- instruction ) 0x91000000 rt-rn-im12-instruction ;
@@ -816,11 +839,11 @@
 ( Shifting  )
 
 : lsl-xxx ( rt rm rn -- instruction  )
-  0x9ac02000 rt-rn-rm-instruction 
+  0x9ac02000 rt-rn-rm-instruction
 ;
 
 : lsr-xxx ( rt rm rn -- instruction  )
-  0x9ac02400 rt-rn-rm-instruction 
+  0x9ac02400 rt-rn-rm-instruction
 ;
 
 ( Move )
@@ -849,13 +872,13 @@
 
 
  ( Conditional branches. The fundimental instruction is b-cond + an
- instruction code. We predefine a few of the common cases. 
+ instruction code. We predefine a few of the common cases.
  Keep in mind that the jump is relative and multiplied by 4. )
 
 : b-cond ( im19 cond -- instruction )
   0x54000000			( im19 cond instruction )
   swap ->cond			( im19 instruction )
-  swap set-im19		
+  swap set-im19
 ;
 
 : beq-# ( im19 -- instruction ) c-eq b-cond ;
@@ -936,7 +959,7 @@ variable loc-5b
 : ->4b loc-4b @ here - 4 /  ;
 : ->5b loc-5b @ here - 4 /  ;
 
- 
+
 ( Forward labels and address words )
 
 variable loc-1f
@@ -971,7 +994,7 @@ with the two forms of relative jumps. )
 ( Given the addr of a branch instruction to patch, patch the
   immediate offset with the difference between the instruction
   address and here. )
-  
+
 : patch-jump-forward  ( address of instruction to patch -- )
   dup not if          ( check for undefined jump )
     ." Forward jump not defined!"
@@ -1464,13 +1487,13 @@ defprim dcci
   test1, test2, ..., testn and executes the matching piece of code within of ... endof.
   If none of the test values match then the default case is executed.  Inside the ... of
   the default case, the value is still at the top of stack -- it is implicitly drop-ed
-  by endcase.  When endof is executed it jumps after endcase -- ie. there is 
+  by endcase.  When endof is executed it jumps after endcase -- ie. there is
   no "fall-through" and no need for a break statement like in C.
 
   The default case may be omitted.  In fact the tests may also be omitted so that you
   just have a default case, although this is probably not very useful.
 
-  An example -- assuming that 'q', etc. are words which push the ASCII value 
+  An example -- assuming that 'q', etc. are words which push the ASCII value
   of the letter on the stack:
 
 	0 value quit
@@ -1626,7 +1649,7 @@ defprim dcci
   The size of the individual elements don't have to be aligned in any way,
   so you can have 7 or 93 byte elements in your array.
 
-  The data section of the array starts with two cells, one for n and one for the 
+  The data section of the array starts with two cells, one for n and one for the
   buffer size. This is followed by the actual elements. When executed, the resulting
   word will push the address of the first element of the buffer array onto the stack.
 )
@@ -1634,10 +1657,10 @@ defprim dcci
 : []buffer ( el-size-bytes n <name> -- )
         create          ( el-size-bytes n )
         2dup            ( el-size-bytes n el-size-bytes n)
-        ,               ( el-size-bytes n el-size-bytes )               
+        ,               ( el-size-bytes n el-size-bytes )
         ,               ( n el-size-bytes )
         *               ( n-bytes )
-        allot         
+        allot
         align
         does> ( i buffer -- addr )
         over 0< if
@@ -1655,14 +1678,14 @@ defprim dcci
 
 ( Given addr of the 1st element, return the el size of an array )
 
-: []% ( buffer[0] -- el-size ) 
+: []% ( buffer[0] -- el-size )
         1 cells - @
 ;
 
 ( Given addr of the 1st element, return the # elements of an array )
 ( Number of elements in buf array )
 
-: []# ( buffer[0] -- len ) 
+: []# ( buffer[0] -- len )
         2 cells - @
 ;
 
