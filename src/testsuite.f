@@ -670,19 +670,18 @@ hex
 
 .\ F.3.15		Counted Loops
 .\ F.6.1.1800	loop
-t{ : gd1 do i loop ; -> }t
-t{ 4 1 gd1 -> 1 2 3 }t
-t{ 2 -1 gd1 -> -1 0 1 }t
+t{ : gd1 do i loop ;       ->          }t
+t{  4 1 gd1                -> 1 2 3    }t
+t{ 2 -1 gd1                -> -1 0 1   }t
 t{ mid-uint+1 mid-uint gd1 -> mid-uint }t
 
 .\ F.6.1.0140	+loop
-\ TODO: [loop] MTN - These fail because my current implementation of +loop doesn't work with
-\ negative increments
+t{ : gd2 do i -1 +loop ; -> }t
+t{ 1 4 gd2 -> 4 3 2 1 }t
+t{ -1 2 gd2 -> 2 1 0 -1 }t
+t{ mid-uint mid-uint+1 gd2 -> mid-uint+1 mid-uint }t
 
-\ t{ : gd2 do i -1 +loop ; -> }t
-\ t{ 1 4 gd2 -> 4 3 2 1 }t
-\ t{ -1 2 gd2 -> 2 1 0 -1 }t
-\ t{ mid-uint mid-uint+1 gd2 -> mid-uint+1 mid-uint }t
+\ TODO: [loop] MTN - These fail because I haven't implemented `leave`
 \ variable gditerations
 \ variable gdincrement
 \ : gd7
@@ -720,12 +719,12 @@ t{ mid-uint+1 mid-uint gd1 -> mid-uint }t
 \ negative increments
 t{ : gd3 do 1 0 do j loop loop ; ->               }t
 t{          4        1 gd3 -> 1 2 3               }t
-\ t{          2       -1 gd3 -> -1 0 1              }t
+t{          2       -1 gd3 -> -1 0 1              }t
 t{ mid-uint+1 mid-uint gd3 -> mid-uint            }t
-\ t{ : gd4 do 1 0 do j loop -1 +loop ; ->           }t
-\ t{        1          4 gd4 -> 4 3 2 1             }t
-\ t{       -1          2 gd4 -> 2 1 0 -1            }t
-\ t{ mid-uint mid-uint+1 gd4 -> mid-uint+1 mid-uint }t
+t{ : gd4 do 1 0 do j loop -1 +loop ; ->           }t
+t{        1          4 gd4 -> 4 3 2 1             }t
+t{       -1          2 gd4 -> 2 1 0 -1            }t
+t{ mid-uint mid-uint+1 gd4 -> mid-uint+1 mid-uint }t
 
 .\ F.6.1.1760	leave
 \ TODO: [loop] MTN - not implemented, but should be
