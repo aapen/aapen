@@ -587,16 +587,16 @@
   In immediate mode we just keep reading characters and printing them until we get to
   the next double quote.
 
-  In compile mode we use S" to store the string, then add TELL afterwards:
-  LITSTRING <string length> <string rounded up to 4 bytes> TELL
+  In compile mode we use S" to store the string, then add TYPE afterwards:
+  LITSTRING <string length> <string rounded up to 4 bytes> TYPE
 )
 
 : ." ( "ccc<quote>" -- )
   state @ if                    ( compiling? )
     postpone s"                 ( read the string, and compile litstring, etc. )
-    postpone tell               ( compile the final tell )
+    postpone type               ( compile the final type )
   else
-    '"' parse tell
+    '"' parse type
   then
 ; immediate
 

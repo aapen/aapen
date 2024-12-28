@@ -258,7 +258,7 @@
 			[ char s ] literal emit '"' emit space ( print s"<space> )
 			cell+ dup @		( get the length word )
 			swap cell+ swap		( end start+8 length )
-			2dup tell		( print the string )
+			2dup type		( print the string )
 			'"' emit space		( finish the string with a final quote )
 			+ aligned		( end start+8+len, aligned )
 			1 cells -		( because we're about to add 8 below )
@@ -418,7 +418,7 @@
   								should be consumed / copied immediately.
   								FORTH string should not contain NULs.
 
-  For example, DUP STRLEN TELL prints a C string.
+  For example, DUP STRLEN TYPE prints a C string.
 )
 
 ( z" .." is like z" ..." except that the string is terminated by an ASCII NUL character.
@@ -631,35 +631,35 @@ blue light-blue clr!
 : aapen-logo
   home cr cr
   yellow fg!
-  s"                 AAA                              AAA                                                                        " tell cr
-  s"                A:::A                            A:::A                                                                       " tell cr
-  s"               A:::::A                          A:::::A                                                                      " tell cr
+  s"                 AAA                              AAA                                                                        " type cr
+  s"                A:::A                            A:::A                                                                       " type cr
+  s"               A:::::A                          A:::::A                                                                      " type cr
   green fg!
-  s"              A:::::::A                        A:::::::A                                                                     " tell cr
-  s"             A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " tell cr
-  s"            A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " tell cr
+  s"              A:::::::A                        A:::::::A                                                                     " type cr
+  s"             A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " type cr
+  s"            A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " type cr
   red fg!
-  s"           A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " tell cr
-  s"          A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" tell cr
+  s"           A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " type cr
+  s"          A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" type cr
   yellow fg!
-  s"         A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" tell cr
-  s"        A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" tell cr
-  s"       A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" tell cr
+  s"         A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" type cr
+  s"        A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" type cr
+  s"       A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" type cr
   green fg!
-  s"      A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" tell cr
-  s"     A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" tell cr
+  s"      A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" type cr
+  s"     A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" type cr
   red fg!
-  s"    A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" tell cr
-  s"   A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" tell cr
-  s"  AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" tell cr
-  s"                                                                  A:::::A                                                    " tell cr
+  s"    A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" type cr
+  s"   A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" type cr
+  s"  AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" type cr
+  s"                                                                  A:::::A                                                    " type cr
   yellow fg!
-  s"                                                                  A:::::A                                                    " tell cr
-  s"                                                                 A:::::::A                                                   " tell cr
-  s"                                                                 A:::::::A                                                   " tell cr
+  s"                                                                  A:::::A                                                    " type cr
+  s"                                                                 A:::::::A                                                   " type cr
+  s"                                                                 A:::::::A                                                   " type cr
   green fg!
-  s"                                                                 A:::::::A                                                   " tell cr
-  s"                                                                 AAAAAAAAA                                                   " tell cr
+  s"                                                                 A:::::::A                                                   " type cr
+  s"                                                                 AAAAAAAAA                                                   " type cr
   light-blue fg!
 ;
 
@@ -675,7 +675,7 @@ sdcard evaluate
 cls
 aapen-logo
 cr
-s" V 0.01" tell cr
-s" READY" tell cr
+s" V 0.01" type cr
+s" READY" type cr
 
 quit

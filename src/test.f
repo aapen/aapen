@@ -63,13 +63,13 @@ defer error
 
 \ ( c-addr u -- ) display an error message
 : error1
-  tell ." :["                   \ error message
+  type ." :["                   \ error message
   >in 60 < if
-    inbuf @ >in @ tell
+    inbuf @ >in @ type
   else
     inbuf @ >in @ + 60 - 60
   then
-  tell ." ]" cr          \ show the line that caused the problem
+  type ." ]" cr          \ show the line that caused the problem
   empty-stack                   \ throw away everything else
 ;
 
@@ -108,6 +108,6 @@ variable verbose
    false verbose !
 
 ( an "echoed comment" )
-: .\ '\n' parse verbose @ if tell cr else 2drop then ;
+: .\ '\n' parse verbose @ if type cr else 2drop then ;
 
 test-old-base base ! hide test-old-base

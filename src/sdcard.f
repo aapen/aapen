@@ -114,7 +114,7 @@ sd-arg2 0xfc + reg sd-slotisr-ver drop
 3 constant efail ( cmd failed )
 4 constant erbad ( response indicates error )
 
-: .reg tell w@ ." : 0x" %08x ;
+: .reg type w@ ." : 0x" %08x ;
 
 : print-sd-status
   cr
@@ -556,8 +556,8 @@ variable sdcard.bus-width
   ." ==============" cr
   ." Card type: "  sdcard.card-type @ .d cr
   ." Capacity: "   sdcard.capacity @ .d cr
-  ." Format: "     sdcard.csd w@ csd.format card-format-name tell cr
-  ." Card state: " sdcard.card-state @ card-state-name tell cr
+  ." Format: "     sdcard.csd w@ csd.format card-format-name type cr
+  ." Card state: " sdcard.card-state @ card-state-name type cr
   base @ >r hex
   ." RCA: 0x" sdcard.rca q.@+ cr drop
   ." OCR: 0x" sdcard.ocr q.@+ cr drop
@@ -925,7 +925,7 @@ variable total-clusters
     swap -
     data-sectors !
 
-    ."    FAT32 volume label: " bbuf -.fat32-volume-label 11 tell cr
+    ."    FAT32 volume label: " bbuf -.fat32-volume-label 11 type cr
     ."       FAT32 volume id: " bbuf -.fat32-volume-id w@un .x cr
   else
     ." maybe fat16" cr -5 abort

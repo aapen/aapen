@@ -958,7 +958,7 @@ t{ pt1 -> 3333 }t
   ." You should see 0-5 separated by two spaces:" cr
   5 1+ 0 do i [char] 0 + emit 2 spaces loop cr
   ." You should see two separate lines:" cr
-  s" Line 1" tell cr s" Line 2" tell cr
+  s" Line 1" type cr s" Line 2" type cr
   ." You should see the number ranges of signed and unsigned numbers:" cr
   ." Signed: " min-int . max-int . cr
   ." Unsigned:" 0 u. max-uint u. cr

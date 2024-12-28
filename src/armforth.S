@@ -2018,7 +2018,7 @@ _number:
 	| LINK    | 0 | 6 | D | O | U | B | L | E | , ... | DOCOL      | DUP        | +          | EXIT       |
 	+---------+---+---+---+---+---+---+---+---+-------+------------+------------+------------+------------+
 
-	See also >CFA and >dfa.
+	See also >CFA and >DFA.
 
 	FIND doesn't find dictionary entries which are flagged as HIDDEN.  See below for why.
 */
@@ -2787,7 +2787,7 @@ _comma:
         .quad lit,-1,over,equ,zbranch,40,drop               // case -1 of   | was an abort
         .quad msg_aborted,branch,104                        // msg_aborted endcase
         .quad lit,-2,over,equ,zbranch,40,drop               // case -2 of   | was abort"
-        .quad tell,branch,24                                // msg_abort_string endcase
+        .quad type,branch,24                                // msg_abort_string endcase
         .quad msg_uncaught                                  // (default case) msg_uncaught
         .quad drop                                          // endcase
         .quad quit                                          // quit         | restart the interpreter
@@ -2800,8 +2800,8 @@ _comma:
 	FORTH).  See the definition of those operators later. Technically, LITSTRING expects to find
 	a counted string immediately after its own xt in the currently executing word.
 
-	TELL just prints a string.  It's more efficient to define this in assembly because we
-	can make it a single Linux syscall.
+	TYPE just prints a string. It could probably be a secondary, if not for the fact that we use
+	it from primitive words.
 */
 
 	defcode "litstring",9,,litstring,throw
@@ -2814,14 +2814,14 @@ _comma:
 	next
 
         // ( addr length -- ) writes a string to output
-	defcode "tell",4,,tell,litstring
-        POPPSP  x2                      // x2 <- len
-        POPPSP  x1                      // x1 <- addr
-        bl      _tell
-	next
+        defcode "type",4,,type,litstring
+        POPPSP  x2
+        POPPSP  x1
+        bl      _type
+        next
 
-        .global _tell
-_tell:
+        .global _type
+_type:
         PUSHPSP lr
         cmp     x2, #0
         beq     2f
@@ -2845,7 +2845,7 @@ _tell:
 	description -- see: http://en.wikipedia.org/wiki/REPL).
 */
 
-        defword "quit",4,,quit,tell
+        defword "quit",4,,quit,type
 	.quad   rz,rspstore	  // r0 rsp!
         .quad   lit,0,srcid,store // 0 srcid !
         .quad   lit,0,state,store // [
@@ -2884,7 +2884,7 @@ _tell:
         PUSHPSP x2
         mov     x2, x1
         mov     x1, x0
-        bl      _tell                   // use tell to echo the word
+        bl      _type                   // use tell to echo the word
         mov     x0, #' '
         BIOS(3)
 9:      POPPSP  x2
@@ -2951,15 +2951,15 @@ _tell:
 	// parse error
 	ldr	x1, =errmsg		// address
 	mov	x2, #errmsgend-errmsg	// length
-        bl      _tell                   // display it
+        bl      _type                   // display it
 
         mov     x1, x4                  // address of word
         mov     x2, x5                  // length of word
-        bl      _tell
+        bl      _type
 
 	ldr	x1, =errmsgnl
 	mov	x2, #errmsgnlend-errmsgnl
-        bl      _tell
+        bl      _type
 
         RESET_INPUT
 	ldr	NIP, =warm_start        // re-initialize
@@ -2980,7 +2980,7 @@ hellomsgend:
         PUSHPSP lr
         ldr     x1,=aborted
         mov     x2,#abortedend-aborted
-        bl      _tell
+        bl      _type
         POPPSP  lr
         POPPSP  x2
         POPPSP  x1
@@ -2996,7 +2996,7 @@ abortedend:
         PUSHPSP x2
         ldr     x1,=uncaught
         mov     x2,#uncaughtend-uncaught
-        bl      _tell
+        bl      _type
         mov     x1,x3
         bl      print_hex
         POPPSP  x2
@@ -3051,7 +3051,7 @@ uncaughtend:
         defcode "hello",5,,hello,dccleaninval
 	ldr	x1, =hellomsg		// address
 	mov	x2, #hellomsgend-hellomsg	// length
-        bl      _tell
+        bl      _type
 	next
 
 	// Example of a secondary in assembly.
