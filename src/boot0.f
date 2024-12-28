@@ -889,9 +889,12 @@
 ;
 
 : madd-xxxx ( rt rm rn ra -- instruction ) 0x9b000000 rt-rn-rm-ra-instruction ;
+: msub-xxxx ( rt rm rn ra -- instruction ) 0x1b008000 rt-rn-rm-ra-instruction ;
 : mul-xxx ( rt rm rn -- instruction )   0x1f 0x9b000000 rt-rn-rm-ra-instruction ;
 : mul-www ( rt rm rn -- instruction ) mul-xxx ->w ;
 
+: udiv-xxx ( rt rn rm -- instruction ) 0x9ac00c00 rt-rn-rm-instruction ;
+: umsubl-xxxx ( rt rm rn ra -- instruction ) 0x9b008000 rt-rn-rm-ra-instruction ;
 
 ( Shifting  )
 
@@ -1234,6 +1237,14 @@ defprim -!
   2 0 		str-x[x] w,
 ;;
 
+defprim um/mod
+  2 		poppsp-x  w, \ x2 <- b
+  1 		poppsp-x  w, \ x1 <- a
+  0 1 2         udiv-xxx  w, \ x0 <- a/b
+  3 0 2 1       msub-xxxx w, \ x3 <- a - (x0 * b)
+  3             pushpsp-x w, \ push remainder
+  0             pushpsp-x w, \ push quotient
+;;
 
 defprim c@c!
   0 28 8 	ldr-x[x#] w,
@@ -1306,16 +1317,16 @@ defprim dcci
 )
 
 : u.		( u -- )
-	base @ /mod	( width rem quot )
+	base @ um/mod	( width rem quot )
 	?dup if			( if quotient <> 0 then )
 		recurse		( print the quotient )
 	then
 
 	( print the remainder )
-	dup 10 < if
+	dup 0d10 u< if
 		'0'		( decimal digits 0..9 )
 	else
-		10 -		( hex and beyond digits a..z )
+		0d10 -		( hex and beyond digits a..z )
 		'a'
 	then
 	+
@@ -1484,7 +1495,7 @@ defprim dcci
 	begin
 		dup dsp@ 8 + >  ( at the top? )
 	while
-		dup @ u.	( print the stack element )
+		dup @ .         ( print the stack element )
 		space
 		8-		( move down )
 	repeat
