@@ -155,10 +155,6 @@
 : cr '\n' emit ;
 : space bl emit ;
 
-( an "echoed comment" )
-
-: .\ '\n' parse tell cr ;
-
 ( More standard FORTH words. )
 ( TBD define these in assembly later)
 

@@ -104,4 +104,10 @@ defer error
   then
 ;
 
+variable verbose
+   false verbose !
+
+( an "echoed comment" )
+: .\ '\n' parse verbose @ if tell cr else 2drop then ;
+
 test-old-base base ! hide test-old-base
