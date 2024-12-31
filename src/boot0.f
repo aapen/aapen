@@ -889,7 +889,9 @@
 : mul-xxx ( rt rm rn -- instruction )   0x1f 0x9b000000 rt-rn-rm-ra-instruction ;
 : mul-www ( rt rm rn -- instruction ) mul-xxx ->w ;
 
-: udiv-xxx ( rt rn rm -- instruction ) 0x9ac00c00 rt-rn-rm-instruction ;
+: sdiv-xxx ( rt rn rm -- instruction ) 0x9ac00c00 rt-rn-rm-instruction ;
+
+: udiv-xxx ( rt rn rm -- instruction ) 0x9ac00800 rt-rn-rm-instruction ;
 : umsubl-xxxx ( rt rm rn ra -- instruction ) 0x9b008000 rt-rn-rm-ra-instruction ;
 
 ( Shifting  )
