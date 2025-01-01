@@ -23,6 +23,7 @@
 : troff 0 echo ! ;
 : tron  1 echo ! ;
 
+
 : cells 8 * ;
 : cell+ 1 cells + ;
 
@@ -83,7 +84,7 @@
 : name>string    9 + count ;
 
 \ nt -- xt | 0  : xt refers to the interpretation semantics of the word. 0 results if it has no defined interpretation semantics
-: name>interpret 40 + ;
+: name>interpret 48 + ;
 
 \ nt -- xt1 xt2 : xt1 refers to the compilation semantics of the word, xt2 is the 'invoker' that will perform it
 : name>compile
