@@ -670,19 +670,18 @@ hex
 
 .\ F.3.15		Counted Loops
 .\ F.6.1.1800	loop
-t{ : gd1 do i loop ; -> }t
-t{ 4 1 gd1 -> 1 2 3 }t
-t{ 2 -1 gd1 -> -1 0 1 }t
+t{ : gd1 do i loop ;       ->          }t
+t{  4 1 gd1                -> 1 2 3    }t
+t{ 2 -1 gd1                -> -1 0 1   }t
 t{ mid-uint+1 mid-uint gd1 -> mid-uint }t
 
 .\ F.6.1.0140	+loop
-\ TODO: [loop] MTN - These fail because my current implementation of +loop doesn't work with
-\ negative increments
+t{ : gd2 do i -1 +loop ; -> }t
+t{ 1 4 gd2 -> 4 3 2 1 }t
+t{ -1 2 gd2 -> 2 1 0 -1 }t
+t{ mid-uint mid-uint+1 gd2 -> mid-uint+1 mid-uint }t
 
-\ t{ : gd2 do i -1 +loop ; -> }t
-\ t{ 1 4 gd2 -> 4 3 2 1 }t
-\ t{ -1 2 gd2 -> 2 1 0 -1 }t
-\ t{ mid-uint mid-uint+1 gd2 -> mid-uint+1 mid-uint }t
+\ TODO: [loop] MTN - These fail because I haven't implemented `leave`
 \ variable gditerations
 \ variable gdincrement
 \ : gd7
@@ -720,12 +719,12 @@ t{ mid-uint+1 mid-uint gd1 -> mid-uint }t
 \ negative increments
 t{ : gd3 do 1 0 do j loop loop ; ->               }t
 t{          4        1 gd3 -> 1 2 3               }t
-\ t{          2       -1 gd3 -> -1 0 1              }t
+t{          2       -1 gd3 -> -1 0 1              }t
 t{ mid-uint+1 mid-uint gd3 -> mid-uint            }t
-\ t{ : gd4 do 1 0 do j loop -1 +loop ; ->           }t
-\ t{        1          4 gd4 -> 4 3 2 1             }t
-\ t{       -1          2 gd4 -> 2 1 0 -1            }t
-\ t{ mid-uint mid-uint+1 gd4 -> mid-uint+1 mid-uint }t
+t{ : gd4 do 1 0 do j loop -1 +loop ; ->           }t
+t{        1          4 gd4 -> 4 3 2 1             }t
+t{       -1          2 gd4 -> 2 1 0 -1            }t
+t{ mid-uint mid-uint+1 gd4 -> mid-uint+1 mid-uint }t
 
 .\ F.6.1.1760	leave
 \ TODO: [loop] MTN - not implemented, but should be
@@ -937,6 +936,10 @@ t{ seebuf         -> 20 20 20 }t
 \ t{ fbuf char+ fbuf 2 chars move ->          }t
 \ t{ seebuf                       -> 12 34 34 }t
 
+.\ F.15.6.2.0270	ahead
+t{ : pt1 ahead 1111 2222 then 3333 ; -> }t
+t{ pt1 -> 3333 }t
+
 .\ F.3.21		Output
 .\ F.6.1.1320	emit
 \ TODO: [negprint] MTN - printing negative numbers is broken for some reason. The last two output
@@ -955,7 +958,7 @@ t{ seebuf         -> 20 20 20 }t
   ." You should see 0-5 separated by two spaces:" cr
   5 1+ 0 do i [char] 0 + emit 2 spaces loop cr
   ." You should see two separate lines:" cr
-  s" Line 1" tell cr s" Line 2" tell cr
+  s" Line 1" type cr s" Line 2" type cr
   ." You should see the number ranges of signed and unsigned numbers:" cr
   ." Signed: " min-int . max-int . cr
   ." Unsigned:" 0 u. max-uint u. cr

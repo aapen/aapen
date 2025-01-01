@@ -156,10 +156,6 @@
 : cr '\n' emit ;
 : space bl emit ;
 
-( an "echoed comment" )
-
-: .\ '\n' parse tell cr ;
-
 ( More standard FORTH words. )
 ( TBD define these in assembly later)
 
@@ -291,6 +287,14 @@
   swap !
 ; immediate
 
+( ahead skipped-code then
+  -- compiles to: --> branch offset skipped-code )
+
+: ahead
+  postpone branch
+  here 0 ,
+; immediate
+
 ( begin loop-part condition until
   -- compiles to: --> loop-part condition 0branch offset
    where offset points back to the loop-part
@@ -370,25 +374,46 @@
   drop
 ;
 
-\ `do` is similar to `begin`, but it has some extra runtime behavior to take the
-\ start and limit from the stack and tuck them away on the rstack.
+\ `do` is similar to `begin`, but it has some extra runtime behavior to take the start, limit, and
+\ step from the stack and tuck them away on the rstack. We call the extra tracking info the
+\ 'loop-sys'. Inside the loop body we access the loop-sys to update the index and check for loop
+\ exit.
 \
-\ Inside the loop body, RSP will be reserved for use by the loop itself.
-\ RSP@ will hold the loop limit and RSP@ + 8 will hold the current count.
+\ It's important that we remove the loop-sys from the rstack before we attempt to leave the word
+\ that invoked the loop... otherwise we'll try to 'return' to some integer that was the loop
+\ index. The _best case_ then would be an alignment fault. The worst case would be that we actually
+\ execute some undefined chunk of memory.
 \
 \ do loop-body loop
 \	-- compiles to: --> setup loop-body 1 (loop-inc) (loop-done?) 0branch offset
 \ where offset points back to just before the loop-body
 
-\ (do) puts the initial count and limit on the rstack, tucked under the return addr for the call to (do) itself.
-: (do) ( p: lim curr ; r: curr lim )
-  r> -rot >r >r >r
+\ Push loop-sys onto return stack
+: (>loop-sys) ( limit index -- )
+  r>          ( limit index real-return )
+  swap >r     ( limit real-return )
+  swap >r     ( real-return )
+  >r
 ;
 
-: do ( runtime: lim curr --  ; r: -- curr lim )
-  0                                     ( at compile time, remember on the stack this was not a qdo )
-  postpone (do)
-  here                                  ( save a location on the stack, it will be the branch target )
+\ Peek at loop-sys from return stack
+: (loop-sys-peek) ( -- limit index )
+  rsp@ 8+ @
+  rsp@ 16 + @
+;
+
+\ Pop loop-sys from return stack, push it to parameter stack
+: (loop-sys>)  ( -- limit index )
+  r>           ( real-return )
+  r> swap      ( limit real-return )
+  r> swap      ( limit index real-return )
+  >r           ( limit index )
+;
+
+: do ( lim curr -- )
+  0
+  postpone (>loop-sys)
+  here 
 ; immediate
 
 \ `?do` is like `do`, but skips the loop body entirely if the limit and index are equal.
@@ -406,7 +431,7 @@
 
 : ?do
   postpone 2dup
-  postpone (do)
+  postpone (>loop-sys)
   postpone = postpone not               ( compile execution-time test on bounds )
   postpone 0branch                      ( if bounds equal, we will skip the body )
   here                                  ( remember where to fill in the offset )
@@ -415,14 +440,13 @@
   here                                  ( save location that will be the loop target )
 ; immediate
 
-( This hijacking of the rstack has a dangerous side effect:
- `exit` will "return" execution to some small, probably
- misaligned address unless we clean up the return stack before executing it. That's
- where `unloop` comes in. It restores the return stack so we can `exit` cleanly. )
-
+\ Whatever word invoked the loop can't use `exit` as long as the loop-sys is still on
+\ rstack. `unloop` cleans up the rstack so `exit` won't cause a problem.
 : unloop
-  postpone rdrop postpone rdrop
-; immediate
+  r>                            ( keep actual return addr )
+  (loop-sys>) 2drop             ( drop the loop-sys )
+  >r                            ( restore actual return addr )
+;
 
 \ There are two words to end the loop's body: `loop` and `+loop`.
 \ The first one increments the loop counter by 1. The second increments it by
@@ -437,30 +461,50 @@
 \ That's true, except that we had to call `i` itself, which puts another address on
 \ the rstack. Confusing? Yes. It also means that we can't use `i` except _directly_
 \ inside a do..loop. No calling it from another word or the offsets will be
-\ wrong. Same goes for `j` and `(loop-done?)`
+\ wrong. Same goes for `j`
 
 : i rsp@ 16 + @ ;               ( get current loop count )
 : j rsp@ 32 + @ ;               ( get outer loop count )
-: (loop-inc) rsp@ 16 + @ + rsp@ 16 + ! ;
-: (loop-done?) rsp@ 8+ @ rsp@ 16 + @ <= ;
+
+: signs-differ? ( a b -- f )
+  xor [ 1 63 lshift ] literal and 0<>
+;
+
+: (loop-done?) ( step limit index -- f )
+  2dup = if 2drop drop true exit then      ( early out if numbers are equal )
+  swap                                     ( step index limit )
+  -                                        ( step index-limit )
+  dup                                      ( step index-limit index-limit )
+  -rot                                     ( index-limit step index-limit )
+  +                                        ( index-limit index-limit+step )
+  signs-differ?
+;
+
+: (loop-inc) ( step -- )
+  r>
+  (loop-sys>) ( step limit index )
+  3 pick      ( limit index step )
+  +           ( limit index' )
+  (>loop-sys) ( )
+  >r
+  drop
+;
+
 
 \ `+loop` is a bit of a beast. It needs to compile the runtime code to update
-\ the loop count and check it against the limit. If we were writing this
-\ directly it would look like this:
-\
-\ ... (loop-inc) (loop-done?) < if ..not done.. else ..done.. then ...
-\
-\ Where the "not done" part branches back to the instruction after the `do`
-\ that started this whole thing and the "done" part cleans up the rstack.
+\ the loop count and check it against the limit. It also needs to recall if the loop was started
+\ with a `?do` so it can backpatch the jump-ahead target
 
-: +loop
-  postpone (loop-inc)
-  postpone (loop-done?)
-  postpone 0branch                      ( compile branch )
-  here - ,                              (  )
-  if                                    ( was this a qdo? )
-    here over -                         ( find offset from the qdo's branch to here )
-    swap !                              ( backpatch the qdo's branch target )
+: +loop ( step )
+  postpone dup                 ( step step )
+  postpone (loop-sys-peek)     ( step step limit index )
+  postpone (loop-done?)        ( step done )
+  postpone swap                ( done step )
+  postpone (loop-inc)          ( done )
+  postpone 0branch             ( return to head of loop )
+  here - ,                     ( compile addr of loop head ... was left on pstack by `do` )
+  if                           ( was this a qdo? )
+    here over - swap !         ( backpatch qdo's 0branch target )
   then
   postpone unloop
 ; immediate
@@ -544,16 +588,16 @@
   In immediate mode we just keep reading characters and printing them until we get to
   the next double quote.
 
-  In compile mode we use S" to store the string, then add TELL afterwards:
-  LITSTRING <string length> <string rounded up to 4 bytes> TELL
+  In compile mode we use S" to store the string, then add TYPE afterwards:
+  LITSTRING <string length> <string rounded up to 4 bytes> TYPE
 )
 
 : ." ( "ccc<quote>" -- )
   state @ if                    ( compiling? )
     postpone s"                 ( read the string, and compile litstring, etc. )
-    postpone tell               ( compile the final tell )
+    postpone type               ( compile the final type )
   else
-    '"' parse tell
+    '"' parse type
   then
 ; immediate
 
@@ -842,9 +886,14 @@
 ;
 
 : madd-xxxx ( rt rm rn ra -- instruction ) 0x9b000000 rt-rn-rm-ra-instruction ;
+: msub-xxxx ( rt rm rn ra -- instruction ) 0x1b008000 rt-rn-rm-ra-instruction ;
 : mul-xxx ( rt rm rn -- instruction )   0x1f 0x9b000000 rt-rn-rm-ra-instruction ;
 : mul-www ( rt rm rn -- instruction ) mul-xxx ->w ;
 
+: sdiv-xxx ( rt rn rm -- instruction ) 0x9ac00c00 rt-rn-rm-instruction ;
+
+: udiv-xxx ( rt rn rm -- instruction ) 0x9ac00800 rt-rn-rm-instruction ;
+: umsubl-xxxx ( rt rm rn ra -- instruction ) 0x9b008000 rt-rn-rm-ra-instruction ;
 
 ( Shifting  )
 
@@ -1179,13 +1228,6 @@ defprim u>
   0             pushpsp-x w,
 ;;
 
-defprim xor
-  1 		poppsp-x w,
-  0 		poppsp-x w,
-  0 1 0 	eor-xxx w,
-  0 		pushpsp-x w,
-;;
-
 defprim -!
   0 		poppsp-x w,
   1 		poppsp-x w,
@@ -1194,6 +1236,14 @@ defprim -!
   2 0 		str-x[x] w,
 ;;
 
+defprim um/mod
+  2 		poppsp-x  w, \ x2 <- b
+  1 		poppsp-x  w, \ x1 <- a
+  0 1 2         udiv-xxx  w, \ x0 <- a/b
+  3 0 2 1       msub-xxxx w, \ x3 <- a - (x0 * b)
+  3             pushpsp-x w, \ push remainder
+  0             pushpsp-x w, \ push quotient
+;;
 
 defprim c@c!
   0 28 8 	ldr-x[x#] w,
@@ -1266,16 +1316,16 @@ defprim dcci
 )
 
 : u.		( u -- )
-	base @ /mod	( width rem quot )
+	base @ um/mod	( width rem quot )
 	?dup if			( if quotient <> 0 then )
 		recurse		( print the quotient )
 	then
 
 	( print the remainder )
-	dup 10 < if
+	dup 0d10 u< if
 		'0'		( decimal digits 0..9 )
 	else
-		10 -		( hex and beyond digits a..z )
+		0d10 -		( hex and beyond digits a..z )
 		'a'
 	then
 	+
@@ -1444,7 +1494,7 @@ defprim dcci
 	begin
 		dup dsp@ 8 + >  ( at the top? )
 	while
-		dup @ u.	( print the stack element )
+		dup @ .         ( print the stack element )
 		space
 		8-		( move down )
 	repeat
@@ -1698,7 +1748,6 @@ defprim dcci
 : []# ( buffer[0] -- len )
         2 cells - @
 ;
-
 
 ( Pull in the rest of the basic Forth boot-up code. )
 
