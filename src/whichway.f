@@ -1,8 +1,8 @@
-: 'i' [ char i ] literal ;
-: 'j' [ char j ] literal ;
-: 'k' [ char k ] literal ;
-: 'l' [ char l ] literal ;
-: 'm' [ char m ] literal ;
+: 'i' [char] i ;
+: 'j' [char] j ;
+: 'k' [char] k ;
+: 'l' [char] l ;
+: 'm' [char] m ;
 
 : up    ( n -- ) get-xy 1- at-xy ;
 : down  ( n -- ) get-xy 1+ at-xy ;
