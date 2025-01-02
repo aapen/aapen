@@ -1404,10 +1404,23 @@ defprim dcci
 
 : xt word find >cfa ;
 
+: begin-structure ( c: "<spaces>name" -- 0 )
+  create
+  here 0 0 ,
+  does> ( r: -- size ) @
+;
+
 : +field ( n1 n2 <name> -- n3 )
   create over , +
   does> ( addr1 -- addr2 ) @ +
 ;
+
+: cfield: 1 chars +field ;
+: hfield: 2 chars aligned-to 2 chars +field ;
+: wfield: 4 chars aligned-to 4 chars +field ;
+: field: aligned 1 cells +field ;
+
+: end-structure swap ! ;
 
 ( c a b WITHIN returns true if a <= c and c < b )
 (  or define without ifs: OVER - >R - R>  U<  )

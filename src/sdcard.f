@@ -664,14 +664,14 @@ variable curdir
 
 20 constant nfiles
 
-0
-1 cells +field file.flags
-1 cells +field file.first-cluster
-1 cells +field file.size
-1 cells +field file.position
-1 cells +field file.cur-cluster
-1 cells +field file.buffer
-constant file%
+begin-structure file%
+  field: file.flags
+  field: file.first-cluster
+  field: file.size
+  field: file.position
+  field: file.cur-cluster
+  field: file.buffer
+end-structure
 
 file% nfiles []buffer files
 128   nfiles []buffer file-buffers
@@ -734,16 +734,16 @@ files-init
 
 variable mounted 2 cells allot
 
-0
-1 +field -.status
-1 +field -.head-start
-2 +field -.cyl-start
-1 +field -.type
-1 +field -.head-end
-2 +field -.cyl-end
-4 +field -.sector
-4 +field -.sectors
-constant ptentry%
+begin-structure ptentry%
+  cfield: -.status
+  cfield: -.head-start
+  hfield: -.cyl-start
+  cfield: -.type
+  cfield: -.head-end
+  hfield: -.cyl-end
+  wfield: -.sector
+  wfield: -.sectors
+end-structure
 
 ( reserve space to hold partition table )
 ptentry% 4 []buffer ptable
@@ -752,54 +752,52 @@ ptentry% 4 []buffer ptable
         FAT 12/16/23  ----------------------------------------------------------------------
 )
 
-0
-3 +field -.bs-jmpboot            \ 0..2
-8 +field -.bs-oemname            \ 3..10
-2 +field -.bytes-per-sector      \ 11..12
-1 +field -.sectors-per-cluster   \ 13
-2 +field -.reserved-sector-count \ 14..15
-1 +field -.num-fats              \ 16
-2 +field -.root-entry-count      \ 17..18
-2 +field -.total-sectors16       \ 19..20
-1 +field -.media                 \ 21
-2 +field -.fat-size16            \ 22..23
-2 +field -.sectors-per-track     \ 24..25
-2 +field -.num-heads             \ 26..27
-4 +field -.hidden-sectors        \ 28..31
-4 +field -.total-sectors32       \ 32..35
-constant fat-bpb%
+begin-structure fat-bpb%
+  3 chars +field -.bs-jmpboot     \ 0..2
+  8 chars +field -.bs-oemname     \ 3..10
+  hfield: -.bytes-per-sector      \ 11.12
+  cfield: -.sectors-per-cluster   \ 13
+  hfield: -.reserved-sector-count \ 14..15
+  cfield: -.num-fats              \ 16
+  hfield: -.root-entry-count      \ 17..18
+  hfield: -.total-sectors16       \ 19..20
+  cfield: -.media                 \ 21
+  hfield: -.fat-size16            \ 22..23
+  hfield: -.sectors-per-track     \ 24..25
+  hfield: -.num-heads             \ 26..27
+  wfield: -.hidden-sectors        \ 28..31
+  wfield: -.total-sectors32       \ 32..35
 
-( fat32 specific part that follows fat-bpb% )
-fat-bpb%
-4 +field -.fat32-size            \ 36..39
-2 +field -.fat32-ext-flags       \ 40..41
-2 +field -.fat32-fsversion       \ 42..43
-4 +field -.fat32-root-cluster    \ 44..47
-2 +field -.fat32-fsinfo          \ 48..49
-2 +field -.fat32-bk-boot-sec     \ 50..51
-12 +field -.fat32-reserved-0     \ 52..63
-1 +field -.fat32-drv-nbr         \ 64
-1 +field -.fat32-reserved-1      \ 65
-1 +field -.fat32-boot-sig        \ 66
-4 +field -.fat32-volume-id       \ 67..70
-11 +field -.fat32-volume-label   \ 71..81
-8 +field -.fat32-fs-type         \ 82..89
-constant fat-bpb-f32-ext%
+  \ the rest of this structure is specific to fat32
+  wfield: -.fat32-size            \ 36..39
+  hfield: -.fat32-ext-flags       \ 40..41
+  hfield: -.fat32-fsversion       \ 42..43
+  wfield: -.fat32-root-cluster    \ 44..47
+  hfield: -.fat32-fsinfo          \ 48..49
+  hfield: -.fat32-bk-boot-sec     \ 50..51
+12 +field -.fat32-reserved-0      \ 52..63
+  cfield: -.fat32-drv-nbr         \ 64
+  cfield: -.fat32-reserved-1      \ 65
+  cfield: -.fat32-boot-sig        \ 66
+  wfield: -.fat32-volume-id       \ 67..70
+11 +field -.fat32-volume-label    \ 71..81
+   field: -.fat32-fs-type         \ 82..89
+end-structure
 
-0
-11 +field -.sfn-name
-1  +field -.attrib
-1  +field -.nt-reserved
-1  +field -.time-tenth
-2  +field -.write-time
-2  +field -.write-date
-2  +field -.last-access-date
-2  +field -.first-cluster-hi
-2  +field -.create-time
-2  +field -.create-date
-2  +field -.first-cluster-lo
-4  +field -.file-size
-constant dirent-sfn%
+begin-structure dirent-sfn%
+  11 chars +field -.sfn-name
+  cfield: -.attrib
+  cfield: -.nt-reserved
+  cfield: -.time-tenth
+  hfield: -.write-time
+  hfield: -.write-date
+  hfield: -.last-access-date
+  hfield: -.first-cluster-hi
+  hfield: -.create-time
+  hfield: -.create-date
+  hfield: -.first-cluster-lo
+  wfield: -.file-size
+end-structure
 
 : bl? bl = ;
 : nb? bl = not ;
@@ -861,17 +859,16 @@ variable &normalize
 ;
 
 
-
-0
-1  +field -.ldir-seq-num
-10 +field -.ldir-name1
-1  +field -.ldir-attr
-1  +field -.ldir-type
-1  +field -.ldir-chksum
-12 +field -.ldir-name2
-2  +field -.ldir-first-cluster-lo
-4  +field -.ldir_name3
-constant dirent-lfn%
+begin-structure dirent-lfn%
+  cfield: -.ldir-seq-num
+  10 chars +field -.ldir-name1
+  cfield: -.ldir-attr
+  cfield: -.ldir-type
+  cfield: -.ldir-chksum
+  12 chars +field -.ldir-name2
+  hfield: -.ldir-first-cluster-lo
+  4 chars +field -.ldir-name3
+end-structure
 
 16 align-to                     ( buffers must be 16 byte aligned )
 4 256 []buffer fatbuf
