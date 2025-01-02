@@ -2792,9 +2792,9 @@ _comma:
                                                             // repeat
         .quad branch,-224
         .quad drop                                          // drop         | no matching catch found
-        .quad lit,-1,over,equ,zbranch,len_header,drop       // case -1 of   | was an abort
+        .quad lit,-1,over,equ,zbranch,40,drop               // case -1 of   | was an abort
         .quad msg_aborted,branch,104                        // msg_aborted endcase
-        .quad lit,-2,over,equ,zbranch,len_header,drop       // case -2 of   | was abort"
+        .quad lit,-2,over,equ,zbranch,40,drop               // case -2 of   | was abort"
         .quad type,branch,24                                // msg_abort_string endcase
         .quad msg_uncaught                                  // (default case) msg_uncaught
         .quad drop                                          // endcase
