@@ -744,6 +744,10 @@ _forth_restart:
 //
 //	Don't worry too much about the exact implementation details of this macro - it's complicated!
 
+        // Word header lenght
+
+        .set len_header,48
+
         // Flags - these are discussed later.
 	.set f_immed,0x80
 	.set f_hidden,0x40
@@ -1318,7 +1322,7 @@ name_0: .quad 0
         defcode "(does>)",7,,execdoes,does
         ldr     x2, =var_latest         // addr of latest
         ldr     x2, [x2]                // val of latest -> most recently defined word
-        add     x2, x2, #48             // address of codeword
+        add     x2, x2, #len_header     // address of codeword
         str     NIP, [x2]               // overwrite codeword of new word with addr of the inlined "do_shim" in parent
         POPRSP  NIP                     // perform the action of exit (we don't want to execute the rest of the parent word now
         next
@@ -1455,7 +1459,8 @@ var_here:
 	defconst "r0",2,,rz,version,return_stack_top
 	defconst "docol",5,,__docol,rz,docol
         defconst "dovar",5,,__dovar,__docol,dovar
-	defconst "f_immed",7,,__f_immed,__dovar,f_immed
+	defconst "len-header",10,,__len_header,__dovar,len_header
+	defconst "f_immed",7,,__f_immed,__len_header,f_immed
 	defconst "f_hidden",8,,__f_hidden,__f_immed,f_hidden
         defconst "lastcell",8,,lastcell,__f_hidden,LASTCELL
         defconst "peripherals",11,,peripherals,lastcell,PERIPH_BASE
@@ -2116,7 +2121,7 @@ _find:
 	next
 _tcfa:
 	// TCFA (address: x0) (address: x0)
-	add	x0, x0, #8+2+30+8		// header length is 48 bytes.
+	add	x0, x0, #len_header
 	ret
 
 /*
@@ -2787,9 +2792,9 @@ _comma:
                                                             // repeat
         .quad branch,-224
         .quad drop                                          // drop         | no matching catch found
-        .quad lit,-1,over,equ,zbranch,48,drop               // case -1 of   | was an abort
+        .quad lit,-1,over,equ,zbranch,len_header,drop       // case -1 of   | was an abort
         .quad msg_aborted,branch,104                        // msg_aborted endcase
-        .quad lit,-2,over,equ,zbranch,48,drop               // case -2 of   | was abort"
+        .quad lit,-2,over,equ,zbranch,len_header,drop       // case -2 of   | was abort"
         .quad type,branch,24                                // msg_abort_string endcase
         .quad msg_uncaught                                  // (default case) msg_uncaught
         .quad drop                                          // endcase
