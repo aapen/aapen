@@ -1220,12 +1220,14 @@ name_0: .quad 0
 
 */
 
+        // ( c addr -- )
 	defcode "c!",2,,storebyte,substore
 	POPPSP	x0		// address
 	POPPSP	x1		// value
 	strb	w1, [x0]	// store
 	next
 
+        // ( addr -- c )
 	defcode "c@",2,,fetchbyte,storebyte
 	POPPSP	x0		// address
 	ldrb	w1, [x0]	// load
@@ -1359,10 +1361,11 @@ do_shim_end:
 	str	w1, [x0]	// store
 	next
 
+        // ( a -- n )
 	defcode "w@",2,,fetchword,storeword
 	POPPSP	x0		// address
 	ldr	w1, [x0]        // load
-	PUSHPSP	x1
+	PUSHPSP	x1              // push
 	next
 
 /*
