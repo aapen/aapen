@@ -630,36 +630,32 @@ blue light-blue clr!
 
 : aapen-logo
   home cr cr
+  
   yellow fg!
-  s"                 AAA                              AAA                                                                        " type cr
-  s"                A:::A                            A:::A                                                                       " type cr
-  s"               A:::::A                          A:::::A                                                                      " type cr
+  s"         ##                ##                                         " type cr
+  s"      /####             /####                                         " type cr
+  s"     /  ###            /  ###                                         " type cr
   green fg!
-  s"              A:::::::A                        A:::::::A                                                                     " type cr
-  s"             A:::::::::A                      A:::::::::A          AAAAA   AAAAAAAAA       AAAAAAAAAAAA    AAAA  AAAAAAAA    " type cr
-  s"            A:::::A:::::A                    A:::::A:::::A         A::::AAA:::::::::A    AA::::::::::::AA  A:::AA::::::::AA  " type cr
+  s"        /##               /##                                         " type cr
+  s"       /  ##             /  ##                                        " type cr
+  s"       /  ##             /  ##          /###       /##    ###  /###   " type cr
   red fg!
-  s"           A:::::A A:::::A                  A:::::A A:::::A        A:::::::::::::::::A  A::::::AAAAA:::::AAA::::::::::::::AA " type cr
-  s"          A:::::A   A:::::A                A:::::A   A:::::A       AA::::::AAAAA::::::AA::::::A     A:::::AAA:::::::::::::::A" type cr
+  s"      /    ##           /    ##        / ###  /   / ###    ###/ #### /" type cr
+  s"      /    ##           /    ##       /   ###/   /   ###    ##   ###/ " type cr
+  s"     /      ##         /      ##     ##    ##   ##    ###   ##    ##  " type cr
   yellow fg!
-  s"         A:::::A     A:::::A              A:::::A     A:::::A       A:::::A     A:::::AA:::::::AAAAA::::::A  A:::::AAAA:::::A" type cr
-  s"        A:::::AAAAAAAAA:::::A            A:::::AAAAAAAAA:::::A      A:::::A     A:::::AA:::::::::::::::::A   A::::A    A::::A" type cr
-  s"       A:::::::::::::::::::::A          A:::::::::::::::::::::A     A:::::A     A:::::AA::::::AAAAAAAAAAA    A::::A    A::::A" type cr
+  s"     /########         /########     ##    ##   ########    ##    ##  " type cr
+  s"    /        ##       /        ##    ##    ##   #######     ##    ##  " type cr
+  s"    #        ##       #        ##    ##    ##   ##          ##    ##  " type cr
   green fg!
-  s"      A:::::AAAAAAAAAAAAA:::::A        A:::::AAAAAAAAAAAAA:::::A    A:::::A    A::::::AA:::::::A             A::::A    A::::A" type cr
-  s"     A:::::A             A:::::A      A:::::A             A:::::A   A:::::AAAAA:::::::AA::::::::A            A::::A    A::::A" type cr
+  s"   /####      ##     /####      ##   ##    ##   ####    /   ##    ##  " type cr
+  s"  /   ####    ## /  /   ####    ## / #######     ######/    ###   ### " type cr
+  s" /     ##      #/  /     ##      #/  ######       #####      ###   ###" type cr
   red fg!
-  s"    A:::::A               A:::::A    A:::::A               A:::::A  A::::::::::::::::A  A::::::::AAAAAAAA    A::::A    A::::A" type cr
-  s"   A:::::A                 A:::::A  A:::::A                 A:::::A A::::::::::::::AA    AA:::::::::::::A    A::::A    A::::A" type cr
-  s"  AAAAAAA                   AAAAAAAAAAAAAA                   AAAAAAAA::::::AAAAAAAA        AAAAAAAAAAAAAA    AAAAAA    AAAAAA" type cr
-  s"                                                                  A:::::A                                                    " type cr
-  yellow fg!
-  s"                                                                  A:::::A                                                    " type cr
-  s"                                                                 A:::::::A                                                   " type cr
-  s"                                                                 A:::::::A                                                   " type cr
-  green fg!
-  s"                                                                 A:::::::A                                                   " type cr
-  s"                                                                 AAAAAAAAA                                                   " type cr
+  s" #                 #                 ##                               " type cr
+  s"  ##                ##               ##                               " type cr
+  s"                                     ##                               " type cr
+  s"                                      ##                              " type cr
   light-blue fg!
 ;
 
