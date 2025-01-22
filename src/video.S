@@ -147,11 +147,12 @@
 //
 // Arguments: none
 // Returns: none
-// Clobbers:
+// Clobbers: x0, x1, x2, x3
 // ----------------------------------------------------------------------
         ENTRY(_video_init)
         // Function prologue, create invocation frame
         stp     x29, x30, [sp, #-16]!
+        stp     x4,  x5,  [sp, #-16]!
         mov     x29, sp
 
         ldr     x0, =fb_init_message
@@ -166,6 +167,9 @@
         ldr     w1, [x2], #80           // read yres, advance ptr to fb addr
         str     x1, [x3], #8            // write yres
         ldr     w1, [x2], #4            // read fb addr, advance ptr to fb size
+        movz    w5, #0xffff             // convert Pi's GPU addr to CPU addr
+        movk    w5, #0x3fff, lsl 16     // by masking off the upper 2 bits of the 32-bit addr
+        and     w1, w1, w5
         str     x1, [x3], #8            // write fb addr to fb struct
         ldr     w1, [x2], #16           // read fb size, advance ptr to fb pitch
         str     x1, [x3], #8            // write fb size to fb struct
@@ -173,6 +177,7 @@
         str     x1, [x3], #8            // write fb pitch to fb struct
 
         // Function epilogue, restore stack
+        ldp     x4,  x5,  [sp], #16
         ldp     x29, x30, [sp], #16
         ret
         END(_video_init)
