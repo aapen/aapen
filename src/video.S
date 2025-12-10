@@ -130,12 +130,6 @@
         bl      _invalidate_cache_region
         dmb     st
 
-        //
-        // TODO - extract FB address, size, and pitch. Store in
-        // variables.
-        //
-
-
         // Function epilogue, restore stack
         ldp     x5,  x4,  [sp], #16
         ldp     x29, x30, [sp], #16
