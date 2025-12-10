@@ -193,16 +193,12 @@
 
   defer <name>
   <xt> IS <name>
-
-  You'll find IS much later, since it requires "throw", which in turn requires "IF" and friends.
 )
 
 : defer ( "name" -- )
   create ['] abort ,            ( create word, default behavior is to abort )
   does> @execute                ( look up xt from data field, execute it )
 ;
-
-( Here is the long-awaited definition of IS )
 
 : is ( xt "name" -- ) word find dup 0= -13 and throw >dfa ! ;
 
